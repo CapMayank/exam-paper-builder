@@ -1,0 +1,573 @@
+@import "tailwindcss";
+
+/*
+ * Exam Studio design system
+ * -------------------------
+ * Subject: a teacher's desk. Ink-teal (the pen) on graphite-on-paper neutrals,
+ * with a highlighter-yellow marker used sparingly for "you are here".
+ *
+ * The Tailwind `indigo` and `slate` scales are remapped below, so every
+ * existing `indigo-*` utility now means "ink teal" (primary) and every
+ * `slate-*` utility means "graphite" (neutral). Use those names for semantics:
+ *   primary -> indigo-*      neutral -> slate-*      marker -> amber-300
+ *   success -> emerald-*     danger  -> red-*        warning -> amber-*
+ */
+:root {
+  --background: #f3f5f2; /* the desk */
+  --foreground: #161b18;
+  --surface: #ffffff;
+  --line: #dfe4de;
+  --ink: #0d2d38; /* sidebar + hero */
+  --marker: #fcd34d; /* highlighter */
+  --shadow-card: 0 1px 2px rgb(13 45 56 / 0.05), 0 1px 1px rgb(13 45 56 / 0.04);
+  --shadow-lift: 0 8px 24px -8px rgb(13 45 56 / 0.18), 0 2px 6px rgb(13 45 56 / 0.06);
+  --sidebar-w: 15.5rem;
+  --sidebar-w-rail: 4.25rem;
+}
+
+@theme {
+  /* primary: ink teal */
+  --color-indigo-50: #eaf5f7;
+  --color-indigo-100: #d3eaee;
+  --color-indigo-200: #abd4dd;
+  --color-indigo-300: #7bb7c5;
+  --color-indigo-400: #4a94a7;
+  --color-indigo-500: #2c768b;
+  --color-indigo-600: #1e6075;
+  --color-indigo-700: #174d5e;
+  --color-indigo-800: #123e4c;
+  --color-indigo-900: #0d2d38;
+  --color-indigo-950: #081e26;
+
+  /* neutral: graphite with a faint green paper tint */
+  --color-slate-50: #f7f8f6;
+  --color-slate-100: #eff1ee;
+  --color-slate-200: #e1e5e0;
+  --color-slate-300: #ccd2cb;
+  --color-slate-400: #9ba49b;
+  --color-slate-500: #6c766d;
+  --color-slate-600: #4f5951;
+  --color-slate-700: #3a423c;
+  --color-slate-800: #262c28;
+  --color-slate-900: #161b18;
+  --color-slate-950: #0c0f0d;
+
+  --font-sans: var(--font-ui), var(--font-deva), system-ui, sans-serif;
+  --font-display: var(--font-heading), var(--font-deva), Georgia, serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-ui), var(--font-deva), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+h1,
+h2,
+.font-display {
+  font-family: var(--font-heading), var(--font-deva), Georgia, serif;
+  letter-spacing: -0.01em;
+}
+::selection {
+  background: var(--color-indigo-200);
+  color: var(--color-indigo-950);
+}
+:focus-visible {
+  outline: 2px solid var(--color-indigo-500);
+  outline-offset: 2px;
+}
+
+/* ---------- UI primitives ---------- */
+.btn {
+  @apply inline-flex min-h-9 select-none items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3.5 py-1.5 text-sm font-medium text-slate-700 shadow-xs transition duration-150 hover:border-slate-400 hover:bg-slate-50 hover:text-slate-900 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none disabled:hover:border-slate-300 disabled:hover:bg-white;
+}
+.btn-primary {
+  @apply border-indigo-700 bg-indigo-600 text-white hover:border-indigo-800 hover:bg-indigo-700 hover:text-white active:bg-indigo-800 disabled:hover:border-indigo-700 disabled:hover:bg-indigo-600;
+  box-shadow: 0 1px 0 rgb(255 255 255 / 0.18) inset, 0 1px 2px rgb(13 45 56 / 0.25);
+}
+.btn-success {
+  @apply border-emerald-700 bg-emerald-600 text-white hover:border-emerald-800 hover:bg-emerald-700 hover:text-white disabled:hover:bg-emerald-600;
+}
+.btn-secondary {
+  @apply border-slate-200 bg-slate-100 text-slate-700 shadow-none hover:bg-slate-200;
+}
+.btn-ghost {
+  @apply border-transparent bg-transparent text-slate-600 shadow-none hover:border-transparent hover:bg-slate-200/60 hover:text-slate-900;
+}
+.btn-danger {
+  @apply border-red-200 bg-white text-red-700 hover:border-red-300 hover:bg-red-50 hover:text-red-800;
+}
+.btn-danger-solid {
+  @apply border-red-700 bg-red-600 text-white hover:border-red-800 hover:bg-red-700 hover:text-white;
+}
+.btn-sm {
+  @apply min-h-8 gap-1 rounded-md px-2.5 py-1 text-xs;
+}
+.btn-lg {
+  @apply min-h-11 px-5 text-base;
+}
+.btn-icon {
+  @apply min-h-0 p-2;
+}
+
+.input {
+  @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-xs transition hover:border-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-3 focus:ring-indigo-500/20 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500;
+}
+input[type="search"].input,
+.input-search,
+.input.pl-8,
+.input.pl-9,
+.input.pl-10 {
+  padding-left: 2.375rem !important;
+}
+select.input {
+  @apply cursor-pointer appearance-none bg-no-repeat pr-9;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236c766d' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-position: right 0.65rem center;
+  background-size: 1rem;
+}
+textarea.input {
+  @apply leading-relaxed;
+}
+input[type="checkbox"],
+input[type="radio"],
+input[type="range"] {
+  accent-color: var(--color-indigo-600);
+}
+
+/* Labels are plain sentence-case text; casing carries no meaning here. */
+.label {
+  @apply mb-1.5 block text-[13px] font-medium text-slate-700;
+}
+.card {
+  @apply rounded-2xl border border-slate-200 bg-white p-5;
+  box-shadow: var(--shadow-card);
+}
+.card-hover {
+  @apply transition duration-150 hover:border-slate-300;
+}
+.card-hover:hover {
+  box-shadow: var(--shadow-lift);
+}
+.badge {
+  @apply inline-flex items-center gap-1 rounded-full border border-transparent bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700;
+}
+.badge-success {
+  @apply border-emerald-200/80 bg-emerald-50 text-emerald-800;
+}
+.badge-warning {
+  @apply border-amber-200/80 bg-amber-50 text-amber-900;
+}
+.badge-indigo {
+  @apply border-indigo-200/80 bg-indigo-50 text-indigo-800;
+}
+.badge-danger {
+  @apply border-red-200/80 bg-red-50 text-red-800;
+}
+
+.chip {
+  @apply inline-flex min-h-8 cursor-pointer items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-600 transition hover:border-slate-400 hover:text-slate-900;
+}
+.chip[aria-pressed="true"],
+.chip-on {
+  @apply border-indigo-600 bg-indigo-600 text-white hover:border-indigo-700 hover:text-white;
+}
+.kbd {
+  @apply inline-flex min-w-5 items-center justify-center rounded border border-slate-300 bg-white px-1 font-sans text-[10px] font-semibold leading-4 text-slate-600;
+  box-shadow: 0 1px 0 var(--color-slate-300);
+}
+
+/* Segmented control */
+.segmented {
+  @apply inline-flex gap-0.5 rounded-lg bg-slate-200/70 p-0.5;
+}
+.segmented > button,
+.segmented > a {
+  @apply inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-medium text-slate-600 transition hover:text-slate-900;
+}
+.segmented > [aria-pressed="true"],
+.segmented > [aria-current="true"],
+.segmented > [aria-current="page"] {
+  @apply bg-white text-slate-900 shadow-xs;
+}
+
+/* Page scaffolding */
+.page-title {
+  @apply text-[1.65rem] font-semibold leading-tight text-slate-900;
+}
+.page-lede {
+  @apply mt-1 max-w-prose text-sm leading-relaxed text-slate-600;
+}
+.table-clean {
+  @apply w-full text-left text-sm;
+}
+.table-clean th {
+  @apply border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600;
+}
+.table-clean td {
+  @apply border-b border-slate-100 px-3 py-2.5 align-top;
+}
+.table-clean tbody tr:hover td {
+  @apply bg-slate-50/70;
+}
+
+/* Graph-paper surface: faint squared grid, the visual signature of the product */
+.graph-paper {
+  background-color: var(--color-slate-50);
+  background-image:
+    linear-gradient(to right, rgb(13 45 56 / 0.07) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(13 45 56 / 0.07) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+.graph-paper-dark {
+  background-color: var(--ink);
+  background-image:
+    linear-gradient(to right, rgb(255 255 255 / 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.06) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+/* Skeleton shimmer */
+.skeleton {
+  @apply rounded-md bg-slate-200/70;
+  background-image: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.65), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+/* ---------- Motion (always in response to an action, or one-off on load) ---------- */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+@keyframes slide-in-left {
+  from {
+    transform: translateX(-100%);
+  }
+}
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+.anim-fade {
+  animation: fade-in 0.16s ease-out both;
+}
+.anim-pop {
+  animation: pop-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.anim-slide-right {
+  animation: slide-in-right 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.anim-slide-left {
+  animation: slide-in-left 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+/* One orchestrated moment: the dashboard sections rise in sequence on first load. */
+.rise {
+  animation: rise 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(var(--i, 0) * 70ms);
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Thin, quiet scrollbars for dense tool panels */
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-slate-300) transparent;
+}
+
+/* ---------- Printed paper ---------- */
+.paper-font {
+  font-family: var(--font-noto), var(--font-deva), "Noto Sans", "Nirmala UI", system-ui, sans-serif;
+  color: #000;
+}
+
+/* One physical A4 page. Fixed size so booklet imposition is exact. */
+.a4,
+.a4-measure {
+  font-size: 10.5pt;
+  line-height: 1.35;
+}
+.a4 {
+  width: 210mm;
+  height: 297mm;
+  background: #fff;
+  position: relative;
+  overflow: hidden;
+  box-sizing: border-box;
+  padding: 14mm 14mm 16mm 14mm;
+}
+.a4 .page-footer {
+  position: absolute;
+  bottom: 6mm;
+  left: 14mm;
+  right: 14mm;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 8.5pt;
+  color: #333;
+}
+.a4 .page-no {
+  position: absolute;
+  bottom: 6mm;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 8.5pt;
+  color: #333;
+}
+.a3-sheet {
+  width: 420mm;
+  height: 297mm;
+  display: flex;
+  background: #fff;
+  position: relative;
+  box-sizing: border-box;
+}
+.a3-sheet .a4:first-child {
+  border-right: 1px dashed #cbd5e1; /* faint fold line guide */
+}
+/* Center fold crease notch markers at top and bottom for precision booklet binding */
+.a3-sheet::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1.5px;
+  height: 6mm;
+  background-color: #64748b;
+  z-index: 20;
+}
+.a3-sheet::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1.5px;
+  height: 6mm;
+  background-color: #64748b;
+  z-index: 20;
+}
+
+/* A5 Page (for A4 sheets folded in half into A5 booklets) */
+.a5 {
+  width: 148.5mm;
+  height: 210mm;
+  background: #fff;
+  position: relative;
+  overflow: hidden;
+  box-sizing: border-box;
+  padding: 10mm 10mm 12mm 10mm;
+}
+.a5 .page-footer {
+  position: absolute;
+  bottom: 4mm;
+  left: 10mm;
+  right: 10mm;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 7.5pt;
+  color: #333;
+}
+.a5 .page-no {
+  position: absolute;
+  bottom: 4mm;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 7.5pt;
+  color: #333;
+}
+
+/* A4 Sheet (Landscape 297x210mm containing two A5 pages side-by-side for folding) */
+.a4-sheet {
+  width: 297mm;
+  height: 210mm;
+  display: flex;
+  background: #fff;
+  position: relative;
+  box-sizing: border-box;
+}
+.a4-sheet .a5:first-child {
+  border-right: 1px dashed #cbd5e1; /* faint fold line guide */
+}
+/* Center fold crease notch markers at top and bottom for precision booklet binding */
+.a4-sheet::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1.5px;
+  height: 5mm;
+  background-color: #64748b;
+  z-index: 20;
+}
+.a4-sheet::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1.5px;
+  height: 5mm;
+  background-color: #64748b;
+  z-index: 20;
+}
+
+.paper-grid {
+  background-image:
+    linear-gradient(to right, #c9c9c9 1px, transparent 1px),
+    linear-gradient(to bottom, #c9c9c9 1px, transparent 1px);
+  background-size: 5mm 5mm;
+  border: 1px solid #555;
+}
+
+.paper-ruled {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent,
+    transparent 7.8mm,
+    #cbd5e1 7.8mm,
+    #cbd5e1 8mm
+  );
+  border-top: 1px solid #cbd5e1;
+  border-bottom: 1px solid #cbd5e1;
+}
+
+.show-print-only {
+  display: none;
+}
+
+.sidebar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+.sidebar-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+.sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 9999px;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8;
+}
+
+@media print {
+  @page {
+    margin: 0 !important;
+  }
+  html,
+  body {
+    background: #fff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .screen-zoom {
+    zoom: 1 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: block !important;
+    gap: 0 !important;
+  }
+  .hide-screen-show-print {
+    display: block !important;
+  }
+  .hide-print {
+    display: none !important;
+  }
+  .a4 {
+    width: 210mm !important;
+    height: 296.8mm !important;
+    max-height: 296.8mm !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+  }
+  .a3-sheet {
+    width: 420mm !important;
+    height: 296.8mm !important;
+    max-height: 296.8mm !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+  }
+  .a5 {
+    width: 148.5mm !important;
+    height: 209.8mm !important;
+    max-height: 209.8mm !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+  }
+  .a4-sheet {
+    width: 297mm !important;
+    height: 209.8mm !important;
+    max-height: 209.8mm !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+  }
+  .page-frame {
+    display: block !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    break-after: page !important;
+    page-break-after: always !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+  .page-frame:last-child,
+  .page-frame:last-of-type {
+    break-after: auto !important;
+    page-break-after: auto !important;
+  }
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

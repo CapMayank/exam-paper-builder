@@ -1,0 +1,56 @@
+name: Deploy Exam Paper Builder
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Execute Remote Deployment via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script_stop: true
+          script: |
+            echo "🚀 Starting automated deployment on server..."
+            cd /home/ubuntu/exam-paper-builder
+
+            # Ensure git repository is initialized on the server
+            if [ ! -d ".git" ]; then
+              echo "Initializing git repository on server..."
+              git init
+              git branch -M main
+              git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+            else
+              git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+            fi
+
+            # Fetch and deploy latest commit from main
+            echo "📥 Fetching latest code from GitHub..."
+            git fetch origin main
+            git reset --hard FETCH_HEAD
+
+            # Install dependencies
+            echo "📦 Installing dependencies..."
+            npm ci
+
+            # Generate Prisma client and apply schema updates safely
+            echo "🗄️ Updating Prisma schema..."
+            npx prisma generate
+            npx prisma db push
+
+            # Production Next.js build
+            echo "⚙️ Building Next.js production bundle..."
+            NODE_OPTIONS='--max-old-space-size=2048' npm run build
+
+            # Restart PM2 process with updated environment
+            echo "🔄 Restarting application in PM2..."
+            pm2 restart exam-paper-builder --update-env
+
+            echo "✅ Deployment completed successfully! Live on http://${{ secrets.SSH_HOST }}"

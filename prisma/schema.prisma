@@ -1,0 +1,240 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// SQLite has no enums: string-valued fields below are validated in src/lib/constants.ts + zod.
+
+model User {
+  id             String          @id @default(cuid())
+  name           String
+  email          String          @unique
+  passwordHash   String
+  role           String          @default("TEACHER") // ADMIN | HOD | TEACHER | EXAM_CELL
+  department     String          @default("")
+  active         Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  questions      Question[]
+  papers         Paper[]
+  paperSnapshots PaperSnapshot[]
+  auditLogs      AuditLog[]
+}
+
+model Book {
+  id              String      @id @default(cuid())
+  title           String
+  subject         String
+  className       String // e.g. "Class 8"
+  academicSession String      @default("2025-26")
+  createdAt       DateTime    @default(now())
+  chapters        Chapter[]
+  questions       Question[]
+  blueprints      Blueprint[]
+}
+
+model Chapter {
+  id                String             @id @default(cuid())
+  bookId            String
+  number            Int
+  title             String
+  book              Book               @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  questions         Question[]
+  blueprintChapters BlueprintChapter[]
+
+  @@unique([bookId, number])
+}
+
+model Blueprint {
+  id              String             @id @default(cuid())
+  name            String
+  bookId          String
+  academicSession String             @default("2025-26")
+  examType        String // QUARTERLY | HALF_YEARLY | ANNUAL
+  durationMin     Int
+  subjectCode     String             @default("")
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  book            Book               @relation(fields: [bookId], references: [id], onDelete: Restrict)
+  chapters        BlueprintChapter[]
+  sections        BlueprintSection[]
+  papers          Paper[]
+}
+
+// Marks that a chapter must contribute to the paper.
+model BlueprintChapter {
+  id          String    @id @default(cuid())
+  blueprintId String
+  chapterId   String
+  marks       Int
+  blueprint   Blueprint @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+  chapter     Chapter   @relation(fields: [chapterId], references: [id], onDelete: Restrict)
+
+  @@unique([blueprintId, chapterId])
+}
+
+// "Section A: 10 MCQ x 1 mark"
+model BlueprintSection {
+  id            String          @id @default(cuid())
+  blueprintId   String
+  position      Int
+  title         String
+  instructions  String          @default("")
+  type          String // question type, see constants.ts
+  count         Int
+  marksEach     Int
+  blueprint     Blueprint       @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+  paperQuestions PaperQuestion[]
+}
+
+model Question {
+  id             String          @id @default(cuid())
+  bookId         String
+  chapterId      String
+  type           String
+  text           String
+  optionsJson    String          @default("[]") // MCQ options: string[]
+  subpartsJson   String          @default("[]") // Subparts for multi-part / case study questions
+  answer         String          @default("")
+  difficulty     String          @default("MEDIUM")
+  imagePath      String? // file name inside data/uploads
+  spaceMm        Int             @default(0) // blank answer space printed under the question
+  showGrid       Boolean         @default(false) // DRAW type: print graph-paper grid in the space
+  createdById    String
+  createdAt      DateTime        @default(now())
+  book           Book            @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  chapter        Chapter         @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  createdBy      User            @relation(fields: [createdById], references: [id])
+  paperQuestions   PaperQuestion[] @relation("PrimaryQuestion")
+  orPaperQuestions PaperQuestion[] @relation("OrQuestion")
+
+  @@index([bookId, chapterId, type])
+}
+
+model Paper {
+  id                   String          @id @default(cuid())
+  title                String
+  blueprintId          String
+  layout               String // BOOKLET | PAGE
+  schoolName           String
+  schoolLogo           String? // Logo image URL or base64
+  logoPath             String? // Logo file name inside data/uploads
+  academicSession      String          @default("2025–26")
+  examType             String          @default("") // QUARTERLY | HALF_YEARLY | ANNUAL (overrides blueprint.examType when set)
+  examDate             String          @default("")
+  paperSet             String          @default("")
+  subjectCode          String          @default("")
+  generalInstructions  String          @default("")
+  printDensity         String          @default("STANDARD") // COMPACT | STANDARD | COMFORTABLE
+  twoColumn            Boolean         @default(false)
+  targetPages          Int?
+  numberingStyle       String          @default("CONTINUOUS") // CONTINUOUS | PREFIXED | SECTION_RELATIVE
+  marksStyle           String          @default("INLINE") // INLINE | RIGHT_COLUMN | SUPPRESSED
+  showCandidateDetails Boolean         @default(true)
+  showSignatures       Boolean         @default(true)
+  status               String          @default("DRAFT") // DRAFT | FINAL
+  createdById          String
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+  blueprint            Blueprint       @relation(fields: [blueprintId], references: [id], onDelete: Restrict)
+  createdBy            User            @relation(fields: [createdById], references: [id])
+  items                PaperQuestion[]
+  snapshots            PaperSnapshot[]
+}
+
+model PaperQuestion {
+  id           String           @id @default(cuid())
+  paperId      String
+  sectionId    String
+  questionId   String
+  orQuestionId String?
+  position     Int
+  paper        Paper            @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  section      BlueprintSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  question     Question         @relation("PrimaryQuestion", fields: [questionId], references: [id], onDelete: Restrict)
+  orQuestion   Question?        @relation("OrQuestion", fields: [orQuestionId], references: [id], onDelete: SetNull)
+
+  @@unique([paperId, questionId])
+}
+
+model PaperSnapshot {
+  id           String   @id @default(cuid())
+  paperId      String
+  name         String
+  snapshotJson String
+  createdById  String
+  createdAt    DateTime @default(now())
+  paper        Paper    @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  createdBy    User     @relation(fields: [createdById], references: [id])
+
+  @@index([paperId, createdAt])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  userName    String
+  userRole    String
+  action      String   // PAPER_CREATE, PAPER_UPDATE, PAPER_PRINT, PAPER_DUPLICATE, QUESTION_CREATE, USER_ROLE_CHANGE, CALCULATOR_ESTIMATE, TIMETABLE_UPDATE
+  entityType  String   // PAPER, QUESTION, BLUEPRINT, USER, TIMETABLE, LOGISTICS
+  entityId    String?
+  detailsJson String   @default("{}")
+  createdAt   DateTime @default(now())
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@index([userId])
+}
+
+model ExamTimetableEntry {
+  id                 String   @id @default(cuid())
+  title              String
+  academicSession    String   @default("2025–26")
+  examType           String   @default("ANNUAL") // QUARTERLY | HALF_YEARLY | ANNUAL
+  className          String
+  subject            String
+  subjectCode        String   @default("")
+  examDate           String   // YYYY-MM-DD
+  startTime          String   // e.g. "09:00"
+  endTime            String   // e.g. "12:00"
+  sessionSlot        String   @default("MORNING") // MORNING | AFTERNOON
+  roomLocations      String   @default("")
+  paperId            String?
+  blueprintId        String?
+  status             String   @default("SCHEDULED") // SCHEDULED | DRAFTED | MODERATED | PRINTED | COMPLETED
+  submissionDeadline String   @default("")
+  printingDeadline   String   @default("")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([examDate])
+  @@index([className])
+}
+
+model PrintRunCalculation {
+  id                  String   @id @default(cuid())
+  paperId             String?
+  paperTitle          String
+  academicSession     String   @default("2025–26")
+  className           String
+  subject             String
+  layout              String   @default("BOOKLET")
+  pageCount           Int      @default(4)
+  totalStudents       Int      @default(0)
+  sectionsJson        String   @default("[]") // [{ name: "10-A", count: 42 }, ...]
+  setsJson            String   @default("[]") // [{ set: "Set 1", count: 41 }, ...]
+  wastagePercent      Float    @default(3.0)
+  totalSheetsRequired Int      @default(0)
+  totalReamsRequired  Float    @default(0.0)
+  answerBookletCount  Int      @default(0)
+  notes               String   @default("")
+  createdById         String
+  createdAt           DateTime @default(now())
+
+  @@index([createdAt])
+}
+

@@ -1,0 +1,484 @@
+"use client";
+
+import { Calendar, FileText, Plus, Search, Upload, X } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { PaperImportModal } from "@/components/PaperImportModal";
+import { PaperRow } from "@/components/PaperRow";
+import { EmptyState, ErrorBanner, Field, ListSkeleton, Modal, PageHeader, Spinner, useConfirm, useToast } from "@/components/ui";
+import { useAcademicSession } from "@/lib/academicSession";
+import { api } from "@/lib/client";
+import { DEFAULT_ACADEMIC_SESSION, DEFAULT_SCHOOL_NAME, EXAM_TYPES, EXAM_TYPE_LABEL, inferExamTypeFromText, LAYOUTS, LAYOUT_LABEL, type ExamType } from "@/lib/constants";
+import type { Blueprint, PaperData, PaperListItem } from "@/lib/types";
+
+const SCHOOL_KEY = "epb:schoolName";
+type Filter = "ALL" | "DRAFT" | "FINAL";
+
+export default function PapersPage() {
+  const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
+  const { currentSession } = useAcademicSession();
+  const [papers, setPapers] = useState<PaperListItem[]>([]);
+  const [blueprints, setBlueprints] = useState<Blueprint[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [sessionFilter, setSessionFilter] = useState<string>("ALL");
+  const [filterStatus, setFilterStatus] = useState<Filter>("ALL");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [form, setForm] = useState({
+    title: "",
+    blueprintId: "",
+    examType: "ANNUAL" as ExamType,
+    layout: "BOOKLET_A4",
+    schoolName: DEFAULT_SCHOOL_NAME,
+    examDate: "",
+    paperSet: "SET A",
+    subjectCode: "041",
+    academicSession: DEFAULT_ACADEMIC_SESSION,
+    generalInstructions: "",
+  });
+
+  const load = useCallback(
+    () =>
+      Promise.all([api<PaperListItem[]>("/api/papers"), api<Blueprint[]>("/api/blueprints")]).then(
+        ([p, b]) => {
+          setPapers(p);
+          setBlueprints(b);
+          setLoaded(true);
+        },
+        (e) => {
+          setError(e.message);
+          setLoaded(true);
+        },
+      ),
+    [],
+  );
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  function openCreate() {
+    const defaultBp = blueprints.find((b) => b.id === form.blueprintId) || blueprints[0];
+    setForm((f) => ({
+      ...f,
+      blueprintId: defaultBp?.id || "",
+      examType: (defaultBp?.examType as ExamType) || "ANNUAL",
+      schoolName: f.schoolName || localStorage.getItem(SCHOOL_KEY) || DEFAULT_SCHOOL_NAME,
+      paperSet: f.paperSet || "SET A",
+      subjectCode: defaultBp?.subjectCode || f.subjectCode || "041",
+      academicSession: f.academicSession || currentSession || DEFAULT_ACADEMIC_SESSION,
+    }));
+    setCreating(true);
+  }
+
+  async function create(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSaving(true);
+    try {
+      const p = await api<PaperData>("/api/papers", { method: "POST", json: form });
+      localStorage.setItem(SCHOOL_KEY, form.schoolName);
+      router.push(`/papers/${p.id}`);
+    } catch (err) {
+      setError((err as Error).message);
+      setSaving(false);
+    }
+  }
+
+  async function remove(p: PaperListItem) {
+    const ok = await confirm({
+      title: "Delete this paper?",
+      message: (
+        <>
+          <strong className="text-slate-900">{p.title}</strong> and its question placements will be removed. Questions stay in your bank. This can&apos;t be undone.
+        </>
+      ),
+      confirmLabel: "Delete paper",
+      tone: "danger",
+    });
+    if (!ok) return;
+    setError(null);
+    try {
+      await api(`/api/papers/${p.id}`, { method: "DELETE" });
+      toast.success(`Deleted “${p.title}”`);
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
+  const availableSessions = useMemo(() => {
+    return Array.from(new Set([currentSession, ...papers.map((p) => p.academicSession || "2025–26")])).sort();
+  }, [papers, currentSession]);
+
+  const filteredPapers = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return [...papers]
+      .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
+      .filter((p) => {
+        if (sessionFilter !== "ALL" && (p.academicSession || "2025–26") !== sessionFilter) return false;
+        if (filterStatus !== "ALL" && p.status !== filterStatus) return false;
+        if (!query) return true;
+        return [p.title, p.blueprint.book.subject, p.blueprint.book.className, p.blueprint.name, p.academicSession || ""].some((s) =>
+          s.toLowerCase().includes(query),
+        );
+      });
+  }, [papers, sessionFilter, filterStatus, searchQuery]);
+
+  const counts = {
+    ALL: papers.length,
+    DRAFT: papers.filter((p) => p.status === "DRAFT").length,
+    FINAL: papers.filter((p) => p.status === "FINAL").length,
+  };
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Exam papers"
+        description="Draft, auto-fill, and print your papers. Open a paper to place questions against its blueprint."
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="btn btn-ghost border border-slate-200"
+              disabled={blueprints.length === 0}
+              onClick={() => setImportOpen(true)}
+              title={blueprints.length === 0 ? "Create a blueprint first" : undefined}
+            >
+              <Upload size={16} className="text-indigo-600" /> Import exam paper
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={blueprints.length === 0}
+              onClick={openCreate}
+              title={blueprints.length === 0 ? "Create a blueprint first" : undefined}
+            >
+              <Plus size={16} /> New exam paper
+            </button>
+          </div>
+        }
+      />
+
+      {loaded && blueprints.length === 0 && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <p className="font-semibold">Create a blueprint first</p>
+          <p className="mt-0.5 leading-relaxed">A blueprint sets the sections, question counts and marks per chapter that every paper follows.</p>
+          <Link href="/blueprints" className="mt-2 inline-flex font-semibold underline underline-offset-2 hover:text-amber-950">
+            Go to blueprints
+          </Link>
+        </div>
+      )}
+
+      <ErrorBanner message={error} onDismiss={() => setError(null)} />
+
+      {/* Academic Session Filter Tabs */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
+        <div className="flex items-center gap-1.5 overflow-x-auto">
+          <span className="text-xs font-semibold text-slate-500 mr-1 flex items-center gap-1">
+            <Calendar size={13} /> Session:
+          </span>
+          <button
+            type="button"
+            onClick={() => setSessionFilter("ALL")}
+            className={`rounded-lg px-2.5 py-1 text-xs font-medium whitespace-nowrap transition ${
+              sessionFilter === "ALL"
+                ? "bg-indigo-900 text-white shadow-sm"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            }`}
+          >
+            All Sessions ({papers.length})
+          </button>
+          {availableSessions.map((sess) => {
+            const count = papers.filter((p) => (p.academicSession || "2025–26") === sess).length;
+            const active = sessionFilter === sess;
+            return (
+              <button
+                key={sess}
+                type="button"
+                onClick={() => setSessionFilter(sess)}
+                className={`rounded-lg px-2.5 py-1 text-xs font-medium whitespace-nowrap transition ${
+                  active
+                    ? "bg-indigo-900 text-white shadow-sm"
+                    : sess === currentSession
+                    ? "bg-indigo-50 text-indigo-900 border border-indigo-200 hover:bg-indigo-100"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                {sess} {count > 0 && <span className="opacity-75 font-normal">({count})</span>}
+                {sess === currentSession && <span className="ml-1 text-[10px] text-amber-500 font-bold">●</span>}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="text-xs text-slate-500">
+          Showing <strong>{filteredPapers.length}</strong> of {papers.length} exam papers
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="segmented" role="group" aria-label="Filter by status">
+          {(
+            [
+              ["ALL", "All"],
+              ["DRAFT", "Drafts"],
+              ["FINAL", "Finalized"],
+            ] as const
+          ).map(([key, label]) => (
+            <button key={key} type="button" aria-pressed={filterStatus === key} onClick={() => setFilterStatus(key)}>
+              {label}
+              <span className="tabular-nums text-slate-400">{counts[key]}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="relative w-full min-w-56 max-w-sm sm:w-auto sm:flex-1">
+          <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="search"
+            className="input pl-9 pr-9 [&::-webkit-search-cancel-button]:hidden"
+            placeholder="Search by title, subject or class"
+            aria-label="Search papers"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              aria-label="Clear search"
+              onClick={() => setSearchQuery("")}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {!loaded ? (
+        <ListSkeleton rows={4} />
+      ) : filteredPapers.length === 0 ? (
+        papers.length === 0 ? (
+          <EmptyState
+            icon={FileText}
+            title="No exam papers yet"
+            description="Create your first paper from a blueprint, then add questions chapter by chapter."
+            action={
+              blueprints.length > 0 ? (
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <button type="button" className="btn btn-primary" onClick={openCreate}>
+                    <Plus size={16} /> New exam paper
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost border border-slate-200"
+                    onClick={() => setImportOpen(true)}
+                  >
+                    <Upload size={16} className="text-indigo-600" /> Import exam paper
+                  </button>
+                </div>
+              ) : undefined
+            }
+          />
+        ) : (
+          <EmptyState
+            compact
+            icon={Search}
+            title="No papers match"
+            description="Try a different search or switch the status filter."
+            action={
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  setSearchQuery("");
+                  setFilterStatus("ALL");
+                }}
+              >
+                Clear filters
+              </button>
+            }
+          />
+        )
+      ) : (
+        <ul className="divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-200 bg-white" style={{ boxShadow: "var(--shadow-card)" }}>
+          {filteredPapers.map((p) => (
+            <PaperRow key={p.id} p={p} onDelete={remove} />
+          ))}
+        </ul>
+      )}
+
+      {creating && (
+        <Modal
+          title="New exam paper"
+          subtitle="Set the basics now. Everything can be changed later in the workbench."
+          onClose={() => setCreating(false)}
+          footer={
+            <>
+              <button type="button" className="btn" onClick={() => setCreating(false)}>
+                Cancel
+              </button>
+              <button form="new-paper-form" className="btn btn-primary" disabled={saving}>
+                {saving && <Spinner />}
+                {saving ? "Creating…" : "Create and open"}
+              </button>
+            </>
+          }
+        >
+          <form id="new-paper-form" onSubmit={create} className="space-y-4">
+            <ErrorBanner message={error} />
+            <Field label="Paper title" helper="Shown at the top of the printed paper.">
+              <input
+                className="input"
+                required
+                placeholder="Science, Half-Yearly Examination 2026"
+                value={form.title}
+                onChange={(e) => {
+                  const nextTitle = e.target.value;
+                  const inferred = inferExamTypeFromText(nextTitle);
+                  setForm({
+                    ...form,
+                    title: nextTitle,
+                    ...(inferred ? { examType: inferred } : {}),
+                  });
+                }}
+              />
+            </Field>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Blueprint" helper="Sets the sections and marks per chapter.">
+                <select
+                  className="input"
+                  required
+                  value={form.blueprintId}
+                  onChange={(e) => {
+                    const nextBp = blueprints.find((b) => b.id === e.target.value);
+                    setForm({
+                      ...form,
+                      blueprintId: e.target.value,
+                      ...(nextBp?.examType && !inferExamTypeFromText(form.title)
+                        ? { examType: nextBp.examType as ExamType }
+                        : {}),
+                      ...(nextBp?.subjectCode ? { subjectCode: nextBp.subjectCode } : {}),
+                    });
+                  }}
+                >
+                  {blueprints.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} ({EXAM_TYPE_LABEL[b.examType as ExamType]} · {b.book.className} {b.book.subject})
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="Examination Term (Print Heading)" helper="Controls Quarterly / Half Yearly / Annual heading on print.">
+                <select
+                  className="input"
+                  value={form.examType}
+                  onChange={(e) => setForm({ ...form, examType: e.target.value as ExamType })}
+                >
+                  {EXAM_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {EXAM_TYPE_LABEL[t]} Examination
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+
+            <Field
+              label="Print format"
+              helper={
+                form.layout === "BOOKLET_A4"
+                  ? "Standard office printers: 1 A4 sheet (landscape) folded in half creates 4 A5 pages. Minimum 4 pages."
+                  : form.layout === "BOOKLET"
+                  ? "A3 sheets folded into an A4 booklet: 4 pages per sheet. Requires an A3 printer."
+                  : "Continuous single A4 portrait pages."
+              }
+            >
+              <select className="input" value={form.layout} onChange={(e) => setForm({ ...form, layout: e.target.value })}>
+                {LAYOUTS.map((l) => (
+                  <option key={l} value={l}>
+                    {LAYOUT_LABEL[l]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="School name" helper="Printed in the paper header.">
+                <input
+                  className="input"
+                  required
+                  placeholder="Sarvodaya English Higher Secondary School, Lakhnadon"
+                  value={form.schoolName}
+                  onChange={(e) => setForm({ ...form, schoolName: e.target.value })}
+                />
+              </Field>
+              <Field label="Exam date (optional)">
+                <input type="date" className="input" value={form.examDate} onChange={(e) => setForm({ ...form, examDate: e.target.value })} />
+              </Field>
+              <Field label="Subject code" helper="For example 041 (Mathematics) or 086 (Science).">
+                <input className="input" placeholder="041" value={form.subjectCode} onChange={(e) => setForm({ ...form, subjectCode: e.target.value })} />
+              </Field>
+              <Field label="Paper set" helper="For example SET A or SET 1.">
+                <input className="input" placeholder="SET A" value={form.paperSet} onChange={(e) => setForm({ ...form, paperSet: e.target.value })} />
+              </Field>
+              <Field label="Academic session" helper="e.g. 2025–26, 2026–27">
+                <input
+                  className="input"
+                  placeholder={currentSession}
+                  value={form.academicSession}
+                  onChange={(e) => setForm({ ...form, academicSession: e.target.value })}
+                />
+              </Field>
+            </div>
+
+            <Field label="General instructions (optional)" helper="Printed under the title block.">
+              <textarea
+                className="input"
+                rows={4}
+                placeholder={"1. All questions are compulsory.\n2. Use of calculators is not permitted."}
+                value={form.generalInstructions}
+                onChange={(e) => setForm({ ...form, generalInstructions: e.target.value })}
+              />
+            </Field>
+            <button
+              type="button"
+              className="-mt-2 text-sm font-medium text-indigo-700 hover:text-indigo-900"
+              onClick={() =>
+                setForm((f) => ({
+                  ...f,
+                  generalInstructions: [
+                    "1. This question paper contains multiple sections. All questions are compulsory.",
+                    "2. In questions with internal choice, attempt only one of the alternatives.",
+                    "3. Neat and labeled diagrams must be drawn wherever necessary. Take π = 22/7 wherever required if not stated.",
+                    "4. Use of calculators is strictly prohibited.",
+                  ].join("\n"),
+                }))
+              }
+            >
+              Fill in standard CBSE instructions
+            </button>
+          </form>
+        </Modal>
+      )}
+
+      {importOpen && (
+        <PaperImportModal
+          isOpen={importOpen}
+          onClose={() => setImportOpen(false)}
+          onSuccess={(paperId) => router.push(`/papers/${paperId}`)}
+          blueprints={blueprints}
+        />
+      )}
+    </div>
+  );
+}
