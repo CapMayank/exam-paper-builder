@@ -32,9 +32,11 @@ import { QuestionPicker } from "@/components/QuestionPicker";
 import { QuestionFreshnessAlert, QuestionUsagePills } from "@/components/QuestionUsageHistory";
 import { QuestionView } from "@/components/QuestionView";
 import { ErrorBanner, Field, Modal } from "@/components/ui";
-import { api } from "@/lib/client";
+import { api, imageUrl } from "@/lib/client";
 import {
   ACADEMIC_SESSIONS,
+  DEFAULT_SCHOOL_LOGO,
+  DEFAULT_SCHOOL_NAME,
   EXAM_TYPES,
   EXAM_TYPE_LABEL,
   inferExamTypeFromText,
@@ -48,6 +50,7 @@ import {
   PRINT_DENSITY_LABEL,
   QUESTION_TYPE_LABEL,
   resolvePaperExamType,
+  SCHOOL_DISPLAY_NAME,
   type ExamType,
 } from "@/lib/constants";
 import { formatQuestionNumber } from "@/lib/layout";
@@ -698,17 +701,79 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                 />
               </Field>
 
+              {/* School Emblem & Branding Preview */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-2.5">
+                <div className="flex items-center gap-3">
+                  <div className="h-12 w-12 shrink-0 rounded-lg border border-slate-200 bg-white p-1">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={
+                        paper.logoPath
+                          ? imageUrl(paper.logoPath)
+                          : paper.schoolLogo && paper.schoolLogo !== "NONE"
+                          ? paper.schoolLogo
+                          : DEFAULT_SCHOOL_LOGO
+                      }
+                      alt="School Crest"
+                      className={`h-full w-full object-contain ${
+                        paper.schoolLogo === "NONE" ? "opacity-30 grayscale" : ""
+                      }`}
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-semibold text-slate-900 truncate">
+                      Sarvodaya School Emblem
+                    </div>
+                    <div className="text-[11px] text-slate-500">
+                      Lakhnadon · Est. 2002
+                    </div>
+                    <label className="mt-1 flex items-center gap-1.5 text-[11px] font-medium text-slate-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={paper.schoolLogo !== "NONE"}
+                        onChange={(e) =>
+                          patch({ schoolLogo: e.target.checked ? DEFAULT_SCHOOL_LOGO : "NONE" })
+                        }
+                        className="rounded text-indigo-600"
+                      />
+                      <span>Print emblem on paper &amp; OMR</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
               <Field label="School Name">
-                <input
-                  className="input text-xs"
-                  value={details.schoolName}
-                  onChange={(e) => setDetails({ ...details, schoolName: e.target.value })}
-                  onBlur={() =>
-                    details.schoolName.trim() &&
-                    details.schoolName !== paper.schoolName &&
-                    patch({ schoolName: details.schoolName })
-                  }
-                />
+                <div className="space-y-1.5">
+                  <input
+                    className="input text-xs"
+                    value={details.schoolName}
+                    onChange={(e) => setDetails({ ...details, schoolName: e.target.value })}
+                    onBlur={() =>
+                      details.schoolName.trim() &&
+                      details.schoolName !== paper.schoolName &&
+                      patch({ schoolName: details.schoolName })
+                    }
+                  />
+                  <div className="flex flex-wrap gap-1">
+                    {[DEFAULT_SCHOOL_NAME, SCHOOL_DISPLAY_NAME].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => {
+                          setDetails((d) => ({ ...d, schoolName: preset }));
+                          if (paper.schoolName !== preset) patch({ schoolName: preset });
+                        }}
+                        className={`rounded-md border px-2 py-0.5 text-[10px] font-medium transition ${
+                          details.schoolName === preset
+                            ? "border-indigo-300 bg-indigo-50 text-indigo-900 font-semibold"
+                            : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
+                        }`}
+                      >
+                        {preset.includes("English") ? "Sarvodaya English H.S." : "Sarvodaya H.S. School"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </Field>
 
               <div className="grid grid-cols-2 gap-2">
@@ -952,7 +1017,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
 
           {/* Guided Quick-Start Onboarding Banner for Empty Papers */}
           {paper.items.length === 0 && !dismissOnboarding && (
-            <div className="rounded-2xl border border-indigo-200 bg-gradient-to-r from-indigo-50/90 via-purple-50/50 to-indigo-50/80 p-5 shadow-xs relative">
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs relative">
               <button
                 type="button"
                 onClick={() => setDismissOnboarding(true)}
@@ -962,8 +1027,8 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                 <X size={15} />
               </button>
               <div className="flex items-start gap-3.5">
-                <div className="rounded-xl bg-indigo-600 p-2 text-white shadow-2xs shrink-0">
-                  <Sparkles size={20} />
+                <div className="rounded-lg bg-slate-900 p-2 text-white shrink-0">
+                  <Sparkles size={18} />
                 </div>
                 <div className="space-y-2.5">
                   <div>
@@ -975,30 +1040,30 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                     </p>
                   </div>
                   <div className="grid gap-2.5 sm:grid-cols-3 text-xs pt-1">
-                    <div className="rounded-xl bg-white/85 p-3 border border-indigo-100 shadow-2xs space-y-1">
-                      <div className="font-bold text-indigo-950 flex items-center gap-1.5">
-                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-100 text-[11px] font-bold text-indigo-700">1</span>
+                    <div className="rounded-lg bg-slate-50 p-3 border border-slate-200/80 space-y-1">
+                      <div className="font-semibold text-slate-900 flex items-center gap-1.5">
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-200 text-[11px] font-bold text-slate-800">1</span>
                         <span>Auto-Fill or Pick</span>
                       </div>
-                      <p className="text-[11px] text-slate-500 leading-normal">
+                      <p className="text-[11px] text-slate-600 leading-normal">
                         Click <strong>Smart Auto-Fill</strong> in the top toolbar to automatically draft all question slots, or click any slot below.
                       </p>
                     </div>
-                    <div className="rounded-xl bg-white/85 p-3 border border-indigo-100 shadow-2xs space-y-1">
-                      <div className="font-bold text-indigo-950 flex items-center gap-1.5">
-                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-100 text-[11px] font-bold text-indigo-700">2</span>
+                    <div className="rounded-lg bg-slate-50 p-3 border border-slate-200/80 space-y-1">
+                      <div className="font-semibold text-slate-900 flex items-center gap-1.5">
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-200 text-[11px] font-bold text-slate-800">2</span>
                         <span>Print &amp; School Setup</span>
                       </div>
-                      <p className="text-[11px] text-slate-500 leading-normal">
-                        Switch to the <strong>Print Setup</strong> tab on the left to set your school name, exam date, booklet layout, and general instructions.
+                      <p className="text-[11px] text-slate-600 leading-normal">
+                        Switch to the <strong>Print Setup</strong> tab on the left to customize the Sarvodaya header, exam date, booklet layout, and instructions.
                       </p>
                     </div>
-                    <div className="rounded-xl bg-white/85 p-3 border border-indigo-100 shadow-2xs space-y-1">
-                      <div className="font-bold text-indigo-950 flex items-center gap-1.5">
-                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-100 text-[11px] font-bold text-indigo-700">3</span>
+                    <div className="rounded-lg bg-slate-50 p-3 border border-slate-200/80 space-y-1">
+                      <div className="font-semibold text-slate-900 flex items-center gap-1.5">
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-200 text-[11px] font-bold text-slate-800">3</span>
                         <span>Export &amp; Finalize</span>
                       </div>
-                      <p className="text-[11px] text-slate-500 leading-normal">
+                      <p className="text-[11px] text-slate-600 leading-normal">
                         Use <strong>Export &amp; Print</strong> to print folded A3/A4 booklets, export Word .docx papers, and generate marking schemes.
                       </p>
                     </div>

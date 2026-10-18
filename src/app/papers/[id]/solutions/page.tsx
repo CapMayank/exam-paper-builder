@@ -6,6 +6,8 @@ import { use, useEffect, useState } from "react";
 import { MathText } from "@/components/MathText";
 import { api, imageUrl } from "@/lib/client";
 import {
+  DEFAULT_SCHOOL_LOGO,
+  DEFAULT_SCHOOL_NAME,
   EXAM_TYPE_LABEL,
   normalizeMcqAnswer,
   QUESTION_TYPE_LABEL,
@@ -43,6 +45,12 @@ export default function SolutionsPage({ params }: PageProps<"/papers/[id]/soluti
   if (!paper) return <p className="p-8 text-sm text-slate-500">Loading…</p>;
 
   const { blueprint } = paper;
+  const resolvedLogoSrc =
+    paper.schoolLogo === "NONE"
+      ? null
+      : paper.logoPath
+      ? imageUrl(paper.logoPath)
+      : paper.schoolLogo || DEFAULT_SCHOOL_LOGO;
 
   // Flatten questions with continuous numbering
   const allNumberedItems: { number: number; sectionTitle: string; marks: number; type: string; question: QuestionDto; orQuestion?: QuestionDto | null }[] = [];
@@ -96,22 +104,37 @@ export default function SolutionsPage({ params }: PageProps<"/papers/[id]/soluti
         {/* Document Header */}
         <div className="border-b-2 border-slate-900 pb-4 text-center">
           {paper.paperSet && (
-            <div className="flex justify-end">
+            <div className="flex justify-end mb-1">
               <span className="border border-slate-900 px-2 py-0.5 text-xs font-bold uppercase tracking-wider">
                 {paper.paperSet}
               </span>
             </div>
           )}
-          <h1 className="text-xl font-bold uppercase tracking-wide text-slate-900">{paper.schoolName}</h1>
-          <p className="text-sm font-semibold text-slate-700">
-            {EXAM_TYPE_LABEL[resolvePaperExamType(paper)]} Examination (
-            {paper.academicSession || blueprint.academicSession || "2025–26"})
-            {paper.examDate ? ` · ${new Date(paper.examDate + "T00:00:00").toLocaleDateString("en-GB")}` : ""}
-          </p>
-          <p className="mt-1 text-sm font-medium text-slate-600">
-            {blueprint.book.className} — {blueprint.book.subject}
-            {paper.subjectCode || blueprint.subjectCode ? ` (Sub Code: ${paper.subjectCode || blueprint.subjectCode})` : ""}
-          </p>
+          <div className="flex items-center justify-between gap-4">
+            {resolvedLogoSrc ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={resolvedLogoSrc}
+                alt="School Emblem"
+                className="h-16 w-16 shrink-0 object-contain"
+              />
+            ) : null}
+            <div className="flex-1 text-center">
+              <h1 className="text-xl font-bold uppercase tracking-wide text-slate-900">
+                {paper.schoolName || DEFAULT_SCHOOL_NAME}
+              </h1>
+              <p className="text-sm font-semibold text-slate-700">
+                {EXAM_TYPE_LABEL[resolvePaperExamType(paper)]} Examination (
+                {paper.academicSession || blueprint.academicSession || "2025–26"})
+                {paper.examDate ? ` · ${new Date(paper.examDate + "T00:00:00").toLocaleDateString("en-GB")}` : ""}
+              </p>
+              <p className="mt-0.5 text-sm font-medium text-slate-600">
+                {blueprint.book.className} — {blueprint.book.subject}
+                {paper.subjectCode || blueprint.subjectCode ? ` (Sub Code: ${paper.subjectCode || blueprint.subjectCode})` : ""}
+              </p>
+            </div>
+            {resolvedLogoSrc ? <div className="w-16 shrink-0" aria-hidden /> : null}
+          </div>
           <div className="mt-3 inline-block rounded bg-emerald-50 px-3 py-1 border border-emerald-300">
             <span className="text-xs font-bold uppercase tracking-widest text-emerald-900">
               {activeTab === "SOLUTIONS"

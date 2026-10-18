@@ -987,14 +987,25 @@ export default function ExamCellPage() {
                   key={i}
                   className="rounded-xl border-2 border-slate-900 bg-white p-4 text-xs space-y-2 shadow-xs"
                 >
-                  <div className="flex justify-between border-b-2 border-slate-900 pb-2">
-                    <div>
-                      <h4 className="font-bold text-sm text-slate-950 uppercase">
-                        EXAMINATION PACKET · {latestCalcResult.paperTitle}
-                      </h4>
-                      <p className="text-[11px] text-slate-600">
-                        {latestCalcResult.className} · {latestCalcResult.subject} ({latestCalcResult.academicSession})
-                      </p>
+                  <div className="flex items-center justify-between gap-3 border-b-2 border-slate-900 pb-2">
+                    <div className="flex items-center gap-2.5">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src="/school-logo.png"
+                        alt="Sarvodaya School Logo"
+                        className="h-11 w-11 shrink-0 object-contain"
+                      />
+                      <div>
+                        <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-700">
+                          Sarvodaya Higher Secondary School, Lakhnadon
+                        </div>
+                        <h4 className="font-bold text-sm text-slate-950 uppercase">
+                          EXAMINATION PACKET · {latestCalcResult.paperTitle}
+                        </h4>
+                        <p className="text-[11px] text-slate-600">
+                          {latestCalcResult.className} · {latestCalcResult.subject} ({latestCalcResult.academicSession})
+                        </p>
+                      </div>
                     </div>
                     <div className="text-right">
                       <span className="badge !bg-slate-900 !text-white font-bold text-xs">

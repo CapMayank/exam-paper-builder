@@ -6,24 +6,7 @@ import { useEffect, useState } from "react";
 import { BrandMark } from "@/components/BrandMark";
 import { ErrorBanner, Field, Spinner } from "@/components/ui";
 import { api } from "@/lib/client";
-
-/** The panel art is a worked geometry figure, the kind a teacher draws in the margin of a paper. */
-function FigureArt() {
-  return (
-    <svg viewBox="0 0 420 300" className="w-full max-w-md" role="img" aria-label="A triangle ABC with its angle at B marked">
-      <g fill="none" stroke="#fcd34d" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M60 240 L340 240 L250 70 Z" />
-        <path d="M312 240 A28 28 0 0 1 326.900 215.300" stroke="#fff" strokeWidth="2" />
-      </g>
-      <g fill="#fff" fontFamily="var(--font-heading), Georgia, serif" fontSize="20" fontStyle="italic">
-        <text x="40" y="262">A</text>
-        <text x="346" y="262">B</text>
-        <text x="246" y="56">C</text>
-        <text x="232" y="228" fill="#fcd34d" fontSize="17">θ = 62°</text>
-      </g>
-    </svg>
-  );
-}
+import { DEFAULT_SCHOOL_LOGO } from "@/lib/constants";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -74,50 +57,74 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="grid min-h-screen lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
-      {/* Left Branding Panel */}
+    <main className="grid min-h-screen lg:grid-cols-[minmax(0,1.08fr)_minmax(0,1fr)]">
+      {/* Left Institutional Branding Panel */}
       <section className="graph-paper-dark relative hidden flex-col justify-between p-12 text-white lg:flex">
-        <div className="flex items-center gap-3">
-          <BrandMark size={38} />
-          <div>
-            <span className="font-display text-lg font-semibold block leading-tight">Exam Paper Builder</span>
-            <span className="text-xs text-amber-300 font-medium">School Institutional Edition</span>
+        <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-5">
+          <div className="flex items-center gap-3">
+            <BrandMark size={40} />
+            <div>
+              <span className="font-display text-base font-semibold block leading-tight text-white">
+                Sarvodaya Higher Secondary School
+              </span>
+              <span className="text-xs text-indigo-200/80">
+                Lakhnadon · Official Examination Portal
+              </span>
+            </div>
           </div>
+          <span className="text-xs font-medium text-amber-300">
+            तमसो माँ ज्योतिर्गमय
+          </span>
         </div>
-        <div className="space-y-8">
-          <FigureArt />
-          <div className="max-w-md space-y-3">
-            <h2 className="font-display text-3xl font-semibold leading-tight">
-              Institutional exam design and question governance.
+
+        <div className="my-auto py-8 space-y-6">
+          <div className="inline-flex rounded-2xl bg-white p-3.5 shadow-lg">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={DEFAULT_SCHOOL_LOGO}
+              alt="Sarvodaya English Higher Secondary School, Lakhnadon Official Emblem"
+              className="h-32 w-32 object-contain"
+            />
+          </div>
+
+          <div className="max-w-lg space-y-2.5">
+            <h2 className="font-display text-3xl font-semibold leading-tight text-white">
+              Sarvodaya Higher Secondary School, Lakhnadon
             </h2>
-            <p className="text-base leading-relaxed text-indigo-100/80">
-              Pick questions chapter by chapter, verify blueprint quotas, review bilingual Hindi &amp; English papers, and print ready-to-fold booklet sets.
+            <p className="text-sm font-medium text-amber-300">
+              Sarvodaya English Higher Secondary School · Established 2002
+            </p>
+            <p className="pt-1 text-base leading-relaxed text-indigo-100/80">
+              Pick questions chapter by chapter, verify blueprint mark quotas, author bilingual Hindi &amp; English papers, and print ready-to-fold examination booklets.
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 text-xs text-indigo-200/70">
+
+        <div className="flex items-center gap-2 border-t border-white/10 pt-4 text-xs text-indigo-200/75">
           <School size={15} className="text-amber-300" />
-          <span>Private School System • CBSE &amp; State Board Compliant</span>
+          <span>Sarvodaya Higher Secondary School, Lakhnadon · CBSE &amp; Board Compliant</span>
         </div>
       </section>
 
       {/* Right Login / Setup Form */}
       <section className="flex items-center justify-center px-5 py-10 sm:px-10">
         <div className="w-full max-w-sm">
-          <div className="mb-8 flex items-center gap-3 lg:hidden">
-            <BrandMark size={34} />
-            <div>
-              <span className="font-display text-lg font-semibold text-slate-900 block leading-tight">
-                Exam Paper Builder
+          <div className="mb-8 flex items-center gap-3.5 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-xs lg:hidden">
+            <BrandMark size={48} surface="none" />
+            <div className="min-w-0">
+              <span className="font-display text-base font-semibold text-slate-900 block leading-tight">
+                Sarvodaya H.S. School, Lakhnadon
               </span>
-              <span className="text-xs text-indigo-600 font-medium">School Portal</span>
+              <span className="text-xs text-slate-600 block">
+                तमसो माँ ज्योतिर्गमय · Est. 2002
+              </span>
             </div>
           </div>
 
           {statusLoading ? (
             <div className="flex flex-col items-center justify-center py-12 gap-3 text-slate-400">
               <Spinner />
-              <span className="text-xs">Connecting to school portal…</span>
+              <span className="text-xs">Connecting to Sarvodaya School portal…</span>
             </div>
           ) : !initialized ? (
             /* Setup Mode: First-time Admin initialization */
@@ -130,7 +137,7 @@ export default function LoginPage() {
                   Create Administrator
                 </h1>
                 <p className="mt-1.5 text-xs text-slate-600 leading-relaxed">
-                  Welcome to your school&apos;s private exam portal. Create the primary School Administrator account. Once completed, public registration is permanently disabled and only you can provision faculty accounts.
+                  Welcome to the official examination portal of <strong>Sarvodaya Higher Secondary School, Lakhnadon</strong>. Create the primary School Administrator account to begin.
                 </p>
               </div>
 
@@ -214,12 +221,14 @@ export default function LoginPage() {
               </div>
 
               {/* Private School Notice */}
-              <div className="flex items-start gap-2.5 rounded-xl border border-indigo-100 bg-indigo-50/70 p-3 text-xs text-indigo-950">
-                <Shield size={16} className="shrink-0 text-indigo-700 mt-0.5" />
+              <div className="flex items-start gap-2.5 rounded-xl border border-amber-200/80 bg-amber-50/70 p-3 text-xs text-slate-900">
+                <Shield size={16} className="shrink-0 text-amber-700 mt-0.5" />
                 <div className="space-y-0.5 leading-snug">
-                  <span className="font-bold block text-indigo-900">Private School Portal</span>
+                  <span className="font-bold block text-slate-900">
+                    Sarvodaya Higher Secondary School, Lakhnadon
+                  </span>
                   <span className="text-slate-600">
-                    Public registration is disabled. Teacher and coordinator accounts are managed by the School Administration.
+                    Authorized Examination Cell portal. Teacher and coordinator accounts are provisioned by the School Administration.
                   </span>
                 </div>
               </div>

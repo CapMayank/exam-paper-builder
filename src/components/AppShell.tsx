@@ -176,21 +176,31 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         {/* Desktop sidebar */}
         <aside
-          className="no-print fixed inset-y-0 left-0 z-30 hidden flex-col bg-indigo-900 px-3 py-4 transition-[width] duration-200 lg:flex"
+          className="no-print fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-slate-800/40 bg-indigo-900 px-3 py-4 transition-[width] duration-200 lg:flex"
           style={{ width: collapsed ? "var(--sidebar-w-rail)" : "var(--sidebar-w)" }}
         >
-          <Link href="/" className={`mb-4 flex items-center gap-3 px-1.5 ${collapsed ? "justify-center" : ""}`} aria-label="Exam Paper Builder home">
-            <BrandMark size={34} className="shrink-0" />
+          <Link
+            href="/"
+            className={`mb-4 flex items-center gap-3 border-b border-white/10 pb-3.5 px-1.5 ${
+              collapsed ? "justify-center px-0" : ""
+            }`}
+            aria-label="Sarvodaya Higher Secondary School Lakhnadon — Examination Portal Home"
+          >
+            <BrandMark size={collapsed ? 36 : 40} className="shrink-0" />
             {!collapsed && (
-              <span className="min-w-0">
-                <span className="font-display block truncate text-[15px] font-semibold leading-tight text-white">Exam Paper Builder</span>
-                <span className="block truncate text-xs text-indigo-200/70">CBSE and board papers</span>
+              <span className="min-w-0 flex-1">
+                <span className="font-display block truncate text-[14.5px] font-semibold leading-tight text-white">
+                  Sarvodaya H.S. School
+                </span>
+                <span className="mt-0.5 block truncate text-xs text-indigo-200/75">
+                  Lakhnadon · Exam Portal
+                </span>
               </span>
             )}
           </Link>
 
           {/* Academic Session Selector in Sidebar */}
-          <div className={`mb-4 px-1.5 ${collapsed ? "flex justify-center" : ""}`}>
+          <div className={`mb-4 px-1 ${collapsed ? "flex justify-center" : ""}`}>
             <AcademicSessionSelector compact={collapsed} className={collapsed ? "" : "w-full"} />
           </div>
 
@@ -213,7 +223,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </aside>
 
         {/* Mobile / tablet top bar */}
-        <header className="no-print sticky top-0 z-30 flex items-center gap-3 border-b border-slate-200 bg-white/90 px-3 py-2 backdrop-blur-md lg:hidden">
+        <header className="no-print sticky top-0 z-30 flex items-center gap-3 border-b border-slate-200 bg-white/95 px-3 py-2 backdrop-blur-md lg:hidden">
           <button
             type="button"
             onClick={() => setDrawerPath(pathname)}
@@ -223,11 +233,18 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             <Menu size={20} />
           </button>
-          <Link href="/" className="flex items-center gap-2.5">
-            <BrandMark size={28} />
-            <span className="font-display text-[15px] font-semibold text-slate-900">Exam Paper Builder</span>
+          <Link href="/" className="flex items-center gap-2.5 min-w-0">
+            <BrandMark size={32} surface="none" />
+            <div className="min-w-0">
+              <span className="font-display block truncate text-[14px] font-semibold leading-tight text-slate-900">
+                Sarvodaya H.S. School, Lakhnadon
+              </span>
+              <span className="block truncate text-[11px] text-slate-500">
+                Examination Portal
+              </span>
+            </div>
           </Link>
-          <div className="ml-auto">
+          <div className="ml-auto shrink-0">
             <AcademicSessionSelector compact={true} />
           </div>
         </header>
@@ -242,10 +259,17 @@ export function AppShell({ children }: { children: ReactNode }) {
               onClick={() => setDrawerPath(null)}
             />
             <aside className="anim-slide-left relative flex h-full w-72 max-w-[85vw] flex-col bg-indigo-900 px-3 py-4" role="dialog" aria-modal="true" aria-label="Navigation">
-              <div className="mb-4 flex items-center justify-between px-1.5">
-                <span className="flex items-center gap-3">
-                  <BrandMark size={32} />
-                  <span className="font-display text-[15px] font-semibold text-white">Exam Paper Builder</span>
+              <div className="mb-4 flex items-center justify-between gap-2 border-b border-white/10 pb-3.5 px-1.5">
+                <span className="flex items-center gap-2.5 min-w-0">
+                  <BrandMark size={36} />
+                  <span className="min-w-0">
+                    <span className="font-display block truncate text-[14.5px] font-semibold text-white leading-tight">
+                      Sarvodaya H.S. School
+                    </span>
+                    <span className="block truncate text-xs text-indigo-200/75">
+                      Lakhnadon · Exam Portal
+                    </span>
+                  </span>
                 </span>
                 <button
                   type="button"

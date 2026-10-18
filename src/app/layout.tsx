@@ -13,12 +13,20 @@ const noto = Noto_Sans({ variable: "--font-noto", subsets: ["latin"] });
 const deva = Noto_Sans_Devanagari({ variable: "--font-deva", subsets: ["devanagari"] });
 
 export const metadata: Metadata = {
-  title: { default: "Exam Paper Builder", template: "%s · Exam Paper Builder" },
-  description: "Build exam papers that follow a blueprint, and print them as booklets or single pages.",
+  title: {
+    default: "Sarvodaya Higher Secondary School, Lakhnadon · Examination Portal",
+    template: "%s · Sarvodaya H.S. School, Lakhnadon",
+  },
+  description:
+    "Official Examination & Question Paper Governance System of Sarvodaya Higher Secondary School, Lakhnadon (Est. 2002 · तमसो माँ ज्योतिर्गमय).",
+  icons: {
+    icon: "/school-logo.png",
+    apple: "/school-logo.png",
+  },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0d2d38",
+  themeColor: "#0b2540",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -4,7 +4,7 @@ import { ArrowLeft, Printer } from "lucide-react";
 import Link from "next/link";
 import { use, useEffect, useMemo, useState } from "react";
 import { api, imageUrl } from "@/lib/client";
-import { EXAM_TYPE_LABEL, resolvePaperExamType } from "@/lib/constants";
+import { DEFAULT_SCHOOL_LOGO, DEFAULT_SCHOOL_NAME, EXAM_TYPE_LABEL, resolvePaperExamType } from "@/lib/constants";
 import type { PaperData } from "@/lib/types";
 
 export default function OmrSheetPage({ params }: PageProps<"/papers/[id]/omr">) {
@@ -63,6 +63,12 @@ export default function OmrSheetPage({ params }: PageProps<"/papers/[id]/omr">) 
 
   const rollBoxIndices = Array.from({ length: rollDigits }, (_, i) => i);
   const sets = ["A", "B", "C", "D"];
+  const resolvedLogoSrc =
+    paper.schoolLogo === "NONE"
+      ? null
+      : paper.logoPath
+      ? imageUrl(paper.logoPath)
+      : paper.schoolLogo || DEFAULT_SCHOOL_LOGO;
 
   return (
     <div className="min-h-screen bg-slate-200/90 pb-12 print:m-0 print:min-h-0 print:bg-white print:p-0">
@@ -77,7 +83,7 @@ export default function OmrSheetPage({ params }: PageProps<"/papers/[id]/omr">) 
           </Link>
           <div className="h-4 w-px bg-slate-200" />
           <span className="font-display font-semibold text-slate-800">
-            CBSE / Board Standard OMR Answer Sheet
+            Sarvodaya H.S. School · OMR Answer Sheet
           </span>
           <span className="badge badge-indigo">
             {totalQuestions} Questions
@@ -147,24 +153,28 @@ export default function OmrSheetPage({ params }: PageProps<"/papers/[id]/omr">) 
           </div>
 
           {/* Header */}
-          <div className="mb-3 border-b-2 border-slate-900 pb-2 text-center">
-            {paper.schoolLogo || paper.logoPath ? (
+          <div className="mb-3 flex items-center justify-between gap-3 border-b-2 border-slate-900 pb-2">
+            {resolvedLogoSrc ? (
+              // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={paper.logoPath ? imageUrl(paper.logoPath) : paper.schoolLogo || ""}
-                alt="Logo"
-                className="mx-auto mb-1 h-12 w-auto object-contain"
+                src={resolvedLogoSrc}
+                alt="School Logo"
+                className="h-14 w-14 shrink-0 object-contain"
               />
             ) : null}
-            <h1 className="font-serif text-xl font-black uppercase tracking-wider text-slate-950">
-              {paper.schoolName || "EXAMINATION BOARD / SCHOOL"}
-            </h1>
-            <p className="text-xs font-bold uppercase tracking-widest text-slate-800">
-              {EXAM_TYPE_LABEL[resolvePaperExamType(paper)]} EXAMINATION · ACADEMIC SESSION{" "}
-              {paper.academicSession || paper.blueprint.academicSession || "2025–26"}
-            </p>
-            <p className="mt-0.5 text-[11px] font-semibold text-slate-700">
-              OPTICAL MARK RECOGNITION (OMR) ANSWER SHEET
-            </p>
+            <div className="flex-1 text-center">
+              <h1 className="font-serif text-lg font-black uppercase tracking-wider text-slate-950">
+                {paper.schoolName || DEFAULT_SCHOOL_NAME}
+              </h1>
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-800">
+                {EXAM_TYPE_LABEL[resolvePaperExamType(paper)]} EXAMINATION · ACADEMIC SESSION{" "}
+                {paper.academicSession || paper.blueprint.academicSession || "2025–26"}
+              </p>
+              <p className="mt-0.5 text-[11px] font-semibold text-slate-700">
+                OPTICAL MARK RECOGNITION (OMR) ANSWER SHEET
+              </p>
+            </div>
+            {resolvedLogoSrc ? <div className="w-14 shrink-0" aria-hidden /> : null}
           </div>
 
           {/* Metadata Row: Class, Subject, Date, Code */}

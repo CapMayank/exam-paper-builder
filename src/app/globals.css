@@ -13,44 +13,44 @@
  *   success -> emerald-*     danger  -> red-*        warning -> amber-*
  */
 :root {
-  --background: #f3f5f2; /* the desk */
-  --foreground: #161b18;
+  --background: #f8fafc; /* crisp daylight paper neutral */
+  --foreground: #0f172a;
   --surface: #ffffff;
-  --line: #dfe4de;
-  --ink: #0d2d38; /* sidebar + hero */
-  --marker: #fcd34d; /* highlighter */
-  --shadow-card: 0 1px 2px rgb(13 45 56 / 0.05), 0 1px 1px rgb(13 45 56 / 0.04);
-  --shadow-lift: 0 8px 24px -8px rgb(13 45 56 / 0.18), 0 2px 6px rgb(13 45 56 / 0.06);
-  --sidebar-w: 15.5rem;
-  --sidebar-w-rail: 4.25rem;
+  --line: #e2e8f0;
+  --ink: #0b1f38; /* solid Oxford navy from the center book of the Sarvodaya crest */
+  --marker: #f59e0b; /* clean saffron-amber accent */
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 1px 1px rgb(15 23 42 / 0.03);
+  --shadow-lift: 0 8px 20px -6px rgb(15 23 42 / 0.10), 0 2px 6px rgb(15 23 42 / 0.04);
+  --sidebar-w: 16.25rem;
+  --sidebar-w-rail: 4.5rem;
 }
 
 @theme {
-  /* primary: ink teal */
-  --color-indigo-50: #eaf5f7;
-  --color-indigo-100: #d3eaee;
-  --color-indigo-200: #abd4dd;
-  --color-indigo-300: #7bb7c5;
-  --color-indigo-400: #4a94a7;
-  --color-indigo-500: #2c768b;
-  --color-indigo-600: #1e6075;
-  --color-indigo-700: #174d5e;
-  --color-indigo-800: #123e4c;
-  --color-indigo-900: #0d2d38;
-  --color-indigo-950: #081e26;
+  /* primary: crisp Oxford & Royal Academic Navy (no muddy tones) */
+  --color-indigo-50: #f0f5fb;
+  --color-indigo-100: #dce8f6;
+  --color-indigo-200: #bed4ee;
+  --color-indigo-300: #91b8e2;
+  --color-indigo-400: #5c94d1;
+  --color-indigo-500: #3673bc;
+  --color-indigo-600: #24599e;
+  --color-indigo-700: #1d4780;
+  --color-indigo-800: #173a69;
+  --color-indigo-900: #0b1f38;
+  --color-indigo-950: #071324;
 
-  /* neutral: graphite with a faint green paper tint */
-  --color-slate-50: #f7f8f6;
-  --color-slate-100: #eff1ee;
-  --color-slate-200: #e1e5e0;
-  --color-slate-300: #ccd2cb;
-  --color-slate-400: #9ba49b;
-  --color-slate-500: #6c766d;
-  --color-slate-600: #4f5951;
-  --color-slate-700: #3a423c;
-  --color-slate-800: #262c28;
-  --color-slate-900: #161b18;
-  --color-slate-950: #0c0f0d;
+  /* neutral: clean, high-contrast paper & slate */
+  --color-slate-50: #f8fafc;
+  --color-slate-100: #f1f5f9;
+  --color-slate-200: #e2e8f0;
+  --color-slate-300: #cbd5e1;
+  --color-slate-400: #94a3b8;
+  --color-slate-500: #64748b;
+  --color-slate-600: #475569;
+  --color-slate-700: #334155;
+  --color-slate-800: #1e293b;
+  --color-slate-900: #0f172a;
+  --color-slate-950: #020617;
 
   --font-sans: var(--font-ui), var(--font-deva), system-ui, sans-serif;
   --font-display: var(--font-heading), var(--font-deva), Georgia, serif;
@@ -215,19 +215,19 @@ input[type="range"] {
   @apply bg-slate-50/70;
 }
 
-/* Graph-paper surface: faint squared grid, the visual signature of the product */
+/* Graph-paper surface: faint squared grid, clean and flat without color-wash gradients */
 .graph-paper {
-  background-color: var(--color-slate-50);
+  background-color: #ffffff;
   background-image:
-    linear-gradient(to right, rgb(13 45 56 / 0.07) 1px, transparent 1px),
-    linear-gradient(to bottom, rgb(13 45 56 / 0.07) 1px, transparent 1px);
+    linear-gradient(to right, rgb(15 23 42 / 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(15 23 42 / 0.045) 1px, transparent 1px);
   background-size: 20px 20px;
 }
 .graph-paper-dark {
   background-color: var(--ink);
   background-image:
-    linear-gradient(to right, rgb(255 255 255 / 0.06) 1px, transparent 1px),
-    linear-gradient(to bottom, rgb(255 255 255 / 0.06) 1px, transparent 1px);
+    linear-gradient(to right, rgb(255 255 255 / 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.045) 1px, transparent 1px);
   background-size: 22px 22px;
 }
 

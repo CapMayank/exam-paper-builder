@@ -3,7 +3,14 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { QuestionView } from "@/components/QuestionView";
 import { imageUrl } from "@/lib/client";
-import { EXAM_TYPE_LABEL, isBookletLayout, QUESTION_TYPE_LABEL, resolvePaperExamType } from "@/lib/constants";
+import {
+  DEFAULT_SCHOOL_LOGO,
+  DEFAULT_SCHOOL_NAME,
+  EXAM_TYPE_LABEL,
+  isBookletLayout,
+  QUESTION_TYPE_LABEL,
+  resolvePaperExamType,
+} from "@/lib/constants";
 import { formatQuestionNumber, imposeBooklet, paginate } from "@/lib/layout";
 import type { PaperData } from "@/lib/types";
 
@@ -34,6 +41,13 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean): Block
   const isEffectiveCompact = compact || paper.printDensity === "COMPACT";
   const questionBottomPadding =
     paper.printDensity === "COMPACT" ? "2.5mm" : paper.printDensity === "COMFORTABLE" ? "5.5mm" : "4mm";
+  const resolvedLogoSrc =
+    paper.schoolLogo === "NONE"
+      ? null
+      : paper.logoPath
+      ? imageUrl(paper.logoPath)
+      : paper.schoolLogo || DEFAULT_SCHOOL_LOGO;
+  const logoBoxSize = isA5 ? "12.5mm" : "15.5mm";
 
   blocks.push({
     key: "header",
@@ -79,36 +93,48 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean): Block
           )}
         </div>
 
-        {/* School Logo (if configured) */}
-        {(paper.logoPath || paper.schoolLogo) && (
-          <div style={{ textAlign: "center", marginBottom: "1.5mm" }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={paper.logoPath ? imageUrl(paper.logoPath) : paper.schoolLogo || ""}
-              alt=""
-              style={{ height: isA5 ? "10mm" : "13mm", width: "auto", objectFit: "contain", margin: "0 auto" }}
-            />
-          </div>
-        )}
-
-        {/* School Name & Exam Title Header */}
+        {/* School Emblem + Centered School Name & Exam Title Header */}
         <div
           style={{
-            textAlign: "center",
-            fontSize: isA5 ? "12pt" : "14.5pt",
-            fontWeight: 800,
-            textTransform: "uppercase",
-            letterSpacing: "0.03em",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "2.5mm",
           }}
         >
-          {paper.schoolName}
-        </div>
-        <div style={{ textAlign: "center", fontSize: isA5 ? "10pt" : "11.5pt", fontWeight: 700, marginTop: "0.5mm" }}>
-          {examHeading} ({sessionText})
-          {paper.examDate ? ` · ${new Date(paper.examDate + "T00:00:00").toLocaleDateString("en-GB")}` : ""}
-        </div>
-        <div style={{ textAlign: "center", fontSize: isA5 ? "9.5pt" : "11pt", fontWeight: 600, marginTop: "0.5mm" }}>
-          {blueprint.book.className} — {blueprint.book.subject}
+          {resolvedLogoSrc ? (
+            <div style={{ width: logoBoxSize, height: logoBoxSize, flexShrink: 0 }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={resolvedLogoSrc}
+                alt="School Emblem"
+                style={{ width: "100%", height: "100%", objectFit: "contain" }}
+              />
+            </div>
+          ) : null}
+
+          <div style={{ flex: 1, textAlign: "center", minWidth: 0 }}>
+            <div
+              style={{
+                fontSize: isA5 ? "11.5pt" : "14pt",
+                fontWeight: 800,
+                textTransform: "uppercase",
+                letterSpacing: "0.025em",
+                lineHeight: 1.2,
+              }}
+            >
+              {paper.schoolName || DEFAULT_SCHOOL_NAME}
+            </div>
+            <div style={{ fontSize: isA5 ? "9.5pt" : "11pt", fontWeight: 700, marginTop: "0.6mm" }}>
+              {examHeading} ({sessionText})
+              {paper.examDate ? ` · ${new Date(paper.examDate + "T00:00:00").toLocaleDateString("en-GB")}` : ""}
+            </div>
+            <div style={{ fontSize: isA5 ? "9pt" : "10.5pt", fontWeight: 600, marginTop: "0.5mm" }}>
+              {blueprint.book.className} — {blueprint.book.subject}
+            </div>
+          </div>
+
+          {resolvedLogoSrc ? <div style={{ width: logoBoxSize, flexShrink: 0 }} aria-hidden /> : null}
         </div>
 
         {/* Time and Maximum Marks Bar */}

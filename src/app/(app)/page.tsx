@@ -8,6 +8,7 @@ import {
   CopyPlus,
   FileText,
   HelpCircle,
+  PackageCheck,
   PencilRuler,
   Plus,
   Printer,
@@ -16,8 +17,10 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { BrandMark } from "@/components/BrandMark";
 import { PaperRow, Progress } from "@/components/PaperRow";
 import { EmptyState, ListSkeleton, Skeleton } from "@/components/ui";
+import { useAcademicSession } from "@/lib/academicSession";
 import { api } from "@/lib/client";
 import { greeting, plural, timeAgo } from "@/lib/format";
 import type { Blueprint, Book, PaperListItem, QuestionDto } from "@/lib/types";
@@ -26,6 +29,7 @@ type Data = { papers: PaperListItem[]; books: Book[]; blueprints: Blueprint[]; q
 
 export default function DashboardPage() {
   const [data, setData] = useState<Data | null>(null);
+  const { currentSession } = useAcademicSession();
 
   useEffect(() => {
     Promise.all([
@@ -55,7 +59,7 @@ export default function DashboardPage() {
   if (!data || !view) {
     return (
       <div className="space-y-8" role="status" aria-label="Loading dashboard">
-        <Skeleton className="h-9 w-72" />
+        <Skeleton className="h-36 w-full rounded-2xl" />
         <Skeleton className="h-44 w-full rounded-2xl" />
         <ListSkeleton rows={3} />
       </div>
@@ -74,22 +78,42 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      <header className="rise flex flex-wrap items-end justify-between gap-4" style={{ "--i": 0 } as React.CSSProperties}>
-        <div>
-          <h1 className="page-title">
-            {greeting()}
-            {first ? `, ${first}` : ""}
-          </h1>
-          <p className="page-lede">
-            {data.papers.length === 0
-              ? "Let's build your first exam paper."
-              : `${plural(view.draftCount, "draft")} in progress and ${plural(view.finalCount, "finalized paper")}.`}
-          </p>
+      {/* Clean Institutional Letterhead Masthead (No gradients or badge clutter) */}
+      <header
+        className="rise flex flex-wrap items-center justify-between gap-5 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6"
+        style={{ "--i": 0, boxShadow: "var(--shadow-card)" } as React.CSSProperties}
+      >
+        <div className="flex items-center gap-4 min-w-0">
+          <BrandMark size={64} surface="none" className="shrink-0" />
+          <div className="min-w-0 space-y-0.5">
+            <h1 className="font-display text-lg font-semibold leading-snug text-slate-900 sm:text-xl">
+              Sarvodaya Higher Secondary School, Lakhnadon
+            </h1>
+            <p className="text-xs font-medium text-slate-500">
+              Sarvodaya English Higher Secondary School · Est. 2002 · तमसो माँ ज्योतिर्गमय · Session {currentSession}
+            </p>
+            <p className="pt-1 text-sm text-slate-700">
+              <span className="font-semibold text-slate-900">
+                {greeting()}
+                {first ? `, ${first}` : ""}.
+              </span>{" "}
+              {data.papers.length === 0
+                ? "Ready to build your first exam paper."
+                : `${plural(view.draftCount, "draft")} in progress and ${plural(view.finalCount, "finalized paper")}.`}
+            </p>
+          </div>
         </div>
-        <Link href="/papers" className="btn btn-primary btn-lg">
-          <Plus size={18} />
-          New exam paper
-        </Link>
+
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Link href="/exam-cell" className="btn">
+            <PackageCheck size={16} className="text-slate-600" />
+            Exam cell
+          </Link>
+          <Link href="/papers" className="btn btn-primary btn-lg">
+            <Plus size={18} />
+            New exam paper
+          </Link>
+        </div>
       </header>
 
       {c ? (
@@ -99,7 +123,9 @@ export default function DashboardPage() {
           aria-labelledby="continue-title"
         >
           <div className="min-w-0 space-y-4">
-            <p className="text-sm font-medium text-slate-600">Pick up where you left off · edited {timeAgo(c.updatedAt)}</p>
+            <p className="text-sm font-medium text-slate-600">
+              Pick up where you left off · edited {timeAgo(c.updatedAt)}
+            </p>
             <h2 id="continue-title" className="font-display text-2xl font-semibold leading-snug text-slate-900 sm:text-[1.7rem]">
               {c.title}
             </h2>

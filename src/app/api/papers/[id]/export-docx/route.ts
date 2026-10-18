@@ -1,9 +1,12 @@
+import fs from "node:fs";
+import path from "node:path";
 import {
   AlignmentType,
   BorderStyle,
   Document,
   Header,
   HeadingLevel,
+  ImageRun,
   Packer,
   Paragraph,
   Table,
@@ -15,6 +18,7 @@ import {
 import { HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import {
+  DEFAULT_SCHOOL_NAME,
   EXAM_TYPE_LABEL,
   formatQuestionNumber,
   isMcqLikeType,
@@ -66,6 +70,31 @@ export const GET = route(async (_req, params, user) => {
 
   const paragraphs: (Paragraph | Table)[] = [];
 
+  // --- School Logo (if enabled) ---
+  if (paper.schoolLogo !== "NONE") {
+    try {
+      const logoFile = path.join(process.cwd(), "public", "school-logo.png");
+      if (fs.existsSync(logoFile)) {
+        const logoBuf = fs.readFileSync(logoFile);
+        paragraphs.push(
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 80 },
+            children: [
+              new ImageRun({
+                data: logoBuf,
+                transformation: { width: 56, height: 56 },
+                type: "png",
+              }),
+            ],
+          }),
+        );
+      }
+    } catch {
+      // ignore if logo file is unreadable
+    }
+  }
+
   // --- Title & School Header ---
   paragraphs.push(
     new Paragraph({
@@ -73,7 +102,7 @@ export const GET = route(async (_req, params, user) => {
       spacing: { after: 120 },
       children: [
         new TextRun({
-          text: paper.schoolName.toUpperCase(),
+          text: (paper.schoolName || DEFAULT_SCHOOL_NAME).toUpperCase(),
           bold: true,
           size: 32, // 16pt
           font: "Times New Roman",

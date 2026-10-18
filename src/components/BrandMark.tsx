@@ -1,11 +1,36 @@
-/** Product mark: a right angle with its arc, drawn like a teacher's margin note. */
-export function BrandMark({ size = 36, className = "" }: { size?: number; className?: string }) {
+import { DEFAULT_SCHOOL_LOGO } from "@/lib/constants";
+
+/** Official emblem of Sarvodaya English Higher Secondary School, Lakhnadon (Est. 2002). */
+export function BrandMark({
+  size = 38,
+  className = "",
+  surface = "auto",
+}: {
+  size?: number;
+  className?: string;
+  surface?: "auto" | "light" | "none";
+}) {
   return (
-    <svg width={size} height={size} viewBox="0 0 36 36" fill="none" aria-hidden className={className}>
-      <rect width="36" height="36" rx="9" fill="#fcd34d" />
-      <path d="M10 8v18h18" stroke="#0d2d38" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M10 18c4.4 0 8 3.6 8 8" stroke="#0d2d38" strokeWidth="2" strokeLinecap="round" strokeDasharray="0.1 4" />
-      <rect x="10" y="22" width="4" height="4" fill="#0d2d38" />
-    </svg>
+    <span
+      className={`inline-flex shrink-0 items-center justify-center ${
+        surface === "auto"
+          ? "rounded-xl bg-white p-1 shadow-xs ring-1 ring-black/5"
+          : surface === "light"
+          ? "rounded-xl bg-slate-50 p-1 ring-1 ring-slate-200/80"
+          : ""
+      } ${className}`}
+      style={{ width: size, height: size }}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={DEFAULT_SCHOOL_LOGO}
+        alt="Sarvodaya English Higher Secondary School, Lakhnadon"
+        width={size}
+        height={size}
+        className="h-full w-full object-contain"
+      />
+    </span>
   );
 }
+
+

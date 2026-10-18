@@ -187,6 +187,13 @@ export const isBookletLayout = (layout?: string | null): boolean =>
   layout === "BOOKLET" || layout === "BOOKLET_A4";
 
 export const DEFAULT_SCHOOL_NAME = "Sarvodaya English Higher Secondary School, Lakhnadon";
+export const SCHOOL_DISPLAY_NAME = "Sarvodaya Higher Secondary School, Lakhnadon";
+export const SCHOOL_SHORT_NAME = "Sarvodaya H.S. School";
+export const SCHOOL_LOCATION = "Lakhnadon";
+export const SCHOOL_ESTABLISHED = "Established 2002 · Lakhnadon";
+export const SCHOOL_MOTTO_HI = "तमसो माँ ज्योतिर्गमय";
+export const SCHOOL_MOTTO_EN = "Lead us from darkness to light";
+export const DEFAULT_SCHOOL_LOGO = "/school-logo.png";
 
 export const PRINT_DENSITIES = ["COMPACT", "STANDARD", "COMFORTABLE"] as const;
 export type PrintDensity = (typeof PRINT_DENSITIES)[number];
