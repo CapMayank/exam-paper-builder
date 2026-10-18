@@ -34,4 +34,4 @@ NODE_OPTIONS='--max-old-space-size=2048' npm run build
 echo "🔄 Restarting application in PM2..."
 pm2 restart exam-paper-builder --update-env
 
-echo "✅ Deployment completed successfully! Live on http://68.233.111.16"
+echo "✅ Deployment completed successfully! Live on https://exam.sarvodayaschool.co.in"
