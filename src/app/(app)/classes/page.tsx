@@ -484,7 +484,7 @@ export default function ClassesHierarchyPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-w-0 max-w-full">
       {/* 1. INSTITUTIONAL PAGE HEADER */}
       <PageHeader
         title="Curriculum & Classes Studio"
@@ -529,8 +529,8 @@ export default function ClassesHierarchyPage() {
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 
       {/* 2. INSTITUTIONAL CONTEXT & WORKSPACE NAV PILLS */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/90 bg-white px-4 py-3 text-xs text-slate-600 shadow-xs">
-        <div className="flex flex-wrap items-center gap-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/90 bg-white px-4 py-3 text-xs text-slate-600 shadow-xs min-w-0 max-w-full">
+        <div className="flex flex-wrap items-center gap-2.5 min-w-0">
           <span className="flex items-center gap-1.5 font-semibold text-slate-800">
             <Calendar size={14} className="text-indigo-600" /> Active Academic Session:
           </span>
@@ -575,31 +575,31 @@ export default function ClassesHierarchyPage() {
       </div>
 
       {/* 3. MOBILE MASTER-DETAIL TABS (< lg screens) */}
-      <div className="flex items-center gap-1.5 p-1 bg-slate-200/80 rounded-xl lg:hidden">
+      <div className="flex items-center gap-1.5 p-1 bg-slate-200/80 rounded-xl lg:hidden min-w-0 max-w-full">
         <button
           type="button"
           onClick={() => setMobileTab("directory")}
-          className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
+          className={`flex-1 py-2 px-2.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition min-w-0 ${
             mobileTab === "directory"
               ? "bg-white text-slate-900 shadow-2xs"
               : "text-slate-600 hover:text-slate-900"
           }`}
         >
-          <GraduationCap size={15} />
-          <span>Classes Directory ({displayedClasses.length})</span>
+          <GraduationCap size={15} className="shrink-0" />
+          <span className="truncate">Classes ({displayedClasses.length})</span>
         </button>
         <button
           type="button"
           onClick={() => setMobileTab("details")}
           disabled={!selectedClass}
-          className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
+          className={`flex-1 py-2 px-2.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition min-w-0 ${
             mobileTab === "details"
               ? "bg-white text-slate-900 shadow-2xs"
               : "text-slate-600 hover:text-slate-900"
           }`}
         >
-          <Layers size={15} />
-          <span>{selectedClass ? `${selectedClass.name} Workspace` : "Class Details"}</span>
+          <Layers size={15} className="shrink-0" />
+          <span className="truncate">{selectedClass ? `${selectedClass.name} Workspace` : "Class Details"}</span>
         </button>
       </div>
 
@@ -630,12 +630,12 @@ export default function ClassesHierarchyPage() {
         />
       ) : (
         /* 4. MAIN RESPONSIVE TWO-COLUMN COMMAND CENTER */
-        <div className="grid items-start gap-6 lg:grid-cols-[19rem_minmax(0,1fr)] xl:grid-cols-[22rem_minmax(0,1fr)]">
+        <div className="grid min-w-0 max-w-full items-start gap-6 lg:grid-cols-[19rem_minmax(0,1fr)] xl:grid-cols-[22rem_minmax(0,1fr)]">
           {/* ======================================================== */}
           {/* LEFT COLUMN: Educational Stages Directory (Sticky)     */}
           {/* ======================================================== */}
           <aside
-            className={`lg:sticky lg:top-6 lg:max-h-[calc(100vh-3.5rem)] flex-col rounded-2xl border border-slate-200/90 bg-white shadow-xs overflow-hidden ${
+            className={`min-w-0 max-w-full lg:sticky lg:top-6 lg:max-h-[calc(100vh-3.5rem)] flex-col rounded-2xl border border-slate-200/90 bg-white shadow-xs overflow-hidden ${
               mobileTab === "details" ? "hidden lg:flex" : "flex"
             }`}
           >
@@ -823,29 +823,29 @@ export default function ClassesHierarchyPage() {
           {selectedClass && (
             <main
               id="class-workspace-card"
-              className={`space-y-6 ${mobileTab === "directory" ? "hidden lg:block" : "block"}`}
+              className={`min-w-0 max-w-full space-y-6 ${mobileTab === "directory" ? "hidden lg:block" : "block"}`}
             >
               {/* Mobile Back Button */}
-              <div className="lg:hidden flex items-center justify-between gap-2 pb-1">
+              <div className="lg:hidden flex items-center justify-between gap-2 pb-1 min-w-0">
                 <button
                   type="button"
                   onClick={() => setMobileTab("directory")}
-                  className="btn btn-ghost border border-slate-200 text-xs py-1.5 px-3 inline-flex items-center gap-1.5 font-semibold text-slate-800"
+                  className="btn btn-ghost border border-slate-200 text-xs py-1.5 px-3 inline-flex items-center gap-1.5 font-semibold text-slate-800 shrink-0"
                 >
                   ← Back to Directory
                 </button>
-                <span className="text-xs text-slate-500 font-medium">
-                  Active Class: <strong>{selectedClass.name}</strong>
+                <span className="text-xs text-slate-500 font-medium truncate">
+                  Active: <strong>{selectedClass.name}</strong>
                 </span>
               </div>
 
               {/* CARD 1: Class Identity & Sections Manager */}
-              <section className="card p-5 sm:p-6 bg-white space-y-5 border-slate-200/90">
+              <section className="card min-w-0 max-w-full p-4 sm:p-6 bg-white space-y-5 border-slate-200/90 overflow-hidden">
                 {/* Header Row: Title, Stream, Actions */}
-                <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 pb-4">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2.5">
-                      <h2 className="text-2xl font-bold font-display text-slate-900 tracking-tight">
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 border-b border-slate-100 pb-4 min-w-0">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-xl sm:text-2xl font-bold font-display text-slate-900 tracking-tight">
                         {selectedClass.name}
                       </h2>
                       <span className="inline-flex items-center rounded-lg bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700 ring-1 ring-inset ring-indigo-700/10">
@@ -864,7 +864,7 @@ export default function ClassesHierarchyPage() {
                   </div>
 
                   {/* Primary Class Actions */}
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-1.5 shrink-0">
                     <button
                       type="button"
                       onClick={() => {
@@ -872,7 +872,7 @@ export default function ClassesHierarchyPage() {
                         setSubjectForm({ name: "", code: "" });
                         setSubjectModalOpen(true);
                       }}
-                      className="btn btn-primary text-xs py-1.5 px-3"
+                      className="btn btn-primary text-xs py-1.5 px-2.5 sm:px-3"
                     >
                       <Plus size={14} /> Add Subject
                     </button>
@@ -886,7 +886,7 @@ export default function ClassesHierarchyPage() {
                         });
                         setClassModal({ editing: selectedClass });
                       }}
-                      className="btn btn-ghost border border-slate-200 text-xs py-1.5 px-3"
+                      className="btn btn-ghost border border-slate-200 text-xs py-1.5 px-2.5 sm:px-3"
                       title="Edit class name or stream"
                     >
                       <Pencil size={13} /> Edit Class
@@ -894,7 +894,7 @@ export default function ClassesHierarchyPage() {
                     <button
                       type="button"
                       onClick={() => deleteClass(selectedClass)}
-                      className="btn btn-ghost border border-slate-200 text-red-600 hover:bg-red-50 text-xs py-1.5 px-2.5"
+                      className="btn btn-ghost border border-slate-200 text-red-600 hover:bg-red-50 text-xs py-1.5 px-2"
                       title="Delete class"
                     >
                       <Trash2 size={14} />
@@ -903,12 +903,12 @@ export default function ClassesHierarchyPage() {
                 </div>
 
                 {/* Interactive Sections Roster */}
-                <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50/70 rounded-xl p-3 border border-slate-100">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider text-[11px]">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/70 rounded-xl p-3 border border-slate-100 min-w-0 max-w-full">
+                  <div className="flex flex-wrap items-center gap-2 min-w-0">
+                    <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider text-[11px] shrink-0">
                       Active Sections:
                     </span>
-                    <div className="flex flex-wrap items-center gap-1.5">
+                    <div className="flex flex-wrap items-center gap-1.5 min-w-0">
                       {selectedClass.sections.map((sec) => (
                         <span
                           key={sec}
@@ -935,7 +935,7 @@ export default function ClassesHierarchyPage() {
                     type="button"
                     disabled={busy}
                     onClick={() => addSectionToClass(selectedClass)}
-                    className="btn btn-ghost border border-slate-200 bg-white text-xs py-1 px-2.5 text-indigo-700 hover:bg-indigo-50 font-semibold"
+                    className="btn btn-ghost border border-slate-200 bg-white text-xs py-1 px-2.5 text-indigo-700 hover:bg-indigo-50 font-semibold shrink-0 self-start sm:self-auto"
                     title="Add sequential next section (e.g. Section B)"
                   >
                     <Plus size={13} /> Add Section
@@ -995,14 +995,14 @@ export default function ClassesHierarchyPage() {
               </section>
 
               {/* CARD 2: Unified Subject Curriculum Roster (The Master Matrix) */}
-              <section className="card p-5 sm:p-6 bg-white space-y-4 border-slate-200/90">
+              <section className="card min-w-0 max-w-full p-4 sm:p-6 bg-white space-y-4 border-slate-200/90 overflow-hidden">
                 {/* Header: Title, Search, and Auto-Add Missing Standard Subjects */}
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3.5">
-                  <div className="space-y-0.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3.5 min-w-0">
+                  <div className="space-y-0.5 min-w-0">
                     <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                      <BookOpen size={17} className="text-indigo-600" />
-                      <span>Curriculum Subjects Roster</span>
-                      <span className="badge !bg-slate-100 !text-slate-800 text-xs font-mono">
+                      <BookOpen size={17} className="text-indigo-600 shrink-0" />
+                      <span className="truncate">Curriculum Subjects Roster</span>
+                      <span className="badge !bg-slate-100 !text-slate-800 text-xs font-mono shrink-0">
                         {classSubjects.length}
                       </span>
                     </h3>
@@ -1011,23 +1011,23 @@ export default function ClassesHierarchyPage() {
                     </p>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2 min-w-0">
                     {/* Auto-add missing standard subjects prompt */}
                     {missingStandardSubjects.length > 0 && (
                       <button
                         type="button"
                         disabled={busy}
                         onClick={addMissingStandardSubjects}
-                        className="btn btn-ghost border border-indigo-200 bg-indigo-50/70 text-indigo-800 hover:bg-indigo-100 text-xs py-1.5 px-3 font-semibold shadow-2xs"
+                        className="btn btn-ghost border border-indigo-200 bg-indigo-50/70 text-indigo-800 hover:bg-indigo-100 text-xs py-1.5 px-2.5 sm:px-3 font-semibold shadow-2xs"
                         title={`Add missing standard board subjects: ${missingStandardSubjects.map((s) => s.name).join(", ")}`}
                       >
-                        <Sparkles size={13} className="text-indigo-600" />
+                        <Sparkles size={13} className="text-indigo-600 shrink-0" />
                         <span>Add Standard Subjects ({missingStandardSubjects.length})</span>
                       </button>
                     )}
 
                     {/* Filter subjects input */}
-                    <div className="relative w-44 sm:w-56">
+                    <div className="relative w-full sm:w-56">
                       <input
                         type="text"
                         placeholder="Filter subjects..."
@@ -1051,7 +1051,7 @@ export default function ClassesHierarchyPage() {
 
                 {/* Empty State when no subjects exist */}
                 {classSubjects.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 p-8 text-center space-y-3">
+                  <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 p-6 sm:p-8 text-center space-y-3 min-w-0">
                     <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-indigo-50 text-indigo-600">
                       <BookOpen size={20} />
                     </div>
@@ -1094,18 +1094,23 @@ export default function ClassesHierarchyPage() {
                   </div>
                 ) : (
                   /* High-Density Responsive Curriculum Matrix Table */
-                  <div className="overflow-x-auto rounded-xl border border-slate-200">
-                    <table className="w-full text-left border-collapse text-xs">
-                      <thead>
-                        <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
-                          <th className="py-2.5 px-3.5 min-w-[11rem]">Subject &amp; Code</th>
-                          <th className="py-2.5 px-3 min-w-[12rem]">Textbooks &amp; Syllabus</th>
-                          <th className="py-2.5 px-3 min-w-[7rem]">Question Bank</th>
-                          <th className="py-2.5 px-3 min-w-[8rem]">Blueprints</th>
-                          <th className="py-2.5 px-3 min-w-[7rem]">Papers</th>
-                          <th className="py-2.5 px-3 text-right w-20">Actions</th>
-                        </tr>
-                      </thead>
+                  <div className="space-y-1.5 min-w-0 max-w-full">
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 px-0.5 sm:hidden">
+                      <span className="font-semibold text-slate-600">Subject Matrix</span>
+                      <span className="text-[10px]">← Swipe table to see all columns →</span>
+                    </div>
+                    <div className="overflow-x-auto min-w-0 max-w-full rounded-xl border border-slate-200 scroll-thin overscroll-x-contain touch-pan-x">
+                      <table className="w-full text-left border-collapse text-xs min-w-[36rem]">
+                        <thead>
+                          <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                            <th className="py-2.5 px-3.5 min-w-[9.5rem]">Subject &amp; Code</th>
+                            <th className="py-2.5 px-3 min-w-[10rem]">Textbooks &amp; Syllabus</th>
+                            <th className="py-2.5 px-2.5 min-w-[6.5rem]">Question Bank</th>
+                            <th className="py-2.5 px-2.5 min-w-[6.5rem]">Blueprints</th>
+                            <th className="py-2.5 px-2.5 min-w-[5.5rem]">Papers</th>
+                            <th className="py-2.5 px-3 text-right w-16">Actions</th>
+                          </tr>
+                        </thead>
                       <tbody className="divide-y divide-slate-100 bg-white">
                         {filteredClassSubjects.map((sub) => {
                           const meta = subjectMetadata.get(sub.name) || {
@@ -1252,48 +1257,49 @@ export default function ClassesHierarchyPage() {
                       </tbody>
                     </table>
                   </div>
-                )}
-              </section>
+                </div>
+              )}
+            </section>
 
               {/* CARD 3: Exam Workflow Launchpad */}
-              <section className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50/50 via-white to-slate-50 p-5 space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-900">
+              <section className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50/50 via-white to-slate-50 p-4 sm:p-5 space-y-3 min-w-0 max-w-full overflow-hidden">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-w-0">
+                  <div className="min-w-0">
+                    <h4 className="text-sm font-bold text-slate-900 truncate">
                       Exam Workflow Actions for {selectedClass.name}
                     </h4>
                     <p className="text-xs text-slate-500">
                       Jump straight into curriculum studios pre-filtered for this class grade.
                     </p>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 min-w-0">
                     <Link
                       href={`/books?className=${encodeURIComponent(selectedClass.name)}`}
-                      className="btn btn-ghost border border-slate-300 bg-white text-xs py-1.5 px-3 font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs"
+                      className="btn btn-ghost border border-slate-300 bg-white text-xs py-1.5 px-2.5 font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs justify-center"
                     >
-                      <BookOpen size={13} className="text-indigo-600" />
-                      <span>Manage Textbooks</span>
+                      <BookOpen size={13} className="text-indigo-600 shrink-0" />
+                      <span className="truncate">Textbooks</span>
                     </Link>
                     <Link
                       href={`/questions?className=${encodeURIComponent(selectedClass.name)}`}
-                      className="btn btn-ghost border border-slate-300 bg-white text-xs py-1.5 px-3 font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs"
+                      className="btn btn-ghost border border-slate-300 bg-white text-xs py-1.5 px-2.5 font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs justify-center"
                     >
-                      <HelpCircle size={13} className="text-indigo-600" />
-                      <span>Question Bank</span>
+                      <HelpCircle size={13} className="text-indigo-600 shrink-0" />
+                      <span className="truncate">Question Bank</span>
                     </Link>
                     <Link
                       href={`/blueprints?className=${encodeURIComponent(selectedClass.name)}`}
-                      className="btn btn-ghost border border-slate-300 bg-white text-xs py-1.5 px-3 font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs"
+                      className="btn btn-ghost border border-slate-300 bg-white text-xs py-1.5 px-2.5 font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs justify-center"
                     >
-                      <Ruler size={13} className="text-indigo-600" />
-                      <span>Create Blueprint</span>
+                      <Ruler size={13} className="text-indigo-600 shrink-0" />
+                      <span className="truncate">Blueprints</span>
                     </Link>
                     <Link
                       href={`/papers?className=${encodeURIComponent(selectedClass.name)}`}
-                      className="btn btn-primary text-xs py-1.5 px-3 font-semibold shadow-2xs"
+                      className="btn btn-primary text-xs py-1.5 px-2.5 font-semibold shadow-2xs justify-center"
                     >
-                      <FileText size={13} />
-                      <span>Draft Exam Paper</span>
+                      <FileText size={13} className="shrink-0" />
+                      <span className="truncate">Draft Paper</span>
                     </Link>
                   </div>
                 </div>
