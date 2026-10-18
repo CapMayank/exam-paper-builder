@@ -70,8 +70,11 @@ describe("Academic Session Normalization", () => {
   });
 });
 
-describe("Curriculum Presets Catalog (Classes 1–12)", () => {
+describe("Curriculum Presets Catalog (Nursery–12th)", () => {
   const classes = [
+    "Nursery",
+    "LKG",
+    "UKG",
     "Class 1",
     "Class 2",
     "Class 3",
@@ -86,7 +89,7 @@ describe("Curriculum Presets Catalog (Classes 1–12)", () => {
     "Class 12",
   ];
 
-  it("contains curriculum presets for every class from Class 1 to Class 12", () => {
+  it("contains curriculum presets for every class from Nursery to Class 12", () => {
     for (const cls of classes) {
       const presetsForClass = STANDARD_CURRICULUM_PRESETS.filter((p) => p.className === cls);
       expect(presetsForClass.length, `Expected presets for ${cls}`).toBeGreaterThanOrEqual(1);

@@ -9,9 +9,34 @@ export function normalizeAcademicSession(session?: string | null): string {
 
 export function inferClassOrder(name: string): number {
   const lower = name.trim().toLowerCase();
+  if (lower.includes("playgroup") || lower.includes("pre-nursery") || lower.includes("prenursery")) return -3;
   if (lower.includes("nursery")) return -2;
-  if (lower.includes("lkg") || lower.includes("kg 1") || lower.includes("kg-1")) return -1;
-  if (lower.includes("ukg") || lower.includes("kg 2") || lower.includes("kg-2")) return 0;
+  if (
+    lower.includes("lkg") ||
+    lower.includes("l.k.g") ||
+    lower.includes("kg 1") ||
+    lower.includes("kg-1") ||
+    lower.includes("kg1") ||
+    lower.includes("kg i") ||
+    lower.includes("lower kg") ||
+    lower.includes("pp-1") ||
+    lower.includes("pp1")
+  ) {
+    return -1;
+  }
+  if (
+    lower.includes("ukg") ||
+    lower.includes("u.k.g") ||
+    lower.includes("kg 2") ||
+    lower.includes("kg-2") ||
+    lower.includes("kg2") ||
+    lower.includes("kg ii") ||
+    lower.includes("upper kg") ||
+    lower.includes("pp-2") ||
+    lower.includes("pp2")
+  ) {
+    return 0;
+  }
   const numMatch = lower.match(/\b(1[0-2]|[1-9])\b/);
   if (numMatch) return Number(numMatch[1]);
   // Roman numeral fallback
@@ -41,6 +66,42 @@ export const STANDARD_SCHOOL_CLASSES: Array<{
   stream: string;
   subjects: Array<{ name: string; code: string }>;
 }> = [
+  {
+    name: "Nursery",
+    displayOrder: -2,
+    stream: "Pre-Primary",
+    subjects: [
+      { name: "English", code: "NUR-ENG" },
+      { name: "Hindi", code: "NUR-HIN" },
+      { name: "Mathematics", code: "NUR-MAT" },
+      { name: "General Awareness (EVS)", code: "NUR-EVS" },
+      { name: "Art & Craft", code: "NUR-ART" },
+    ],
+  },
+  {
+    name: "LKG",
+    displayOrder: -1,
+    stream: "Pre-Primary",
+    subjects: [
+      { name: "English", code: "LKG-ENG" },
+      { name: "Hindi", code: "LKG-HIN" },
+      { name: "Mathematics", code: "LKG-MAT" },
+      { name: "General Awareness (EVS)", code: "LKG-EVS" },
+      { name: "Rhymes & Conversation", code: "LKG-RHY" },
+    ],
+  },
+  {
+    name: "UKG",
+    displayOrder: 0,
+    stream: "Pre-Primary",
+    subjects: [
+      { name: "English", code: "UKG-ENG" },
+      { name: "Hindi", code: "UKG-HIN" },
+      { name: "Mathematics", code: "UKG-MAT" },
+      { name: "Environmental Studies (EVS)", code: "UKG-EVS" },
+      { name: "General Knowledge", code: "UKG-GK" },
+    ],
+  },
   {
     name: "Class 1",
     displayOrder: 1,
@@ -249,6 +310,7 @@ export async function ensureClassAndSubject(
       name: cleanClass,
       displayOrder: inferClassOrder(cleanClass),
       academicSession: session,
+      sectionsJson: JSON.stringify(["A"]),
     },
   });
 

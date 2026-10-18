@@ -687,7 +687,7 @@ export function SyllabusImportModal({ onClose, onSuccess, targetBook, initialTab
                 value={filterClass}
                 onChange={(e) => setFilterClass(e.target.value)}
               >
-                <option value="ALL">All Classes (1–12)</option>
+                <option value="ALL">All Classes (Nursery–12th)</option>
                 <option value="Class 12">Class 12</option>
                 <option value="Class 11">Class 11</option>
                 <option value="Class 10">Class 10</option>
@@ -700,6 +700,9 @@ export function SyllabusImportModal({ onClose, onSuccess, targetBook, initialTab
                 <option value="Class 3">Class 3</option>
                 <option value="Class 2">Class 2</option>
                 <option value="Class 1">Class 1</option>
+                <option value="UKG">UKG</option>
+                <option value="LKG">LKG</option>
+                <option value="Nursery">Nursery</option>
               </select>
 
               {/* Subject Filter */}

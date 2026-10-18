@@ -1,6 +1,146 @@
-import type { ParsedChapterItem, StandardCurriculumPreset } from "./syllabusImport";
+import type { StandardCurriculumPreset } from "./syllabusImport";
 
 export const STANDARD_CURRICULUM_PRESETS: StandardCurriculumPreset[] = [
+  // ==========================================
+  // NURSERY (Pre-Primary - Early Childhood)
+  // ==========================================
+  {
+    id: "pre-nursery-english",
+    title: "Nursery English & Rhymes",
+    className: "Nursery",
+    subject: "English",
+    board: "Foundational Early Years",
+    description: "Foundational English letters, strokes, phonics and action rhymes",
+    chapters: [
+      { number: 1, title: "Pattern Tracing (Standing, Sleeping & Slanting Lines)" },
+      { number: 2, title: "Alphabet Identification & Phonics (A to Z)" },
+      { number: 3, title: "Action Rhymes & Songs" },
+      { number: 4, title: "Picture Reading & Story Listening" },
+    ],
+  },
+  {
+    id: "pre-nursery-maths",
+    title: "Nursery Numbers & Pre-Maths",
+    className: "Nursery",
+    subject: "Mathematics / गणित",
+    board: "Foundational Early Years",
+    description: "Pre-number concepts, basic counting 1 to 10 and shapes",
+    chapters: [
+      { number: 1, title: "Pre-Math Concepts (Big/Small, Tall/Short, Heavy/Light)" },
+      { number: 2, title: "Basic Shapes & Primary Colours" },
+      { number: 3, title: "Number Counting & Tracing (1 to 10)" },
+      { number: 4, title: "Matching & Sorting Activities" },
+    ],
+  },
+  {
+    id: "pre-nursery-evs",
+    title: "Nursery General Awareness (EVS)",
+    className: "Nursery",
+    subject: "General Awareness (EVS)",
+    board: "Foundational Early Years",
+    description: "Myself, family, body parts, animals and environment",
+    chapters: [
+      { number: 1, title: "All About Me & My Family" },
+      { number: 2, title: "Parts of My Body & Five Senses" },
+      { number: 3, title: "Animals Around Us & Birds" },
+      { number: 4, title: "Fruits, Vegetables & Good Habits" },
+    ],
+  },
+  // ==========================================
+  // LKG (Pre-Primary - Lower Kindergarten)
+  // ==========================================
+  {
+    id: "pre-lkg-english",
+    title: "LKG English & Phonics",
+    className: "LKG",
+    subject: "English",
+    board: "Foundational Early Years",
+    description: "Capital & small letters, 2-letter sight words, vowel sounds",
+    chapters: [
+      { number: 1, title: "Capital and Small Letters (Aa to Zz)" },
+      { number: 2, title: "Phonics Sounds & Beginning Letters" },
+      { number: 3, title: "Two-Letter Sight Words (in, on, at, it, he, me)" },
+      { number: 4, title: "Conversational English & Rhymes" },
+    ],
+  },
+  {
+    id: "pre-lkg-maths",
+    title: "LKG Mathematics",
+    className: "LKG",
+    subject: "Mathematics / गणित",
+    board: "Foundational Early Years",
+    description: "Number recognition 1 to 50, number names 1 to 10, comparison",
+    chapters: [
+      { number: 1, title: "Numbers 1 to 50 (Oral & Written Counting)" },
+      { number: 2, title: "Number Names (One to Ten)" },
+      { number: 3, title: "What Comes Before, After & In Between" },
+      { number: 4, title: "Comparing Quantities (More/Less, Equal)" },
+      { number: 5, title: "Shapes & Simple Spatial Patterns" },
+    ],
+  },
+  {
+    id: "pre-lkg-evs",
+    title: "LKG General Awareness (EVS)",
+    className: "LKG",
+    subject: "General Awareness (EVS)",
+    board: "Foundational Early Years",
+    description: "Community helpers, seasons, cleanliness and nature",
+    chapters: [
+      { number: 1, title: "My School & Classroom Manners" },
+      { number: 2, title: "Seasons (Summer, Rainy, Winter)" },
+      { number: 3, title: "Community Helpers (Doctor, Teacher, Policeman)" },
+      { number: 4, title: "Means of Transport (Land, Water, Air)" },
+      { number: 5, title: "Cleanliness, Safety & Good Manners" },
+    ],
+  },
+  // ==========================================
+  // UKG (Pre-Primary - Upper Kindergarten)
+  // ==========================================
+  {
+    id: "pre-ukg-english",
+    title: "UKG English & Reading Skills",
+    className: "UKG",
+    subject: "English",
+    board: "Foundational Early Years",
+    description: "Vowels, CVC 3-letter words, simple sentences, opposites",
+    chapters: [
+      { number: 1, title: "Vowels and Consonants (a, e, i, o, u)" },
+      { number: 2, title: "Three-Letter CVC Words (bat, pin, sun, hen, pot)" },
+      { number: 3, title: "Sight Words & Simple Sentences (This is / That is)" },
+      { number: 4, title: "Opposites & Action Words (Verbs)" },
+      { number: 5, title: "Short Stories & Reading Comprehension" },
+    ],
+  },
+  {
+    id: "pre-ukg-maths",
+    title: "UKG Mathematics",
+    className: "UKG",
+    subject: "Mathematics / गणित",
+    board: "Foundational Early Years",
+    description: "Numbers 1 to 100, number names 1 to 20, addition & subtraction",
+    chapters: [
+      { number: 1, title: "Numbers 1 to 100 & Backward Counting" },
+      { number: 2, title: "Number Names 1 to 20" },
+      { number: 3, title: "Single-Digit Addition (Using Objects & Number Line)" },
+      { number: 4, title: "Single-Digit Subtraction (Take Away)" },
+      { number: 5, title: "Time, Clock Reading & Days of the Week" },
+    ],
+  },
+  {
+    id: "pre-ukg-evs",
+    title: "UKG Environmental Studies (EVS)",
+    className: "UKG",
+    subject: "Environmental Studies (EVS)",
+    board: "Foundational Early Years",
+    description: "Living vs non-living, plants, animals, road safety and universe",
+    chapters: [
+      { number: 1, title: "Living and Non-Living Things" },
+      { number: 2, title: "Plants and Trees Around Us" },
+      { number: 3, title: "Animal Kingdom (Wild, Domestic & Water Animals)" },
+      { number: 4, title: "Traffic Lights, Road Safety & Healthy Habits" },
+      { number: 5, title: "Sun, Moon, Stars and Weather" },
+    ],
+  },
   // ==========================================
   // CLASS 1 (Primary - NCF)
   // ==========================================

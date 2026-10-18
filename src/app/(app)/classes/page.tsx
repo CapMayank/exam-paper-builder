@@ -4,7 +4,6 @@ import {
   ArrowRight,
   BookOpen,
   Calendar,
-  ChevronRight,
   FileText,
   GraduationCap,
   HelpCircle,
@@ -41,6 +40,19 @@ import type {
   PaperListItem,
 } from "@/lib/types";
 
+const STREAM_PRIORITY: Record<string, number> = {
+  "pre-primary": 1,
+  "primary": 2,
+  "middle": 3,
+  "secondary": 4,
+  "senior secondary": 5,
+  "science": 6,
+  "commerce": 7,
+  "arts": 8,
+  "humanities": 9,
+  "general": 10,
+};
+
 function subjectMatches(bookSubject: string, classSubjectName: string): boolean {
   const a = bookSubject.trim().toLowerCase();
   const b = classSubjectName.trim().toLowerCase();
@@ -70,7 +82,7 @@ export default function ClassesHierarchyPage() {
 
   // Modals for Class and Subject management
   const [classModal, setClassModal] = useState<{ editing: AcademicClassDto | null } | null>(null);
-  const [classForm, setClassForm] = useState({ name: "", stream: "", sectionsText: "A, B" });
+  const [classForm, setClassForm] = useState({ name: "", stream: "", sectionsText: "A" });
 
   const [subjectModalOpen, setSubjectModalOpen] = useState(false);
   const [editingSubject, setEditingSubject] = useState<ClassSubjectDto | null>(null);
@@ -128,7 +140,12 @@ export default function ClassesHierarchyPage() {
     classes.forEach((c) => {
       if (c.stream) set.add(c.stream);
     });
-    return Array.from(set).sort();
+    return Array.from(set).sort((a, b) => {
+      const orderA = STREAM_PRIORITY[a.trim().toLowerCase()] ?? 99;
+      const orderB = STREAM_PRIORITY[b.trim().toLowerCase()] ?? 99;
+      if (orderA !== orderB) return orderA - orderB;
+      return a.localeCompare(b);
+    });
   }, [classes]);
 
   const displayedClasses = useMemo(() => {
@@ -224,7 +241,7 @@ export default function ClassesHierarchyPage() {
         json: { action: "SEED_STANDARD", academicSession: activeSession },
       });
       await load();
-      toast.success(`Initialized standard Classes 1–12 & Subjects for Session ${activeSession}`);
+      toast.success(`Initialized standard Classes Nursery–12th & Subjects for Session ${activeSession}`);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -368,9 +385,9 @@ export default function ClassesHierarchyPage() {
               disabled={busy}
               onClick={seedStandardClasses}
               className="btn btn-ghost border border-slate-200 bg-white text-slate-800 hover:bg-slate-50"
-              title="Populate standard Classes 1 to 12 with CBSE/NCERT subjects for this session"
+              title="Populate standard school classes (Nursery to Class 12) with foundational & CBSE/NCERT subjects for this session"
             >
-              <Sparkles size={15} className="text-amber-600" /> Initialize Classes 1–12
+              <Sparkles size={15} className="text-amber-600" /> Initialize Nursery–12th
             </button>
             <button
               type="button"
@@ -384,7 +401,7 @@ export default function ClassesHierarchyPage() {
             <button
               type="button"
               onClick={() => {
-                setClassForm({ name: "", stream: "", sectionsText: "A, B" });
+                setClassForm({ name: "", stream: "", sectionsText: "A" });
                 setClassModal({ editing: null });
               }}
               className="btn btn-primary"
@@ -473,16 +490,16 @@ export default function ClassesHierarchyPage() {
         <EmptyState
           icon={GraduationCap}
           title={`No classes configured for Session ${activeSession}`}
-          description="Start by initializing standard school classes (Class 1 to Class 12) with default CBSE/NCERT subjects, or add a class manually."
+          description="Start by initializing standard school classes (Nursery to Class 12) with foundational & CBSE/NCERT subjects, or add a class manually."
           action={
             <div className="flex flex-wrap items-center gap-2">
               <button type="button" onClick={seedStandardClasses} className="btn btn-primary">
-                <Sparkles size={16} /> Initialize Standard Classes (Class 1–12)
+                <Sparkles size={16} /> Initialize Standard Classes (Nursery–12th)
               </button>
               <button
                 type="button"
                 onClick={() => {
-                  setClassForm({ name: "Class 10", stream: "Secondary", sectionsText: "A, B" });
+                  setClassForm({ name: "Nursery", stream: "Pre-Primary", sectionsText: "A" });
                   setClassModal({ editing: null });
                 }}
                 className="btn btn-ghost border border-slate-200"
@@ -551,10 +568,10 @@ export default function ClassesHierarchyPage() {
                         )}
                       </div>
                       <span className="mt-0.5 block text-sm text-slate-600">
-                        Sections: {cls.sections.join(", ")}
+                        {cls.sections.length === 1 ? `Section ${cls.sections[0]}` : `Sections: ${cls.sections.join(", ")}`}
                       </span>
                       <span className="mt-2 block text-xs text-slate-500">
-                        {plural(cls.subjects.length, "subject")} · {plural(clsBooks.length, "book")} · {plural(clsBps.length, "blueprint")}
+                        {plural(cls.subjects.length, "subject")} · {plural(clsBooks.length, "book")} · {plural(clsBps.length, "blueprint")} · {plural(clsPapers.length, "paper")}
                       </span>
                     </button>
                     <div className="absolute right-2.5 top-2.5 z-10 flex gap-0.5 opacity-100 transition sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100 bg-white/95 rounded-lg p-0.5 shadow-2xs">
@@ -605,7 +622,7 @@ export default function ClassesHierarchyPage() {
                         </span>
                       )}
                       <span className="badge !bg-slate-100 !text-slate-700 border border-slate-200 font-mono">
-                        Sections: {selectedClass.sections.join(", ")}
+                        {selectedClass.sections.length === 1 ? `Section ${selectedClass.sections[0]}` : `Sections: ${selectedClass.sections.join(", ")}`}
                       </span>
                     </div>
                     <p className="text-xs text-slate-500 mt-1">
@@ -903,11 +920,11 @@ export default function ClassesHierarchyPage() {
           subtitle="Classes organize subjects, textbooks, blueprints, and question papers for the active academic session."
         >
           <form onSubmit={saveClass} className="space-y-4">
-            <Field label="Class Name" helper="e.g. Class 10, Class 12, Nursery">
+            <Field label="Class Name" helper="e.g. Nursery, LKG, UKG, Class 1, Class 10, Class 12">
               <input
                 type="text"
                 className="input"
-                placeholder="Class 10"
+                placeholder="Nursery or Class 10"
                 value={classForm.name}
                 onChange={(e) => setClassForm({ ...classForm, name: e.target.value })}
                 required
@@ -915,21 +932,21 @@ export default function ClassesHierarchyPage() {
               />
             </Field>
 
-            <Field label="Stream (Optional)" helper="e.g. Science, Commerce, Arts, General">
+            <Field label="Stream (Optional)" helper="e.g. Pre-Primary, Primary, Middle, Secondary, Senior Secondary, Science, Commerce">
               <input
                 type="text"
                 className="input"
-                placeholder="General"
+                placeholder="Pre-Primary"
                 value={classForm.stream}
                 onChange={(e) => setClassForm({ ...classForm, stream: e.target.value })}
               />
             </Field>
 
-            <Field label="Sections" helper="Comma-separated section names, e.g. A, B, C">
+            <Field label="Sections" helper="Comma-separated section names; defaults to a single section A (e.g. A, or A, B, C)">
               <input
                 type="text"
                 className="input"
-                placeholder="A, B"
+                placeholder="A"
                 value={classForm.sectionsText}
                 onChange={(e) => setClassForm({ ...classForm, sectionsText: e.target.value })}
                 required

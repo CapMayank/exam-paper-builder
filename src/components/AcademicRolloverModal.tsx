@@ -154,7 +154,7 @@ export function AcademicRolloverModal({
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-500 mt-0.5">
-                  Copies standard Class 1–12 definitions, subject lists, codes, and section arrangements.
+                  Copies institutional class (Nursery–12th) definitions, subject lists, codes, and section arrangements.
                 </p>
               </div>
             </div>

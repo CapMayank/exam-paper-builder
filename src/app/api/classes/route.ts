@@ -76,7 +76,7 @@ export const POST = route(async (req) => {
           displayOrder: preset.displayOrder,
           stream: preset.stream,
           academicSession: session,
-          sectionsJson: JSON.stringify(["A", "B"]),
+          sectionsJson: JSON.stringify(["A"]),
         },
       });
 

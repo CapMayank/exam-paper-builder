@@ -445,6 +445,224 @@ async function main() {
   }
   console.log(`✓ Assembled Draft Paper "${draftPaper.title}" with 4 questions to showcase in-progress blueprint indicators.`);
 
+  // 7. Seed Standard School Classes (Nursery to Class 12) with default single section ["A"]
+  const STANDARD_CLASSES_SEED = [
+    {
+      name: "Nursery",
+      displayOrder: -2,
+      stream: "Pre-Primary",
+      subjects: [
+        { name: "English", code: "NUR-ENG" },
+        { name: "Hindi", code: "NUR-HIN" },
+        { name: "Mathematics", code: "NUR-MAT" },
+        { name: "General Awareness (EVS)", code: "NUR-EVS" },
+        { name: "Art & Craft", code: "NUR-ART" },
+      ],
+    },
+    {
+      name: "LKG",
+      displayOrder: -1,
+      stream: "Pre-Primary",
+      subjects: [
+        { name: "English", code: "LKG-ENG" },
+        { name: "Hindi", code: "LKG-HIN" },
+        { name: "Mathematics", code: "LKG-MAT" },
+        { name: "General Awareness (EVS)", code: "LKG-EVS" },
+        { name: "Rhymes & Conversation", code: "LKG-RHY" },
+      ],
+    },
+    {
+      name: "UKG",
+      displayOrder: 0,
+      stream: "Pre-Primary",
+      subjects: [
+        { name: "English", code: "UKG-ENG" },
+        { name: "Hindi", code: "UKG-HIN" },
+        { name: "Mathematics", code: "UKG-MAT" },
+        { name: "Environmental Studies (EVS)", code: "UKG-EVS" },
+        { name: "General Knowledge", code: "UKG-GK" },
+      ],
+    },
+    {
+      name: "Class 1",
+      displayOrder: 1,
+      stream: "Primary",
+      subjects: [
+        { name: "English", code: "101" },
+        { name: "Hindi", code: "102" },
+        { name: "Mathematics", code: "103" },
+        { name: "EVS", code: "104" },
+      ],
+    },
+    {
+      name: "Class 2",
+      displayOrder: 2,
+      stream: "Primary",
+      subjects: [
+        { name: "English", code: "101" },
+        { name: "Hindi", code: "102" },
+        { name: "Mathematics", code: "103" },
+        { name: "EVS", code: "104" },
+      ],
+    },
+    {
+      name: "Class 3",
+      displayOrder: 3,
+      stream: "Primary",
+      subjects: [
+        { name: "English", code: "101" },
+        { name: "Hindi", code: "102" },
+        { name: "Mathematics", code: "103" },
+        { name: "EVS", code: "104" },
+      ],
+    },
+    {
+      name: "Class 4",
+      displayOrder: 4,
+      stream: "Primary",
+      subjects: [
+        { name: "English", code: "101" },
+        { name: "Hindi", code: "102" },
+        { name: "Mathematics", code: "103" },
+        { name: "EVS", code: "104" },
+      ],
+    },
+    {
+      name: "Class 5",
+      displayOrder: 5,
+      stream: "Primary",
+      subjects: [
+        { name: "English", code: "101" },
+        { name: "Hindi", code: "102" },
+        { name: "Mathematics", code: "103" },
+        { name: "EVS", code: "104" },
+      ],
+    },
+    {
+      name: "Class 6",
+      displayOrder: 6,
+      stream: "Middle",
+      subjects: [
+        { name: "English", code: "101" },
+        { name: "Hindi", code: "002" },
+        { name: "Mathematics", code: "041" },
+        { name: "Science", code: "086" },
+        { name: "Social Science", code: "087" },
+        { name: "Sanskrit", code: "122" },
+      ],
+    },
+    {
+      name: "Class 7",
+      displayOrder: 7,
+      stream: "Middle",
+      subjects: [
+        { name: "English", code: "101" },
+        { name: "Hindi", code: "002" },
+        { name: "Mathematics", code: "041" },
+        { name: "Science", code: "086" },
+        { name: "Social Science", code: "087" },
+        { name: "Sanskrit", code: "122" },
+      ],
+    },
+    {
+      name: "Class 8",
+      displayOrder: 8,
+      stream: "Middle",
+      subjects: [
+        { name: "English", code: "101" },
+        { name: "Hindi", code: "002" },
+        { name: "Mathematics", code: "041" },
+        { name: "Science", code: "086" },
+        { name: "Social Science", code: "087" },
+        { name: "Sanskrit", code: "122" },
+      ],
+    },
+    {
+      name: "Class 9",
+      displayOrder: 9,
+      stream: "Secondary",
+      subjects: [
+        { name: "English Language & Literature", code: "184" },
+        { name: "Hindi Course-A", code: "002" },
+        { name: "Mathematics", code: "041" },
+        { name: "Science", code: "086" },
+        { name: "Social Science", code: "087" },
+        { name: "Information Technology", code: "402" },
+      ],
+    },
+    {
+      name: "Class 10",
+      displayOrder: 10,
+      stream: "Secondary",
+      subjects: [
+        { name: "English Language & Literature", code: "184" },
+        { name: "Hindi Course-A", code: "002" },
+        { name: "Mathematics", code: "041" },
+        { name: "Science", code: "086" },
+        { name: "Social Science", code: "087" },
+        { name: "Information Technology", code: "402" },
+      ],
+    },
+    {
+      name: "Class 11",
+      displayOrder: 11,
+      stream: "Senior Secondary",
+      subjects: [
+        { name: "English Core", code: "301" },
+        { name: "Physics", code: "042" },
+        { name: "Chemistry", code: "043" },
+        { name: "Mathematics", code: "041" },
+        { name: "Biology", code: "044" },
+        { name: "Accountancy", code: "055" },
+        { name: "Business Studies", code: "054" },
+        { name: "Economics", code: "030" },
+      ],
+    },
+    {
+      name: "Class 12",
+      displayOrder: 12,
+      stream: "Senior Secondary",
+      subjects: [
+        { name: "English Core", code: "301" },
+        { name: "Physics", code: "042" },
+        { name: "Chemistry", code: "043" },
+        { name: "Mathematics", code: "041" },
+        { name: "Biology", code: "044" },
+        { name: "Accountancy", code: "055" },
+        { name: "Business Studies", code: "054" },
+        { name: "Economics", code: "030" },
+      ],
+    },
+  ];
+
+  for (const session of ["2025–26", "2026–27"]) {
+    for (const item of STANDARD_CLASSES_SEED) {
+      const cls = await prisma.academicClass.upsert({
+        where: { academicSession_name: { academicSession: session, name: item.name } },
+        update: {
+          displayOrder: item.displayOrder,
+          stream: item.stream,
+        },
+        create: {
+          name: item.name,
+          displayOrder: item.displayOrder,
+          stream: item.stream,
+          academicSession: session,
+          sectionsJson: JSON.stringify(["A"]),
+        },
+      });
+
+      for (const subj of item.subjects) {
+        await prisma.classSubject.upsert({
+          where: { classId_name: { classId: cls.id, name: subj.name } },
+          update: { code: subj.code },
+          create: { classId: cls.id, name: subj.name, code: subj.code },
+        });
+      }
+    }
+  }
+  console.log(`✓ Seeded standard Nursery–12th classes with default section ["A"] for 2025–26 and 2026–27`);
+
   console.log("\nSeed completed successfully!");
 }
 
