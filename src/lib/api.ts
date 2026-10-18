@@ -1,4 +1,5 @@
 import "server-only";
+import { unstable_rethrow } from "next/navigation";
 import { ZodError } from "zod";
 import { prisma } from "./prisma";
 import { sessionUserId } from "./session";
@@ -54,6 +55,7 @@ export function route(
       const result = await handler(req, params, user as SessionUser);
       return result instanceof Response ? result : Response.json(result ?? { ok: true });
     } catch (e) {
+      unstable_rethrow(e);
       if (e instanceof HttpError) return Response.json({ error: e.message }, { status: e.status });
       if (e instanceof ZodError) {
         const msg = e.issues.map((i) => `${i.path.join(".") || "input"}: ${i.message}`).join("; ");
