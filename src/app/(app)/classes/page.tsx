@@ -168,6 +168,31 @@ export default function ClassesHierarchyPage() {
     [displayedClasses, classes, selectedClassId]
   );
 
+  const [mobileTab, setMobileTab] = useState<"directory" | "details">("directory");
+
+  const selectedClassIndex = useMemo(() => {
+    if (!selectedClass) return -1;
+    return classes.findIndex((c) => c.id === selectedClass.id);
+  }, [classes, selectedClass]);
+
+  const prevClass = selectedClassIndex > 0 ? classes[selectedClassIndex - 1] : null;
+  const nextClass = selectedClassIndex >= 0 && selectedClassIndex < classes.length - 1 ? classes[selectedClassIndex + 1] : null;
+
+  const handleSelectClass = useCallback((clsId: string) => {
+    setSelectedClassId(clsId);
+    setSelectedSubjectName(null);
+    setMobileTab("details");
+    if (typeof window !== "undefined") {
+      const el = document.getElementById("class-details-workspace");
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        if (rect.top < 20 || window.innerWidth < 1024) {
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }
+    }
+  }, []);
+
   // Registered ClassSubjects + any subjects present on existing books
   const classSubjects = useMemo(() => {
     if (!selectedClass) return [];
@@ -414,74 +439,58 @@ export default function ClassesHierarchyPage() {
 
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 
-      {/* Academic Session & Stream Filter Bar (Matching Books & Syllabus) */}
-      <div className="card p-4 space-y-3 bg-white">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-slate-500 flex items-center gap-1.5">
-              <Calendar size={14} className="text-slate-600" /> Active Session:
-            </span>
-            <span className="badge !bg-slate-900 !text-white font-mono px-2.5 py-0.5">
-              {activeSession}
-            </span>
-            <span className="text-xs text-slate-500">
-              ({classes.length} {classes.length === 1 ? "class" : "classes"} configured)
-            </span>
-          </div>
-
-          <div className="flex items-center gap-4 text-xs font-semibold text-slate-700">
-            <Link
-              href="/books"
-              className="hover:text-slate-950 inline-flex items-center gap-1"
-            >
-              <BookOpen size={14} /> Textbooks &amp; Syllabus
-            </Link>
-            <Link
-              href="/blueprints"
-              className="hover:text-slate-950 inline-flex items-center gap-1"
-            >
-              <Ruler size={14} /> Exam Blueprints
-            </Link>
-          </div>
+      {/* Slim Institutional Context Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs text-slate-600 shadow-2xs">
+        <div className="flex flex-wrap items-center gap-2">
+          <Calendar size={14} className="text-slate-500" />
+          <span className="font-semibold text-slate-800">Active Academic Session:</span>
+          <span className="badge !bg-slate-900 !text-white font-mono px-2 py-0.5 text-xs">
+            {activeSession}
+          </span>
+          <span className="text-slate-400">·</span>
+          <span>
+            <strong>{classes.length}</strong> institutional classes configured
+          </span>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs font-semibold text-slate-500">Stream:</span>
-              <select
-                className="input py-1 px-2.5 text-xs w-44"
-                value={streamFilter}
-                onChange={(e) => setStreamFilter(e.target.value)}
-              >
-                <option value="ALL">All Streams ({availableStreams.length})</option>
-                {availableStreams.map((st) => (
-                  <option key={st} value={st}>
-                    {st}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs font-semibold text-slate-500">Search:</span>
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Find class..."
-                  className="input py-1 pl-7 pr-2.5 text-xs w-44"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-                <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-              </div>
-            </div>
-          </div>
-
-          <div className="text-xs text-slate-500">
-            Showing <strong>{displayedClasses.length}</strong> of {classes.length} classes
-          </div>
+        <div className="flex items-center gap-3 font-semibold text-slate-700">
+          <Link
+            href="/books"
+            className="hover:text-slate-950 inline-flex items-center gap-1 transition"
+          >
+            <BookOpen size={13} className="text-indigo-600" /> Textbooks &amp; Syllabus
+          </Link>
+          <span className="text-slate-300">·</span>
+          <Link
+            href="/blueprints"
+            className="hover:text-slate-950 inline-flex items-center gap-1 transition"
+          >
+            <Ruler size={13} className="text-indigo-600" /> Exam Blueprints
+          </Link>
         </div>
+      </div>
+
+      {/* Mobile Tab Switcher (< lg screens) */}
+      <div className="flex items-center gap-1 p-1 bg-slate-200/80 rounded-xl lg:hidden">
+        <button
+          type="button"
+          onClick={() => setMobileTab("directory")}
+          className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
+            mobileTab === "directory" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-600 hover:text-slate-900"
+          }`}
+        >
+          <GraduationCap size={14} /> Classes Directory ({classes.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileTab("details")}
+          disabled={!selectedClass}
+          className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
+            mobileTab === "details" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-600 hover:text-slate-900"
+          }`}
+        >
+          <Layers size={14} /> {selectedClass ? `${selectedClass.name} Options` : "Class Options"}
+        </button>
       </div>
 
       {!loaded ? (
@@ -528,90 +537,247 @@ export default function ClassesHierarchyPage() {
           }
         />
       ) : (
-        <div className="grid items-start gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
-          {/* LEFT COLUMN: Class Directory */}
-          <ul className="space-y-2" aria-label="Classes Directory">
-            {displayedClasses.map((cls) => {
-              const active = selectedClass?.id === cls.id;
-              const clsBooks = sessionBooks.filter(
-                (b) => b.className.trim().toLowerCase() === cls.name.trim().toLowerCase()
-              );
-              const clsBookIds = new Set(clsBooks.map((b) => b.id));
-              const clsBps = sessionBlueprints.filter((bp) => clsBookIds.has(bp.bookId));
-              const clsPapers = sessionPapers.filter(
-                (p) => p.blueprint.book.className.trim().toLowerCase() === cls.name.trim().toLowerCase()
-              );
+        <div className="grid items-start gap-6 lg:grid-cols-[21rem_minmax(0,1fr)]">
+          {/* LEFT COLUMN: Sticky, Viewport-Contained Classes Directory */}
+          <div
+            className={`lg:sticky lg:top-6 lg:max-h-[calc(100vh-3.5rem)] flex-col rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden ${
+              mobileTab === "details" ? "hidden lg:flex" : "flex"
+            }`}
+          >
+            {/* Directory Header with Quick Filter Pills & Search */}
+            <div className="p-3 border-b border-slate-100 bg-slate-50/70 space-y-2.5 shrink-0">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <GraduationCap size={15} className="text-indigo-600" />
+                  <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Directory</span>
+                  <span className="badge !bg-indigo-100 !text-indigo-800 text-[10px] px-1.5 font-mono">
+                    {displayedClasses.length}/{classes.length}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setClassForm({ name: "", stream: "", sectionsText: "A" });
+                    setClassModal({ editing: null });
+                  }}
+                  className="btn btn-primary text-[11px] py-1 px-2.5 gap-1"
+                  title="Add class"
+                >
+                  <Plus size={13} /> Add
+                </button>
+              </div>
 
-              return (
-                <li key={cls.id}>
-                  <div
-                    className={`group relative rounded-2xl border bg-white p-4 transition ${
-                      active ? "border-indigo-500 ring-3 ring-indigo-500/15" : "border-slate-200 hover:border-slate-300"
-                    }`}
-                    style={{ boxShadow: "var(--shadow-card)" }}
+              {/* Quick Search */}
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Find class or subject..."
+                  className="input py-1 pl-7 pr-7 text-xs w-full bg-white"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+                <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-xs px-1"
+                    aria-label="Clear search"
                   >
+                    ×
+                  </button>
+                )}
+              </div>
+
+              {/* Stream filter chips */}
+              <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                <button
+                  type="button"
+                  onClick={() => setStreamFilter("ALL")}
+                  className={`px-2 py-0.5 rounded-md text-[11px] font-medium transition ${
+                    streamFilter === "ALL"
+                      ? "bg-slate-900 text-white"
+                      : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                  }`}
+                >
+                  All ({classes.length})
+                </button>
+                {availableStreams.map((st) => {
+                  const count = classes.filter((c) => c.stream.trim().toLowerCase() === st.trim().toLowerCase()).length;
+                  const active = streamFilter.trim().toLowerCase() === st.trim().toLowerCase();
+                  return (
                     <button
+                      key={st}
                       type="button"
-                      onClick={() => {
-                        setSelectedClassId(cls.id);
-                        setSelectedSubjectName(null);
-                      }}
-                      aria-pressed={active}
-                      className="block w-full rounded-lg text-left after:absolute after:inset-0 after:rounded-2xl"
+                      onClick={() => setStreamFilter(active ? "ALL" : st)}
+                      className={`px-2 py-0.5 rounded-md text-[11px] font-medium transition ${
+                        active
+                          ? "bg-indigo-600 text-white shadow-2xs"
+                          : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                      }`}
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="block font-semibold leading-snug text-slate-900 truncate">{cls.name}</span>
-                        {cls.stream && (
-                          <span className="inline-flex shrink-0 items-center rounded-md bg-indigo-50 px-1.5 py-0.5 text-[11px] font-medium text-indigo-700 ring-1 ring-inset ring-indigo-700/10 whitespace-nowrap">
-                            {cls.stream}
-                          </span>
-                        )}
-                      </div>
-                      <span className="mt-0.5 block text-sm text-slate-600">
-                        {cls.sections.length === 1 ? `Section ${cls.sections[0]}` : `Sections: ${cls.sections.join(", ")}`}
-                      </span>
-                      <span className="mt-2 block text-xs text-slate-500">
-                        {plural(cls.subjects.length, "subject")} · {plural(clsBooks.length, "book")} · {plural(clsBps.length, "blueprint")} · {plural(clsPapers.length, "paper")}
-                      </span>
+                      {st} ({count})
                     </button>
-                    <div className="absolute right-2.5 top-2.5 z-10 flex gap-0.5 opacity-100 transition sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100 bg-white/95 rounded-lg p-0.5 shadow-2xs">
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Scrollable Class List */}
+            <ul className="overflow-y-auto overscroll-contain flex-1 p-2 space-y-1 divide-y divide-slate-100 focus:outline-none" aria-label="Classes Directory">
+              {displayedClasses.map((cls) => {
+                const active = selectedClass?.id === cls.id;
+                const clsBooks = sessionBooks.filter(
+                  (b) => b.className.trim().toLowerCase() === cls.name.trim().toLowerCase()
+                );
+                const clsBookIds = new Set(clsBooks.map((b) => b.id));
+                const clsBps = sessionBlueprints.filter((bp) => clsBookIds.has(bp.bookId));
+                const clsPapers = sessionPapers.filter(
+                  (p) => p.blueprint.book.className.trim().toLowerCase() === cls.name.trim().toLowerCase()
+                );
+
+                return (
+                  <li key={cls.id} className="pt-1 first:pt-0">
+                    <div
+                      className={`group relative rounded-xl transition border ${
+                        active
+                          ? "bg-indigo-50/90 border-indigo-500/80 ring-1 ring-indigo-500/20 shadow-2xs text-indigo-950"
+                          : "border-transparent hover:border-slate-200 hover:bg-slate-50/80 text-slate-800"
+                      }`}
+                    >
                       <button
                         type="button"
-                        className="btn btn-ghost btn-icon btn-sm"
-                        title="Edit class"
-                        aria-label={`Edit ${cls.name}`}
-                        onClick={() => {
-                          setClassForm({
-                            name: cls.name,
-                            stream: cls.stream,
-                            sectionsText: cls.sections.join(", "),
-                          });
-                          setClassModal({ editing: cls });
-                        }}
+                        onClick={() => handleSelectClass(cls.id)}
+                        aria-pressed={active}
+                        className="w-full text-left p-2.5 rounded-xl block relative after:absolute after:inset-0 after:rounded-xl"
                       >
-                        <Pencil size={14} />
+                        <div className="flex items-center justify-between gap-1.5">
+                          <span className="font-semibold text-sm truncate">{cls.name}</span>
+                          {cls.stream && (
+                            <span className={`inline-flex shrink-0 items-center rounded px-1.5 py-0.2 text-[10px] font-medium whitespace-nowrap ${
+                              active ? "bg-indigo-100 text-indigo-800" : "bg-slate-100 text-slate-600"
+                            }`}>
+                              {cls.stream}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between gap-2 mt-0.5 text-[11px] text-slate-500">
+                          <span className="font-mono text-slate-600">
+                            {cls.sections.length === 1 ? `Sec ${cls.sections[0]}` : `Secs ${cls.sections.join(",")}`}
+                          </span>
+                          <span className="truncate">
+                            {plural(cls.subjects.length, "subj")} · {plural(clsBooks.length, "book")} · {plural(clsPapers.length, "paper")}
+                          </span>
+                        </div>
                       </button>
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-icon btn-sm hover:bg-red-50 hover:text-red-700"
-                        title="Delete class"
-                        aria-label={`Delete ${cls.name}`}
-                        onClick={() => deleteClass(cls)}
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      <div className="absolute right-2 top-2 z-10 flex gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity bg-white/95 rounded-lg p-0.5 shadow-2xs border border-slate-200/60">
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-icon btn-xs p-1"
+                          title="Edit class"
+                          aria-label={`Edit ${cls.name}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setClassForm({
+                              name: cls.name,
+                              stream: cls.stream,
+                              sectionsText: cls.sections.join(", "),
+                            });
+                            setClassModal({ editing: cls });
+                          }}
+                        >
+                          <Pencil size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-icon btn-xs p-1 hover:bg-red-50 hover:text-red-700"
+                          title="Delete class"
+                          aria-label={`Delete ${cls.name}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void deleteClass(cls);
+                          }}
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
 
           {/* RIGHT COLUMN: Selected Class Configuration & Relational Workspaces */}
           {selectedClass && (
-            <div className="space-y-6">
+            <div
+              id="class-details-workspace"
+              className={`space-y-6 ${mobileTab === "directory" ? "hidden lg:block" : "block"}`}
+            >
+              {/* Mobile Back to Directory Button */}
+              <div className="lg:hidden flex items-center justify-between gap-2 pb-1">
+                <button
+                  type="button"
+                  onClick={() => setMobileTab("directory")}
+                  className="btn btn-ghost border border-slate-200 text-xs py-1.5 px-3 inline-flex items-center gap-1.5 font-semibold text-slate-800"
+                >
+                  ← Back to Directory
+                </button>
+                <span className="text-xs text-slate-500 font-medium">
+                  Viewing {selectedClass.name}
+                </span>
+              </div>
+
               {/* Card 1: Class Details & Subject Roster */}
               <div className="card p-5 space-y-4 bg-white">
+                {/* Horizontal Quick-Switch Class Strip */}
+                <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3 -mt-1">
+                  <div className="flex items-center gap-1.5 overflow-x-auto py-0.5 text-xs no-scrollbar">
+                    <span className="text-slate-400 font-medium shrink-0 flex items-center gap-1 text-[11px]">
+                      <Layers size={13} className="text-indigo-600" /> Switch Class:
+                    </span>
+                    {classes.map((c) => {
+                      const isCur = c.id === selectedClass.id;
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => handleSelectClass(c.id)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
+                            isCur
+                              ? "bg-indigo-600 text-white shadow-2xs"
+                              : "bg-slate-100 text-slate-700 hover:bg-slate-200 hover:text-slate-950"
+                          }`}
+                        >
+                          {c.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Prev / Next buttons */}
+                  <div className="hidden sm:flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      disabled={!prevClass}
+                      onClick={() => prevClass && handleSelectClass(prevClass.id)}
+                      className="btn btn-ghost btn-xs border border-slate-200 py-1 px-2 text-[11px] disabled:opacity-40"
+                      title={prevClass ? `Go to ${prevClass.name}` : "No previous class"}
+                    >
+                      ← Prev
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!nextClass}
+                      onClick={() => nextClass && handleSelectClass(nextClass.id)}
+                      className="btn btn-ghost btn-xs border border-slate-200 py-1 px-2 text-[11px] disabled:opacity-40"
+                      title={nextClass ? `Go to ${nextClass.name}` : "No next class"}
+                    >
+                      Next →
+                    </button>
+                  </div>
+                </div>
+
                 <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-4">
                   <div>
                     <div className="flex items-center gap-2.5">

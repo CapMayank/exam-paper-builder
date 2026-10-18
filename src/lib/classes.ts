@@ -1,63 +1,12 @@
-import { DEFAULT_ACADEMIC_SESSION } from "./constants";
+import { DEFAULT_ACADEMIC_SESSION, inferClassOrder, sortClassNames } from "./constants";
 import { prisma } from "./prisma";
 import type { AcademicClassDto } from "./types";
+
+export { inferClassOrder, sortClassNames };
 
 export function normalizeAcademicSession(session?: string | null): string {
   if (!session || !session.trim()) return DEFAULT_ACADEMIC_SESSION;
   return session.trim().replace(/-/g, "–");
-}
-
-export function inferClassOrder(name: string): number {
-  const lower = name.trim().toLowerCase();
-  if (lower.includes("playgroup") || lower.includes("pre-nursery") || lower.includes("prenursery")) return -3;
-  if (lower.includes("nursery")) return -2;
-  if (
-    lower.includes("lkg") ||
-    lower.includes("l.k.g") ||
-    lower.includes("kg 1") ||
-    lower.includes("kg-1") ||
-    lower.includes("kg1") ||
-    lower.includes("kg i") ||
-    lower.includes("lower kg") ||
-    lower.includes("pp-1") ||
-    lower.includes("pp1")
-  ) {
-    return -1;
-  }
-  if (
-    lower.includes("ukg") ||
-    lower.includes("u.k.g") ||
-    lower.includes("kg 2") ||
-    lower.includes("kg-2") ||
-    lower.includes("kg2") ||
-    lower.includes("kg ii") ||
-    lower.includes("upper kg") ||
-    lower.includes("pp-2") ||
-    lower.includes("pp2")
-  ) {
-    return 0;
-  }
-  const numMatch = lower.match(/\b(1[0-2]|[1-9])\b/);
-  if (numMatch) return Number(numMatch[1]);
-  // Roman numeral fallback
-  const romanMap: Array<[RegExp, number]> = [
-    [/\bxii\b/, 12],
-    [/\bxi\b/, 11],
-    [/\bx\b/, 10],
-    [/\bix\b/, 9],
-    [/\bviii\b/, 8],
-    [/\bvii\b/, 7],
-    [/\bvi\b/, 6],
-    [/\bv\b/, 5],
-    [/\biv\b/, 4],
-    [/\biii\b/, 3],
-    [/\bii\b/, 2],
-    [/\bi\b/, 1],
-  ];
-  for (const [re, val] of romanMap) {
-    if (re.test(lower)) return val;
-  }
-  return 99;
 }
 
 export const STANDARD_SCHOOL_CLASSES: Array<{

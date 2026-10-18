@@ -9,7 +9,7 @@ import { PaperRow } from "@/components/PaperRow";
 import { EmptyState, ErrorBanner, Field, ListSkeleton, Modal, PageHeader, Spinner, useConfirm, useToast } from "@/components/ui";
 import { normalizeSession, useAcademicSession } from "@/lib/academicSession";
 import { api } from "@/lib/client";
-import { DEFAULT_ACADEMIC_SESSION, DEFAULT_SCHOOL_NAME, EXAM_TYPES, EXAM_TYPE_LABEL, inferExamTypeFromText, LAYOUTS, LAYOUT_LABEL, type ExamType } from "@/lib/constants";
+import { DEFAULT_ACADEMIC_SESSION, DEFAULT_SCHOOL_NAME, EXAM_TYPES, EXAM_TYPE_LABEL, inferExamTypeFromText, LAYOUTS, LAYOUT_LABEL, sortClassNames, type ExamType } from "@/lib/constants";
 import type { Blueprint, PaperData, PaperListItem } from "@/lib/types";
 
 const SCHOOL_KEY = "epb:schoolName";
@@ -142,7 +142,7 @@ export default function PapersPage() {
   }, [papers, currentSession]);
 
   const availableClasses = useMemo(() => {
-    return Array.from(new Set(papers.map((p) => p.blueprint.book.className))).sort();
+    return sortClassNames(Array.from(new Set(papers.map((p) => p.blueprint.book.className))));
   }, [papers]);
 
   const availableSubjects = useMemo(() => {
@@ -151,7 +151,7 @@ export default function PapersPage() {
   }, [papers, classFilter]);
 
   const modalAvailableClasses = useMemo(() => {
-    return Array.from(new Set(blueprints.map((b) => b.book.className))).sort();
+    return sortClassNames(Array.from(new Set(blueprints.map((b) => b.book.className))));
   }, [blueprints]);
 
   const modalAvailableSubjects = useMemo(() => {

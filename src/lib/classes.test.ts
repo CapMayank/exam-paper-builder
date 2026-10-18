@@ -1,8 +1,33 @@
 import { describe, expect, it } from "vitest";
-import { inferClassOrder, normalizeAcademicSession, STANDARD_SCHOOL_CLASSES, toAcademicClassDto } from "./classes";
+import { inferClassOrder, normalizeAcademicSession, sortClassNames, STANDARD_SCHOOL_CLASSES, toAcademicClassDto } from "./classes";
 import { academicClassSchema, classSubjectSchema } from "./schemas";
 
 describe("Academic Class & Subject Hierarchy", () => {
+  it("sorts classes in true curriculum order (Pre-Primary through Class 12)", () => {
+    const unsorted = [
+      "Class 10",
+      "UKG",
+      "Class 2",
+      "Class 12",
+      "Nursery",
+      "Class 1",
+      "LKG",
+      "Class 9",
+      "Class 11",
+    ];
+    const sorted = sortClassNames(unsorted);
+    expect(sorted).toEqual([
+      "Nursery",
+      "LKG",
+      "UKG",
+      "Class 1",
+      "Class 2",
+      "Class 9",
+      "Class 10",
+      "Class 11",
+      "Class 12",
+    ]);
+  });
   it("normalizes academic sessions consistently with en-dash", () => {
     expect(normalizeAcademicSession("2026-27")).toBe("2026–27");
     expect(normalizeAcademicSession(" 2025–26 ")).toBe("2025–26");

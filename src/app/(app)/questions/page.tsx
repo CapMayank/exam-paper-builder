@@ -27,7 +27,7 @@ import { ErrorBanner, Field, Modal } from "@/components/ui";
 import type { BatchImportReport } from "@/lib/batchQuestionIo";
 import { parseBulkQuestions } from "@/lib/bulkImport";
 import { api } from "@/lib/client";
-import { DIFFICULTIES, QUESTION_TYPES, QUESTION_TYPE_LABEL, type QuestionType } from "@/lib/constants";
+import { DIFFICULTIES, QUESTION_TYPES, QUESTION_TYPE_LABEL, sortClassNames, type QuestionType } from "@/lib/constants";
 import type { Book, QuestionDto } from "@/lib/types";
 
 const SAMPLE_CSV = `type,marks,text,answer,chapterNumber,difficulty,options,subparts
@@ -141,7 +141,7 @@ export default function QuestionsPage() {
   }, []);
 
   const availableClasses = useMemo(
-    () => Array.from(new Set(books.map((b) => b.className))).sort(),
+    () => sortClassNames(Array.from(new Set(books.map((b) => b.className)))),
     [books]
   );
 

@@ -9,6 +9,7 @@ import { CombineBooksModal } from "@/components/CombineBooksModal";
 import { AcademicRolloverModal } from "@/components/AcademicRolloverModal";
 import { normalizeSession, useAcademicSession } from "@/lib/academicSession";
 import { api } from "@/lib/client";
+import { sortClassNames } from "@/lib/constants";
 import { plural } from "@/lib/format";
 import type { AcademicClassDto, Book, Chapter } from "@/lib/types";
 
@@ -100,7 +101,7 @@ export default function BooksPage() {
       .filter((c) => sessionFilter === "ALL" || normalizeSession(c.academicSession) === sessionFilter)
       .map((c) => c.name);
     const fromBooks = sessionBooks.map((b) => b.className);
-    return Array.from(new Set([...fromClasses, ...fromBooks]));
+    return sortClassNames(Array.from(new Set([...fromClasses, ...fromBooks])));
   }, [classes, sessionBooks, sessionFilter]);
 
   const availableSubjects = useMemo(() => {
@@ -380,57 +381,78 @@ export default function BooksPage() {
         />
       ) : (
         <div className="grid items-start gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
-          <ul className="space-y-2" aria-label="Textbooks">
-            {displayedBooks.map((b) => {
-              const active = b.id === selectedId;
-              return (
-                <li key={b.id}>
-                  <div
-                    className={`group relative rounded-2xl border bg-white p-4 transition ${
-                      active ? "border-indigo-500 ring-3 ring-indigo-500/15" : "border-slate-200 hover:border-slate-300"
-                    }`}
-                    style={{ boxShadow: "var(--shadow-card)" }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setSelectedId(b.id)}
-                      aria-pressed={active}
-                      className="block w-full rounded-lg text-left after:absolute after:inset-0 after:rounded-2xl"
+          <div className="lg:sticky lg:top-6 lg:max-h-[calc(100vh-3.5rem)] flex flex-col rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden">
+            <div className="p-3 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between gap-2 shrink-0">
+              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                <BookOpen size={14} className="text-indigo-600" /> Textbooks ({displayedBooks.length})
+              </span>
+              <button
+                type="button"
+                className="btn btn-primary text-[11px] py-1 px-2.5 gap-1"
+                onClick={() => openBookDialog()}
+              >
+                <Plus size={13} /> Add
+              </button>
+            </div>
+            <ul className="overflow-y-auto overscroll-contain flex-1 p-2 space-y-1.5 focus:outline-none" aria-label="Textbooks">
+              {displayedBooks.map((b) => {
+                const active = b.id === selectedId;
+                return (
+                  <li key={b.id}>
+                    <div
+                      className={`group relative rounded-xl border p-3 transition ${
+                        active ? "border-indigo-500/80 ring-1 ring-indigo-500/20 bg-indigo-50/90 text-indigo-950 shadow-2xs" : "border-slate-200 hover:border-slate-300 bg-white"
+                      }`}
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="block font-semibold leading-snug text-slate-900 truncate">{b.title}</span>
-                        <span className="inline-flex shrink-0 items-center rounded-md bg-indigo-50 px-1.5 py-0.5 text-[11px] font-medium text-indigo-700 ring-1 ring-inset ring-indigo-700/10 whitespace-nowrap">
-                          {b.academicSession || "2025–26"}
-                        </span>
-                      </div>
-                      <span className="mt-0.5 block text-sm text-slate-600">
-                        {b.className} · {b.subject}
-                      </span>
-                      <span className="mt-2 block text-xs text-slate-500">
-                        {plural(b.chapters.length, "chapter")} · {plural(b._count.questions, "question")}
-                      </span>
-                    </button>
-                    <div className="absolute right-2.5 top-2.5 z-10 flex gap-0.5 opacity-100 transition sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100 bg-white/95 rounded-lg p-0.5 shadow-2xs">
-                      <button type="button" className="btn btn-ghost btn-icon btn-sm" title="Edit textbook" aria-label={`Edit ${b.title}`} onClick={() => openBookDialog(b)}>
-                        <Pencil size={14} />
-                      </button>
                       <button
                         type="button"
-                        className="btn btn-ghost btn-icon btn-sm hover:bg-red-50 hover:text-red-700"
-                        title="Delete textbook"
-                        aria-label={`Delete ${b.title}`}
-                        onClick={() => removeBook(b)}
+                        onClick={() => {
+                          setSelectedId(b.id);
+                          if (typeof window !== "undefined") {
+                            const el = document.getElementById("book-details-section");
+                            if (el && (el.getBoundingClientRect().top < 20 || window.innerWidth < 1024)) {
+                              el.scrollIntoView({ behavior: "smooth", block: "start" });
+                            }
+                          }
+                        }}
+                        aria-pressed={active}
+                        className="block w-full rounded-lg text-left after:absolute after:inset-0 after:rounded-xl"
                       >
-                        <Trash2 size={14} />
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="block font-semibold text-sm text-slate-900 truncate">{b.title}</span>
+                          <span className="inline-flex shrink-0 items-center rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 ring-1 ring-inset ring-indigo-700/10 whitespace-nowrap">
+                            {b.academicSession || "2025–26"}
+                          </span>
+                        </div>
+                        <span className="mt-0.5 block text-xs text-slate-600">
+                          {b.className} · {b.subject}
+                        </span>
+                        <span className="mt-1.5 block text-[11px] text-slate-500">
+                          {plural(b.chapters.length, "chapter")} · {plural(b._count.questions, "question")}
+                        </span>
                       </button>
+                      <div className="absolute right-2 top-2 z-10 flex gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity bg-white/95 rounded-lg p-0.5 shadow-2xs border border-slate-200/60">
+                        <button type="button" className="btn btn-ghost btn-icon btn-xs p-1" title="Edit textbook" aria-label={`Edit ${b.title}`} onClick={() => openBookDialog(b)}>
+                          <Pencil size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-icon btn-xs p-1 hover:bg-red-50 hover:text-red-700"
+                          title="Delete textbook"
+                          aria-label={`Delete ${b.title}`}
+                          onClick={() => removeBook(b)}
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
 
-          <section className="card space-y-5 p-5 sm:p-6" aria-live="polite">
+          <section id="book-details-section" className="card space-y-5 p-5 sm:p-6" aria-live="polite">
             {selected ? (
               <>
                 <div className="flex flex-wrap items-start justify-between gap-3">

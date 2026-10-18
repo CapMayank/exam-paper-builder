@@ -62,10 +62,9 @@ function getSectionsForClass(cls?: AcademicClassDto | null): ClassSectionInput[]
   if (!cls) {
     return [
       { name: "Section A", count: 40 },
-      { name: "Section B", count: 40 },
     ];
   }
-  const secs = cls.sections && cls.sections.length > 0 ? cls.sections : ["A", "B"];
+  const secs = cls.sections && cls.sections.length > 0 ? cls.sections : ["A"];
   return secs.map((s) => ({
     name: `${cls.name} - Section ${s}`,
     count: 40,
@@ -104,9 +103,7 @@ export default function ExamCellPage() {
   const [pageCount, setPageCount] = useState<number>(4);
   const [wastagePercent, setWastagePercent] = useState<number>(3);
   const [sections, setSections] = useState<ClassSectionInput[]>([
-    { name: "10-A", count: 42 },
-    { name: "10-B", count: 40 },
-    { name: "10-C", count: 38 },
+    { name: "10-A", count: 40 },
   ]);
   const [sets, setSets] = useState<SetDistribution[]>([
     { set: "Set 1", count: 0 },
