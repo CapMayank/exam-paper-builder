@@ -10,9 +10,9 @@ export const GET = route(async (req) => {
   const status = searchParams.get("status");
 
   const where: Record<string, unknown> = {};
-  if (className) where.className = className;
-  if (academicSession) where.academicSession = academicSession;
-  if (status) where.status = status;
+  if (className && className !== "ALL") where.className = className;
+  if (academicSession && academicSession !== "ALL") where.academicSession = academicSession.replace(/-/g, "–");
+  if (status && status !== "ALL") where.status = status;
 
   const entries = await prisma.examTimetableEntry.findMany({
     where,

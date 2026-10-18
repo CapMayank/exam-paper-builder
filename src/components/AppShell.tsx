@@ -3,6 +3,7 @@
 import {
   BookOpen,
   FileText,
+  GraduationCap,
   HelpCircle,
   LayoutDashboard,
   LogOut,
@@ -25,11 +26,12 @@ import { BrandMark } from "./BrandMark";
 import { Spinner, UiProvider } from "./ui";
 
 const NAV: { href: string; label: string; icon: LucideIcon; hint: string }[] = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard, hint: "Overview and recent papers" },
-  { href: "/papers", label: "Exam papers", icon: FileText, hint: "Build, print and share papers" },
-  { href: "/questions", label: "Question bank", icon: HelpCircle, hint: "All your questions" },
-  { href: "/blueprints", label: "Blueprints", icon: Ruler, hint: "Marks and chapter quotas" },
-  { href: "/books", label: "Books & syllabus", icon: BookOpen, hint: "Subjects and chapters" },
+  { href: "/", label: "Dashboard", icon: LayoutDashboard, hint: "Overview and academic flow" },
+  { href: "/classes", label: "Classes & subjects", icon: GraduationCap, hint: "Session → Class → Subject curriculum hub" },
+  { href: "/books", label: "Books & syllabus", icon: BookOpen, hint: "Textbooks and chapters per class & subject" },
+  { href: "/questions", label: "Question bank", icon: HelpCircle, hint: "Questions organized by class, subject & chapter" },
+  { href: "/blueprints", label: "Blueprints", icon: Ruler, hint: "Marks and chapter quotas per subject" },
+  { href: "/papers", label: "Exam papers", icon: FileText, hint: "Build, print and share papers from blueprints" },
   { href: "/exam-cell", label: "Exam cell & Logistics", icon: PackageCheck, hint: "Paper budget calculator, timetable and audit trail" },
   { href: "/admin/users", label: "Faculty & RBAC", icon: ShieldCheck, hint: "Teacher roles and department access" },
 ];

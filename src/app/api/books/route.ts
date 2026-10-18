@@ -1,4 +1,5 @@
 import { body, route } from "@/lib/api";
+import { ensureClassAndSubject } from "@/lib/classes";
 import { prisma } from "@/lib/prisma";
 import { bookSchema } from "@/lib/schemas";
 
@@ -15,5 +16,13 @@ export const GET = route(async (req) => {
 
 export const POST = route(async (req) => {
   const data = await body(req, bookSchema);
-  return prisma.book.create({ data, include: { chapters: true, _count: { select: { questions: true, blueprints: true } } } });
+  const normalizedData = {
+    ...data,
+    academicSession: (data.academicSession || "2025–26").replace(/-/g, "–"),
+  };
+  await ensureClassAndSubject(normalizedData.academicSession, normalizedData.className, normalizedData.subject);
+  return prisma.book.create({
+    data: normalizedData,
+    include: { chapters: true, _count: { select: { questions: true, blueprints: true } } },
+  });
 });

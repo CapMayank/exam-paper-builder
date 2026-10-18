@@ -48,6 +48,27 @@ export const userUpdateSchema = z.object({
   password: z.string().min(6).max(100).optional(),
 });
 
+export const academicClassSchema = z.object({
+  name: text(40),
+  displayOrder: z.number().int().min(-10).max(100).optional(),
+  stream: z.string().trim().max(40).optional().default(""),
+  academicSession: z.string().trim().max(40).optional().default(DEFAULT_ACADEMIC_SESSION),
+  sections: z.array(z.string().trim().min(1).max(20)).optional().default(["A"]),
+  subjects: z
+    .array(
+      z.object({
+        name: text(80),
+        code: z.string().trim().max(40).optional().default(""),
+      })
+    )
+    .optional(),
+});
+
+export const classSubjectSchema = z.object({
+  name: text(80),
+  code: z.string().trim().max(40).optional().default(""),
+});
+
 export const bookSchema = z.object({
   title: text(),
   subject: text(80),
@@ -319,4 +340,13 @@ export const rolloverBookSchema = z.object({
   selectedChapterIds: z.array(z.string()).optional(),
   includeQuestions: z.boolean().optional().default(false),
 });
+
+export const unifiedRolloverSchema = z.object({
+  sourceSession: z.string().trim().min(1, "Source session required"),
+  targetSession: z.string().trim().min(1, "Target session required"),
+  includeClasses: z.boolean().default(true),
+  includeBooks: z.boolean().default(true),
+  includeBlueprints: z.boolean().default(true),
+});
+
 

@@ -3,8 +3,17 @@ import { recordAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { printRunCalculationSchema } from "@/lib/schemas";
 
-export const GET = route(async () => {
+export const GET = route(async (req) => {
+  const { searchParams } = new URL(req.url);
+  const className = searchParams.get("className");
+  const academicSession = searchParams.get("academicSession");
+
+  const where: Record<string, unknown> = {};
+  if (className && className !== "ALL") where.className = className;
+  if (academicSession && academicSession !== "ALL") where.academicSession = academicSession.replace(/-/g, "–");
+
   const calculations = await prisma.printRunCalculation.findMany({
+    where,
     orderBy: { createdAt: "desc" },
     take: 30,
   });

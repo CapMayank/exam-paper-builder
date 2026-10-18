@@ -24,6 +24,31 @@ model User {
   auditLogs      AuditLog[]
 }
 
+model AcademicClass {
+  id              String         @id @default(cuid())
+  name            String         // e.g. "Class 10", "Class 12"
+  displayOrder    Int            @default(10)
+  stream          String         @default("") // e.g. "Science", "Commerce", "Arts", ""
+  academicSession String         @default("2025–26")
+  sectionsJson    String         @default("[\"A\"]") // e.g. ["A", "B"]
+  createdAt       DateTime       @default(now())
+  subjects        ClassSubject[]
+
+  @@unique([academicSession, name])
+  @@index([academicSession, displayOrder])
+}
+
+model ClassSubject {
+  id            String        @id @default(cuid())
+  classId       String
+  name          String        // e.g. "Mathematics", "Science"
+  code          String        @default("") // e.g. "041", "086"
+  createdAt     DateTime      @default(now())
+  academicClass AcademicClass @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@unique([classId, name])
+}
+
 model Book {
   id              String      @id @default(cuid())
   title           String

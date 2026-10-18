@@ -1,13 +1,13 @@
 "use client";
 
-import { Calendar, FileText, Plus, Search, Upload, X } from "lucide-react";
+import { Calendar, FileText, GraduationCap, Plus, Search, Upload, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PaperImportModal } from "@/components/PaperImportModal";
 import { PaperRow } from "@/components/PaperRow";
 import { EmptyState, ErrorBanner, Field, ListSkeleton, Modal, PageHeader, Spinner, useConfirm, useToast } from "@/components/ui";
-import { useAcademicSession } from "@/lib/academicSession";
+import { normalizeSession, useAcademicSession } from "@/lib/academicSession";
 import { api } from "@/lib/client";
 import { DEFAULT_ACADEMIC_SESSION, DEFAULT_SCHOOL_NAME, EXAM_TYPES, EXAM_TYPE_LABEL, inferExamTypeFromText, LAYOUTS, LAYOUT_LABEL, type ExamType } from "@/lib/constants";
 import type { Blueprint, PaperData, PaperListItem } from "@/lib/types";
@@ -27,9 +27,13 @@ export default function PapersPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sessionFilter, setSessionFilter] = useState<string>("ALL");
+  const [sessionFilter, setSessionFilter] = useState<string>(currentSession);
+  const [classFilter, setClassFilter] = useState<string>("ALL");
+  const [subjectFilter, setSubjectFilter] = useState<string>("ALL");
   const [filterStatus, setFilterStatus] = useState<Filter>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
+  const [modalClassFilter, setModalClassFilter] = useState<string>("ALL");
+  const [modalSubjectFilter, setModalSubjectFilter] = useState<string>("ALL");
   const [form, setForm] = useState({
     title: "",
     blueprintId: "",
@@ -42,6 +46,19 @@ export default function PapersPage() {
     academicSession: DEFAULT_ACADEMIC_SESSION,
     generalInstructions: "",
   });
+
+  useEffect(() => {
+    setSessionFilter(currentSession);
+  }, [currentSession]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const cls = params.get("className");
+    const subj = params.get("subject");
+    if (cls) setClassFilter(cls);
+    if (subj) setSubjectFilter(subj);
+  }, []);
 
   const load = useCallback(
     () =>
@@ -64,7 +81,14 @@ export default function PapersPage() {
   }, [load]);
 
   function openCreate() {
-    const defaultBp = blueprints.find((b) => b.id === form.blueprintId) || blueprints[0];
+    const matchingBlueprints = blueprints.filter((b) => {
+      if (classFilter !== "ALL" && b.book.className !== classFilter) return false;
+      if (subjectFilter !== "ALL" && b.book.subject !== subjectFilter) return false;
+      return true;
+    });
+    const defaultBp = matchingBlueprints[0] || blueprints.find((b) => b.id === form.blueprintId) || blueprints[0];
+    setModalClassFilter(defaultBp?.book.className || classFilter);
+    setModalSubjectFilter(defaultBp?.book.subject || subjectFilter);
     setForm((f) => ({
       ...f,
       blueprintId: defaultBp?.id || "",
@@ -72,7 +96,7 @@ export default function PapersPage() {
       schoolName: f.schoolName || localStorage.getItem(SCHOOL_KEY) || DEFAULT_SCHOOL_NAME,
       paperSet: f.paperSet || "SET A",
       subjectCode: defaultBp?.subjectCode || f.subjectCode || "041",
-      academicSession: f.academicSession || currentSession || DEFAULT_ACADEMIC_SESSION,
+      academicSession: currentSession || DEFAULT_ACADEMIC_SESSION,
     }));
     setCreating(true);
   }
@@ -117,19 +141,47 @@ export default function PapersPage() {
     return Array.from(new Set([currentSession, ...papers.map((p) => p.academicSession || "2025–26")])).sort();
   }, [papers, currentSession]);
 
+  const availableClasses = useMemo(() => {
+    return Array.from(new Set(papers.map((p) => p.blueprint.book.className))).sort();
+  }, [papers]);
+
+  const availableSubjects = useMemo(() => {
+    const pool = classFilter === "ALL" ? papers : papers.filter((p) => p.blueprint.book.className === classFilter);
+    return Array.from(new Set(pool.map((p) => p.blueprint.book.subject))).sort();
+  }, [papers, classFilter]);
+
+  const modalAvailableClasses = useMemo(() => {
+    return Array.from(new Set(blueprints.map((b) => b.book.className))).sort();
+  }, [blueprints]);
+
+  const modalAvailableSubjects = useMemo(() => {
+    const pool = modalClassFilter === "ALL" ? blueprints : blueprints.filter((b) => b.book.className === modalClassFilter);
+    return Array.from(new Set(pool.map((b) => b.book.subject))).sort();
+  }, [blueprints, modalClassFilter]);
+
+  const modalFilteredBlueprints = useMemo(() => {
+    return blueprints.filter((b) => {
+      if (modalClassFilter !== "ALL" && b.book.className !== modalClassFilter) return false;
+      if (modalSubjectFilter !== "ALL" && b.book.subject !== modalSubjectFilter) return false;
+      return true;
+    });
+  }, [blueprints, modalClassFilter, modalSubjectFilter]);
+
   const filteredPapers = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     return [...papers]
       .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
       .filter((p) => {
         if (sessionFilter !== "ALL" && (p.academicSession || "2025–26") !== sessionFilter) return false;
+        if (classFilter !== "ALL" && p.blueprint.book.className !== classFilter) return false;
+        if (subjectFilter !== "ALL" && p.blueprint.book.subject !== subjectFilter) return false;
         if (filterStatus !== "ALL" && p.status !== filterStatus) return false;
         if (!query) return true;
         return [p.title, p.blueprint.book.subject, p.blueprint.book.className, p.blueprint.name, p.academicSession || ""].some((s) =>
           s.toLowerCase().includes(query),
         );
       });
-  }, [papers, sessionFilter, filterStatus, searchQuery]);
+  }, [papers, sessionFilter, classFilter, subjectFilter, filterStatus, searchQuery]);
 
   const counts = {
     ALL: papers.length,
@@ -178,65 +230,88 @@ export default function PapersPage() {
 
       <ErrorBanner message={error} onDismiss={() => setError(null)} />
 
-      {/* Academic Session Filter Tabs */}
+      {/* Active Session & Count Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
-        <div className="flex items-center gap-1.5 overflow-x-auto">
-          <span className="text-xs font-semibold text-slate-500 mr-1 flex items-center gap-1">
-            <Calendar size={13} /> Session:
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-slate-500 flex items-center gap-1.5">
+            <Calendar size={14} className="text-slate-600" /> Active Session:
           </span>
-          <button
-            type="button"
-            onClick={() => setSessionFilter("ALL")}
-            className={`rounded-lg px-2.5 py-1 text-xs font-medium whitespace-nowrap transition ${
-              sessionFilter === "ALL"
-                ? "bg-indigo-900 text-white shadow-sm"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-            }`}
-          >
-            All Sessions ({papers.length})
-          </button>
-          {availableSessions.map((sess) => {
-            const count = papers.filter((p) => (p.academicSession || "2025–26") === sess).length;
-            const active = sessionFilter === sess;
-            return (
-              <button
-                key={sess}
-                type="button"
-                onClick={() => setSessionFilter(sess)}
-                className={`rounded-lg px-2.5 py-1 text-xs font-medium whitespace-nowrap transition ${
-                  active
-                    ? "bg-indigo-900 text-white shadow-sm"
-                    : sess === currentSession
-                    ? "bg-indigo-50 text-indigo-900 border border-indigo-200 hover:bg-indigo-100"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                {sess} {count > 0 && <span className="opacity-75 font-normal">({count})</span>}
-                {sess === currentSession && <span className="ml-1 text-[10px] text-amber-500 font-bold">●</span>}
-              </button>
-            );
-          })}
+          <span className="badge !bg-slate-900 !text-white font-mono px-2.5 py-0.5">
+            {normalizeSession(currentSession)}
+          </span>
+          <span className="text-xs text-slate-500">
+            ({filteredPapers.length} of {papers.length} exam papers)
+          </span>
         </div>
 
-        <div className="text-xs text-slate-500">
-          Showing <strong>{filteredPapers.length}</strong> of {papers.length} exam papers
-        </div>
+        <Link
+          href="/classes"
+          className="text-xs font-semibold text-slate-700 hover:text-slate-950 inline-flex items-center gap-1"
+        >
+          <GraduationCap size={14} /> Manage Classes &amp; Subjects
+        </Link>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="segmented" role="group" aria-label="Filter by status">
-          {(
-            [
-              ["ALL", "All"],
-              ["DRAFT", "Drafts"],
-              ["FINAL", "Finalized"],
-            ] as const
-          ).map(([key, label]) => (
-            <button key={key} type="button" aria-pressed={filterStatus === key} onClick={() => setFilterStatus(key)}>
-              {label}
-              <span className="tabular-nums text-slate-400">{counts[key]}</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="segmented" role="group" aria-label="Filter by status">
+            {(
+              [
+                ["ALL", "All"],
+                ["DRAFT", "Drafts"],
+                ["FINAL", "Finalized"],
+              ] as const
+            ).map(([key, label]) => (
+              <button key={key} type="button" aria-pressed={filterStatus === key} onClick={() => setFilterStatus(key)}>
+                {label}
+                <span className="tabular-nums text-slate-400">{counts[key]}</span>
+              </button>
+            ))}
+          </div>
+
+          <select
+            className="input h-9 w-40 py-1 text-xs font-medium"
+            value={classFilter}
+            onChange={(e) => {
+              setClassFilter(e.target.value);
+              setSubjectFilter("ALL");
+            }}
+            aria-label="Filter by class"
+          >
+            <option value="ALL">All Classes</option>
+            {availableClasses.map((cls) => (
+              <option key={cls} value={cls}>
+                {cls}
+              </option>
+            ))}
+          </select>
+
+          <select
+            className="input h-9 w-44 py-1 text-xs font-medium"
+            value={subjectFilter}
+            onChange={(e) => setSubjectFilter(e.target.value)}
+            aria-label="Filter by subject"
+          >
+            <option value="ALL">All Subjects</option>
+            {availableSubjects.map((subj) => (
+              <option key={subj} value={subj}>
+                {subj}
+              </option>
+            ))}
+          </select>
+
+          {(classFilter !== "ALL" || subjectFilter !== "ALL") && (
+            <button
+              type="button"
+              onClick={() => {
+                setClassFilter("ALL");
+                setSubjectFilter("ALL");
+              }}
+              className="text-xs font-semibold text-indigo-700 hover:underline"
+            >
+              Reset Class/Subject
             </button>
-          ))}
+          )}
         </div>
 
         <div className="relative w-full min-w-56 max-w-sm sm:w-auto sm:flex-1">
@@ -292,7 +367,7 @@ export default function PapersPage() {
             compact
             icon={Search}
             title="No papers match"
-            description="Try a different search or switch the status filter."
+            description="Try a different search or switch the class, subject, or status filter."
             action={
               <button
                 type="button"
@@ -300,6 +375,8 @@ export default function PapersPage() {
                 onClick={() => {
                   setSearchQuery("");
                   setFilterStatus("ALL");
+                  setClassFilter("ALL");
+                  setSubjectFilter("ALL");
                 }}
               >
                 Clear filters
@@ -318,14 +395,14 @@ export default function PapersPage() {
       {creating && (
         <Modal
           title="New exam paper"
-          subtitle="Set the basics now. Everything can be changed later in the workbench."
+          subtitle="Select Class, Subject, and Blueprint to build an exam paper."
           onClose={() => setCreating(false)}
           footer={
             <>
               <button type="button" className="btn" onClick={() => setCreating(false)}>
                 Cancel
               </button>
-              <button form="new-paper-form" className="btn btn-primary" disabled={saving}>
+              <button form="new-paper-form" className="btn btn-primary" disabled={saving || !form.blueprintId}>
                 {saving && <Spinner />}
                 {saving ? "Creating…" : "Create and open"}
               </button>
@@ -352,45 +429,110 @@ export default function PapersPage() {
               />
             </Field>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Blueprint" helper="Sets the sections and marks per chapter.">
-                <select
-                  className="input"
-                  required
-                  value={form.blueprintId}
-                  onChange={(e) => {
-                    const nextBp = blueprints.find((b) => b.id === e.target.value);
-                    setForm({
-                      ...form,
-                      blueprintId: e.target.value,
-                      ...(nextBp?.examType && !inferExamTypeFromText(form.title)
-                        ? { examType: nextBp.examType as ExamType }
-                        : {}),
-                      ...(nextBp?.subjectCode ? { subjectCode: nextBp.subjectCode } : {}),
-                    });
-                  }}
-                >
-                  {blueprints.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name} ({EXAM_TYPE_LABEL[b.examType as ExamType]} · {b.book.className} {b.book.subject})
-                    </option>
-                  ))}
-                </select>
-              </Field>
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-3">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-600">
+                1. Curriculum Selection (Class → Subject → Blueprint)
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Filter by Class">
+                  <select
+                    className="input bg-white"
+                    value={modalClassFilter}
+                    onChange={(e) => {
+                      const nextCls = e.target.value;
+                      setModalClassFilter(nextCls);
+                      setModalSubjectFilter("ALL");
+                      const matching = blueprints.filter((b) => nextCls === "ALL" || b.book.className === nextCls);
+                      if (matching[0]) {
+                        setForm((f) => ({
+                          ...f,
+                          blueprintId: matching[0].id,
+                          examType: (matching[0].examType as ExamType) || f.examType,
+                          subjectCode: matching[0].subjectCode || f.subjectCode,
+                        }));
+                      }
+                    }}
+                  >
+                    <option value="ALL">All Classes</option>
+                    {modalAvailableClasses.map((cls) => (
+                      <option key={cls} value={cls}>
+                        {cls}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Filter by Subject">
+                  <select
+                    className="input bg-white"
+                    value={modalSubjectFilter}
+                    onChange={(e) => {
+                      const nextSubj = e.target.value;
+                      setModalSubjectFilter(nextSubj);
+                      const matching = blueprints.filter(
+                        (b) =>
+                          (modalClassFilter === "ALL" || b.book.className === modalClassFilter) &&
+                          (nextSubj === "ALL" || b.book.subject === nextSubj),
+                      );
+                      if (matching[0]) {
+                        setForm((f) => ({
+                          ...f,
+                          blueprintId: matching[0].id,
+                          examType: (matching[0].examType as ExamType) || f.examType,
+                          subjectCode: matching[0].subjectCode || f.subjectCode,
+                        }));
+                      }
+                    }}
+                  >
+                    <option value="ALL">All Subjects</option>
+                    {modalAvailableSubjects.map((subj) => (
+                      <option key={subj} value={subj}>
+                        {subj}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
 
-              <Field label="Examination Term (Print Heading)" helper="Controls Quarterly / Half Yearly / Annual heading on print.">
-                <select
-                  className="input"
-                  value={form.examType}
-                  onChange={(e) => setForm({ ...form, examType: e.target.value as ExamType })}
-                >
-                  {EXAM_TYPES.map((t) => (
-                    <option key={t} value={t}>
-                      {EXAM_TYPE_LABEL[t]} Examination
-                    </option>
-                  ))}
-                </select>
-              </Field>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Blueprint" helper="Sets the sections and marks per chapter.">
+                  <select
+                    className="input bg-white"
+                    required
+                    value={form.blueprintId}
+                    onChange={(e) => {
+                      const nextBp = blueprints.find((b) => b.id === e.target.value);
+                      setForm({
+                        ...form,
+                        blueprintId: e.target.value,
+                        ...(nextBp?.examType && !inferExamTypeFromText(form.title)
+                          ? { examType: nextBp.examType as ExamType }
+                          : {}),
+                        ...(nextBp?.subjectCode ? { subjectCode: nextBp.subjectCode } : {}),
+                      });
+                    }}
+                  >
+                    {modalFilteredBlueprints.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name} ({EXAM_TYPE_LABEL[b.examType as ExamType]} · {b.book.className} {b.book.subject})
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field label="Examination Term (Print Heading)" helper="Controls Quarterly / Half Yearly / Annual heading on print.">
+                  <select
+                    className="input bg-white"
+                    value={form.examType}
+                    onChange={(e) => setForm({ ...form, examType: e.target.value as ExamType })}
+                  >
+                    {EXAM_TYPES.map((t) => (
+                      <option key={t} value={t}>
+                        {EXAM_TYPE_LABEL[t]} Examination
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
             </div>
 
             <Field

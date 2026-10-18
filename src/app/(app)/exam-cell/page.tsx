@@ -21,13 +21,15 @@ import {
   RefreshCw,
   Search,
   ShieldCheck,
+  Sparkles,
   Trash2,
   User,
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ErrorBanner, Modal, Skeleton } from "@/components/ui";
+import { useAcademicSession } from "@/lib/academicSession";
 import { api } from "@/lib/client";
 import {
   EXAM_TYPES,
@@ -43,7 +45,9 @@ import {
 } from "@/lib/constants";
 import { timeAgo } from "@/lib/format";
 import type {
+  AcademicClassDto,
   AuditLogEntry,
+  Blueprint,
   ClassSectionInput,
   ExamTimetableItem,
   PaperListItem,
@@ -54,25 +58,48 @@ import type {
 
 type Tab = "calculator" | "timetable" | "audit";
 
+function getSectionsForClass(cls?: AcademicClassDto | null): ClassSectionInput[] {
+  if (!cls) {
+    return [
+      { name: "Section A", count: 40 },
+      { name: "Section B", count: 40 },
+    ];
+  }
+  const secs = cls.sections && cls.sections.length > 0 ? cls.sections : ["A", "B"];
+  return secs.map((s) => ({
+    name: `${cls.name} - Section ${s}`,
+    count: 40,
+  }));
+}
+
 export default function ExamCellPage() {
+  const { currentSession, availableSessions } = useAcademicSession();
+  const [sessionFilter, setSessionFilter] = useState<string>(currentSession);
   const [activeTab, setActiveTab] = useState<Tab>("calculator");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Data
   const [currentUser, setCurrentUser] = useState<UserData | null>(null);
+  const [classes, setClasses] = useState<AcademicClassDto[]>([]);
+  const [blueprints, setBlueprints] = useState<Blueprint[]>([]);
   const [papers, setPapers] = useState<PaperListItem[]>([]);
   const [calculations, setCalculations] = useState<PrintRunCalculationDto[]>([]);
   const [timetable, setTimetable] = useState<ExamTimetableItem[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [auditTotal, setAuditTotal] = useState(0);
 
+  // Filters for Timetable
+  const [timetableClassFilter, setTimetableClassFilter] = useState<string>("ALL");
+  const [timetableExamTypeFilter, setTimetableExamTypeFilter] = useState<string>("ALL");
+  const [timetableStatusFilter, setTimetableStatusFilter] = useState<string>("ALL");
+  const [timetableSearch, setTimetableSearch] = useState<string>("");
+
   // Calculator State
   const [selectedPaperId, setSelectedPaperId] = useState<string>("");
   const [paperTitle, setPaperTitle] = useState("");
   const [className, setClassName] = useState("Class 10");
   const [subject, setSubject] = useState("Science");
-  const [academicSession, setAcademicSession] = useState("2025–26");
   const [layout, setLayout] = useState<Layout>("BOOKLET_A4");
   const [pageCount, setPageCount] = useState<number>(4);
   const [wastagePercent, setWastagePercent] = useState<number>(3);
@@ -97,7 +124,7 @@ export default function ExamCellPage() {
     className: "Class 10",
     subject: "Science",
     subjectCode: "086",
-    academicSession: "2025–26",
+    academicSession: currentSession,
     examType: "ANNUAL" as ExamType,
     examDate: new Date().toISOString().split("T")[0],
     startTime: "09:00",
@@ -108,6 +135,7 @@ export default function ExamCellPage() {
     submissionDeadline: "",
     printingDeadline: "",
     paperId: "",
+    blueprintId: "",
   });
   const [savingTimetable, setSavingTimetable] = useState(false);
 
@@ -119,39 +147,123 @@ export default function ExamCellPage() {
   });
   const [inspectAudit, setInspectAudit] = useState<AuditLogEntry | null>(null);
 
+  // Synchronize sessionFilter with currentSession
+  useEffect(() => {
+    setSessionFilter(currentSession);
+  }, [currentSession]);
+
+  // URL search params parsing
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get("tab") as Tab | null;
+    const classParam = params.get("className");
+    const subjectParam = params.get("subject");
+    const sessionParam = params.get("session");
+
+    if (tabParam && (tabParam === "calculator" || tabParam === "timetable" || tabParam === "audit")) {
+      setActiveTab(tabParam);
+    }
+    if (classParam) {
+      setClassName(classParam);
+      setTimetableClassFilter(classParam);
+    }
+    if (subjectParam) {
+      setSubject(subjectParam);
+    }
+    if (sessionParam) {
+      setSessionFilter(sessionParam);
+    }
+  }, []);
+
   // Fetch initial data
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [u, p, c, t, a] = await Promise.all([
+      const sessionQuery = sessionFilter !== "ALL" ? `?session=${encodeURIComponent(sessionFilter)}` : "";
+      const timetableQuery = sessionFilter !== "ALL" ? `?academicSession=${encodeURIComponent(sessionFilter)}` : "";
+      const calcQuery = sessionFilter !== "ALL" ? `?academicSession=${encodeURIComponent(sessionFilter)}` : "";
+
+      const [u, p, c, t, a, clsList, bpList] = await Promise.all([
         api<UserData>("/api/me"),
         api<PaperListItem[]>("/api/papers"),
-        api<PrintRunCalculationDto[]>("/api/exam-cell/calculator"),
-        api<ExamTimetableItem[]>("/api/exam-cell/timetable"),
+        api<PrintRunCalculationDto[]>(`/api/exam-cell/calculator${calcQuery}`),
+        api<ExamTimetableItem[]>(`/api/exam-cell/timetable${timetableQuery}`),
         api<{ logs: AuditLogEntry[]; total: number }>("/api/audit?limit=50"),
+        api<AcademicClassDto[]>(`/api/classes${sessionQuery}`),
+        api<Blueprint[]>("/api/blueprints"),
       ]);
+
       setCurrentUser(u);
       setPapers(p);
       setCalculations(c);
       setTimetable(t);
       setAuditLogs(a.logs);
       setAuditTotal(a.total);
+      setClasses(clsList);
+      setBlueprints(bpList);
 
-      // Pre-select first paper if available
-      if (p.length > 0 && !selectedPaperId) {
-        handleSelectPaper(p[0].id, p);
+      // Auto-initialize class & subject from loaded classes if available
+      if (clsList.length > 0) {
+        setClassName((prevClass) => {
+          const matched = clsList.find((cl) => cl.name === prevClass) || clsList[0];
+          setSubject((prevSubj) => {
+            if (matched.subjects.some((s) => s.name === prevSubj)) return prevSubj;
+            return matched.subjects[0]?.name || "General";
+          });
+          setSections((prevSecs) => {
+            if (prevSecs.length > 0 && prevSecs[0].name.startsWith(matched.name)) return prevSecs;
+            return getSectionsForClass(matched);
+          });
+          return matched.name;
+        });
       }
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setLoading(false);
     }
-  };
+  }, [sessionFilter]);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    void fetchData();
+  }, [fetchData]);
+
+  const selectedClassObj = useMemo(() => {
+    return classes.find((c) => c.name === className) || null;
+  }, [classes, className]);
+
+  const availableSubjectsForCalculator = useMemo(() => {
+    if (!selectedClassObj) return [];
+    return selectedClassObj.subjects;
+  }, [selectedClassObj]);
+
+  const matchingPapersForCalculator = useMemo(() => {
+    return papers.filter((p) => {
+      if (sessionFilter !== "ALL" && (p.academicSession || "2025–26") !== sessionFilter) return false;
+      if (className && p.blueprint.book.className !== className) return false;
+      if (subject && p.blueprint.book.subject !== subject) return false;
+      return true;
+    });
+  }, [papers, sessionFilter, className, subject]);
+
+  const handleClassChange = (newClassName: string) => {
+    setClassName(newClassName);
+    const matched = classes.find((c) => c.name === newClassName);
+    if (matched) {
+      if (matched.subjects.length > 0) {
+        setSubject(matched.subjects[0].name);
+      }
+      setSections(getSectionsForClass(matched));
+    }
+  };
+
+  const handleResetSectionsToClass = () => {
+    if (selectedClassObj) {
+      setSections(getSectionsForClass(selectedClassObj));
+    }
+  };
 
   // When a paper is chosen in the calculator, auto-populate details
   const handleSelectPaper = (id: string, paperList = papers) => {
@@ -161,9 +273,12 @@ export default function ExamCellPage() {
       setPaperTitle(found.title);
       setClassName(found.blueprint.book.className);
       setSubject(found.blueprint.book.subject);
-      setAcademicSession(found.academicSession || "2025–26");
-      setLayout((found.layout as any) || "BOOKLET");
+      setLayout((found.layout as any) || "BOOKLET_A4");
       setPageCount(found.targetPages || 4);
+      const matchedClass = classes.find((c) => c.name === found.blueprint.book.className);
+      if (matchedClass) {
+        setSections(getSectionsForClass(matchedClass));
+      }
     }
   };
 
@@ -204,12 +319,13 @@ export default function ExamCellPage() {
     setSavingCalc(true);
     setError(null);
     try {
+      const activeSessionVal = sessionFilter !== "ALL" ? sessionFilter : currentSession;
       const res = await api<any>("/api/exam-cell/calculator", {
         method: "POST",
         json: {
           paperId: selectedPaperId || null,
           paperTitle: paperTitle || "Examination Paper",
-          academicSession,
+          academicSession: activeSessionVal,
           className,
           subject,
           layout,
@@ -238,7 +354,10 @@ export default function ExamCellPage() {
     try {
       const res = await api<ExamTimetableItem>("/api/exam-cell/timetable", {
         method: "POST",
-        json: timetableForm,
+        json: {
+          ...timetableForm,
+          academicSession: sessionFilter !== "ALL" ? sessionFilter : currentSession,
+        },
       });
       setTimetable((prev) => [...prev, res].sort((a, b) => a.examDate.localeCompare(b.examDate)));
       setTimetableModal(false);
@@ -247,6 +366,76 @@ export default function ExamCellPage() {
     } finally {
       setSavingTimetable(false);
     }
+  };
+
+  const handleTimetableClassChange = (nextClass: string) => {
+    const cls = classes.find((c) => c.name === nextClass);
+    const subj = cls?.subjects[0];
+    setTimetableForm((prev) => ({
+      ...prev,
+      className: nextClass,
+      subject: subj?.name || "",
+      subjectCode: subj?.code || "",
+      title: cls && subj ? `${cls.name} ${subj.name} Examination` : prev.title,
+      paperId: "",
+      blueprintId: "",
+    }));
+  };
+
+  const handleTimetableSubjectChange = (nextSubject: string) => {
+    const cls = classes.find((c) => c.name === timetableForm.className);
+    const subj = cls?.subjects.find((s) => s.name === nextSubject);
+    setTimetableForm((prev) => ({
+      ...prev,
+      subject: nextSubject,
+      subjectCode: subj?.code || prev.subjectCode,
+      title: cls && subj ? `${cls.name} ${subj.name} Examination` : prev.title,
+      paperId: "",
+      blueprintId: "",
+    }));
+  };
+
+  const handleTimetablePaperSelect = (paperId: string) => {
+    const paper = papers.find((p) => p.id === paperId);
+    if (paper) {
+      setTimetableForm((prev) => ({
+        ...prev,
+        paperId: paper.id,
+        title: paper.title,
+        className: paper.blueprint.book.className,
+        subject: paper.blueprint.book.subject,
+        subjectCode: paper.subjectCode || prev.subjectCode,
+        examType: (paper.examType as ExamType) || prev.examType,
+      }));
+    } else {
+      setTimetableForm((prev) => ({ ...prev, paperId: "", blueprintId: "" }));
+    }
+  };
+
+  const openScheduleExamModal = () => {
+    const defaultClass =
+      (timetableClassFilter !== "ALL" && classes.find((c) => c.name === timetableClassFilter)) ||
+      classes[0];
+    const defaultSubject = defaultClass?.subjects[0];
+    setTimetableForm({
+      title: defaultClass && defaultSubject ? `${defaultClass.name} ${defaultSubject.name} Examination` : "",
+      className: defaultClass?.name || "Class 10",
+      subject: defaultSubject?.name || "Science",
+      subjectCode: defaultSubject?.code || "086",
+      academicSession: sessionFilter !== "ALL" ? sessionFilter : currentSession,
+      examType: "ANNUAL",
+      examDate: new Date().toISOString().split("T")[0],
+      startTime: "09:00",
+      endTime: "12:00",
+      sessionSlot: "MORNING",
+      roomLocations: "Halls A & B, Room 204",
+      status: "SCHEDULED",
+      submissionDeadline: "",
+      printingDeadline: "",
+      paperId: "",
+      blueprintId: "",
+    });
+    setTimetableModal(true);
   };
 
   // Handle Timetable Status change
@@ -297,6 +486,24 @@ export default function ExamCellPage() {
       return true;
     });
   }, [auditLogs, auditFilter]);
+
+  // Filtered Timetable entries
+  const filteredTimetable = useMemo(() => {
+    const q = timetableSearch.trim().toLowerCase();
+    return timetable.filter((item) => {
+      if (sessionFilter !== "ALL" && (item.academicSession || "2025–26") !== sessionFilter) return false;
+      if (timetableClassFilter !== "ALL" && item.className !== timetableClassFilter) return false;
+      if (timetableExamTypeFilter !== "ALL" && item.examType !== timetableExamTypeFilter) return false;
+      if (timetableStatusFilter !== "ALL" && item.status !== timetableStatusFilter) return false;
+      if (!q) return true;
+      return (
+        item.title.toLowerCase().includes(q) ||
+        item.subject.toLowerCase().includes(q) ||
+        item.className.toLowerCase().includes(q) ||
+        item.roomLocations.toLowerCase().includes(q)
+      );
+    });
+  }, [timetable, sessionFilter, timetableClassFilter, timetableExamTypeFilter, timetableStatusFilter, timetableSearch]);
 
   if (loading) {
     return (
@@ -363,6 +570,50 @@ export default function ExamCellPage() {
         </div>
       </header>
 
+      {/* Academic Session Filter Tabs */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
+        <div className="flex items-center gap-1.5 overflow-x-auto">
+          <span className="text-xs font-semibold text-slate-500 mr-1 flex items-center gap-1">
+            <Calendar size={13} /> Session:
+          </span>
+          <button
+            type="button"
+            onClick={() => setSessionFilter("ALL")}
+            className={`rounded-lg px-2.5 py-1 text-xs font-medium whitespace-nowrap transition ${
+              sessionFilter === "ALL"
+                ? "bg-indigo-900 text-white shadow-sm"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            }`}
+          >
+            All Sessions
+          </button>
+          {availableSessions.map((sess) => {
+            const active = sessionFilter === sess;
+            return (
+              <button
+                key={sess}
+                type="button"
+                onClick={() => setSessionFilter(sess)}
+                className={`rounded-lg px-2.5 py-1 text-xs font-medium whitespace-nowrap transition ${
+                  active
+                    ? "bg-indigo-900 text-white shadow-sm"
+                    : sess === currentSession
+                    ? "bg-indigo-50 text-indigo-900 border border-indigo-200 hover:bg-indigo-100"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                {sess}
+                {sess === currentSession && <span className="ml-1 text-[10px] text-amber-500 font-bold">●</span>}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="text-xs text-slate-500">
+          Academic Hierarchy: <strong>Session {sessionFilter !== "ALL" ? sessionFilter : currentSession}</strong> · {classes.length} Classes configured
+        </div>
+      </div>
+
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 
       {/* ============================================================== */}
@@ -411,41 +662,96 @@ export default function ExamCellPage() {
 
                 {/* Pre-fill from existing paper */}
                 <div>
-                  <label className="label">Select Paper from Bank (Auto-fill parameters)</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="label mb-0">Select Paper from Bank (Auto-fill parameters)</label>
+                    {selectedPaperId && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPaperId("")}
+                        className="text-xs text-indigo-600 hover:underline"
+                      >
+                        Clear linked paper
+                      </button>
+                    )}
+                  </div>
                   <select
                     value={selectedPaperId}
                     onChange={(e) => handleSelectPaper(e.target.value)}
                     className="input w-full"
                   >
-                    <option value="">— Select an Exam Paper —</option>
-                    {papers.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.title} · {p.blueprint.book.className} {p.blueprint.book.subject} ({p.academicSession})
-                      </option>
-                    ))}
+                    <option value="">— Select an Exam Paper (or set manually below) —</option>
+                    {matchingPapersForCalculator.length > 0 && (
+                      <optgroup label={`Papers for ${className} · ${subject}`}>
+                        {matchingPapersForCalculator.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.title} ({p.status} · {p.academicSession})
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    <optgroup label="All other papers in session">
+                      {papers
+                        .filter((p) => !matchingPapersForCalculator.some((m) => m.id === p.id))
+                        .map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.title} · {p.blueprint.book.className} {p.blueprint.book.subject} ({p.academicSession})
+                          </option>
+                        ))}
+                    </optgroup>
                   </select>
                 </div>
 
+                {/* Dynamic Class & Subject Selection */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="label">Class / Grade</label>
-                    <input
-                      type="text"
-                      className="input w-full"
-                      value={className}
-                      onChange={(e) => setClassName(e.target.value)}
-                      required
-                    />
+                    {classes.length > 0 ? (
+                      <select
+                        className="input w-full font-medium"
+                        value={className}
+                        onChange={(e) => handleClassChange(e.target.value)}
+                        required
+                      >
+                        {classes.map((c) => (
+                          <option key={c.id} value={c.name}>
+                            {c.name} {c.stream ? `(${c.stream})` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        className="input w-full"
+                        value={className}
+                        onChange={(e) => setClassName(e.target.value)}
+                        required
+                      />
+                    )}
                   </div>
                   <div>
                     <label className="label">Subject</label>
-                    <input
-                      type="text"
-                      className="input w-full"
-                      value={subject}
-                      onChange={(e) => setSubject(e.target.value)}
-                      required
-                    />
+                    {availableSubjectsForCalculator.length > 0 ? (
+                      <select
+                        className="input w-full font-medium"
+                        value={subject}
+                        onChange={(e) => setSubject(e.target.value)}
+                        required
+                      >
+                        {availableSubjectsForCalculator.map((s) => (
+                          <option key={s.id || s.name} value={s.name}>
+                            {s.name} {s.code ? `(${s.code})` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        className="input w-full"
+                        value={subject}
+                        onChange={(e) => setSubject(e.target.value)}
+                        required
+                      />
+                    )}
                   </div>
                 </div>
 
@@ -495,13 +801,25 @@ export default function ExamCellPage() {
                       <span className="font-semibold text-sm text-slate-900 block">Class Sections &amp; Headcount</span>
                       <span className="text-xs text-slate-500">Specify student counts per exam hall or section</span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={addSection}
-                      className="btn btn-sm btn-ghost text-indigo-700 hover:bg-indigo-50"
-                    >
-                      <Plus size={14} /> Add Section
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {selectedClassObj && (
+                        <button
+                          type="button"
+                          onClick={handleResetSectionsToClass}
+                          className="btn btn-sm btn-ghost border border-slate-200 text-xs text-slate-700 hover:bg-slate-50"
+                          title={`Reset to standard sections configured for ${className}`}
+                        >
+                          <RefreshCw size={13} className="text-slate-500" /> Reset to {className} Sections
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={addSection}
+                        className="btn btn-sm btn-ghost text-indigo-700 hover:bg-indigo-50"
+                      >
+                        <Plus size={14} /> Add Section
+                      </button>
+                    </div>
                   </div>
 
                   <div className="space-y-2">
@@ -718,7 +1036,7 @@ export default function ExamCellPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setTimetableModal(true)}
+                onClick={openScheduleExamModal}
                 className="btn btn-primary"
               >
                 <Plus size={15} /> Schedule Exam
@@ -726,22 +1044,121 @@ export default function ExamCellPage() {
             </div>
           </div>
 
-          {/* Timetable Schedule Cards / Table */}
-          {timetable.length === 0 ? (
-            <div className="card p-12 text-center bg-white border border-slate-200">
-              <CalendarDays size={36} className="mx-auto text-slate-400 mb-3" />
-              <h3 className="font-display font-semibold text-slate-800">No exams scheduled yet</h3>
-              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                Schedule exam dates, time slots, and track the status of paper drafting, moderation, and printing.
-              </p>
-              <button
-                type="button"
-                onClick={() => setTimetableModal(true)}
-                className="btn btn-primary btn-sm mt-4 inline-flex items-center gap-1.5"
+          {/* Timetable Filters Toolbar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold text-slate-500 mr-1 flex items-center gap-1">
+                <Filter size={13} /> Filters:
+              </span>
+              <select
+                className="input h-9 text-xs font-medium py-1 w-36"
+                value={timetableClassFilter}
+                onChange={(e) => setTimetableClassFilter(e.target.value)}
+                aria-label="Filter by class"
               >
-                <Plus size={14} /> Schedule First Exam
-              </button>
+                <option value="ALL">All Classes</option>
+                {classes.map((cls) => (
+                  <option key={cls.id} value={cls.name}>
+                    {cls.name}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                className="input h-9 text-xs font-medium py-1 w-36"
+                value={timetableExamTypeFilter}
+                onChange={(e) => setTimetableExamTypeFilter(e.target.value)}
+                aria-label="Filter by exam term"
+              >
+                <option value="ALL">All Terms</option>
+                {EXAM_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {EXAM_TYPE_LABEL[t]}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                className="input h-9 text-xs font-medium py-1 w-36"
+                value={timetableStatusFilter}
+                onChange={(e) => setTimetableStatusFilter(e.target.value)}
+                aria-label="Filter by status"
+              >
+                <option value="ALL">All Statuses</option>
+                {TIMETABLE_STATUSES.map((st) => (
+                  <option key={st} value={st}>
+                    {TIMETABLE_STATUS_LABEL[st]}
+                  </option>
+                ))}
+              </select>
+
+              {(timetableClassFilter !== "ALL" ||
+                timetableExamTypeFilter !== "ALL" ||
+                timetableStatusFilter !== "ALL" ||
+                timetableSearch) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTimetableClassFilter("ALL");
+                    setTimetableExamTypeFilter("ALL");
+                    setTimetableStatusFilter("ALL");
+                    setTimetableSearch("");
+                  }}
+                  className="text-xs font-semibold text-indigo-700 hover:underline"
+                >
+                  Reset filters
+                </button>
+              )}
             </div>
+
+            <div className="relative min-w-56 max-w-xs">
+              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="search"
+                className="input pl-8 py-1 text-xs h-9 w-full [&::-webkit-search-cancel-button]:hidden"
+                placeholder="Search subject, title, room…"
+                value={timetableSearch}
+                onChange={(e) => setTimetableSearch(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Timetable Schedule Cards / Table */}
+          {filteredTimetable.length === 0 ? (
+            timetable.length === 0 ? (
+              <div className="card p-12 text-center bg-white border border-slate-200">
+                <CalendarDays size={36} className="mx-auto text-slate-400 mb-3" />
+                <h3 className="font-display font-semibold text-slate-800">No exams scheduled yet</h3>
+                <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                  Schedule exam dates, time slots, and link with exam papers or blueprints for Session {sessionFilter !== "ALL" ? sessionFilter : currentSession}.
+                </p>
+                <button
+                  type="button"
+                  onClick={openScheduleExamModal}
+                  className="btn btn-primary btn-sm mt-4 inline-flex items-center gap-1.5"
+                >
+                  <Plus size={14} /> Schedule First Exam
+                </button>
+              </div>
+            ) : (
+              <div className="card p-8 text-center bg-white border border-slate-200">
+                <Search size={28} className="mx-auto text-slate-400 mb-2" />
+                <h4 className="font-semibold text-sm text-slate-800">No scheduled exams match filters</h4>
+                <p className="text-xs text-slate-500 mt-1">Try switching the class, term, status, or search query.</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTimetableClassFilter("ALL");
+                    setTimetableExamTypeFilter("ALL");
+                    setTimetableStatusFilter("ALL");
+                    setTimetableSearch("");
+                  }}
+                  className="btn btn-sm btn-ghost border border-slate-200 mt-3"
+                >
+                  Clear filters
+                </button>
+              </div>
+            )
           ) : (
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card">
               <div className="overflow-x-auto">
@@ -750,7 +1167,7 @@ export default function ExamCellPage() {
                     <tr>
                       <th className="px-4 py-3">Date &amp; Slot</th>
                       <th className="px-4 py-3">Class &amp; Subject</th>
-                      <th className="px-4 py-3">Exam Title</th>
+                      <th className="px-4 py-3">Exam Title &amp; Paper</th>
                       <th className="px-4 py-3">Rooms / Halls</th>
                       <th className="px-4 py-3">Print Deadline</th>
                       <th className="px-4 py-3">Lifecycle Status</th>
@@ -758,7 +1175,7 @@ export default function ExamCellPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {timetable.map((item) => (
+                    {filteredTimetable.map((item) => (
                       <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
                         <td className="px-4 py-3 font-semibold text-slate-900 whitespace-nowrap">
                           <div className="flex items-center gap-1.5">
@@ -770,11 +1187,34 @@ export default function ExamCellPage() {
                           </div>
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">
-                          <div className="font-bold text-slate-900">{item.className}</div>
-                          <div className="text-slate-600 font-medium">{item.subject} {item.subjectCode ? `(${item.subjectCode})` : ""}</div>
+                          <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                            <span>{item.className}</span>
+                            <span className="badge badge-sm !bg-indigo-50 !text-indigo-900 text-[10px]">
+                              {item.academicSession}
+                            </span>
+                          </div>
+                          <div className="text-slate-600 font-medium">
+                            {item.subject} {item.subjectCode ? `(${item.subjectCode})` : ""}
+                          </div>
                         </td>
-                        <td className="px-4 py-3 max-w-xs truncate font-medium text-slate-800">
-                          {item.title}
+                        <td className="px-4 py-3 max-w-xs font-medium text-slate-800">
+                          <div className="truncate font-semibold">{item.title}</div>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="badge !bg-slate-100 !text-slate-700 text-[10px]">
+                              {EXAM_TYPE_LABEL[item.examType as ExamType] || item.examType}
+                            </span>
+                            {item.paperId ? (
+                              <Link
+                                href={`/papers/${item.paperId}`}
+                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-700 hover:underline"
+                                title="Open linked Exam Paper workbench"
+                              >
+                                <FileText size={11} /> Open Paper <ExternalLink size={10} />
+                              </Link>
+                            ) : (
+                              <span className="text-[10px] text-slate-400">No paper linked</span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
                           <div className="flex items-center gap-1">
@@ -1061,8 +1501,120 @@ export default function ExamCellPage() {
       {/* MODAL: SCHEDULE NEW EXAM TIMETABLE                             */}
       {/* ============================================================== */}
       {timetableModal && (
-        <Modal title="Schedule Examination in Timetable" onClose={() => setTimetableModal(false)}>
+        <Modal
+          title="Schedule Examination in Timetable"
+          subtitle={`Plan date, rooms, and connect with paper for Session ${timetableForm.academicSession || currentSession}.`}
+          onClose={() => setTimetableModal(false)}
+        >
           <form onSubmit={handleCreateTimetable} className="space-y-4">
+            {/* Dynamic Class & Subject Hierarchy */}
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-3">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-600">
+                1. Target Class &amp; Subject
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Class / Grade</label>
+                  {classes.length > 0 ? (
+                    <select
+                      value={timetableForm.className}
+                      onChange={(e) => handleTimetableClassChange(e.target.value)}
+                      className="input w-full bg-white font-medium"
+                      required
+                    >
+                      {classes.map((c) => (
+                        <option key={c.id} value={c.name}>
+                          {c.name} {c.stream ? `(${c.stream})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={timetableForm.className}
+                      onChange={(e) => handleTimetableClassChange(e.target.value)}
+                      className="input w-full bg-white"
+                      required
+                    />
+                  )}
+                </div>
+                <div>
+                  <label className="label">Subject</label>
+                  {(classes.find((c) => c.name === timetableForm.className)?.subjects || []).length > 0 ? (
+                    <select
+                      value={timetableForm.subject}
+                      onChange={(e) => handleTimetableSubjectChange(e.target.value)}
+                      className="input w-full bg-white font-medium"
+                      required
+                    >
+                      {(classes.find((c) => c.name === timetableForm.className)?.subjects || []).map((s) => (
+                        <option key={s.id || s.name} value={s.name}>
+                          {s.name} {s.code ? `(${s.code})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={timetableForm.subject}
+                      onChange={(e) => handleTimetableSubjectChange(e.target.value)}
+                      className="input w-full bg-white"
+                      required
+                    />
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Subject Code</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 041, 086"
+                    value={timetableForm.subjectCode}
+                    onChange={(e) => setTimetableForm({ ...timetableForm, subjectCode: e.target.value })}
+                    className="input w-full bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="label">Examination Term</label>
+                  <select
+                    value={timetableForm.examType}
+                    onChange={(e) => setTimetableForm({ ...timetableForm, examType: e.target.value as ExamType })}
+                    className="input w-full bg-white font-medium"
+                  >
+                    {EXAM_TYPES.map((t) => (
+                      <option key={t} value={t}>
+                        {EXAM_TYPE_LABEL[t]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="label">Link to Exam Paper (Optional)</label>
+                <select
+                  value={timetableForm.paperId}
+                  onChange={(e) => handleTimetablePaperSelect(e.target.value)}
+                  className="input w-full bg-white text-xs"
+                >
+                  <option value="">— Not linked to specific paper yet —</option>
+                  {papers
+                    .filter(
+                      (p) =>
+                        p.blueprint.book.className === timetableForm.className &&
+                        p.blueprint.book.subject === timetableForm.subject,
+                    )
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.title} ({p.status} · {p.academicSession})
+                      </option>
+                    ))}
+                </select>
+              </div>
+            </div>
+
             <div>
               <label className="label">Exam Title</label>
               <input
@@ -1070,32 +1622,9 @@ export default function ExamCellPage() {
                 placeholder="e.g. Class 10 Science Annual Board Exam"
                 value={timetableForm.title}
                 onChange={(e) => setTimetableForm({ ...timetableForm, title: e.target.value })}
-                className="input w-full"
+                className="input w-full font-medium"
                 required
               />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="label">Class / Grade</label>
-                <input
-                  type="text"
-                  value={timetableForm.className}
-                  onChange={(e) => setTimetableForm({ ...timetableForm, className: e.target.value })}
-                  className="input w-full"
-                  required
-                />
-              </div>
-              <div>
-                <label className="label">Subject</label>
-                <input
-                  type="text"
-                  value={timetableForm.subject}
-                  onChange={(e) => setTimetableForm({ ...timetableForm, subject: e.target.value })}
-                  className="input w-full"
-                  required
-                />
-              </div>
             </div>
 
             <div className="grid grid-cols-3 gap-3">

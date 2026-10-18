@@ -187,6 +187,7 @@ export const isBookletLayout = (layout?: string | null): boolean =>
   layout === "BOOKLET" || layout === "BOOKLET_A4";
 
 export const DEFAULT_SCHOOL_NAME = "Sarvodaya English Higher Secondary School, Lakhnadon";
+export const SCHOOL_FULL_NAME = DEFAULT_SCHOOL_NAME;
 export const SCHOOL_DISPLAY_NAME = "Sarvodaya Higher Secondary School, Lakhnadon";
 export const SCHOOL_SHORT_NAME = "Sarvodaya H.S. School";
 export const SCHOOL_LOCATION = "Lakhnadon";

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUp, Plus, Sparkles, Trash2, Upload } from "lucide-react";
+import { ArrowDown, ArrowUp, FileText, Plus, Sparkles, Trash2, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { use, useEffect, useState } from "react";
 import { ErrorBanner, Field, useConfirm, useToast } from "@/components/ui";
@@ -17,8 +17,8 @@ import {
   type SectionGroup,
 } from "@/lib/blueprint";
 import { api } from "@/lib/client";
-import { EXAM_TYPES, EXAM_TYPE_LABEL, QUESTION_TYPES, QUESTION_TYPE_LABEL } from "@/lib/constants";
-import type { Blueprint, Book } from "@/lib/types";
+import { DEFAULT_SCHOOL_NAME, EXAM_TYPES, EXAM_TYPE_LABEL, QUESTION_TYPES, QUESTION_TYPE_LABEL } from "@/lib/constants";
+import type { Blueprint, Book, PaperData } from "@/lib/types";
 
 let qtSeq = 0;
 const newQuestionType = (over: Partial<QuestionTypeItem> = {}): QuestionTypeItem => ({
@@ -64,6 +64,9 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
   const [busy, setBusy] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
 
+  const [selectedClassFilter, setSelectedClassFilter] = useState("");
+  const [selectedSubjectFilter, setSelectedSubjectFilter] = useState("");
+
   useEffect(() => {
     if (sp.import === "true" || sp.import === "1") {
       setImportModalOpen(true);
@@ -81,6 +84,11 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
         if (source) {
           setName(id === "new" ? `${source.name} (copy)` : source.name);
           setBookId(source.bookId);
+          const matchedBook = bs.find((b) => b.id === source.bookId);
+          if (matchedBook) {
+            setSelectedClassFilter(matchedBook.className);
+            setSelectedSubjectFilter(matchedBook.subject);
+          }
           setAcademicSession(source.academicSession || currentSession);
           setExamType(source.examType);
           setDurationMin(source.durationMin);
@@ -89,7 +97,32 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
           setSectionGroups(groupSectionsFromFlat(source.sections));
           setPaperCount(id === "new" ? 0 : source._count.papers);
         } else {
-          setBookId(bs[0]?.id ?? "");
+          const urlBookId = typeof sp.bookId === "string" ? sp.bookId : undefined;
+          const urlCode = typeof sp.subjectCode === "string" ? sp.subjectCode : "";
+          const urlClassName = typeof sp.className === "string" ? sp.className : "";
+          const urlSubject = typeof sp.subject === "string" ? sp.subject : "";
+
+          const initialBook =
+            (urlBookId && bs.find((b) => b.id === urlBookId)) ||
+            (urlClassName && urlSubject && bs.find(
+              (b) =>
+                b.className.trim().toLowerCase() === urlClassName.trim().toLowerCase() &&
+                b.subject.trim().toLowerCase() === urlSubject.trim().toLowerCase()
+            )) ||
+            (urlClassName && bs.find((b) => b.className.trim().toLowerCase() === urlClassName.trim().toLowerCase())) ||
+            bs[0];
+
+          setBookId(initialBook?.id ?? "");
+          if (initialBook) {
+            setSelectedClassFilter(initialBook.className);
+            setSelectedSubjectFilter(initialBook.subject);
+            setName(`${initialBook.className} ${initialBook.subject} – Blueprint`);
+          } else if (urlClassName) {
+            setSelectedClassFilter(urlClassName);
+            if (urlSubject) setSelectedSubjectFilter(urlSubject);
+            setName(`${urlClassName} ${urlSubject || ""} – Blueprint`.trim());
+          }
+          if (urlCode) setSubjectCode(urlCode);
           setAcademicSession(currentSession);
           setSectionGroups([
             newSectionGroup(
@@ -107,7 +140,7 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
         setError((e as Error).message);
       }
     })();
-  }, [id, from, currentSession]);
+  }, [id, from, currentSession, sp.bookId, sp.subjectCode, sp.className, sp.subject]);
 
   const hasPapers = paperCount > 0;
   const book = books.find((b) => b.id === bookId);
@@ -262,11 +295,11 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
     );
   }
 
-  async function save(e: React.FormEvent) {
-    e.preventDefault();
+  async function save(e?: React.FormEvent, andBuildPaper = false) {
+    if (e) e.preventDefault();
     setError(null);
 
-    if (hasPapers) {
+    if (hasPapers && !andBuildPaper) {
       const ok = await confirm({
         title: `Save Blueprint & Sync ${paperCount} Paper(s)?`,
         message: `This blueprint is used in ${paperCount} exam paper(s). Section and quota updates will be applied in-place. If any finalized papers have quota discrepancies, they will safely revert to Draft with detailed reconciliation steps.`,
@@ -295,14 +328,35 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
           marksEach: s.marksEach,
         })),
       };
+      let savedBlueprintId = id;
       if (id === "new") {
-        await api("/api/blueprints", { method: "POST", json });
+        const created = await api<{ id: string }>("/api/blueprints", { method: "POST", json });
+        savedBlueprintId = created.id;
         toast.success("Blueprint created successfully");
       } else {
         await api(`/api/blueprints/${id}`, { method: "PUT", json });
         toast.success(hasPapers ? `Updated blueprint & synchronized ${paperCount} paper(s)` : "Blueprint saved successfully");
       }
-      router.push("/blueprints");
+
+      if (andBuildPaper) {
+        const paper = await api<PaperData>("/api/papers", {
+          method: "POST",
+          json: {
+            title: `${name} — Draft Paper`,
+            blueprintId: savedBlueprintId,
+            examType,
+            layout: "BOOKLET_A4",
+            schoolName: DEFAULT_SCHOOL_NAME,
+            paperSet: "SET A",
+            subjectCode,
+            academicSession,
+          },
+        });
+        toast.success(`Created paper "${paper.title}"`);
+        router.push(`/papers/${paper.id}`);
+      } else {
+        router.push("/blueprints");
+      }
     } catch (err) {
       setError((err as Error).message);
       setBusy(false);
@@ -326,9 +380,9 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
       </div>
 
       {id === "new" && (
-        <div className="rounded-xl border border-indigo-100 bg-gradient-to-r from-indigo-50/70 via-slate-50/60 to-white p-3.5 text-xs text-indigo-950 flex flex-wrap items-center justify-between gap-2 shadow-2xs">
+        <div className="rounded-xl border border-slate-200 bg-white p-3.5 text-xs text-slate-800 flex flex-wrap items-center justify-between gap-2 shadow-2xs">
           <div className="flex items-center gap-2">
-            <Sparkles size={16} className="text-indigo-600 shrink-0" />
+            <Sparkles size={16} className="text-amber-600 shrink-0" />
             <span>
               <strong>Have a syllabus or exam specification ready?</strong> Upload your JSON or CSV file to auto-configure sections, marks, and chapter weightages instantly.
             </span>
@@ -336,17 +390,17 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
           <button
             type="button"
             onClick={() => setImportModalOpen(true)}
-            className="btn btn-sm btn-ghost bg-white border border-indigo-200 text-indigo-900 hover:bg-indigo-50 text-xs font-semibold shrink-0 shadow-2xs flex items-center gap-1.5"
+            className="btn btn-sm btn-ghost bg-slate-50 border border-slate-200 text-slate-900 hover:bg-slate-100 text-xs font-semibold shrink-0 flex items-center gap-1.5"
           >
-            <Upload size={13} className="text-indigo-600" /> Import file
+            <Upload size={13} /> Import file
           </button>
         </div>
       )}
       
       {hasPapers && (
-        <div className="rounded-xl border border-indigo-200 bg-indigo-50/90 p-4 text-xs text-indigo-950 shadow-2xs space-y-1.5">
-          <div className="flex items-center gap-2 font-bold text-indigo-950">
-            <Sparkles size={16} className="text-indigo-600" />
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-800 shadow-2xs space-y-1.5">
+          <div className="flex items-center gap-2 font-bold text-slate-900">
+            <Sparkles size={16} className="text-amber-600" />
             <span>Smart In-Use Blueprint Editing ({paperCount} linked paper{paperCount > 1 ? "s" : ""})</span>
           </div>
           <p className="leading-relaxed">
@@ -360,9 +414,6 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
       <ErrorBanner message={error} />
 
       <section className="card grid gap-3 sm:grid-cols-4">
-        <Field label="Blueprint name" className="sm:col-span-2">
-          <input className="input" required value={name} placeholder="Class 8 Science – Half Yearly" onChange={(e) => setName(e.target.value)} />
-        </Field>
         <Field label="Academic session">
           <select className="input" value={academicSession} onChange={(e) => setAcademicSession(e.target.value)}>
             {availableSessions.map((s) => (
@@ -371,6 +422,100 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
               </option>
             ))}
           </select>
+        </Field>
+        <Field label="Class">
+          <select
+            className="input"
+            value={selectedClassFilter}
+            disabled={hasPapers}
+            onChange={(e) => {
+              const cls = e.target.value;
+              setSelectedClassFilter(cls);
+              setSelectedSubjectFilter("");
+              const firstMatch = books.find((b) => !cls || b.className === cls);
+              if (firstMatch) {
+                setBookId(firstMatch.id);
+                setMarks({});
+              }
+            }}
+          >
+            <option value="">All Classes</option>
+            {Array.from(new Set(books.map((b) => b.className)))
+              .sort()
+              .map((cls) => (
+                <option key={cls} value={cls}>
+                  {cls}
+                </option>
+              ))}
+          </select>
+        </Field>
+        <Field label="Subject">
+          <select
+            className="input"
+            value={selectedSubjectFilter}
+            disabled={hasPapers}
+            onChange={(e) => {
+              const sub = e.target.value;
+              setSelectedSubjectFilter(sub);
+              const firstMatch = books.find(
+                (b) =>
+                  (!selectedClassFilter || b.className === selectedClassFilter) &&
+                  (!sub || b.subject === sub)
+              );
+              if (firstMatch) {
+                setBookId(firstMatch.id);
+                setMarks({});
+              }
+            }}
+          >
+            <option value="">All Subjects</option>
+            {Array.from(
+              new Set(
+                books
+                  .filter((b) => !selectedClassFilter || b.className === selectedClassFilter)
+                  .map((b) => b.subject)
+              )
+            )
+              .sort()
+              .map((sub) => (
+                <option key={sub} value={sub}>
+                  {sub}
+                </option>
+              ))}
+          </select>
+        </Field>
+        <Field label="Textbook / Syllabus" helper={hasPapers ? "Book cannot be changed while papers use this blueprint." : undefined}>
+          <select
+            className="input"
+            value={bookId}
+            required
+            disabled={hasPapers}
+            onChange={(e) => {
+              const picked = books.find((b) => b.id === e.target.value);
+              setBookId(e.target.value);
+              if (picked) {
+                setSelectedClassFilter(picked.className);
+                setSelectedSubjectFilter(picked.subject);
+              }
+              setMarks({});
+            }}
+          >
+            {books
+              .filter(
+                (b) =>
+                  (!selectedClassFilter || b.className === selectedClassFilter) &&
+                  (!selectedSubjectFilter || b.subject === selectedSubjectFilter)
+              )
+              .map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.title} ({b.className} · {b.subject})
+                </option>
+              ))}
+          </select>
+        </Field>
+
+        <Field label="Blueprint name" className="sm:col-span-2">
+          <input className="input" required value={name} placeholder="Class 10 Mathematics – Half Yearly" onChange={(e) => setName(e.target.value)} />
         </Field>
         <Field label="Exam">
           <select className="input" value={examType} onChange={(e) => setExamType(e.target.value)}>
@@ -381,30 +526,14 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
             ))}
           </select>
         </Field>
-        <Field label="Duration (minutes)">
-          <input type="number" min={5} className="input" value={durationMin} onChange={(e) => setDurationMin(num(e.target.value))} />
-        </Field>
-        <Field label="Subject code (optional)">
-          <input className="input" value={subjectCode} placeholder="e.g. 086 / 041" onChange={(e) => setSubjectCode(e.target.value)} />
-        </Field>
-        <Field label="Book" className="sm:col-span-2" helper={hasPapers ? "Book cannot be changed while papers are using this blueprint." : undefined}>
-          <select
-            className="input"
-            value={bookId}
-            required
-            disabled={hasPapers}
-            onChange={(e) => {
-              setBookId(e.target.value);
-              setMarks({});
-            }}
-          >
-            {books.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.className} · {b.subject} · {b.title}
-              </option>
-            ))}
-          </select>
-        </Field>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Duration (min)">
+            <input type="number" min={5} className="input" value={durationMin} onChange={(e) => setDurationMin(num(e.target.value))} />
+          </Field>
+          <Field label="Subject code">
+            <input className="input" value={subjectCode} placeholder="041" onChange={(e) => setSubjectCode(e.target.value)} />
+          </Field>
+        </div>
       </section>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -658,11 +787,28 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
         </div>
       )}
 
-      <div className="flex gap-2">
-        <button className="btn btn-primary" disabled={busy || problems.length > 0}>
-          {busy ? "Saving…" : "Save blueprint"}
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={(e) => void save(e, true)}
+          className="btn btn-primary flex items-center gap-1.5"
+          disabled={busy || problems.length > 0}
+          title="Save blueprint and open immediately in Paper Studio to generate exam paper"
+        >
+          <FileText size={15} /> Save &amp; Build Exam Paper
         </button>
-        <button type="button" className="btn" onClick={() => router.push("/blueprints")}>
+        <button
+          type="submit"
+          className="btn btn-ghost border border-slate-300 bg-white text-slate-900 hover:bg-slate-50 font-semibold"
+          disabled={busy || problems.length > 0}
+        >
+          {busy ? "Saving…" : "Save Blueprint"}
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost border border-slate-200"
+          onClick={() => router.push("/blueprints")}
+        >
           Cancel
         </button>
       </div>

@@ -5,6 +5,23 @@ import type { MarksStyle, NumberingStyle, PrintDensity, UserRole, TimetableStatu
 export type { QuestionDto, PaperImplication };
 export type { MarksStyle, NumberingStyle, PrintDensity, UserRole, TimetableStatus, SessionSlot };
 
+export type ClassSubjectDto = {
+  id: string;
+  classId: string;
+  name: string;
+  code: string;
+};
+
+export type AcademicClassDto = {
+  id: string;
+  name: string;
+  displayOrder: number;
+  stream: string;
+  academicSession: string;
+  sections: string[];
+  subjects: ClassSubjectDto[];
+};
+
 export type Chapter = { id: string; bookId: string; number: number; title: string };
 export type Book = {
   id: string;

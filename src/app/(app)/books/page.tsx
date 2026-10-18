@@ -1,25 +1,40 @@
 "use client";
 
-import { BookOpen, Calendar, Layers, Library, Pencil, Plus, RotateCcw, Sparkles, Trash2 } from "lucide-react";
+import { BookOpen, Calendar, GraduationCap, Layers, Library, Pencil, Plus, RotateCcw, Sparkles, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EmptyState, ErrorBanner, Field, ListSkeleton, Modal, PageHeader, Spinner, useConfirm, useToast } from "@/components/ui";
 import { SyllabusImportModal } from "@/components/SyllabusImportModal";
 import { CombineBooksModal } from "@/components/CombineBooksModal";
-import { useAcademicSession } from "@/lib/academicSession";
+import { AcademicRolloverModal } from "@/components/AcademicRolloverModal";
+import { normalizeSession, useAcademicSession } from "@/lib/academicSession";
 import { api } from "@/lib/client";
 import { plural } from "@/lib/format";
-import type { Book, Chapter } from "@/lib/types";
+import type { AcademicClassDto, Book, Chapter } from "@/lib/types";
 
 const emptyBook = { title: "", subject: "", className: "", academicSession: "" };
+
+function subjectMatchesFilter(bookSubject: string, filterSub: string): boolean {
+  if (!filterSub || filterSub === "ALL") return true;
+  const a = bookSubject.trim().toLowerCase();
+  const b = filterSub.trim().toLowerCase();
+  if (a === b) return true;
+  const aParts = a.split("/").map((s) => s.trim());
+  const bParts = b.split("/").map((s) => s.trim());
+  return aParts.some((p) => bParts.includes(p));
+}
 
 export default function BooksPage() {
   const toast = useToast();
   const confirm = useConfirm();
-  const { currentSession } = useAcademicSession();
+  const { currentSession, setSession, availableSessions: hookSessions } = useAcademicSession();
   const [books, setBooks] = useState<Book[]>([]);
+  const [classes, setClasses] = useState<AcademicClassDto[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [sessionFilter, setSessionFilter] = useState<string>("ALL");
+  const [sessionFilter, setSessionFilter] = useState<string>(currentSession);
+  const [classFilter, setClassFilter] = useState<string>("ALL");
+  const [subjectFilter, setSubjectFilter] = useState<string>("ALL");
   const [bookDialog, setBookDialog] = useState<{ editingId: string | null } | null>(null);
   const [bookForm, setBookForm] = useState(emptyBook);
   const [chapterForm, setChapterForm] = useState({ number: "", title: "" });
@@ -28,15 +43,32 @@ export default function BooksPage() {
   const [importInitialTab, setImportInitialTab] = useState<"preset" | "rollover" | "ai_scan" | "text" | "csv" | "json">("preset");
   const [importTargetBook, setImportTargetBook] = useState<{ id: string; title: string; className: string; subject: string } | null>(null);
   const [combineOpen, setCombineOpen] = useState(false);
+  const [rolloverModalOpen, setRolloverModalOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const chapterTitleRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    setSessionFilter(normalizeSession(currentSession));
+  }, [currentSession]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    const cls = sp.get("className");
+    const sub = sp.get("subject");
+    const bId = sp.get("bookId");
+    if (cls) setClassFilter(cls);
+    if (sub) setSubjectFilter(sub);
+    if (bId) setSelectedId(bId);
+  }, []);
+
   const load = useCallback(
     () =>
-      api<Book[]>("/api/books").then(
-        (data) => {
+      Promise.all([api<Book[]>("/api/books"), api<AcademicClassDto[]>("/api/classes")]).then(
+        ([data, clsData]) => {
           setBooks(data);
+          setClasses(clsData);
           setSelectedId((cur) => (cur && data.some((b) => b.id === cur) ? cur : (data[0]?.id ?? null)));
           setLoaded(true);
         },
@@ -53,15 +85,48 @@ export default function BooksPage() {
   }, [load]);
 
   const availableSessions = useMemo(() => {
-    return Array.from(new Set([currentSession, ...books.map((b) => (b.academicSession || "2025–26").replace(/-/g, "–"))])).sort();
+    return Array.from(new Set([currentSession, ...books.map((b) => normalizeSession(b.academicSession))])).sort();
   }, [books, currentSession]);
 
-  const displayedBooks = useMemo(() => {
+  const sessionBooks = useMemo(() => {
     return books.filter((b) => {
       if (sessionFilter === "ALL") return true;
-      return (b.academicSession || "2025–26").replace(/-/g, "–") === sessionFilter;
+      return normalizeSession(b.academicSession) === sessionFilter;
     });
   }, [books, sessionFilter]);
+
+  const availableClasses = useMemo(() => {
+    const fromClasses = classes
+      .filter((c) => sessionFilter === "ALL" || normalizeSession(c.academicSession) === sessionFilter)
+      .map((c) => c.name);
+    const fromBooks = sessionBooks.map((b) => b.className);
+    return Array.from(new Set([...fromClasses, ...fromBooks]));
+  }, [classes, sessionBooks, sessionFilter]);
+
+  const availableSubjects = useMemo(() => {
+    const relevantClasses = classes.filter(
+      (c) =>
+        (sessionFilter === "ALL" || normalizeSession(c.academicSession) === sessionFilter) &&
+        (classFilter === "ALL" || c.name.trim().toLowerCase() === classFilter.trim().toLowerCase())
+    );
+    const fromClasses = relevantClasses.flatMap((c) => c.subjects.map((s) => s.name));
+    const fromBooks = sessionBooks
+      .filter((b) => classFilter === "ALL" || b.className.trim().toLowerCase() === classFilter.trim().toLowerCase())
+      .map((b) => b.subject);
+    return Array.from(new Set([...fromClasses, ...fromBooks]));
+  }, [classes, sessionBooks, sessionFilter, classFilter]);
+
+  const displayedBooks = useMemo(() => {
+    return sessionBooks.filter((b) => {
+      if (classFilter !== "ALL" && b.className.trim().toLowerCase() !== classFilter.trim().toLowerCase()) {
+        return false;
+      }
+      if (subjectFilter !== "ALL" && !subjectMatchesFilter(b.subject, subjectFilter)) {
+        return false;
+      }
+      return true;
+    });
+  }, [sessionBooks, classFilter, subjectFilter]);
 
   const selected = displayedBooks.find((b) => b.id === selectedId) ?? displayedBooks[0] ?? null;
   const nextChapterNumber = selected ? Math.max(0, ...selected.chapters.map((c) => c.number)) + 1 : 1;
@@ -87,7 +152,12 @@ export default function BooksPage() {
     setBookForm(
       b
         ? { title: b.title, subject: b.subject, className: b.className, academicSession: b.academicSession || currentSession }
-        : { ...emptyBook, academicSession: currentSession },
+        : {
+            ...emptyBook,
+            className: classFilter !== "ALL" ? classFilter : availableClasses[0] || "",
+            subject: subjectFilter !== "ALL" ? subjectFilter : "",
+            academicSession: sessionFilter !== "ALL" ? sessionFilter : currentSession,
+          },
     );
     setBookDialog({ editingId: b?.id ?? null });
   }
@@ -162,15 +232,11 @@ export default function BooksPage() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              className="btn btn-ghost border border-indigo-200 bg-indigo-50/50 text-indigo-900 hover:bg-indigo-100 hover:border-indigo-300"
-              onClick={() => {
-                setImportTargetBook(null);
-                setImportInitialTab("rollover");
-                setImportOpen(true);
-              }}
-              title="Import or clone textbooks and syllabus from a previous academic session"
+              className="btn btn-ghost border border-slate-200 bg-white text-slate-800 hover:bg-slate-50"
+              onClick={() => setRolloverModalOpen(true)}
+              title="Clone syllabus, classes, and blueprints into a new academic session"
             >
-              <RotateCcw size={16} className="text-indigo-600" /> Rollover from previous session
+              <RotateCcw size={16} /> Rollover Session
             </button>
             <button
               type="button"
@@ -198,48 +264,70 @@ export default function BooksPage() {
         }
       />
 
-      {/* Academic Session Filter Tabs */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
-        <div className="flex items-center gap-1.5 overflow-x-auto">
-          <span className="text-xs font-semibold text-slate-500 mr-1 flex items-center gap-1">
-            <Calendar size={13} /> Session:
-          </span>
-          <button
-            type="button"
-            onClick={() => setSessionFilter("ALL")}
-            className={`rounded-lg px-2.5 py-1 text-xs font-medium whitespace-nowrap transition ${
-              sessionFilter === "ALL"
-                ? "bg-indigo-900 text-white shadow-sm"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-            }`}
+      {/* Academic Session & Class -> Subject Hierarchy Filter Bar */}
+      <div className="card p-4 space-y-3 bg-white">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-slate-500 flex items-center gap-1.5">
+              <Calendar size={14} className="text-slate-600" /> Active Session:
+            </span>
+            <span className="badge !bg-slate-900 !text-white font-mono px-2.5 py-0.5">
+              {normalizeSession(currentSession)}
+            </span>
+            <span className="text-xs text-slate-500">
+              ({sessionBooks.length} textbooks)
+            </span>
+          </div>
+
+          <Link
+            href="/classes"
+            className="text-xs font-semibold text-slate-700 hover:text-slate-950 inline-flex items-center gap-1"
           >
-            All Sessions ({books.length})
-          </button>
-          {availableSessions.map((sess) => {
-            const count = books.filter((b) => (b.academicSession || "2025–26").replace(/-/g, "–") === sess).length;
-            const active = sessionFilter === sess;
-            return (
-              <button
-                key={sess}
-                type="button"
-                onClick={() => setSessionFilter(sess)}
-                className={`rounded-lg px-2.5 py-1 text-xs font-medium whitespace-nowrap transition ${
-                  active
-                    ? "bg-indigo-900 text-white shadow-sm"
-                    : sess === currentSession
-                    ? "bg-indigo-50 text-indigo-900 border border-indigo-200 hover:bg-indigo-100"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                {sess} {count > 0 && <span className="opacity-75 font-normal">({count})</span>}
-                {sess === currentSession && <span className="ml-1 text-[10px] text-amber-500 font-bold">●</span>}
-              </button>
-            );
-          })}
+            <GraduationCap size={14} /> Manage Classes &amp; Subjects
+          </Link>
         </div>
 
-        <div className="text-xs text-slate-500">
-          Showing <strong>{displayedBooks.length}</strong> of {books.length} textbooks
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-semibold text-slate-500">Class:</span>
+              <select
+                className="input py-1 px-2.5 text-xs w-40"
+                value={classFilter}
+                onChange={(e) => {
+                  setClassFilter(e.target.value);
+                  setSubjectFilter("ALL");
+                }}
+              >
+                <option value="ALL">All Classes ({availableClasses.length})</option>
+                {availableClasses.map((cls) => (
+                  <option key={cls} value={cls}>
+                    {cls}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-semibold text-slate-500">Subject:</span>
+              <select
+                className="input py-1 px-2.5 text-xs w-48"
+                value={subjectFilter}
+                onChange={(e) => setSubjectFilter(e.target.value)}
+              >
+                <option value="ALL">All Subjects ({availableSubjects.length})</option>
+                {availableSubjects.map((sub) => (
+                  <option key={sub} value={sub}>
+                    {sub}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="text-xs text-slate-500">
+            Showing <strong>{displayedBooks.length}</strong> of {sessionBooks.length} textbooks
+          </div>
         </div>
       </div>
 
@@ -322,7 +410,7 @@ export default function BooksPage() {
                         {plural(b.chapters.length, "chapter")} · {plural(b._count.questions, "question")}
                       </span>
                     </button>
-                    <div className="absolute right-2.5 top-2.5 z-10 flex gap-0.5 opacity-100 transition sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
+                    <div className="absolute right-2.5 top-2.5 z-10 flex gap-0.5 opacity-100 transition sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100 bg-white/95 rounded-lg p-0.5 shadow-2xs">
                       <button type="button" className="btn btn-ghost btn-icon btn-sm" title="Edit textbook" aria-label={`Edit ${b.title}`} onClick={() => openBookDialog(b)}>
                         <Pencil size={14} />
                       </button>
@@ -483,17 +571,41 @@ export default function BooksPage() {
         >
           <form id="book-form" onSubmit={saveBook} className="space-y-4">
             <ErrorBanner message={error} />
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Class">
+                <input
+                  list="class-options"
+                  className="input"
+                  required
+                  placeholder="Class 10"
+                  value={bookForm.className}
+                  onChange={(e) => setBookForm({ ...bookForm, className: e.target.value })}
+                />
+                <datalist id="class-options">
+                  {availableClasses.map((cls) => (
+                    <option key={cls} value={cls} />
+                  ))}
+                </datalist>
+              </Field>
+              <Field label="Subject">
+                <input
+                  list="subject-options"
+                  className="input"
+                  required
+                  placeholder="Science"
+                  value={bookForm.subject}
+                  onChange={(e) => setBookForm({ ...bookForm, subject: e.target.value })}
+                />
+                <datalist id="subject-options">
+                  {availableSubjects.map((sub) => (
+                    <option key={sub} value={sub} />
+                  ))}
+                </datalist>
+              </Field>
+            </div>
             <Field label="Textbook title">
               <input className="input" required placeholder="NCERT Science" value={bookForm.title} onChange={(e) => setBookForm({ ...bookForm, title: e.target.value })} />
             </Field>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Class">
-                <input className="input" required placeholder="Class 10" value={bookForm.className} onChange={(e) => setBookForm({ ...bookForm, className: e.target.value })} />
-              </Field>
-              <Field label="Subject">
-                <input className="input" required placeholder="Science" value={bookForm.subject} onChange={(e) => setBookForm({ ...bookForm, subject: e.target.value })} />
-              </Field>
-            </div>
             <Field label="Academic session" helper="e.g. 2025–26, 2026–27">
               <input
                 className="input"
@@ -527,6 +639,19 @@ export default function BooksPage() {
             void load().then(() => {
               if (newBookId) setSelectedId(newBookId);
             });
+          }}
+        />
+      )}
+
+      {rolloverModalOpen && (
+        <AcademicRolloverModal
+          currentSession={currentSession}
+          availableSessions={availableSessions}
+          onClose={() => setRolloverModalOpen(false)}
+          onSuccess={(targetSession) => {
+            setRolloverModalOpen(false);
+            setSession(targetSession);
+            void load();
           }}
         />
       )}

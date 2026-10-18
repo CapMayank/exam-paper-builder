@@ -95,6 +95,8 @@ Diff: HARD`;
 export default function QuestionsPage() {
   const [books, setBooks] = useState<Book[]>([]);
   const [questions, setQuestions] = useState<QuestionDto[]>([]);
+  const [classFilter, setClassFilter] = useState<string>("");
+  const [subjectFilter, setSubjectFilter] = useState<string>("");
   const [filters, setFilters] = useState({ bookId: "", chapterId: "", type: "", difficulty: "", q: "", freshness: "ALL" });
   const [editing, setEditing] = useState<QuestionDto | "new" | null>(null);
   const [showAnswers, setShowAnswers] = useState(false);
@@ -115,19 +117,59 @@ export default function QuestionsPage() {
   const [aiGenModalOpen, setAiGenModalOpen] = useState(false);
 
   useEffect(() => {
+    const sp = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+    const urlClass = sp?.get("className") || "";
+    const urlSubject = sp?.get("subject") || "";
+    const urlBookId = sp?.get("bookId") || "";
+    if (urlClass) setClassFilter(urlClass);
+    if (urlSubject) setSubjectFilter(urlSubject);
+    if (urlBookId) setFilters((f) => ({ ...f, bookId: urlBookId }));
+
     api<Book[]>("/api/books").then(
       (b) => {
         setBooks(b);
         if (b.length > 0) {
-          setBulkBookId(b[0].id);
-          if (b[0].chapters.length > 0) {
-            setBulkChapterId(b[0].chapters[0].id);
+          const initialBook = (urlBookId && b.find((bk) => bk.id === urlBookId)) || b[0];
+          setBulkBookId(initialBook.id);
+          if (initialBook.chapters.length > 0) {
+            setBulkChapterId(initialBook.chapters[0].id);
           }
         }
       },
       (e) => setError(e.message),
     );
   }, []);
+
+  const availableClasses = useMemo(
+    () => Array.from(new Set(books.map((b) => b.className))).sort(),
+    [books]
+  );
+
+  const availableSubjects = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          books
+            .filter((b) => !classFilter || b.className.trim().toLowerCase() === classFilter.trim().toLowerCase())
+            .map((b) => b.subject)
+        )
+      ).sort(),
+    [books, classFilter]
+  );
+
+  const filteredBooks = useMemo(() => {
+    return books.filter((b) => {
+      if (classFilter && b.className.trim().toLowerCase() !== classFilter.trim().toLowerCase()) return false;
+      if (subjectFilter) {
+        const a = b.subject.trim().toLowerCase();
+        const s = subjectFilter.trim().toLowerCase();
+        const aParts = a.split("/").map((x) => x.trim());
+        const sParts = s.split("/").map((x) => x.trim());
+        if (a !== s && !aParts.some((p) => sParts.includes(p))) return false;
+      }
+      return true;
+    });
+  }, [books, classFilter, subjectFilter]);
 
   const load = useCallback(async () => {
     const sp = new URLSearchParams();
@@ -148,14 +190,20 @@ export default function QuestionsPage() {
   }, [load]);
 
   const displayedQuestions = useMemo(() => {
-    if (filters.freshness === "FRESH") {
-      return questions.filter((q) => (q.timesUsed ?? q.usages?.length ?? 0) === 0);
-    }
-    if (filters.freshness === "USED") {
-      return questions.filter((q) => (q.timesUsed ?? q.usages?.length ?? 0) > 0);
-    }
-    return questions;
-  }, [questions, filters.freshness]);
+    const allowedBookIds = new Set(filteredBooks.map((b) => b.id));
+    return questions.filter((q) => {
+      if ((classFilter || subjectFilter) && !filters.bookId && !allowedBookIds.has(q.bookId)) {
+        return false;
+      }
+      if (filters.freshness === "FRESH") {
+        return (q.timesUsed ?? q.usages?.length ?? 0) === 0;
+      }
+      if (filters.freshness === "USED") {
+        return (q.timesUsed ?? q.usages?.length ?? 0) > 0;
+      }
+      return true;
+    });
+  }, [questions, filters.freshness, filters.bookId, classFilter, subjectFilter, filteredBooks]);
 
   const chapters = books.find((b) => b.id === filters.bookId)?.chapters ?? [];
   const set = (k: keyof typeof filters, v: string) =>
@@ -323,18 +371,53 @@ export default function QuestionsPage() {
         </button>
       </div>
 
-      {/* Detailed Filter Bar */}
-      <div className="card grid gap-2.5 sm:grid-cols-2 lg:grid-cols-6 p-4 shadow-xs border-slate-200">
+      {/* Detailed Hierarchy Filter Bar: Class -> Subject -> Book -> Chapter */}
+      <div className="card grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4 p-4 shadow-xs border-slate-200">
+        <select
+          className="input text-xs"
+          value={classFilter}
+          onChange={(e) => {
+            setClassFilter(e.target.value);
+            setSubjectFilter("");
+            setFilters((f) => ({ ...f, bookId: "", chapterId: "" }));
+          }}
+          aria-label="Class"
+        >
+          <option value="">All Classes</option>
+          {availableClasses.map((cls) => (
+            <option key={cls} value={cls}>
+              {cls}
+            </option>
+          ))}
+        </select>
+
+        <select
+          className="input text-xs"
+          value={subjectFilter}
+          onChange={(e) => {
+            setSubjectFilter(e.target.value);
+            setFilters((f) => ({ ...f, bookId: "", chapterId: "" }));
+          }}
+          aria-label="Subject"
+        >
+          <option value="">All Subjects</option>
+          {availableSubjects.map((sub) => (
+            <option key={sub} value={sub}>
+              {sub}
+            </option>
+          ))}
+        </select>
+
         <select
           className="input text-xs"
           value={filters.bookId}
           onChange={(e) => set("bookId", e.target.value)}
           aria-label="Book"
         >
-          <option value="">All books &amp; classes</option>
-          {books.map((b) => (
+          <option value="">All Books ({filteredBooks.length})</option>
+          {filteredBooks.map((b) => (
             <option key={b.id} value={b.id}>
-              {b.className} · {b.title} ({b.subject})
+              {b.className} · {b.subject} — {b.title}
             </option>
           ))}
         </select>
@@ -346,7 +429,7 @@ export default function QuestionsPage() {
           onChange={(e) => set("chapterId", e.target.value)}
           aria-label="Chapter"
         >
-          <option value="">All chapters</option>
+          <option value="">All Chapters</option>
           {chapters.map((c) => (
             <option key={c.id} value={c.id}>
               Ch {c.number}. {c.title}
