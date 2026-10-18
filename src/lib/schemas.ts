@@ -48,6 +48,23 @@ export const userUpdateSchema = z.object({
   password: z.string().min(6).max(100).optional(),
 });
 
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, "Current password is required"),
+    newPassword: z.string().min(6, "New password must be at least 6 characters").max(100),
+    confirmPassword: z.string().min(1, "Please confirm your new password"),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: "New passwords do not match",
+    path: ["confirmPassword"],
+  });
+
+export const userProfileUpdateSchema = z.object({
+  name: text(80).optional(),
+  department: z.string().trim().max(100).optional(),
+});
+
+
 export const academicClassSchema = z.object({
   name: text(40),
   displayOrder: z.number().int().min(-10).max(100).optional(),

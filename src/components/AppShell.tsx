@@ -23,7 +23,8 @@ import { api } from "@/lib/client";
 import { AcademicSessionProvider } from "@/lib/academicSession";
 import { AcademicSessionSelector } from "./AcademicSessionSelector";
 import { BrandMark } from "./BrandMark";
-import { Spinner, UiProvider } from "./ui";
+import { UiProvider } from "./ui";
+import { UserProfileModal } from "./UserProfileModal";
 
 const NAV: { href: string; label: string; icon: LucideIcon; hint: string }[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, hint: "Overview and academic flow" },
@@ -74,7 +75,17 @@ function NavList({ pathname, rail, onNavigate }: { pathname: string; rail: boole
   );
 }
 
-function UserCard({ user, rail, onSignOut }: { user: User | null; rail: boolean; onSignOut: () => void }) {
+function UserCard({
+  user,
+  rail,
+  onSignOut,
+  onOpenProfile,
+}: {
+  user: User | null;
+  rail: boolean;
+  onSignOut: () => void;
+  onOpenProfile: () => void;
+}) {
   if (!user) {
     return (
       <div className={`flex items-center gap-2.5 rounded-xl bg-white/6 p-2 ${rail ? "flex-col" : ""}`}>
@@ -96,30 +107,40 @@ function UserCard({ user, rail, onSignOut }: { user: User | null; rail: boolean;
 
   const initial = user.name ? user.name.trim()[0]?.toUpperCase() : "T";
   return (
-    <div className={`flex items-center gap-2.5 rounded-xl bg-white/6 p-2 ${rail ? "flex-col" : ""}`}>
-      <span
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-300 text-sm font-bold text-indigo-950"
-        title={rail ? `${user.name} (${user.email})` : undefined}
+    <div className={`flex items-center gap-2 rounded-xl bg-white/6 p-2 ${rail ? "flex-col" : ""}`}>
+      <button
+        type="button"
+        onClick={onOpenProfile}
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-300 text-sm font-bold text-indigo-950 hover:ring-2 hover:ring-amber-400 transition"
+        title={rail ? `${user.name} (${user.email}) · Account & Security` : "Open Account & Security"}
+        aria-label="Open Account & Security"
       >
         {initial}
-      </span>
+      </button>
       {!rail && (
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold leading-tight text-white">{user.name}</div>
+        <button
+          type="button"
+          onClick={onOpenProfile}
+          className="min-w-0 flex-1 text-left group"
+          title="Account & Security"
+        >
+          <div className="truncate text-sm font-semibold leading-tight text-white group-hover:text-amber-300 transition-colors">
+            {user.name}
+          </div>
           <div className="flex items-center gap-1.5 mt-0.5">
             <span className="inline-block rounded px-1.5 py-0.5 bg-amber-300/20 text-amber-300 border border-amber-300/30 text-[9px] font-bold uppercase tracking-wider">
               {user.role || "Teacher"}
             </span>
             <span className="truncate text-[11px] leading-tight text-indigo-200/70">{user.email}</span>
           </div>
-        </div>
+        </button>
       )}
       <button
         type="button"
         onClick={onSignOut}
         title="Sign out"
         aria-label="Sign out"
-        className="rounded-lg p-2 text-indigo-200/80 transition hover:bg-white/10 hover:text-white"
+        className="rounded-lg p-2 text-indigo-200/80 transition hover:bg-white/10 hover:text-white shrink-0"
       >
         <LogOut size={16} />
       </button>
@@ -133,6 +154,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [collapsed, setCollapsed] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [drawerPath, setDrawerPath] = useState<string | null>(null);
   // The drawer is "open" only for the page it was opened on, so navigating closes it without an effect.
   const drawerOpen = drawerPath === pathname;
@@ -220,7 +242,12 @@ export function AppShell({ children }: { children: ReactNode }) {
               {collapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
               {!collapsed && "Collapse"}
             </button>
-            <UserCard user={user} rail={collapsed} onSignOut={signOut} />
+            <UserCard
+              user={user}
+              rail={collapsed}
+              onSignOut={signOut}
+              onOpenProfile={() => setProfileOpen(true)}
+            />
           </div>
         </aside>
 
@@ -287,10 +314,25 @@ export function AppShell({ children }: { children: ReactNode }) {
               </div>
               <NavList pathname={pathname} rail={false} onNavigate={() => setDrawerPath(null)} />
               <div className="mt-auto">
-                <UserCard user={user} rail={false} onSignOut={signOut} />
+                <UserCard
+                  user={user}
+                  rail={false}
+                  onSignOut={signOut}
+                  onOpenProfile={() => {
+                    setDrawerPath(null);
+                    setProfileOpen(true);
+                  }}
+                />
               </div>
             </aside>
           </div>
+        )}
+
+        {profileOpen && (
+          <UserProfileModal
+            onClose={() => setProfileOpen(false)}
+            onUserUpdated={(updated) => setUser((u) => (u ? { ...u, ...updated } : null))}
+          />
         )}
 
         <div

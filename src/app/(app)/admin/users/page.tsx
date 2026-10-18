@@ -3,12 +3,9 @@
 import {
   CheckCircle2,
   Lock,
-  Mail,
-  Plus,
   RefreshCw,
   Search,
   Shield,
-  ShieldAlert,
   ShieldCheck,
   Trash2,
   AlertTriangle,
@@ -17,9 +14,15 @@ import {
   UserPlus,
   Users,
   XCircle,
+  KeyRound,
+  Copy,
+  Check,
+  Eye,
+  EyeOff,
+  Sparkles,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { ErrorBanner, Modal, Skeleton } from "@/components/ui";
+import { ErrorBanner, Modal, Skeleton, SuccessBanner } from "@/components/ui";
 import { api } from "@/lib/client";
 import { USER_ROLES, USER_ROLE_LABEL, type UserRole } from "@/lib/constants";
 import { timeAgo } from "@/lib/format";
@@ -30,12 +33,18 @@ export default function UsersAdminPage() {
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("");
 
   // Modals
   const [createModal, setCreateModal] = useState(false);
   const [editUser, setEditUser] = useState<UserData | null>(null);
+  const [resetUser, setResetUser] = useState<UserData | null>(null);
+  const [resetPasswordInput, setResetPasswordInput] = useState("");
+  const [showResetPass, setShowResetPass] = useState(true);
+  const [copied, setCopied] = useState(false);
+  const [savingResetPass, setSavingResetPass] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<UserData | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -50,6 +59,7 @@ export default function UsersAdminPage() {
   const [savingCreate, setSavingCreate] = useState(false);
 
   const [editForm, setEditForm] = useState({
+    name: "",
     role: "TEACHER" as UserRole,
     department: "",
     active: true,
@@ -74,6 +84,7 @@ export default function UsersAdminPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchUsers();
   }, []);
 
@@ -129,10 +140,49 @@ export default function UsersAdminPage() {
       await api(`/api/users/${deleteTarget.id}`, { method: "DELETE" });
       setUsers((prev) => prev.filter((u) => u.id !== deleteTarget.id));
       setDeleteTarget(null);
+      setSuccess(`Faculty account deleted successfully.`);
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const generateTemporaryPassword = () => {
+    const chars = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789!@#$%";
+    const prefix = "Sarv#";
+    const suffix = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+    return `${prefix}${suffix}`;
+  };
+
+  const handleOpenReset = (u: UserData) => {
+    setResetUser(u);
+    setResetPasswordInput(generateTemporaryPassword());
+    setShowResetPass(true);
+    setCopied(false);
+    setError(null);
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetUser) return;
+    if (resetPasswordInput.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+    setSavingResetPass(true);
+    setError(null);
+    try {
+      await api<UserData>(`/api/users/${resetUser.id}`, {
+        method: "PATCH",
+        json: { password: resetPasswordInput },
+      });
+      setSuccess(`Password for ${resetUser.name} (${resetUser.email}) successfully reset to: ${resetPasswordInput}`);
+      setResetUser(null);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSavingResetPass(false);
     }
   };
 
@@ -189,6 +239,7 @@ export default function UsersAdminPage() {
       </header>
 
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
+      {success && <SuccessBanner message={success} onDismiss={() => setSuccess(null)} />}
 
       {/* Permissions Matrix Ribbon */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
@@ -340,9 +391,18 @@ export default function UsersAdminPage() {
                           <div className="flex items-center justify-end gap-1">
                             <button
                               type="button"
+                              onClick={() => handleOpenReset(u)}
+                              className="btn btn-sm btn-ghost text-amber-700 hover:bg-amber-50"
+                              title="Reset faculty password"
+                            >
+                              <KeyRound size={13} /> Reset Password
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => {
                                 setEditUser(u);
                                 setEditForm({
+                                  name: u.name,
                                   role: u.role,
                                   department: u.department || "",
                                   active: u.active,
@@ -476,6 +536,17 @@ export default function UsersAdminPage() {
             </div>
 
             <div>
+              <label className="label">Full Name</label>
+              <input
+                type="text"
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                className="input w-full font-semibold"
+                required
+              />
+            </div>
+
+            <div>
               <label className="label">Assigned Role (RBAC)</label>
               <select
                 value={editForm.role}
@@ -527,6 +598,106 @@ export default function UsersAdminPage() {
                 className="btn btn-primary"
               >
                 {savingEdit ? "Updating Role…" : "Save Changes"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL: RESET FACULTY PASSWORD                                  */}
+      {/* ============================================================== */}
+      {resetUser && (
+        <Modal
+          title={`Reset Password: ${resetUser.name}`}
+          subtitle={`${resetUser.email} · ${USER_ROLE_LABEL[resetUser.role] || resetUser.role}`}
+          onClose={() => !savingResetPass && setResetUser(null)}
+        >
+          <form onSubmit={handleResetPassword} className="space-y-4">
+            <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 text-xs text-amber-950 space-y-1">
+              <div className="flex items-center gap-2 font-bold text-amber-900">
+                <Lock size={14} className="text-amber-700" /> Institutional Security Policy
+              </div>
+              <p className="text-slate-700 leading-relaxed">
+                Resetting this password will immediately update this faculty member&apos;s sign-in credentials. Please share the new password with them securely.
+              </p>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between pb-1">
+                <label className="label mb-0">Temporary / New Password</label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResetPasswordInput(generateTemporaryPassword());
+                    setCopied(false);
+                  }}
+                  className="flex items-center gap-1 text-[11px] font-semibold text-indigo-700 hover:text-indigo-900"
+                >
+                  <Sparkles size={12} /> Generate Another
+                </button>
+              </div>
+
+              <div className="relative">
+                <input
+                  type={showResetPass ? "text" : "password"}
+                  value={resetPasswordInput}
+                  onChange={(e) => {
+                    setResetPasswordInput(e.target.value);
+                    setCopied(false);
+                  }}
+                  required
+                  minLength={6}
+                  className="input w-full pr-20 font-mono text-sm tracking-wide font-semibold text-slate-900"
+                />
+                <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowResetPass((s) => !s)}
+                    className="p-1.5 text-slate-400 hover:text-slate-700 rounded"
+                    title={showResetPass ? "Hide password" : "Show password"}
+                  >
+                    {showResetPass ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(resetPasswordInput);
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2500);
+                    }}
+                    className={`flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold transition ${
+                      copied
+                        ? "bg-emerald-100 text-emerald-800"
+                        : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                    }`}
+                    title="Copy to clipboard"
+                  >
+                    {copied ? <Check size={12} /> : <Copy size={12} />}
+                    <span>{copied ? "Copied" : "Copy"}</span>
+                  </button>
+                </div>
+              </div>
+              <span className="text-[11px] text-slate-500 mt-1 block">
+                Minimum 6 characters. Copy and provide this password to the faculty member.
+              </span>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                disabled={savingResetPass}
+                onClick={() => setResetUser(null)}
+                className="btn btn-ghost"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={savingResetPass}
+                className="btn btn-primary"
+              >
+                {savingResetPass ? "Updating Password…" : "Save New Password"}
               </button>
             </div>
           </form>

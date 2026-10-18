@@ -70,6 +70,13 @@ export const PATCH = route(
       });
     }
 
+    if (input.password !== undefined) {
+      await recordAudit(adminUser, "USER_PASSWORD_RESET", "USER", targetUserId, {
+        targetEmail: existing.email,
+        targetName: existing.name,
+      });
+    }
+
     return {
       ...updated,
       createdAt: updated.createdAt.toISOString(),

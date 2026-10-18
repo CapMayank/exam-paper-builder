@@ -1,10 +1,10 @@
 "use client";
 
-import { Eye, EyeOff, Shield, ShieldCheck, School } from "lucide-react";
+import { Eye, EyeOff, Shield, ShieldCheck, School, Lock, Mail } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { BrandMark } from "@/components/BrandMark";
-import { ErrorBanner, Field, Spinner } from "@/components/ui";
+import { ErrorBanner, Field, Modal, Spinner } from "@/components/ui";
 import { api } from "@/lib/client";
 import { DEFAULT_SCHOOL_LOGO } from "@/lib/constants";
 
@@ -18,6 +18,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showForgotModal, setShowForgotModal] = useState(false);
 
   useEffect(() => {
     api<{ initialized: boolean; schoolCodeConfigured: boolean }>("/api/auth/setup-status")
@@ -249,7 +250,17 @@ export default function LoginPage() {
                   />
                 </Field>
 
-                <Field label="Password">
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="label mb-0">Password</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowForgotModal(true)}
+                      className="text-xs font-semibold text-indigo-700 hover:text-indigo-900 hover:underline"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
                   <span className="relative block">
                     <input
                       type={showPassword ? "text" : "password"}
@@ -268,7 +279,7 @@ export default function LoginPage() {
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
                   </span>
-                </Field>
+                </div>
 
                 <button className="btn btn-primary btn-lg w-full mt-2" disabled={busy}>
                   {busy && <Spinner />}
@@ -278,14 +289,77 @@ export default function LoginPage() {
 
               <div className="pt-4 border-t border-slate-100 text-center text-xs text-slate-500">
                 Forgot password or need an account? <br />
-                <span className="text-slate-700 font-medium">
+                <button
+                  type="button"
+                  onClick={() => setShowForgotModal(true)}
+                  className="text-slate-800 font-semibold hover:text-indigo-700 underline mt-0.5"
+                >
                   Contact your Examination Cell or School Administrator.
-                </span>
+                </button>
               </div>
             </div>
           )}
         </div>
       </section>
+
+      {/* Institutional Password Assistance Modal */}
+      {showForgotModal && (
+        <Modal
+          title="Institutional Password Assistance"
+          subtitle="Sarvodaya Higher Secondary School, Lakhnadon"
+          onClose={() => setShowForgotModal(false)}
+        >
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 rounded-xl border border-indigo-200 bg-indigo-50/70 p-3.5">
+              <Lock size={18} className="shrink-0 text-indigo-700 mt-0.5" />
+              <div className="space-y-1 text-xs text-indigo-950 leading-relaxed">
+                <div className="font-bold text-sm text-indigo-900">
+                  Password Reset Policy (Admin-Managed Only)
+                </div>
+                <p>
+                  To protect the confidentiality of upcoming examination question papers, student marking keys, and curriculum blueprints, self-service automated password resets via external links are disabled.
+                </p>
+                <p className="font-semibold text-indigo-800">
+                  Faculty passwords are reset directly by the School Administrator or Examination Cell.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-2 text-xs text-slate-700">
+              <div className="font-bold text-slate-900 text-sm">How to recover access:</div>
+              <ol className="list-decimal list-inside space-y-1.5 text-slate-600">
+                <li>
+                  <strong>Contact in person:</strong> Visit the Principal&apos;s Office or Examination Cell coordinator during school hours.
+                </li>
+                <li>
+                  <strong>Direct Request:</strong> Your administrator will generate a secure temporary password for your account in the Faculty &amp; RBAC console.
+                </li>
+                <li>
+                  <strong>Update Credentials:</strong> Once signed in, you can immediately change your password in your Account &amp; Security profile.
+                </li>
+              </ol>
+            </div>
+
+            <div className="flex flex-col gap-2 pt-2 border-t border-slate-100">
+              <a
+                href={`mailto:admin@sarvodaya.edu?subject=Sarvodaya%20Exam%20Portal%20-%20Password%20Reset%20Request&body=Respected%20Administrator,%0A%0AI%20am%20requesting%20a%20password%20reset%20for%20my%20faculty%20account%20on%20the%20Sarvodaya%20Examination%20Portal.%0A%0AEmail:%20${encodeURIComponent(
+                  form.email || "faculty@school.edu"
+                )}%0AFaculty%20Name:%20%0ADepartment:%20%0A%0AThank%20you.`}
+                className="btn btn-primary flex items-center justify-center gap-1.5 w-full"
+              >
+                <Mail size={15} /> Open Email Request to Administrator
+              </a>
+              <button
+                type="button"
+                onClick={() => setShowForgotModal(false)}
+                className="btn btn-ghost w-full"
+              >
+                Back to Sign In
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </main>
   );
 }
