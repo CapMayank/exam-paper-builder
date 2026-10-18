@@ -4,12 +4,19 @@ set -e
 echo "🚀 Starting automated deployment on Oracle Cloud VM..."
 cd /home/ubuntu/exam-paper-builder
 
+PREV_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "")
+
 echo "📥 Pulling latest code from GitHub..."
 git fetch origin main
 git reset --hard origin/main
 
-echo "📦 Installing dependencies..."
-npm ci
+# Only run npm ci if dependencies changed or node_modules is missing
+if [ ! -d "node_modules" ] || [ -z "$PREV_COMMIT" ] || git diff --name-only "$PREV_COMMIT" HEAD | grep -qE 'package(-lock)?\.json'; then
+  echo "📦 Dependencies updated, running npm ci..."
+  npm ci --no-audit --no-fund
+else
+  echo "📦 Dependencies unchanged, skipping npm ci (saves ~3 minutes)."
+fi
 
 echo "🗄️ Generating Prisma client and syncing schema..."
 npx prisma generate
