@@ -203,7 +203,7 @@ export default function LoginPage() {
                   </Field>
                 )}
 
-                <button className="btn btn-primary btn-lg w-full mt-2" disabled={busy}>
+                <button type="submit" className="btn btn-primary btn-lg w-full mt-2" disabled={busy}>
                   {busy && <Spinner />}
                   {busy ? "Initializing Portal…" : "Complete Setup & Create Admin"}
                 </button>
@@ -281,7 +281,7 @@ export default function LoginPage() {
                   </span>
                 </div>
 
-                <button className="btn btn-primary btn-lg w-full mt-2" disabled={busy}>
+                <button type="submit" className="btn btn-primary btn-lg w-full mt-2" disabled={busy}>
                   {busy && <Spinner />}
                   {busy ? "Signing in…" : "Sign In to Portal"}
                 </button>

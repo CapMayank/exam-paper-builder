@@ -45,6 +45,7 @@ export default function BooksPage() {
   const [importTargetBook, setImportTargetBook] = useState<{ id: string; title: string; className: string; subject: string } | null>(null);
   const [combineOpen, setCombineOpen] = useState(false);
   const [rolloverModalOpen, setRolloverModalOpen] = useState(false);
+  const [mobileTab, setMobileTab] = useState<"directory" | "details">("directory");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const chapterTitleRef = useRef<HTMLInputElement>(null);
@@ -380,88 +381,137 @@ export default function BooksPage() {
           }
         />
       ) : (
-        <div className="grid items-start gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
-          <div className="lg:sticky lg:top-6 lg:max-h-[calc(100vh-3.5rem)] flex flex-col rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden">
-            <div className="p-3 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between gap-2 shrink-0">
-              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                <BookOpen size={14} className="text-indigo-600" /> Textbooks ({displayedBooks.length})
-              </span>
-              <button
-                type="button"
-                className="btn btn-primary text-[11px] py-1 px-2.5 gap-1"
-                onClick={() => openBookDialog()}
-              >
-                <Plus size={13} /> Add
-              </button>
-            </div>
-            <ul className="overflow-y-auto overscroll-contain flex-1 p-2 space-y-1.5 focus:outline-none" aria-label="Textbooks">
-              {displayedBooks.map((b) => {
-                const active = b.id === selectedId;
-                return (
-                  <li key={b.id}>
-                    <div
-                      className={`group relative rounded-xl border p-3 transition ${
-                        active ? "border-indigo-500/80 ring-1 ring-indigo-500/20 bg-indigo-50/90 text-indigo-950 shadow-2xs" : "border-slate-200 hover:border-slate-300 bg-white"
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedId(b.id);
-                          if (typeof window !== "undefined") {
-                            const el = document.getElementById("book-details-section");
-                            if (el && (el.getBoundingClientRect().top < 20 || window.innerWidth < 1024)) {
-                              el.scrollIntoView({ behavior: "smooth", block: "start" });
-                            }
-                          }
-                        }}
-                        aria-pressed={active}
-                        className="block w-full rounded-lg text-left after:absolute after:inset-0 after:rounded-xl"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="block font-semibold text-sm text-slate-900 truncate">{b.title}</span>
-                          <span className="inline-flex shrink-0 items-center rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 ring-1 ring-inset ring-indigo-700/10 whitespace-nowrap">
-                            {b.academicSession || "2025–26"}
-                          </span>
-                        </div>
-                        <span className="mt-0.5 block text-xs text-slate-600">
-                          {b.className} · {b.subject}
-                        </span>
-                        <span className="mt-1.5 block text-[11px] text-slate-500">
-                          {plural(b.chapters.length, "chapter")} · {plural(b._count.questions, "question")}
-                        </span>
-                      </button>
-                      <div className="absolute right-2 top-2 z-10 flex gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity bg-white/95 rounded-lg p-0.5 shadow-2xs border border-slate-200/60">
-                        <button type="button" className="btn btn-ghost btn-icon btn-xs p-1" title="Edit textbook" aria-label={`Edit ${b.title}`} onClick={() => openBookDialog(b)}>
-                          <Pencil size={12} />
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-icon btn-xs p-1 hover:bg-red-50 hover:text-red-700"
-                          title="Delete textbook"
-                          aria-label={`Delete ${b.title}`}
-                          onClick={() => removeBook(b)}
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+        <>
+          {/* Mobile Tab Switcher (< lg screens) */}
+          <div className="flex items-center gap-1.5 p-1 bg-slate-200/80 rounded-xl lg:hidden">
+            <button
+              type="button"
+              onClick={() => setMobileTab("directory")}
+              className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
+                mobileTab === "directory" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <BookOpen size={14} /> Textbooks ({displayedBooks.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobileTab("details")}
+              disabled={!selected}
+              className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
+                mobileTab === "details" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Layers size={14} /> {selected ? selected.title : "Textbook Details"}
+            </button>
           </div>
 
-          <section id="book-details-section" className="card space-y-5 p-5 sm:p-6" aria-live="polite">
-            {selected ? (
-              <>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <h2 className="font-display text-xl font-semibold text-slate-900">{selected.title}</h2>
-                    <div className="mt-1 flex flex-wrap items-center gap-2">
-                      <span className="text-sm text-slate-600">
-                        {selected.className} · {selected.subject} · {plural(selected.chapters.length, "chapter")}
-                      </span>
+          <div className="grid items-start gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
+            <div
+              className={`lg:sticky lg:top-6 lg:max-h-[calc(100vh-3.5rem)] flex-col rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden ${
+                mobileTab === "details" ? "hidden lg:flex" : "flex"
+              }`}
+            >
+              <div className="p-3 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between gap-2 shrink-0">
+                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <BookOpen size={14} className="text-indigo-600" /> Textbooks ({displayedBooks.length})
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-primary text-[11px] py-1 px-2.5 gap-1"
+                  onClick={() => openBookDialog()}
+                >
+                  <Plus size={13} /> Add
+                </button>
+              </div>
+              <ul className="overflow-y-auto overscroll-contain flex-1 p-2 space-y-1.5 focus:outline-none" aria-label="Textbooks">
+                {displayedBooks.map((b) => {
+                  const active = b.id === selectedId;
+                  return (
+                    <li key={b.id}>
+                      <div
+                        className={`group relative rounded-xl border p-3 transition ${
+                          active ? "border-indigo-500/80 ring-1 ring-indigo-500/20 bg-indigo-50/90 text-indigo-950 shadow-2xs" : "border-slate-200 hover:border-slate-300 bg-white"
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedId(b.id);
+                            setMobileTab("details");
+                            if (typeof window !== "undefined") {
+                              const el = document.getElementById("book-details-section");
+                              if (el && (el.getBoundingClientRect().top < 20 || window.innerWidth < 1024)) {
+                                el.scrollIntoView({ behavior: "smooth", block: "start" });
+                              }
+                            }
+                          }}
+                          aria-pressed={active}
+                          className="block w-full rounded-lg text-left after:absolute after:inset-0 after:rounded-xl"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="block font-semibold text-sm text-slate-900 truncate">{b.title}</span>
+                            <span className="inline-flex shrink-0 items-center rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 ring-1 ring-inset ring-indigo-700/10 whitespace-nowrap">
+                              {b.academicSession || "2025–26"}
+                            </span>
+                          </div>
+                          <span className="mt-0.5 block text-xs text-slate-600">
+                            {b.className} · {b.subject}
+                          </span>
+                          <span className="mt-1.5 block text-[11px] text-slate-500">
+                            {plural(b.chapters.length, "chapter")} · {plural(b._count.questions, "question")}
+                          </span>
+                        </button>
+                        <div className="absolute right-2 top-2 z-10 flex gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity bg-white/95 rounded-lg p-0.5 shadow-2xs border border-slate-200/60">
+                          <button type="button" className="btn btn-ghost btn-icon btn-xs p-1" title="Edit textbook" aria-label={`Edit ${b.title}`} onClick={() => openBookDialog(b)}>
+                            <Pencil size={12} />
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-icon btn-xs p-1 hover:bg-red-50 hover:text-red-700"
+                            title="Delete textbook"
+                            aria-label={`Delete ${b.title}`}
+                            onClick={() => removeBook(b)}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+
+            <section
+              id="book-details-section"
+              className={`card space-y-5 p-5 sm:p-6 ${mobileTab === "directory" ? "hidden lg:block" : "block"}`}
+              aria-live="polite"
+            >
+              {/* Mobile Back to Textbooks Button */}
+              <div className="lg:hidden flex items-center justify-between gap-2 pb-1">
+                <button
+                  type="button"
+                  onClick={() => setMobileTab("directory")}
+                  className="btn btn-ghost border border-slate-200 text-xs py-1.5 px-3 inline-flex items-center gap-1.5 font-semibold text-slate-800"
+                >
+                  ← Back to Textbooks
+                </button>
+                {selected && (
+                  <span className="text-xs text-slate-500 font-medium truncate">
+                    {selected.title}
+                  </span>
+                )}
+              </div>
+
+              {selected ? (
+                <>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h2 className="font-display text-xl font-semibold text-slate-900">{selected.title}</h2>
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <span className="text-sm text-slate-600">
+                          {selected.className} · {selected.subject} · {plural(selected.chapters.length, "chapter")}
+                        </span>
                       <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700 ring-1 ring-inset ring-indigo-700/10 whitespace-nowrap">
                         <Calendar size={12} /> Session {selected.academicSession || "2025–26"}
                       </span>
@@ -572,6 +622,7 @@ export default function BooksPage() {
             )}
           </section>
         </div>
+        </>
       )}
 
       {bookDialog && (

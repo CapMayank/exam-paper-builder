@@ -77,6 +77,7 @@ export default function BlueprintsPage() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [rolloverOpen, setRolloverOpen] = useState(false);
+  const [mobileTab, setMobileTab] = useState<"directory" | "details">("directory");
 
   // Quick Paper Build Modal
   const [buildPaperBp, setBuildPaperBp] = useState<Blueprint | null>(null);
@@ -456,43 +457,72 @@ export default function BlueprintsPage() {
           }
         />
       ) : (
-        <div className="grid items-start gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
-          {/* LEFT COLUMN: Blueprints List */}
-          <div className="lg:sticky lg:top-6 lg:max-h-[calc(100vh-3.5rem)] flex flex-col rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden">
-            <div className="p-3 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between gap-2 shrink-0">
-              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                <Ruler size={14} className="text-indigo-600" /> Blueprints ({displayedBlueprints.length})
-              </span>
-              <Link href="/blueprints/new" className="btn btn-primary text-[11px] py-1 px-2.5 gap-1">
-                <Plus size={13} /> New
-              </Link>
-            </div>
-            <ul className="overflow-y-auto overscroll-contain flex-1 p-2 space-y-1.5 focus:outline-none" aria-label="Blueprints">
-              {displayedBlueprints.map((bp) => {
-                const active = selected?.id === bp.id;
-                const totalMarks = blueprintTotalMarks(bp.sections);
+        <>
+          {/* Mobile Tab Switcher (< lg screens) */}
+          <div className="flex items-center gap-1.5 p-1 bg-slate-200/80 rounded-xl lg:hidden">
+            <button
+              type="button"
+              onClick={() => setMobileTab("directory")}
+              className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
+                mobileTab === "directory" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Ruler size={14} /> Blueprints ({displayedBlueprints.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobileTab("details")}
+              disabled={!selected}
+              className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
+                mobileTab === "details" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Layers size={14} /> {selected ? selected.name : "Blueprint Details"}
+            </button>
+          </div>
 
-                return (
-                  <li key={bp.id}>
-                    <div
-                      className={`group relative rounded-xl border p-3 transition ${
-                        active ? "border-indigo-500/80 ring-1 ring-indigo-500/20 bg-indigo-50/90 text-indigo-950 shadow-2xs" : "border-slate-200 hover:border-slate-300 bg-white"
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedId(bp.id);
-                          if (typeof window !== "undefined") {
-                            const el = document.getElementById("blueprint-detail-workspace");
-                            if (el && (el.getBoundingClientRect().top < 20 || window.innerWidth < 1024)) {
-                              el.scrollIntoView({ behavior: "smooth", block: "start" });
-                            }
-                          }
-                        }}
-                        aria-pressed={active}
-                        className="block w-full rounded-lg text-left after:absolute after:inset-0 after:rounded-xl"
+          <div className="grid items-start gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
+            {/* LEFT COLUMN: Blueprints List */}
+            <div
+              className={`lg:sticky lg:top-6 lg:max-h-[calc(100vh-3.5rem)] flex-col rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden ${
+                mobileTab === "details" ? "hidden lg:flex" : "flex"
+              }`}
+            >
+              <div className="p-3 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between gap-2 shrink-0">
+                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <Ruler size={14} className="text-indigo-600" /> Blueprints ({displayedBlueprints.length})
+                </span>
+                <Link href="/blueprints/new" className="btn btn-primary text-[11px] py-1 px-2.5 gap-1">
+                  <Plus size={13} /> New
+                </Link>
+              </div>
+              <ul className="overflow-y-auto overscroll-contain flex-1 p-2 space-y-1.5 focus:outline-none" aria-label="Blueprints">
+                {displayedBlueprints.map((bp) => {
+                  const active = selected?.id === bp.id;
+                  const totalMarks = blueprintTotalMarks(bp.sections);
+
+                  return (
+                    <li key={bp.id}>
+                      <div
+                        className={`group relative rounded-xl border p-3 transition ${
+                          active ? "border-indigo-500/80 ring-1 ring-indigo-500/20 bg-indigo-50/90 text-indigo-950 shadow-2xs" : "border-slate-200 hover:border-slate-300 bg-white"
+                        }`}
                       >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedId(bp.id);
+                            setMobileTab("details");
+                            if (typeof window !== "undefined") {
+                              const el = document.getElementById("blueprint-detail-workspace");
+                              if (el && (el.getBoundingClientRect().top < 20 || window.innerWidth < 1024)) {
+                                el.scrollIntoView({ behavior: "smooth", block: "start" });
+                              }
+                            }
+                          }}
+                          aria-pressed={active}
+                          className="block w-full rounded-lg text-left after:absolute after:inset-0 after:rounded-xl"
+                        >
                         <div className="flex items-center justify-between gap-2">
                           <span className="block font-semibold text-sm text-slate-900 truncate">{bp.name}</span>
                           <span className="inline-flex shrink-0 items-center rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 ring-1 ring-inset ring-indigo-700/10 whitespace-nowrap">
@@ -543,7 +573,24 @@ export default function BlueprintsPage() {
 
           {/* RIGHT COLUMN: Focused Blueprint Studio & Launcher Workspace */}
           {selected && (
-            <div id="blueprint-detail-workspace" className="space-y-6">
+            <div
+              id="blueprint-detail-workspace"
+              className={`space-y-6 ${mobileTab === "directory" ? "hidden lg:block" : "block"}`}
+            >
+              {/* Mobile Back to Blueprints Button */}
+              <div className="lg:hidden flex items-center justify-between gap-2 pb-1">
+                <button
+                  type="button"
+                  onClick={() => setMobileTab("directory")}
+                  className="btn btn-ghost border border-slate-200 text-xs py-1.5 px-3 inline-flex items-center gap-1.5 font-semibold text-slate-800"
+                >
+                  ← Back to Blueprints
+                </button>
+                <span className="text-xs text-slate-500 font-medium truncate">
+                  {selected.name}
+                </span>
+              </div>
+
               {/* Card 1: Blueprint Header & Quick Actions */}
               <div className="card p-6 space-y-6 bg-white" style={{ boxShadow: "var(--shadow-card)" }}>
                 <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 pb-4">
@@ -703,6 +750,7 @@ export default function BlueprintsPage() {
             </div>
           )}
         </div>
+        </>
       )}
 
       {/* Unified Academic Rollover Modal */}

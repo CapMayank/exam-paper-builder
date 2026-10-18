@@ -527,11 +527,11 @@ export default function ExamCellPage() {
         </div>
 
         {/* Tab Navigation */}
-        <div className="segmented inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200">
+        <div className="segmented flex flex-wrap sm:inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200 w-full sm:w-auto">
           <button
             type="button"
             onClick={() => setActiveTab("calculator")}
-            className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-bold transition-all ${
+            className={`flex items-center justify-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-bold transition-all flex-1 sm:flex-initial whitespace-nowrap ${
               activeTab === "calculator"
                 ? "bg-white text-indigo-900 shadow-xs"
                 : "text-slate-600 hover:text-slate-900"
@@ -543,7 +543,7 @@ export default function ExamCellPage() {
           <button
             type="button"
             onClick={() => setActiveTab("timetable")}
-            className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-bold transition-all ${
+            className={`flex items-center justify-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-bold transition-all flex-1 sm:flex-initial whitespace-nowrap ${
               activeTab === "timetable"
                 ? "bg-white text-indigo-900 shadow-xs"
                 : "text-slate-600 hover:text-slate-900"
@@ -555,7 +555,7 @@ export default function ExamCellPage() {
           <button
             type="button"
             onClick={() => setActiveTab("audit")}
-            className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-bold transition-all ${
+            className={`flex items-center justify-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-bold transition-all flex-1 sm:flex-initial whitespace-nowrap ${
               activeTab === "audit"
                 ? "bg-white text-indigo-900 shadow-xs"
                 : "text-slate-600 hover:text-slate-900"
