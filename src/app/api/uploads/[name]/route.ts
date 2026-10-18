@@ -16,7 +16,7 @@ export const GET = route(async (_req, { name }) => {
   const m = /^[a-f0-9-]{36}\.(png|jpg|jpeg|webp|gif)$/.exec(name);
   if (!m) throw new HttpError(404, "Not found");
   try {
-    const data = await readFile(path.join(UPLOAD_DIR, name));
+    const data = await readFile(path.join(/*turbopackIgnore: true*/ UPLOAD_DIR, name));
     return new Response(new Uint8Array(data), {
       headers: { "Content-Type": TYPE_BY_EXT[m[1]], "Cache-Control": "private, max-age=86400" },
     });

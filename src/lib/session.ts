@@ -35,9 +35,7 @@ export async function endSession() {
   (await cookies()).delete(COOKIE);
 }
 
-/** Returns the user id from a valid, unexpired session cookie, else null. */
-export async function sessionUserId(): Promise<string | null> {
-  const raw = (await cookies()).get(COOKIE)?.value;
+function parseRawSessionCookie(raw: string | null | undefined): string | null {
   if (!raw) return null;
   const parts = raw.split(".");
   if (parts.length !== 3) return null;
@@ -48,4 +46,26 @@ export async function sessionUserId(): Promise<string | null> {
   if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
   if (Number(exp) < Date.now() / 1000) return null;
   return userId;
+}
+
+/** Extracts session cookie directly from incoming HTTP Request headers without triggering hanging prerender promises. */
+export function sessionUserIdFromRequest(req: Request): string | null {
+  const cookieHeader = req.headers.get("cookie");
+  if (!cookieHeader) return null;
+  const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${COOKIE}=([^;]*)`));
+  if (!match) return null;
+  return parseRawSessionCookie(decodeURIComponent(match[1]));
+}
+
+/** Returns the user id from a valid, unexpired session cookie, else null. */
+export async function sessionUserId(req?: Request): Promise<string | null> {
+  if (req) {
+    return sessionUserIdFromRequest(req);
+  }
+  try {
+    const raw = (await cookies()).get(COOKIE)?.value;
+    return parseRawSessionCookie(raw);
+  } catch {
+    return null;
+  }
 }

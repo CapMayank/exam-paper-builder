@@ -37,7 +37,7 @@ export function route(
     try {
       let user = null as SessionUser | null;
       if (opts.auth !== false) {
-        const id = await sessionUserId();
+        const id = await sessionUserId(req);
         user = id
           ? ((await prisma.user.findUnique({
               where: { id },
