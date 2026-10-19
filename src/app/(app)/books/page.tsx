@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Calendar, ChevronRight, GraduationCap, HelpCircle, Layers, Library, MoreVertical, Pencil, Plus, RotateCcw, Ruler, Sparkles, Trash2 } from "lucide-react";
+import { BookOpen, Calendar, GraduationCap, HelpCircle, Layers, Library, Pencil, Plus, RotateCcw, Ruler, Sparkles, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EmptyState, ErrorBanner, Field, ListSkeleton, Modal, PageHeader, Spinner, useConfirm, useToast } from "@/components/ui";
@@ -37,7 +37,6 @@ export default function BooksPage() {
   const [sessionFilter, setSessionFilter] = useState<string>(currentSession);
   const [classFilter, setClassFilter] = useState<string>("ALL");
   const [subjectFilter, setSubjectFilter] = useState<string>("ALL");
-  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [bookDialog, setBookDialog] = useState<{ editingId: string | null } | null>(null);
   const [bookForm, setBookForm] = useState(emptyBook);
   const [chapterForm, setChapterForm] = useState({ number: "", title: "" });
@@ -368,116 +367,105 @@ export default function BooksPage() {
         title="Books and syllabus"
         description="Add the textbooks you teach from and their chapters. Blueprints set marks per chapter against these."
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              className="btn btn-ghost border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 text-xs sm:text-sm font-medium"
+              className="btn btn-ghost border border-slate-200 bg-white text-slate-800 hover:bg-slate-50"
+              onClick={() => setRolloverModalOpen(true)}
+              title="Clone syllabus, classes, and blueprints into a new academic session"
+            >
+              <RotateCcw size={16} /> Rollover Session
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost border border-purple-200 bg-purple-50/50 text-purple-800 hover:bg-purple-100 hover:border-purple-300"
+              onClick={() => setCombineOpen(true)}
+              title="Combine multiple readers (e.g. English First Flight + Footprints, or Social Science 4-books) into a single composite exam subject"
+            >
+              <Layers size={16} className="text-purple-600" /> Combine for Multi-Book Exam
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost border border-slate-200 hover:border-slate-300"
               onClick={() => {
                 setImportTargetBook(null);
                 setImportInitialTab("preset");
                 setImportOpen(true);
               }}
             >
-              <Sparkles size={15} className="text-indigo-600" /> Import syllabus
+              <Sparkles size={16} className="text-indigo-600" /> Import syllabus
             </button>
-            <button type="button" className="btn btn-primary text-xs sm:text-sm font-medium" onClick={() => openBookDialog()}>
-              <Plus size={15} /> Add textbook
+            <button type="button" className="btn btn-primary" onClick={() => openBookDialog()}>
+              <Plus size={16} /> Add textbook
             </button>
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setMoreMenuOpen(!moreMenuOpen)}
-                className="btn btn-ghost border border-slate-200 bg-white p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-                title="More actions"
-                aria-label="More actions"
-                aria-expanded={moreMenuOpen}
-              >
-                <MoreVertical size={16} />
-              </button>
-              {moreMenuOpen && (
-                <>
-                  <div className="fixed inset-0 z-30" onClick={() => setMoreMenuOpen(false)} />
-                  <div className="absolute right-0 top-full mt-1.5 z-40 w-56 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg text-xs space-y-0.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMoreMenuOpen(false);
-                        setCombineOpen(true);
-                      }}
-                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 text-slate-700 flex items-center gap-2 transition"
-                    >
-                      <Layers size={14} className="text-purple-600 shrink-0" />
-                      <span>Combine Multi-Book Exam</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMoreMenuOpen(false);
-                        setRolloverModalOpen(true);
-                      }}
-                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 text-slate-700 flex items-center gap-2 transition"
-                    >
-                      <RotateCcw size={14} className="text-slate-500 shrink-0" />
-                      <span>Rollover Session</span>
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
           </div>
         }
       />
 
-      {/* Single-row Class and Subject Filter Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs shadow-2xs">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <span className="font-semibold text-slate-500">Class:</span>
-            <select
-              className="input py-1 px-2.5 text-xs w-36 bg-slate-50 border-slate-200 font-medium"
-              value={classFilter}
-              onChange={(e) => {
-                setClassFilter(e.target.value);
-                setSubjectFilter("ALL");
-              }}
-            >
-              <option value="ALL">All Classes ({availableClasses.length})</option>
-              {availableClasses.map((cls) => (
-                <option key={cls} value={cls}>
-                  {cls}
-                </option>
-              ))}
-            </select>
+      {/* Academic Session & Class -> Subject Hierarchy Filter Bar */}
+      <div className="card p-4 space-y-3 bg-white">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-slate-500 flex items-center gap-1.5">
+              <Calendar size={14} className="text-slate-600" /> Active Session:
+            </span>
+            <span className="badge !bg-slate-900 !text-white font-mono px-2.5 py-0.5">
+              {normalizeSession(currentSession)}
+            </span>
+            <span className="text-xs text-slate-500">
+              ({sessionBooks.length} textbooks)
+            </span>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <span className="font-semibold text-slate-500">Subject:</span>
-            <select
-              className="input py-1 px-2.5 text-xs w-44 bg-slate-50 border-slate-200 font-medium"
-              value={subjectFilter}
-              onChange={(e) => setSubjectFilter(e.target.value)}
-            >
-              <option value="ALL">All Subjects ({availableSubjects.length})</option>
-              {availableSubjects.map((sub) => (
-                <option key={sub} value={sub}>
-                  {sub}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3 text-slate-500">
-          <span>
-            <strong>{displayedBooks.length}</strong> {displayedBooks.length === 1 ? "textbook" : "textbooks"}
-          </span>
-          <span className="text-slate-300">·</span>
           <Link
             href="/classes"
-            className="text-slate-600 hover:text-indigo-600 font-medium inline-flex items-center gap-1 transition"
+            className="text-xs font-semibold text-slate-700 hover:text-slate-950 inline-flex items-center gap-1"
           >
-            <GraduationCap size={13} /> Manage Classes
+            <GraduationCap size={14} /> Manage Classes &amp; Subjects
           </Link>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-semibold text-slate-500">Class:</span>
+              <select
+                className="input py-1 px-2.5 text-xs w-40"
+                value={classFilter}
+                onChange={(e) => {
+                  setClassFilter(e.target.value);
+                  setSubjectFilter("ALL");
+                }}
+              >
+                <option value="ALL">All Classes ({availableClasses.length})</option>
+                {availableClasses.map((cls) => (
+                  <option key={cls} value={cls}>
+                    {cls}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-semibold text-slate-500">Subject:</span>
+              <select
+                className="input py-1 px-2.5 text-xs w-48"
+                value={subjectFilter}
+                onChange={(e) => setSubjectFilter(e.target.value)}
+              >
+                <option value="ALL">All Subjects ({availableSubjects.length})</option>
+                {availableSubjects.map((sub) => (
+                  <option key={sub} value={sub}>
+                    {sub}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="text-xs text-slate-500">
+            Showing <strong>{displayedBooks.length}</strong> of {sessionBooks.length} textbooks
+          </div>
         </div>
       </div>
 
@@ -552,6 +540,13 @@ export default function BooksPage() {
                       : `${displayedBooks.length} book${displayedBooks.length === 1 ? "" : "s"} across ${availableClasses.length} classes`}
                   </span>
                 </div>
+                <button
+                  type="button"
+                  className="btn btn-primary text-[11px] py-1 px-2.5 gap-1 shrink-0"
+                  onClick={() => openBookDialog()}
+                >
+                  <Plus size={13} /> Add
+                </button>
               </div>
 
               <div className="overflow-y-auto overscroll-contain flex-1 p-2 space-y-3 focus:outline-none" aria-label="Textbooks and Subjects">
@@ -586,7 +581,7 @@ export default function BooksPage() {
                           </span>
                         </div>
 
-                        {/* List of textbooks or Clean Setup Row */}
+                        {/* List of textbooks or Empty State Card */}
                         {hasBooks ? (
                           <div className="space-y-1">
                             {group.books.map((b) => {
@@ -653,24 +648,48 @@ export default function BooksPage() {
                             })}
                           </div>
                         ) : (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedId(null);
-                              setSelectedSubjectKey(group.subjectName);
-                              setMobileTab("details");
-                            }}
-                            className={`w-full rounded-xl px-2.5 py-2 text-left transition flex items-center justify-between border ${
+                          <div
+                            className={`rounded-xl border border-dashed p-2.5 transition ${
                               isSubjectActive
-                                ? "border-indigo-400 bg-indigo-50/90 text-indigo-950 font-medium shadow-2xs"
-                                : "border-slate-100/90 hover:border-slate-200 hover:bg-slate-50/80 text-slate-500"
+                                ? "border-amber-400 bg-amber-50 ring-1 ring-amber-400/30"
+                                : "border-slate-200 bg-slate-50/50 hover:border-slate-300"
                             }`}
                           >
-                            <span className="text-[11px] text-slate-500">No textbook added</span>
-                            <span className="text-[11px] text-indigo-600 font-semibold shrink-0 flex items-center gap-0.5">
-                              Setup <ChevronRight size={12} />
-                            </span>
-                          </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedId(null);
+                                setSelectedSubjectKey(group.subjectName);
+                                setMobileTab("details");
+                              }}
+                              className="w-full text-left"
+                            >
+                              <p className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
+                                <span className="h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0" />
+                                No textbook added yet
+                              </p>
+                            </button>
+                            <div className="mt-2 flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => openBookDialog(undefined, group.className, group.subjectName)}
+                                className="btn btn-primary text-[10px] py-0.5 px-2 gap-1"
+                              >
+                                <Plus size={11} /> Add Book
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setImportTargetBook(null);
+                                  setImportInitialTab("preset");
+                                  setImportOpen(true);
+                                }}
+                                className="btn btn-ghost border border-slate-200 bg-white text-[10px] py-0.5 px-2 text-slate-700 hover:bg-slate-50"
+                              >
+                                <Sparkles size={11} className="text-indigo-600" /> Import
+                              </button>
+                            </div>
+                          </div>
                         )}
                       </div>
                     );
@@ -717,10 +736,17 @@ export default function BooksPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <Link
                         href={`/blueprints/new?bookId=${selected.id}&className=${encodeURIComponent(selected.className)}&subject=${encodeURIComponent(selected.subject)}`}
-                        className="btn btn-sm btn-ghost border border-indigo-200 bg-indigo-50/70 text-indigo-900 hover:bg-indigo-100 flex items-center gap-1.5 font-semibold shadow-2xs text-xs"
+                        className="btn btn-sm btn-ghost border border-indigo-200 bg-indigo-50/70 text-indigo-900 hover:bg-indigo-100 flex items-center gap-1.5 font-semibold shadow-2xs"
                         title="Create an exam blueprint for this textbook"
                       >
                         <Ruler size={14} className="text-indigo-600" /> Create Blueprint
+                      </Link>
+                      <Link
+                        href={`/questions?className=${encodeURIComponent(selected.className)}&subject=${encodeURIComponent(selected.subject)}`}
+                        className="btn btn-sm btn-ghost border border-slate-200 hover:border-slate-300 text-slate-700 flex items-center gap-1.5 text-xs"
+                        title="View question bank for this subject"
+                      >
+                        <HelpCircle size={14} className="text-slate-500" /> Questions ({selected._count.questions})
                       </Link>
                       <button
                         type="button"
@@ -852,16 +878,16 @@ export default function BooksPage() {
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-8 sm:p-10 text-center space-y-4">
-                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-indigo-50 text-indigo-600">
-                      <BookOpen size={22} />
+                  <div className="rounded-2xl border border-dashed border-amber-300 bg-amber-50/50 p-6 sm:p-8 text-center space-y-4">
+                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+                      <BookOpen size={24} />
                     </div>
-                    <div className="space-y-1.5">
-                      <h3 className="text-base font-bold text-slate-900">
-                        No textbook added for {activeEmptySubject.subjectName} yet
+                    <div className="space-y-1">
+                      <h3 className="text-base font-bold text-amber-950">
+                        No textbooks added for {activeEmptySubject.subjectName} yet
                       </h3>
-                      <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-                        Add a textbook or import chapters to organize your syllabus, allocate blueprint marks, and start building exam papers.
+                      <p className="text-xs text-amber-900/80 max-w-md mx-auto">
+                        Add a textbook (e.g. NCERT {activeEmptySubject.subjectName}) or import chapters to organize your syllabus, allocate blueprint marks, and start building exam papers.
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
@@ -870,18 +896,18 @@ export default function BooksPage() {
                         className="btn btn-primary text-xs py-2 px-3.5 gap-1.5"
                         onClick={() => openBookDialog(undefined, activeEmptySubject.className, activeEmptySubject.subjectName)}
                       >
-                        <Plus size={14} /> Add Textbook
+                        <Plus size={15} /> Add Textbook for {activeEmptySubject.subjectName}
                       </button>
                       <button
                         type="button"
-                        className="btn btn-ghost border border-slate-200 bg-white text-xs py-2 px-3.5 text-slate-700 hover:bg-slate-50 gap-1.5 shadow-2xs font-medium"
+                        className="btn btn-ghost border border-amber-200 bg-white text-xs py-2 px-3.5 text-amber-900 hover:bg-amber-100 gap-1.5 shadow-2xs"
                         onClick={() => {
                           setImportTargetBook(null);
                           setImportInitialTab("preset");
                           setImportOpen(true);
                         }}
                       >
-                        <Sparkles size={14} className="text-indigo-600" /> Import Syllabus
+                        <Sparkles size={15} className="text-amber-600" /> Import Syllabus (CBSE / NCERT)
                       </button>
                     </div>
                   </div>

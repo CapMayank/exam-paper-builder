@@ -4,17 +4,10 @@ import {
   ArrowRight,
   BookOpen,
   Calendar,
-  CheckCircle2,
-  ChevronRight,
-  ExternalLink,
-  FileText,
   GraduationCap,
-  HelpCircle,
-  Layers,
   Pencil,
   Plus,
   RotateCcw,
-  Ruler,
   Search,
   Sparkles,
   Trash2,
@@ -47,10 +40,8 @@ import {
 } from "@/lib/schoolCurriculum";
 import type {
   AcademicClassDto,
-  Blueprint,
   Book,
   ClassSubjectDto,
-  PaperListItem,
   SectionDetail,
 } from "@/lib/types";
 
@@ -147,8 +138,6 @@ export default function ClassesHierarchyPage() {
 
   const [classes, setClasses] = useState<AcademicClassDto[]>([]);
   const [books, setBooks] = useState<Book[]>([]);
-  const [blueprints, setBlueprints] = useState<Blueprint[]>([]);
-  const [papers, setPapers] = useState<PaperListItem[]>([]);
   const [currentUser, setCurrentUser] = useState<{ id: string; name: string; email: string; role: string } | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -175,17 +164,13 @@ export default function ClassesHierarchyPage() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [cls, bks, bps, pps, me] = await Promise.all([
+      const [cls, bks, me] = await Promise.all([
         api<AcademicClassDto[]>(`/api/classes?session=${encodeURIComponent(activeSession)}`),
         api<Book[]>("/api/books"),
-        api<Blueprint[]>("/api/blueprints"),
-        api<PaperListItem[]>("/api/papers"),
         api<{ id: string; name: string; email: string; role: string }>("/api/me").catch(() => null),
       ]);
       setClasses(cls);
       setBooks(bks);
-      setBlueprints(bps);
-      setPapers(pps);
       if (me) setCurrentUser(me);
       setSelectedClassId((prev) => {
         if (prev && cls.some((c) => c.id === prev)) return prev;
@@ -205,16 +190,6 @@ export default function ClassesHierarchyPage() {
   const sessionBooks = useMemo(
     () => books.filter((b) => normalizeSession(b.academicSession) === activeSession),
     [books, activeSession]
-  );
-
-  const sessionBlueprints = useMemo(
-    () => blueprints.filter((bp) => normalizeSession(bp.academicSession) === activeSession),
-    [blueprints, activeSession]
-  );
-
-  const sessionPapers = useMemo(
-    () => papers.filter((p) => normalizeSession(p.academicSession) === activeSession),
-    [papers, activeSession]
   );
 
   // Filter classes by educational stage & search
@@ -290,30 +265,6 @@ export default function ClassesHierarchyPage() {
     );
   }, [selectedClass, classSubjects]);
 
-  // Overall class curriculum statistics
-  const classStats = useMemo(() => {
-    if (!selectedClass) {
-      return { totalSubjects: 0, booksCount: 0, blueprintsCount: 0, papersCount: 0, questionsCount: 0 };
-    }
-    const cBooks = sessionBooks.filter(
-      (b) => b.className.trim().toLowerCase() === selectedClass.name.trim().toLowerCase()
-    );
-    const bookIdSet = new Set(cBooks.map((b) => b.id));
-    const cBlueprints = sessionBlueprints.filter((bp) => bookIdSet.has(bp.bookId));
-    const cPapers = sessionPapers.filter(
-      (p) => p.blueprint.book.className.trim().toLowerCase() === selectedClass.name.trim().toLowerCase()
-    );
-    const questionsCount = cBooks.reduce((sum, b) => sum + (b._count?.questions || 0), 0);
-
-    return {
-      totalSubjects: classSubjects.length,
-      booksCount: cBooks.length,
-      blueprintsCount: cBlueprints.length,
-      papersCount: cPapers.length,
-      questionsCount,
-    };
-  }, [selectedClass, sessionBooks, sessionBlueprints, sessionPapers, classSubjects]);
-
   const selectedClassSections = useMemo((): SectionDetail[] => {
     if (!selectedClass) return [];
     if (selectedClass.sectionDetails && selectedClass.sectionDetails.length > 0) {
@@ -326,35 +277,19 @@ export default function ClassesHierarchyPage() {
     return selectedClassSections.reduce((sum, s) => sum + s.studentCount, 0);
   }, [selectedClassSections]);
 
-  // Subject matrix metadata mapper
-  const subjectMetadata = useMemo(() => {
-    if (!selectedClass) return new Map<string, { books: Book[]; blueprints: Blueprint[]; papers: PaperListItem[]; questions: number }>();
-    const map = new Map<string, { books: Book[]; blueprints: Blueprint[]; papers: PaperListItem[]; questions: number }>();
-
+  // Subject book counts mapper
+  const subjectBookCounts = useMemo(() => {
+    if (!selectedClass) return new Map<string, number>();
+    const counts = new Map<string, number>();
+    const cBooks = sessionBooks.filter(
+      (b) => b.className.trim().toLowerCase() === selectedClass.name.trim().toLowerCase()
+    );
     for (const sub of classSubjects) {
-      const sBooks = sessionBooks.filter(
-        (b) =>
-          b.className.trim().toLowerCase() === selectedClass.name.trim().toLowerCase() &&
-          subjectMatches(b.subject, sub.name)
-      );
-      const sBookIds = new Set(sBooks.map((b) => b.id));
-      const sBlueprints = sessionBlueprints.filter((bp) => sBookIds.has(bp.bookId));
-      const sPapers = sessionPapers.filter(
-        (p) =>
-          p.blueprint.book.className.trim().toLowerCase() === selectedClass.name.trim().toLowerCase() &&
-          subjectMatches(p.blueprint.book.subject, sub.name)
-      );
-      const questions = sBooks.reduce((acc, b) => acc + (b._count?.questions || 0), 0);
-
-      map.set(sub.name, {
-        books: sBooks,
-        blueprints: sBlueprints,
-        papers: sPapers,
-        questions,
-      });
+      const matchCount = cBooks.filter((b) => subjectMatches(b.subject, sub.name)).length;
+      counts.set(sub.name, matchCount);
     }
-    return map;
-  }, [selectedClass, classSubjects, sessionBooks, sessionBlueprints, sessionPapers]);
+    return counts;
+  }, [selectedClass, sessionBooks, classSubjects]);
 
   const isAdmin = currentUser?.role === "ADMIN";
 
@@ -694,29 +629,14 @@ export default function ClassesHierarchyPage() {
           </span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 font-semibold text-slate-700">
+        <div className="flex items-center font-medium text-slate-600">
           <Link
             href="/books"
-            className="hover:text-indigo-600 inline-flex items-center gap-1.5 transition"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-700 hover:underline transition"
             title="Browse all textbooks & syllabus"
           >
-            <BookOpen size={14} className="text-slate-400" /> Textbooks ({sessionBooks.length})
-          </Link>
-          <span className="text-slate-200">·</span>
-          <Link
-            href="/blueprints"
-            className="hover:text-indigo-600 inline-flex items-center gap-1.5 transition"
-            title="Browse all exam blueprints"
-          >
-            <Ruler size={14} className="text-slate-400" /> Blueprints ({sessionBlueprints.length})
-          </Link>
-          <span className="text-slate-200">·</span>
-          <Link
-            href="/papers"
-            className="hover:text-indigo-600 inline-flex items-center gap-1.5 transition"
-            title="Browse all exam papers"
-          >
-            <FileText size={14} className="text-slate-400" /> Papers ({sessionPapers.length})
+            <BookOpen size={14} className="text-indigo-600" />
+            <span>Manage Textbooks &amp; Syllabus Studio &rarr;</span>
           </Link>
         </div>
       </div>
@@ -745,7 +665,7 @@ export default function ClassesHierarchyPage() {
               : "text-slate-600 hover:text-slate-900"
           }`}
         >
-          <Layers size={15} className="shrink-0" />
+          <BookOpen size={15} className="shrink-0" />
           <span className="truncate">{selectedClass ? `${selectedClass.name} Workspace` : "Class Details"}</span>
         </button>
       </div>
@@ -1106,72 +1026,22 @@ export default function ClassesHierarchyPage() {
                   </div>
                 </div>
 
-                {/* Class Health Metrics Bar */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
-                  <div className="rounded-xl border border-slate-200/80 bg-slate-50/40 p-3">
-                    <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                      Subjects
-                    </div>
-                    <div className="mt-1 flex items-baseline gap-1.5">
-                      <span className="text-xl font-bold text-slate-900 font-display">
-                        {classStats.totalSubjects}
-                      </span>
-                      <span className="text-xs text-slate-500">enrolled</span>
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-slate-200/80 bg-slate-50/40 p-3">
-                    <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                      Textbooks
-                    </div>
-                    <div className="mt-1 flex items-baseline gap-1.5">
-                      <span className="text-xl font-bold text-slate-900 font-display">
-                        {classStats.booksCount}
-                      </span>
-                      <span className="text-xs text-slate-500">syllabus</span>
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-slate-200/80 bg-slate-50/40 p-3">
-                    <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                      Blueprints
-                    </div>
-                    <div className="mt-1 flex items-baseline gap-1.5">
-                      <span className="text-xl font-bold text-slate-900 font-display">
-                        {classStats.blueprintsCount}
-                      </span>
-                      <span className="text-xs text-slate-500">quotas</span>
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-slate-200/80 bg-slate-50/40 p-3">
-                    <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                      Questions
-                    </div>
-                    <div className="mt-1 flex items-baseline gap-1.5">
-                      <span className="text-xl font-bold text-slate-900 font-display">
-                        {classStats.questionsCount}
-                      </span>
-                      <span className="text-xs text-slate-500">bank</span>
-                    </div>
-                  </div>
-                </div>
               </section>
 
-              {/* CARD 2: Unified Subject Curriculum Roster (The Master Matrix) */}
+              {/* CARD 2: Subjects Roster */}
               <section className="card min-w-0 max-w-full p-4 sm:p-6 bg-white space-y-4 border-slate-200/90 overflow-hidden">
                 {/* Header: Title, Search, and Auto-Add Missing Standard Subjects */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3.5 min-w-0">
                   <div className="space-y-0.5 min-w-0">
                     <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                       <BookOpen size={17} className="text-indigo-600 shrink-0" />
-                      <span className="truncate">Curriculum Subjects Roster</span>
+                      <span className="truncate">Subjects Roster</span>
                       <span className="badge !bg-slate-100 !text-slate-800 text-xs font-mono shrink-0">
                         {classSubjects.length}
                       </span>
                     </h3>
                     <p className="text-xs text-slate-500">
-                      View all subjects taught in {selectedClass.name} with connected textbooks, blueprints, and question bank assets.
+                      Subjects taught in {selectedClass.name}. Configure subjects and assign official board codes.
                     </p>
                   </div>
 
@@ -1190,8 +1060,23 @@ export default function ClassesHierarchyPage() {
                       </button>
                     )}
 
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingSubject(null);
+                          setSubjectForm({ name: "", code: "" });
+                          setSubjectModalOpen(true);
+                        }}
+                        className="btn btn-primary text-xs py-1.5 px-3"
+                      >
+                        <Plus size={13} />
+                        <span>Add Subject</span>
+                      </button>
+                    )}
+
                     {/* Filter subjects input */}
-                    <div className="relative w-full sm:w-56">
+                    <div className="relative w-full sm:w-52">
                       <input
                         type="text"
                         placeholder="Filter subjects..."
@@ -1224,7 +1109,7 @@ export default function ClassesHierarchyPage() {
                         No subjects added to {selectedClass.name} yet
                       </h4>
                       <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-                        Add subjects (e.g. Mathematics, Science, English, Hindi) to organize syllabus chapters and build question papers.
+                        Add standard or custom subjects for this class to organize syllabus and question papers.
                       </p>
                     </div>
 
@@ -1259,136 +1144,60 @@ export default function ClassesHierarchyPage() {
                     No subjects match &quot;{subjectQuery}&quot;. Try clearing the search.
                   </div>
                 ) : (
-                  /* High-Density Responsive Curriculum Matrix Table */
-                  <div className="space-y-1.5 min-w-0 max-w-full">
-                    <div className="flex items-center justify-between text-[11px] text-slate-400 px-0.5 sm:hidden">
-                      <span className="font-semibold text-slate-600">Subject Matrix</span>
-                      <span className="text-[10px]">← Swipe table to see all columns →</span>
-                    </div>
-                    <div className="overflow-x-auto min-w-0 max-w-full rounded-xl border border-slate-200 scroll-thin overscroll-x-contain touch-pan-x">
-                      <table className="w-full text-left border-collapse text-xs min-w-[36rem]">
-                        <thead>
-                          <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
-                            <th className="py-2.5 px-3.5 min-w-[9.5rem]">Subject &amp; Code</th>
-                            <th className="py-2.5 px-3 min-w-[10rem]">Textbooks &amp; Syllabus</th>
-                            <th className="py-2.5 px-2.5 min-w-[6.5rem]">Question Bank</th>
-                            <th className="py-2.5 px-2.5 min-w-[6.5rem]">Blueprints</th>
-                            <th className="py-2.5 px-2.5 min-w-[5.5rem]">Papers</th>
-                            {isAdmin && <th className="py-2.5 px-3 text-right w-16">Actions</th>}
-                          </tr>
-                        </thead>
+                  /* Clean, Focused 4-Column Subjects Table */
+                  <div className="overflow-x-auto min-w-0 max-w-full rounded-xl border border-slate-200">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                          <th className="py-2.5 px-4">Subject</th>
+                          <th className="py-2.5 px-3 w-36">Board Code</th>
+                          <th className="py-2.5 px-3 w-48">Textbooks</th>
+                          {isAdmin && <th className="py-2.5 px-4 text-right w-24">Actions</th>}
+                        </tr>
+                      </thead>
                       <tbody className="divide-y divide-slate-100 bg-white">
                         {filteredClassSubjects.map((sub) => {
-                          const meta = subjectMetadata.get(sub.name) || {
-                            books: [],
-                            blueprints: [],
-                            papers: [],
-                            questions: 0,
-                          };
+                          const bookCount = subjectBookCounts.get(sub.name) ?? 0;
 
                           return (
                             <tr
                               key={sub.name}
                               className="hover:bg-slate-50/80 transition group"
                             >
-                              {/* Subject & Official Code */}
-                              <td className="py-3 px-3.5 align-middle">
-                                <div className="font-semibold text-slate-900 text-sm flex items-center gap-1.5">
-                                  <span>{sub.name}</span>
-                                </div>
+                              {/* Subject Name */}
+                              <td className="py-3 px-4 align-middle">
+                                <span className="font-semibold text-slate-900 text-sm">
+                                  {sub.name}
+                                </span>
+                              </td>
+
+                              {/* Board Code */}
+                              <td className="py-3 px-3 align-middle">
                                 {sub.code ? (
-                                  <span className="mt-0.5 inline-block font-mono text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded">
-                                    Code: {sub.code}
+                                  <span className="inline-block font-mono text-xs text-slate-700 bg-slate-100 border border-slate-200/80 px-2 py-0.5 rounded-md">
+                                    {sub.code}
                                   </span>
                                 ) : (
-                                  <span className="mt-0.5 inline-block text-[10px] text-slate-400">
-                                    No code set
-                                  </span>
+                                  <span className="text-slate-400 text-xs">—</span>
                                 )}
                               </td>
 
-                              {/* Textbooks & Chapters */}
+                              {/* Textbooks & Link to Books Studio */}
                               <td className="py-3 px-3 align-middle">
-                                {meta.books.length > 0 ? (
-                                  <div className="space-y-1">
-                                    {meta.books.map((b) => (
-                                      <Link
-                                        key={b.id}
-                                        href={`/books?className=${encodeURIComponent(selectedClass.name)}&subject=${encodeURIComponent(sub.name)}`}
-                                        className="inline-flex items-center gap-1.5 text-slate-700 hover:text-indigo-600 font-medium transition"
-                                        title={`View textbook ${b.title}`}
-                                      >
-                                        <BookOpen size={13} className="text-indigo-600 shrink-0" />
-                                        <span className="truncate max-w-[13rem]">{b.title}</span>
-                                        <span className="text-[10px] text-slate-400 font-mono">
-                                          ({plural(b.chapters.length, "ch")})
-                                        </span>
-                                      </Link>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <Link
-                                    href={`/books?className=${encodeURIComponent(selectedClass.name)}&subject=${encodeURIComponent(sub.name)}&add=1`}
-                                    className="inline-flex items-center gap-1 text-[11px] text-amber-700 hover:text-amber-900 font-medium"
-                                  >
-                                    <span>+ Add Textbook</span>
-                                  </Link>
-                                )}
-                              </td>
-
-                              {/* Question Bank Assets */}
-                              <td className="py-3 px-3 align-middle font-medium">
-                                {meta.questions > 0 ? (
-                                  <Link
-                                    href={`/questions?className=${encodeURIComponent(selectedClass.name)}&subject=${encodeURIComponent(sub.name)}`}
-                                    className="inline-flex items-center gap-1 text-slate-700 hover:text-indigo-600 transition"
-                                  >
-                                    <HelpCircle size={13} className="text-slate-400" />
-                                    <span>{plural(meta.questions, "question")}</span>
-                                  </Link>
-                                ) : (
-                                  <span className="text-slate-400 text-[11px]">0 questions</span>
-                                )}
-                              </td>
-
-                              {/* Blueprints */}
-                              <td className="py-3 px-3 align-middle">
-                                {meta.blueprints.length > 0 ? (
-                                  <Link
-                                    href={`/blueprints?className=${encodeURIComponent(selectedClass.name)}&subject=${encodeURIComponent(sub.name)}`}
-                                    className="inline-flex items-center gap-1 text-slate-700 hover:text-indigo-600 font-medium transition"
-                                  >
-                                    <Ruler size={13} className="text-indigo-600" />
-                                    <span>{plural(meta.blueprints.length, "blueprint")}</span>
-                                  </Link>
-                                ) : (
-                                  <Link
-                                    href={`/blueprints/new?className=${encodeURIComponent(selectedClass.name)}&subject=${encodeURIComponent(sub.name)}`}
-                                    className="text-[11px] text-indigo-600 hover:text-indigo-800 font-medium"
-                                  >
-                                    + Create
-                                  </Link>
-                                )}
-                              </td>
-
-                              {/* Papers */}
-                              <td className="py-3 px-3 align-middle">
-                                {meta.papers.length > 0 ? (
-                                  <Link
-                                    href={`/papers?className=${encodeURIComponent(selectedClass.name)}&subject=${encodeURIComponent(sub.name)}`}
-                                    className="inline-flex items-center gap-1 text-slate-700 hover:text-indigo-600 font-medium transition"
-                                  >
-                                    <FileText size={13} className="text-indigo-600" />
-                                    <span>{plural(meta.papers.length, "paper")}</span>
-                                  </Link>
-                                ) : (
-                                  <span className="text-slate-400 text-[11px]">None</span>
-                                )}
+                                <Link
+                                  href={`/books?className=${encodeURIComponent(selectedClass.name)}&subject=${encodeURIComponent(sub.name)}`}
+                                  className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-700 hover:text-indigo-600 transition group/link"
+                                  title={`Open textbooks studio for ${sub.name}`}
+                                >
+                                  <BookOpen size={13} className="text-slate-400 group-hover/link:text-indigo-600 shrink-0" />
+                                  <span>{bookCount > 0 ? plural(bookCount, "textbook") : "No books"}</span>
+                                  <ArrowRight size={11} className="text-slate-400 group-hover/link:text-indigo-600 shrink-0 ml-0.5" />
+                                </Link>
                               </td>
 
                               {/* Actions */}
                               {isAdmin && (
-                                <td className="py-3 px-3 text-right align-middle whitespace-nowrap">
+                                <td className="py-3 px-4 text-right align-middle whitespace-nowrap">
                                   <div className="inline-flex items-center gap-1">
                                     {sub.id && (
                                       <button
@@ -1398,7 +1207,7 @@ export default function ClassesHierarchyPage() {
                                           setSubjectForm({ name: sub.name, code: sub.code });
                                           setSubjectModalOpen(true);
                                         }}
-                                        className="btn btn-ghost btn-icon btn-xs p-1 text-slate-500 hover:text-slate-800"
+                                        className="btn btn-ghost btn-icon btn-xs p-1.5 text-slate-500 hover:text-slate-800"
                                         title="Edit Subject"
                                         aria-label={`Edit ${sub.name}`}
                                       >
@@ -1409,7 +1218,7 @@ export default function ClassesHierarchyPage() {
                                       <button
                                         type="button"
                                         onClick={() => void deleteSubject(sub.id, sub.name)}
-                                        className="btn btn-ghost btn-icon btn-xs p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
+                                        className="btn btn-ghost btn-icon btn-xs p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-700"
                                         title="Remove Subject"
                                         aria-label={`Remove ${sub.name}`}
                                       >
@@ -1425,52 +1234,7 @@ export default function ClassesHierarchyPage() {
                       </tbody>
                     </table>
                   </div>
-                </div>
-              )}
-            </section>
-
-              {/* CARD 3: Exam Workflow Launchpad */}
-              <section className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50/50 via-white to-slate-50 p-4 sm:p-5 space-y-3 min-w-0 max-w-full overflow-hidden">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-w-0">
-                  <div className="min-w-0">
-                    <h4 className="text-sm font-bold text-slate-900 truncate">
-                      Exam Workflow Actions for {selectedClass.name}
-                    </h4>
-                    <p className="text-xs text-slate-500">
-                      Jump straight into curriculum studios pre-filtered for this class grade.
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 min-w-0">
-                    <Link
-                      href={`/books?className=${encodeURIComponent(selectedClass.name)}`}
-                      className="btn btn-ghost border border-slate-300 bg-white text-xs py-1.5 px-2.5 font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs justify-center"
-                    >
-                      <BookOpen size={13} className="text-indigo-600 shrink-0" />
-                      <span className="truncate">Textbooks</span>
-                    </Link>
-                    <Link
-                      href={`/questions?className=${encodeURIComponent(selectedClass.name)}`}
-                      className="btn btn-ghost border border-slate-300 bg-white text-xs py-1.5 px-2.5 font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs justify-center"
-                    >
-                      <HelpCircle size={13} className="text-indigo-600 shrink-0" />
-                      <span className="truncate">Question Bank</span>
-                    </Link>
-                    <Link
-                      href={`/blueprints?className=${encodeURIComponent(selectedClass.name)}`}
-                      className="btn btn-ghost border border-slate-300 bg-white text-xs py-1.5 px-2.5 font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs justify-center"
-                    >
-                      <Ruler size={13} className="text-indigo-600 shrink-0" />
-                      <span className="truncate">Blueprints</span>
-                    </Link>
-                    <Link
-                      href={`/papers?className=${encodeURIComponent(selectedClass.name)}`}
-                      className="btn btn-primary text-xs py-1.5 px-2.5 font-semibold shadow-2xs justify-center"
-                    >
-                      <FileText size={13} className="shrink-0" />
-                      <span className="truncate">Draft Paper</span>
-                    </Link>
-                  </div>
-                </div>
+                )}
               </section>
             </main>
           )}
