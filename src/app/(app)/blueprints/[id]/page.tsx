@@ -1,8 +1,9 @@
 "use client";
 
-import { ArrowDown, ArrowUp, FileText, Plus, Sparkles, Trash2, Upload } from "lucide-react";
+import { ArrowDown, ArrowUp, BookOpen, FileText, Plus, Sparkles, Trash2, Upload } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import { ErrorBanner, Field, useConfirm, useToast } from "@/components/ui";
 import { BlueprintImportModal } from "@/components/BlueprintImportModal";
 import { useAcademicSession } from "@/lib/academicSession";
@@ -17,8 +18,8 @@ import {
   type SectionGroup,
 } from "@/lib/blueprint";
 import { api } from "@/lib/client";
-import { DEFAULT_SCHOOL_NAME, EXAM_TYPES, EXAM_TYPE_LABEL, QUESTION_TYPES, QUESTION_TYPE_LABEL } from "@/lib/constants";
-import type { Blueprint, Book, PaperData } from "@/lib/types";
+import { DEFAULT_SCHOOL_NAME, EXAM_TYPES, EXAM_TYPE_LABEL, QUESTION_TYPES, QUESTION_TYPE_LABEL, sortClassNames } from "@/lib/constants";
+import type { AcademicClassDto, Blueprint, Book, PaperData } from "@/lib/types";
 
 let qtSeq = 0;
 const newQuestionType = (over: Partial<QuestionTypeItem> = {}): QuestionTypeItem => ({
@@ -50,6 +51,7 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
   const { currentSession, availableSessions } = useAcademicSession();
 
   const [books, setBooks] = useState<Book[]>([]);
+  const [classes, setClasses] = useState<AcademicClassDto[]>([]);
   const [name, setName] = useState("");
   const [academicSession, setAcademicSession] = useState(currentSession);
   const [bookId, setBookId] = useState("");
@@ -76,11 +78,13 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
   useEffect(() => {
     (async () => {
       try {
-        const [bs, source] = await Promise.all([
+        const [bs, clsList, source] = await Promise.all([
           api<Book[]>("/api/books"),
+          api<AcademicClassDto[]>(`/api/classes?session=${encodeURIComponent(currentSession)}`).catch(() => []),
           id !== "new" ? api<Blueprint>(`/api/blueprints/${id}`) : from ? api<Blueprint>(`/api/blueprints/${from}`) : Promise.resolve(null),
         ]);
         setBooks(bs);
+        setClasses(clsList);
         if (source) {
           setName(id === "new" ? `${source.name} (copy)` : source.name);
           setBookId(source.bookId);
@@ -109,8 +113,8 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
                 b.className.trim().toLowerCase() === urlClassName.trim().toLowerCase() &&
                 b.subject.trim().toLowerCase() === urlSubject.trim().toLowerCase()
             )) ||
-            (urlClassName && bs.find((b) => b.className.trim().toLowerCase() === urlClassName.trim().toLowerCase())) ||
-            bs[0];
+            (urlClassName && !urlSubject && bs.find((b) => b.className.trim().toLowerCase() === urlClassName.trim().toLowerCase())) ||
+            (!urlClassName && !urlSubject ? (bs[0] ?? null) : null);
 
           setBookId(initialBook?.id ?? "");
           if (initialBook) {
@@ -150,6 +154,30 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
   const chapterTotal = chapterQuotas.reduce((s, c) => s + c.marks, 0);
   const problems = validateBlueprint({ sections, chapters: chapterQuotas });
   const feasibilityWarnings = checkBlueprintFeasibility({ sections, chapters: chapterQuotas });
+
+  const availableClasses = useMemo(() => {
+    const classNamesFromClasses = classes.map((c) => c.name);
+    const classNamesFromBooks = books.map((b) => b.className);
+    return sortClassNames(Array.from(new Set([...classNamesFromClasses, ...classNamesFromBooks])));
+  }, [classes, books]);
+
+  const availableSubjects = useMemo(() => {
+    const subjectsFromClasses = classes
+      .filter((c) => !selectedClassFilter || c.name.trim().toLowerCase() === selectedClassFilter.trim().toLowerCase())
+      .flatMap((c) => c.subjects.map((s) => s.name));
+    const subjectsFromBooks = books
+      .filter((b) => !selectedClassFilter || b.className.trim().toLowerCase() === selectedClassFilter.trim().toLowerCase())
+      .map((b) => b.subject);
+    return Array.from(new Set([...subjectsFromClasses, ...subjectsFromBooks])).sort();
+  }, [classes, books, selectedClassFilter]);
+
+  const matchingBooks = useMemo(() => {
+    return books.filter(
+      (b) =>
+        (!selectedClassFilter || b.className.trim().toLowerCase() === selectedClassFilter.trim().toLowerCase()) &&
+        (!selectedSubjectFilter || b.subject.trim().toLowerCase() === selectedSubjectFilter.trim().toLowerCase())
+    );
+  }, [books, selectedClassFilter, selectedSubjectFilter]);
 
   function autoDistributeMarks() {
     if (!book || book.chapters.length === 0 || total === 0) return;
@@ -299,6 +327,11 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
     if (e) e.preventDefault();
     setError(null);
 
+    if (!bookId) {
+      setError(`Please select or add a textbook for ${selectedClassFilter || "this class"} ${selectedSubjectFilter ? `· ${selectedSubjectFilter}` : ""} before saving the blueprint.`);
+      return;
+    }
+
     if (hasPapers && !andBuildPaper) {
       const ok = await confirm({
         title: `Save Blueprint & Sync ${paperCount} Paper(s)?`,
@@ -432,21 +465,22 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
               const cls = e.target.value;
               setSelectedClassFilter(cls);
               setSelectedSubjectFilter("");
-              const firstMatch = books.find((b) => !cls || b.className === cls);
+              const firstMatch = books.find((b) => !cls || b.className.trim().toLowerCase() === cls.trim().toLowerCase());
               if (firstMatch) {
                 setBookId(firstMatch.id);
+                setMarks({});
+              } else {
+                setBookId("");
                 setMarks({});
               }
             }}
           >
             <option value="">All Classes</option>
-            {Array.from(new Set(books.map((b) => b.className)))
-              .sort()
-              .map((cls) => (
-                <option key={cls} value={cls}>
-                  {cls}
-                </option>
-              ))}
+            {availableClasses.map((cls) => (
+              <option key={cls} value={cls}>
+                {cls}
+              </option>
+            ))}
           </select>
         </Field>
         <Field label="Subject">
@@ -459,29 +493,24 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
               setSelectedSubjectFilter(sub);
               const firstMatch = books.find(
                 (b) =>
-                  (!selectedClassFilter || b.className === selectedClassFilter) &&
-                  (!sub || b.subject === sub)
+                  (!selectedClassFilter || b.className.trim().toLowerCase() === selectedClassFilter.trim().toLowerCase()) &&
+                  (!sub || b.subject.trim().toLowerCase() === sub.trim().toLowerCase())
               );
               if (firstMatch) {
                 setBookId(firstMatch.id);
+                setMarks({});
+              } else {
+                setBookId("");
                 setMarks({});
               }
             }}
           >
             <option value="">All Subjects</option>
-            {Array.from(
-              new Set(
-                books
-                  .filter((b) => !selectedClassFilter || b.className === selectedClassFilter)
-                  .map((b) => b.subject)
-              )
-            )
-              .sort()
-              .map((sub) => (
-                <option key={sub} value={sub}>
-                  {sub}
-                </option>
-              ))}
+            {availableSubjects.map((sub) => (
+              <option key={sub} value={sub}>
+                {sub}
+              </option>
+            ))}
           </select>
         </Field>
         <Field label="Textbook / Syllabus" helper={hasPapers ? "Book cannot be changed while papers use this blueprint." : undefined}>
@@ -489,7 +518,7 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
             className="input"
             value={bookId}
             required
-            disabled={hasPapers}
+            disabled={hasPapers || matchingBooks.length === 0}
             onChange={(e) => {
               const picked = books.find((b) => b.id === e.target.value);
               setBookId(e.target.value);
@@ -500,19 +529,39 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
               setMarks({});
             }}
           >
-            {books
-              .filter(
-                (b) =>
-                  (!selectedClassFilter || b.className === selectedClassFilter) &&
-                  (!selectedSubjectFilter || b.subject === selectedSubjectFilter)
-              )
-              .map((b) => (
+            {matchingBooks.length === 0 ? (
+              <option value="">No textbooks available for this subject</option>
+            ) : (
+              matchingBooks.map((b) => (
                 <option key={b.id} value={b.id}>
-                  {b.title} ({b.className} · {b.subject})
+                  {b.title} ({b.className} · {b.subject} · {b.chapters.length} ch)
                 </option>
-              ))}
+              ))
+            )}
           </select>
         </Field>
+
+        {selectedClassFilter && selectedSubjectFilter && matchingBooks.length === 0 && (
+          <div className="col-span-full rounded-xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-start gap-2.5">
+              <Sparkles size={18} className="text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-sm">
+                  No textbook found for {selectedClassFilter} · {selectedSubjectFilter}
+                </p>
+                <p className="text-amber-800/90 mt-0.5">
+                  Exam blueprints require a syllabus textbook and chapters to allocate marks and build exam papers.
+                </p>
+              </div>
+            </div>
+            <Link
+              href={`/books?className=${encodeURIComponent(selectedClassFilter)}&subject=${encodeURIComponent(selectedSubjectFilter)}&add=1`}
+              className="btn btn-primary text-xs py-1.5 px-3 shrink-0 self-start sm:self-auto gap-1.5"
+            >
+              <Plus size={14} /> Add Textbook for {selectedSubjectFilter}
+            </Link>
+          </div>
+        )}
 
         <Field label="Blueprint name" className="sm:col-span-2">
           <input className="input" required value={name} placeholder="Class 10 Mathematics – Half Yearly" onChange={(e) => setName(e.target.value)} />

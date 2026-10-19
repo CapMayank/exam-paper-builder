@@ -439,21 +439,37 @@ export default function BlueprintsPage() {
       ) : displayedBlueprints.length === 0 ? (
         <EmptyState
           icon={Ruler}
-          title="No matching blueprints"
-          description={`No blueprints match your current filter settings. Try clearing your filters.`}
+          title={
+            classFilter !== "ALL" || subjectFilter !== "ALL"
+              ? `No blueprints for ${classFilter !== "ALL" ? classFilter : ""} ${subjectFilter !== "ALL" ? `· ${subjectFilter}` : ""}`
+              : "No matching blueprints"
+          }
+          description={
+            classFilter !== "ALL" || subjectFilter !== "ALL"
+              ? `Create an exam blueprint for ${subjectFilter !== "ALL" ? subjectFilter : classFilter} to define question formats, marks, and chapter quotas.`
+              : "No blueprints match your current filter settings. Try clearing your filters."
+          }
           action={
-            <button
-              type="button"
-              className="btn btn-ghost border border-slate-200"
-              onClick={() => {
-                setClassFilter("ALL");
-                setSubjectFilter("ALL");
-                setExamTypeFilter("ALL");
-                setSearchQuery("");
-              }}
-            >
-              Reset Filters
-            </button>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <Link
+                href={`/blueprints/new${classFilter !== "ALL" ? `?className=${encodeURIComponent(classFilter)}` : ""}${subjectFilter !== "ALL" ? `${classFilter !== "ALL" ? "&" : "?"}subject=${encodeURIComponent(subjectFilter)}` : ""}`}
+                className="btn btn-primary"
+              >
+                <Plus size={16} /> Create Blueprint {subjectFilter !== "ALL" ? `for ${subjectFilter}` : ""}
+              </Link>
+              <button
+                type="button"
+                className="btn btn-ghost border border-slate-200"
+                onClick={() => {
+                  setClassFilter("ALL");
+                  setSubjectFilter("ALL");
+                  setExamTypeFilter("ALL");
+                  setSearchQuery("");
+                }}
+              >
+                Reset Filters
+              </button>
+            </div>
           }
         />
       ) : (

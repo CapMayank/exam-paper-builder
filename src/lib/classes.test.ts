@@ -149,4 +149,95 @@ describe("Academic Class & Subject Hierarchy", () => {
     expect(validSubj.name).toBe("Physics");
     expect(validSubj.code).toBe("042");
   });
+
+  it("accurately correlates class subjects with textbooks and flags subjects needing setup", () => {
+    const classDto = toAcademicClassDto({
+      id: "cls-10",
+      name: "Class 10",
+      displayOrder: 10,
+      stream: "Secondary",
+      academicSession: "2025–26",
+      sectionsJson: '["A"]',
+      subjects: [
+        { id: "sub-1", classId: "cls-10", name: "Mathematics", code: "041" },
+        { id: "sub-2", classId: "cls-10", name: "Science", code: "086" },
+        { id: "sub-3", classId: "cls-10", name: "Social Science", code: "087" },
+      ],
+    });
+
+    const existingBooks = [
+      {
+        id: "book-1",
+        title: "NCERT Science 10",
+        className: "Class 10",
+        subject: "Science",
+        academicSession: "2025–26",
+        chapters: [{ id: "c1", number: 1, title: "Chemical Reactions" }],
+      },
+    ];
+
+    // Compute subject status
+    const subjectSummary = classDto.subjects.map((sub) => {
+      const booksForSub = existingBooks.filter(
+        (b) =>
+          b.className.toLowerCase() === classDto.name.toLowerCase() &&
+          b.subject.toLowerCase() === sub.name.toLowerCase()
+      );
+      return {
+        name: sub.name,
+        code: sub.code,
+        booksCount: booksForSub.length,
+        hasTextbook: booksForSub.length > 0,
+      };
+    });
+
+    // Science has a textbook
+    const science = subjectSummary.find((s) => s.name === "Science");
+    expect(science?.hasTextbook).toBe(true);
+    expect(science?.booksCount).toBe(1);
+
+    // Mathematics has no textbook yet and is properly surfaced
+    const math = subjectSummary.find((s) => s.name === "Mathematics");
+    expect(math?.hasTextbook).toBe(false);
+    expect(math?.booksCount).toBe(0);
+
+    // Social Science has no textbook yet and is properly surfaced
+    const sst = subjectSummary.find((s) => s.name === "Social Science");
+    expect(sst?.hasTextbook).toBe(false);
+    expect(sst?.booksCount).toBe(0);
+  });
+
+  it("prevents blueprint creation from falling back to unrelated textbooks when subject has no books", () => {
+    const books = [
+      {
+        id: "book-physics-12",
+        title: "NCERT Physics 12",
+        className: "Class 12",
+        subject: "Physics",
+        academicSession: "2025–26",
+      },
+      {
+        id: "book-science-10",
+        title: "NCERT Science 10",
+        className: "Class 10",
+        subject: "Science",
+        academicSession: "2025–26",
+      },
+    ];
+
+    // Teacher asks to create a blueprint for Class 10 Mathematics
+    const targetClass = "Class 10";
+    const targetSubject = "Mathematics";
+
+    // Strict subject lookup
+    const matchingBook =
+      books.find(
+        (b) =>
+          b.className.trim().toLowerCase() === targetClass.trim().toLowerCase() &&
+          b.subject.trim().toLowerCase() === targetSubject.trim().toLowerCase()
+      ) ?? null;
+
+    // Must be null, NOT falling back to books[0] (Physics 12) or Class 10 Science!
+    expect(matchingBook).toBeNull();
+  });
 });

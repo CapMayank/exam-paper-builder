@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Calendar, GraduationCap, Layers, Library, Pencil, Plus, RotateCcw, Sparkles, Trash2 } from "lucide-react";
+import { BookOpen, Calendar, GraduationCap, HelpCircle, Layers, Library, Pencil, Plus, RotateCcw, Ruler, Sparkles, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EmptyState, ErrorBanner, Field, ListSkeleton, Modal, PageHeader, Spinner, useConfirm, useToast } from "@/components/ui";
@@ -33,6 +33,7 @@ export default function BooksPage() {
   const [classes, setClasses] = useState<AcademicClassDto[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedSubjectKey, setSelectedSubjectKey] = useState<string | null>(null);
   const [sessionFilter, setSessionFilter] = useState<string>(currentSession);
   const [classFilter, setClassFilter] = useState<string>("ALL");
   const [subjectFilter, setSubjectFilter] = useState<string>("ALL");
@@ -60,10 +61,23 @@ export default function BooksPage() {
     const cls = sp.get("className");
     const sub = sp.get("subject");
     const bId = sp.get("bookId");
+    const autoAdd = sp.get("add") === "1" || sp.get("add") === "true";
     if (cls) setClassFilter(cls);
-    if (sub) setSubjectFilter(sub);
+    if (sub) {
+      setSubjectFilter(sub);
+      setSelectedSubjectKey(sub);
+    }
     if (bId) setSelectedId(bId);
-  }, []);
+    if (autoAdd && (cls || sub)) {
+      setBookForm({
+        ...emptyBook,
+        className: cls || "",
+        subject: sub || "",
+        academicSession: normalizeSession(currentSession),
+      });
+      setBookDialog({ editingId: null });
+    }
+  }, [currentSession]);
 
   const load = useCallback(
     () =>
@@ -130,7 +144,129 @@ export default function BooksPage() {
     });
   }, [sessionBooks, classFilter, subjectFilter]);
 
-  const selected = displayedBooks.find((b) => b.id === selectedId) ?? displayedBooks[0] ?? null;
+  interface SubjectBookGroup {
+    subjectName: string;
+    subjectCode?: string;
+    className: string;
+    books: Book[];
+  }
+
+  const subjectDirectory = useMemo(() => {
+    if (classFilter !== "ALL") {
+      const clsObj = classes.find(
+        (c) =>
+          (sessionFilter === "ALL" || normalizeSession(c.academicSession) === sessionFilter) &&
+          c.name.trim().toLowerCase() === classFilter.trim().toLowerCase()
+      );
+      const map = new Map<string, SubjectBookGroup>();
+
+      // 1. Add all enrolled subjects for this class
+      if (clsObj) {
+        for (const sub of clsObj.subjects) {
+          map.set(sub.name.trim().toLowerCase(), {
+            subjectName: sub.name,
+            subjectCode: sub.code,
+            className: clsObj.name,
+            books: [],
+          });
+        }
+      }
+
+      // 2. Add books for this class
+      for (const b of sessionBooks) {
+        if (b.className.trim().toLowerCase() !== classFilter.trim().toLowerCase()) continue;
+        const key = b.subject.trim().toLowerCase();
+        let existing = map.get(key);
+        if (!existing) {
+          const matchedEntry = Array.from(map.values()).find((item) =>
+            subjectMatchesFilter(b.subject, item.subjectName)
+          );
+          if (matchedEntry) {
+            existing = matchedEntry;
+          } else {
+            existing = {
+              subjectName: b.subject,
+              className: b.className,
+              books: [],
+            };
+            map.set(key, existing);
+          }
+        }
+        if (!existing.books.some((eb) => eb.id === b.id)) {
+          existing.books.push(b);
+        }
+      }
+
+      let items = Array.from(map.values());
+      if (subjectFilter !== "ALL") {
+        items = items.filter((item) => subjectMatchesFilter(item.subjectName, subjectFilter));
+      }
+      return items;
+    }
+
+    // If classFilter === "ALL":
+    const map = new Map<string, SubjectBookGroup>();
+
+    if (subjectFilter !== "ALL") {
+      for (const cls of classes) {
+        if (sessionFilter !== "ALL" && normalizeSession(cls.academicSession) !== sessionFilter) continue;
+        const matchingSub = cls.subjects.find((s) => subjectMatchesFilter(s.name, subjectFilter));
+        if (matchingSub) {
+          const key = `${cls.name}__${matchingSub.name}`.toLowerCase();
+          map.set(key, {
+            subjectName: matchingSub.name,
+            subjectCode: matchingSub.code,
+            className: cls.name,
+            books: [],
+          });
+        }
+      }
+    }
+
+    for (const b of sessionBooks) {
+      if (subjectFilter !== "ALL" && !subjectMatchesFilter(b.subject, subjectFilter)) continue;
+      const key = `${b.className}__${b.subject}`.toLowerCase();
+      let existing = map.get(key);
+      if (!existing) {
+        existing = {
+          subjectName: b.subject,
+          className: b.className,
+          books: [],
+        };
+        map.set(key, existing);
+      }
+      if (!existing.books.some((eb) => eb.id === b.id)) {
+        existing.books.push(b);
+      }
+    }
+
+    return Array.from(map.values());
+  }, [classes, sessionBooks, sessionFilter, classFilter, subjectFilter]);
+
+  const selected = useMemo(() => {
+    if (selectedId) {
+      const match = sessionBooks.find((b) => b.id === selectedId);
+      if (match) return match;
+    }
+    return displayedBooks[0] ?? null;
+  }, [selectedId, sessionBooks, displayedBooks]);
+
+  const activeEmptySubject = useMemo(() => {
+    if (selected) return null;
+    if (selectedSubjectKey) {
+      const match = subjectDirectory.find(
+        (g) => g.subjectName.trim().toLowerCase() === selectedSubjectKey.trim().toLowerCase()
+      );
+      if (match) return match;
+    }
+    if (subjectFilter !== "ALL") {
+      const match = subjectDirectory.find((g) => subjectMatchesFilter(g.subjectName, subjectFilter));
+      if (match) return match;
+    }
+    const firstEmpty = subjectDirectory.find((g) => g.books.length === 0);
+    return firstEmpty ?? null;
+  }, [selected, selectedSubjectKey, subjectFilter, subjectDirectory]);
+
   const nextChapterNumber = selected ? Math.max(0, ...selected.chapters.map((c) => c.number)) + 1 : 1;
 
   async function run(fn: () => Promise<unknown>, success?: string) {
@@ -149,15 +285,15 @@ export default function BooksPage() {
     }
   }
 
-  function openBookDialog(b?: Book) {
+  function openBookDialog(b?: Book, overrideClass?: string, overrideSubject?: string) {
     setError(null);
     setBookForm(
       b
         ? { title: b.title, subject: b.subject, className: b.className, academicSession: b.academicSession || currentSession }
         : {
             ...emptyBook,
-            className: classFilter !== "ALL" ? classFilter : availableClasses[0] || "",
-            subject: subjectFilter !== "ALL" ? subjectFilter : "",
+            className: overrideClass || (classFilter !== "ALL" ? classFilter : availableClasses[0] || ""),
+            subject: overrideSubject || (subjectFilter !== "ALL" ? subjectFilter : ""),
             academicSession: sessionFilter !== "ALL" ? sessionFilter : currentSession,
           },
     );
@@ -337,7 +473,7 @@ export default function BooksPage() {
 
       {!loaded ? (
         <ListSkeleton rows={3} />
-      ) : books.length === 0 ? (
+      ) : books.length === 0 && classes.length === 0 ? (
         <EmptyState
           icon={Library}
           title="No textbooks yet"
@@ -361,25 +497,6 @@ export default function BooksPage() {
             </div>
           }
         />
-      ) : displayedBooks.length === 0 ? (
-        <EmptyState
-          icon={Library}
-          title={`No textbooks in session ${sessionFilter}`}
-          description="Switch sessions or rollover textbooks from a previous session to start setting blueprints and papers."
-          action={
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => {
-                setImportTargetBook(null);
-                setImportInitialTab("rollover");
-                setImportOpen(true);
-              }}
-            >
-              <RotateCcw size={16} /> Rollover into {sessionFilter === "ALL" ? currentSession : sessionFilter}
-            </button>
-          }
-        />
       ) : (
         <>
           {/* Mobile Tab Switcher (< lg screens) */}
@@ -391,17 +508,17 @@ export default function BooksPage() {
                 mobileTab === "directory" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              <BookOpen size={14} /> Textbooks ({displayedBooks.length})
+              <BookOpen size={14} /> Subjects &amp; Books ({subjectDirectory.length})
             </button>
             <button
               type="button"
               onClick={() => setMobileTab("details")}
-              disabled={!selected}
+              disabled={!selected && !activeEmptySubject}
               className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
                 mobileTab === "details" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              <Layers size={14} /> {selected ? selected.title : "Textbook Details"}
+              <Layers size={14} /> {selected ? selected.title : activeEmptySubject ? activeEmptySubject.subjectName : "Subject Details"}
             </button>
           </div>
 
@@ -412,74 +529,173 @@ export default function BooksPage() {
               }`}
             >
               <div className="p-3 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between gap-2 shrink-0">
-                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                  <BookOpen size={14} className="text-indigo-600" /> Textbooks ({displayedBooks.length})
-                </span>
+                <div className="min-w-0">
+                  <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5 truncate">
+                    <BookOpen size={14} className="text-indigo-600 shrink-0" />
+                    {classFilter !== "ALL" ? `${classFilter} Subjects` : "Textbooks Directory"}
+                  </span>
+                  <span className="text-[11px] text-slate-500 font-normal">
+                    {classFilter !== "ALL"
+                      ? `${subjectDirectory.length} subject${subjectDirectory.length === 1 ? "" : "s"} · ${displayedBooks.length} book${displayedBooks.length === 1 ? "" : "s"}`
+                      : `${displayedBooks.length} book${displayedBooks.length === 1 ? "" : "s"} across ${availableClasses.length} classes`}
+                  </span>
+                </div>
                 <button
                   type="button"
-                  className="btn btn-primary text-[11px] py-1 px-2.5 gap-1"
+                  className="btn btn-primary text-[11px] py-1 px-2.5 gap-1 shrink-0"
                   onClick={() => openBookDialog()}
                 >
                   <Plus size={13} /> Add
                 </button>
               </div>
-              <ul className="overflow-y-auto overscroll-contain flex-1 p-2 space-y-1.5 focus:outline-none" aria-label="Textbooks">
-                {displayedBooks.map((b) => {
-                  const active = b.id === selectedId;
-                  return (
-                    <li key={b.id}>
-                      <div
-                        className={`group relative rounded-xl border p-3 transition ${
-                          active ? "border-indigo-500/80 ring-1 ring-indigo-500/20 bg-indigo-50/90 text-indigo-950 shadow-2xs" : "border-slate-200 hover:border-slate-300 bg-white"
-                        }`}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedId(b.id);
-                            setMobileTab("details");
-                            if (typeof window !== "undefined") {
-                              const el = document.getElementById("book-details-section");
-                              if (el && (el.getBoundingClientRect().top < 20 || window.innerWidth < 1024)) {
-                                el.scrollIntoView({ behavior: "smooth", block: "start" });
-                              }
-                            }
-                          }}
-                          aria-pressed={active}
-                          className="block w-full rounded-lg text-left after:absolute after:inset-0 after:rounded-xl"
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="block font-semibold text-sm text-slate-900 truncate">{b.title}</span>
-                            <span className="inline-flex shrink-0 items-center rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 ring-1 ring-inset ring-indigo-700/10 whitespace-nowrap">
-                              {b.academicSession || "2025–26"}
-                            </span>
-                          </div>
-                          <span className="mt-0.5 block text-xs text-slate-600">
-                            {b.className} · {b.subject}
+
+              <div className="overflow-y-auto overscroll-contain flex-1 p-2 space-y-3 focus:outline-none" aria-label="Textbooks and Subjects">
+                {subjectDirectory.length === 0 ? (
+                  <div className="p-4 text-center text-xs text-slate-500">
+                    No subjects or textbooks match this filter.
+                  </div>
+                ) : (
+                  subjectDirectory.map((group) => {
+                    const hasBooks = group.books.length > 0;
+                    const isSubjectActive = !selected && activeEmptySubject?.subjectName.toLowerCase() === group.subjectName.toLowerCase();
+
+                    return (
+                      <div key={`${group.className}_${group.subjectName}`} className="space-y-1.5">
+                        {/* Subject Header */}
+                        <div className="flex items-center justify-between px-1.5 pt-1 text-[11px] font-semibold text-slate-700">
+                          <span className="flex items-center gap-1.5 truncate">
+                            <span className="font-bold text-slate-900">{group.subjectName}</span>
+                            {group.subjectCode && (
+                              <span className="font-mono text-[10px] text-slate-500 bg-slate-100 px-1 py-0.2 rounded">
+                                {group.subjectCode}
+                              </span>
+                            )}
+                            {classFilter === "ALL" && (
+                              <span className="text-[10px] text-slate-500">
+                                ({group.className})
+                              </span>
+                            )}
                           </span>
-                          <span className="mt-1.5 block text-[11px] text-slate-500">
-                            {plural(b.chapters.length, "chapter")} · {plural(b._count.questions, "question")}
+                          <span className="text-[10px] text-slate-400 font-normal shrink-0">
+                            {hasBooks ? plural(group.books.length, "book") : "No books"}
                           </span>
-                        </button>
-                        <div className="absolute right-2 top-2 z-10 flex gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity bg-white/95 rounded-lg p-0.5 shadow-2xs border border-slate-200/60">
-                          <button type="button" className="btn btn-ghost btn-icon btn-xs p-1" title="Edit textbook" aria-label={`Edit ${b.title}`} onClick={() => openBookDialog(b)}>
-                            <Pencil size={12} />
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-icon btn-xs p-1 hover:bg-red-50 hover:text-red-700"
-                            title="Delete textbook"
-                            aria-label={`Delete ${b.title}`}
-                            onClick={() => removeBook(b)}
-                          >
-                            <Trash2 size={12} />
-                          </button>
                         </div>
+
+                        {/* List of textbooks or Empty State Card */}
+                        {hasBooks ? (
+                          <div className="space-y-1">
+                            {group.books.map((b) => {
+                              const active = b.id === selected?.id;
+                              return (
+                                <div
+                                  key={b.id}
+                                  className={`group relative rounded-xl border p-2.5 transition ${
+                                    active
+                                      ? "border-indigo-500/80 ring-1 ring-indigo-500/20 bg-indigo-50/90 text-indigo-950 shadow-2xs"
+                                      : "border-slate-200 hover:border-slate-300 bg-white"
+                                  }`}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedId(b.id);
+                                      setSelectedSubjectKey(null);
+                                      setMobileTab("details");
+                                      if (typeof window !== "undefined") {
+                                        const el = document.getElementById("book-details-section");
+                                        if (el && (el.getBoundingClientRect().top < 20 || window.innerWidth < 1024)) {
+                                          el.scrollIntoView({ behavior: "smooth", block: "start" });
+                                        }
+                                      }
+                                    }}
+                                    aria-pressed={active}
+                                    className="block w-full rounded-lg text-left after:absolute after:inset-0 after:rounded-xl"
+                                  >
+                                    <div className="flex items-center justify-between gap-1.5">
+                                      <span className="block font-semibold text-xs text-slate-900 truncate">
+                                        {b.title}
+                                      </span>
+                                      <span className="inline-flex shrink-0 items-center rounded-md bg-indigo-50 px-1.5 py-0.2 text-[10px] font-medium text-indigo-700 ring-1 ring-inset ring-indigo-700/10 whitespace-nowrap">
+                                        {b.academicSession || "2025–26"}
+                                      </span>
+                                    </div>
+                                    <span className="mt-1 block text-[11px] text-slate-500">
+                                      {plural(b.chapters.length, "chapter")} · {plural(b._count.questions, "question")}
+                                    </span>
+                                  </button>
+                                  <div className="absolute right-2 top-2 z-10 flex gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity bg-white/95 rounded-lg p-0.5 shadow-2xs border border-slate-200/60">
+                                    <button
+                                      type="button"
+                                      className="btn btn-ghost btn-icon btn-xs p-1"
+                                      title="Edit textbook"
+                                      aria-label={`Edit ${b.title}`}
+                                      onClick={() => openBookDialog(b)}
+                                    >
+                                      <Pencil size={11} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn btn-ghost btn-icon btn-xs p-1 hover:bg-red-50 hover:text-red-700"
+                                      title="Delete textbook"
+                                      aria-label={`Delete ${b.title}`}
+                                      onClick={() => removeBook(b)}
+                                    >
+                                      <Trash2 size={11} />
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div
+                            className={`rounded-xl border border-dashed p-2.5 transition ${
+                              isSubjectActive
+                                ? "border-amber-400 bg-amber-50 ring-1 ring-amber-400/30"
+                                : "border-slate-200 bg-slate-50/50 hover:border-slate-300"
+                            }`}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedId(null);
+                                setSelectedSubjectKey(group.subjectName);
+                                setMobileTab("details");
+                              }}
+                              className="w-full text-left"
+                            >
+                              <p className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
+                                <span className="h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0" />
+                                No textbook added yet
+                              </p>
+                            </button>
+                            <div className="mt-2 flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => openBookDialog(undefined, group.className, group.subjectName)}
+                                className="btn btn-primary text-[10px] py-0.5 px-2 gap-1"
+                              >
+                                <Plus size={11} /> Add Book
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setImportTargetBook(null);
+                                  setImportInitialTab("preset");
+                                  setImportOpen(true);
+                                }}
+                                className="btn btn-ghost border border-slate-200 bg-white text-[10px] py-0.5 px-2 text-slate-700 hover:bg-slate-50"
+                              >
+                                <Sparkles size={11} className="text-indigo-600" /> Import
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </li>
-                  );
-                })}
-              </ul>
+                    );
+                  })
+                )}
+              </div>
             </div>
 
             <section
@@ -494,11 +710,11 @@ export default function BooksPage() {
                   onClick={() => setMobileTab("directory")}
                   className="btn btn-ghost border border-slate-200 text-xs py-1.5 px-3 inline-flex items-center gap-1.5 font-semibold text-slate-800"
                 >
-                  ← Back to Textbooks
+                  ← Back to Subjects &amp; Textbooks
                 </button>
-                {selected && (
+                {(selected || activeEmptySubject) && (
                   <span className="text-xs text-slate-500 font-medium truncate">
-                    {selected.title}
+                    {selected ? selected.title : activeEmptySubject?.subjectName}
                   </span>
                 )}
               </div>
@@ -512,116 +728,195 @@ export default function BooksPage() {
                         <span className="text-sm text-slate-600">
                           {selected.className} · {selected.subject} · {plural(selected.chapters.length, "chapter")}
                         </span>
-                      <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700 ring-1 ring-inset ring-indigo-700/10 whitespace-nowrap">
-                        <Calendar size={12} /> Session {selected.academicSession || "2025–26"}
-                      </span>
+                        <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700 ring-1 ring-inset ring-indigo-700/10 whitespace-nowrap">
+                          <Calendar size={12} /> Session {selected.academicSession || "2025–26"}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-ghost border border-slate-200 hover:border-slate-300 text-indigo-700"
-                    onClick={() => {
-                      setImportTargetBook({
-                        id: selected.id,
-                        title: selected.title,
-                        className: selected.className,
-                        subject: selected.subject,
-                      });
-                      setImportOpen(true);
-                    }}
-                  >
-                    <Sparkles size={14} className="text-indigo-600" /> Bulk import chapters
-                  </button>
-                </div>
-
-                <form onSubmit={saveChapter} className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3.5">
-                  <Field label="Number" className="w-24">
-                    <input
-                      type="number"
-                      min={1}
-                      className="input"
-                      required
-                      placeholder={String(nextChapterNumber)}
-                      value={chapterForm.number}
-                      onChange={(e) => setChapterForm({ ...chapterForm, number: e.target.value })}
-                    />
-                  </Field>
-                  <Field label={editingChapterId ? "Edit chapter title" : "New chapter title"} className="min-w-48 flex-1">
-                    <input
-                      ref={chapterTitleRef}
-                      className="input"
-                      required
-                      placeholder="Chemical reactions and equations"
-                      value={chapterForm.title}
-                      onChange={(e) => setChapterForm({ ...chapterForm, title: e.target.value })}
-                    />
-                  </Field>
-                  <div className="flex gap-2">
-                    <button className="btn btn-primary" disabled={busy}>
-                      {editingChapterId ? "Save chapter" : <><Plus size={15} /> Add chapter</>}
-                    </button>
-                    {editingChapterId && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link
+                        href={`/blueprints/new?bookId=${selected.id}&className=${encodeURIComponent(selected.className)}&subject=${encodeURIComponent(selected.subject)}`}
+                        className="btn btn-sm btn-ghost border border-indigo-200 bg-indigo-50/70 text-indigo-900 hover:bg-indigo-100 flex items-center gap-1.5 font-semibold shadow-2xs"
+                        title="Create an exam blueprint for this textbook"
+                      >
+                        <Ruler size={14} className="text-indigo-600" /> Create Blueprint
+                      </Link>
+                      <Link
+                        href={`/questions?className=${encodeURIComponent(selected.className)}&subject=${encodeURIComponent(selected.subject)}`}
+                        className="btn btn-sm btn-ghost border border-slate-200 hover:border-slate-300 text-slate-700 flex items-center gap-1.5 text-xs"
+                        title="View question bank for this subject"
+                      >
+                        <HelpCircle size={14} className="text-slate-500" /> Questions ({selected._count.questions})
+                      </Link>
                       <button
                         type="button"
-                        className="btn"
+                        className="btn btn-sm btn-ghost border border-slate-200 hover:border-slate-300 text-slate-700 flex items-center gap-1.5 text-xs"
                         onClick={() => {
-                          setEditingChapterId(null);
-                          setChapterForm({ number: String(nextChapterNumber), title: "" });
+                          setImportTargetBook({
+                            id: selected.id,
+                            title: selected.title,
+                            className: selected.className,
+                            subject: selected.subject,
+                          });
+                          setImportOpen(true);
                         }}
                       >
-                        Cancel
+                        <Sparkles size={14} className="text-indigo-600" /> Bulk import chapters
                       </button>
-                    )}
+                    </div>
                   </div>
-                </form>
 
-                {selected.chapters.length === 0 ? (
-                  <EmptyState compact icon={BookOpen} title="No chapters yet" description="Add the first chapter above. The number moves on by itself, so you can type titles one after another." />
-                ) : (
-                  <div className="overflow-x-auto rounded-xl border border-slate-200">
-                    <table className="table-clean">
-                      <thead>
-                        <tr>
-                          <th className="w-24">Chapter</th>
-                          <th>Title</th>
-                          <th className="w-28 text-right">
-                            <span className="sr-only">Actions</span>
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {[...selected.chapters]
-                          .sort((a, b) => a.number - b.number)
-                          .map((c) => (
-                            <tr key={c.id} className={editingChapterId === c.id ? "bg-amber-50/70" : ""}>
-                              <td className="font-semibold tabular-nums text-slate-500">{c.number}</td>
-                              <td className="font-medium text-slate-800">{c.title}</td>
-                              <td className="text-right whitespace-nowrap">
-                                <button type="button" className="btn btn-ghost btn-icon btn-sm" title="Edit chapter" aria-label={`Edit chapter ${c.number}`} onClick={() => editChapter(c)}>
-                                  <Pencil size={14} />
-                                </button>
-                                <button
-                                  type="button"
-                                  className="btn btn-ghost btn-icon btn-sm hover:bg-red-50 hover:text-red-700"
-                                  title="Delete chapter"
-                                  aria-label={`Delete chapter ${c.number}`}
-                                  onClick={() => removeChapter(c)}
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                      </tbody>
-                    </table>
+                  <form onSubmit={saveChapter} className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3.5">
+                    <Field label="Number" className="w-24">
+                      <input
+                        type="number"
+                        min={1}
+                        className="input"
+                        required
+                        placeholder={String(nextChapterNumber)}
+                        value={chapterForm.number}
+                        onChange={(e) => setChapterForm({ ...chapterForm, number: e.target.value })}
+                      />
+                    </Field>
+                    <Field label={editingChapterId ? "Edit chapter title" : "New chapter title"} className="min-w-48 flex-1">
+                      <input
+                        ref={chapterTitleRef}
+                        className="input"
+                        required
+                        placeholder="Chemical reactions and equations"
+                        value={chapterForm.title}
+                        onChange={(e) => setChapterForm({ ...chapterForm, title: e.target.value })}
+                      />
+                    </Field>
+                    <div className="flex gap-2">
+                      <button className="btn btn-primary" disabled={busy}>
+                        {editingChapterId ? "Save chapter" : <><Plus size={15} /> Add chapter</>}
+                      </button>
+                      {editingChapterId && (
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={() => {
+                            setEditingChapterId(null);
+                            setChapterForm({ number: String(nextChapterNumber), title: "" });
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      )}
+                    </div>
+                  </form>
+
+                  {selected.chapters.length === 0 ? (
+                    <EmptyState compact icon={BookOpen} title="No chapters yet" description="Add the first chapter above. The number moves on by itself, so you can type titles one after another." />
+                  ) : (
+                    <div className="overflow-x-auto rounded-xl border border-slate-200">
+                      <table className="table-clean">
+                        <thead>
+                          <tr>
+                            <th className="w-24">Chapter</th>
+                            <th>Title</th>
+                            <th className="w-28 text-right">
+                              <span className="sr-only">Actions</span>
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[...selected.chapters]
+                            .sort((a, b) => a.number - b.number)
+                            .map((c) => (
+                              <tr key={c.id} className={editingChapterId === c.id ? "bg-amber-50/70" : ""}>
+                                <td className="font-semibold tabular-nums text-slate-500">{c.number}</td>
+                                <td className="font-medium text-slate-800">{c.title}</td>
+                                <td className="text-right whitespace-nowrap">
+                                  <button type="button" className="btn btn-ghost btn-icon btn-sm" title="Edit chapter" aria-label={`Edit chapter ${c.number}`} onClick={() => editChapter(c)}>
+                                    <Pencil size={14} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-ghost btn-icon btn-sm hover:bg-red-50 hover:text-red-700"
+                                    title="Delete chapter"
+                                    aria-label={`Delete chapter ${c.number}`}
+                                    onClick={() => removeChapter(c)}
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </>
+              ) : activeEmptySubject ? (
+                <div className="space-y-5">
+                  <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-4">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="font-display text-xl font-bold text-slate-900">
+                          {activeEmptySubject.className} · {activeEmptySubject.subjectName}
+                        </h2>
+                        {activeEmptySubject.subjectCode && (
+                          <span className="font-mono text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
+                            Code: {activeEmptySubject.subjectCode}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Configured board curriculum subject for <strong>{activeEmptySubject.className}</strong> in Session {normalizeSession(sessionFilter)}.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link
+                        href="/classes"
+                        className="btn btn-sm btn-ghost border border-slate-200 text-xs text-slate-700"
+                      >
+                        <GraduationCap size={14} /> Classes Studio
+                      </Link>
+                    </div>
                   </div>
-                )}
-              </>
-            ) : (
-              <EmptyState compact icon={BookOpen} title="Select a textbook" description="Pick a book on the left to manage its chapters." />
-            )}
-          </section>
-        </div>
+
+                  <div className="rounded-2xl border border-dashed border-amber-300 bg-amber-50/50 p-6 sm:p-8 text-center space-y-4">
+                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+                      <BookOpen size={24} />
+                    </div>
+                    <div className="space-y-1">
+                      <h3 className="text-base font-bold text-amber-950">
+                        No textbooks added for {activeEmptySubject.subjectName} yet
+                      </h3>
+                      <p className="text-xs text-amber-900/80 max-w-md mx-auto">
+                        Add a textbook (e.g. NCERT {activeEmptySubject.subjectName}) or import chapters to organize your syllabus, allocate blueprint marks, and start building exam papers.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
+                      <button
+                        type="button"
+                        className="btn btn-primary text-xs py-2 px-3.5 gap-1.5"
+                        onClick={() => openBookDialog(undefined, activeEmptySubject.className, activeEmptySubject.subjectName)}
+                      >
+                        <Plus size={15} /> Add Textbook for {activeEmptySubject.subjectName}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost border border-amber-200 bg-white text-xs py-2 px-3.5 text-amber-900 hover:bg-amber-100 gap-1.5 shadow-2xs"
+                        onClick={() => {
+                          setImportTargetBook(null);
+                          setImportInitialTab("preset");
+                          setImportOpen(true);
+                        }}
+                      >
+                        <Sparkles size={15} className="text-amber-600" /> Import Syllabus (CBSE / NCERT)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <EmptyState compact icon={BookOpen} title="Select a subject or textbook" description="Pick a subject or textbook on the left to manage chapters and syllabus." />
+              )}
+            </section>
+          </div>
         </>
       )}
 

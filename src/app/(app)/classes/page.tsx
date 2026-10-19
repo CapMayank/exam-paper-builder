@@ -1328,7 +1328,7 @@ export default function ClassesHierarchyPage() {
                                   </div>
                                 ) : (
                                   <Link
-                                    href={`/books?className=${encodeURIComponent(selectedClass.name)}&subject=${encodeURIComponent(sub.name)}`}
+                                    href={`/books?className=${encodeURIComponent(selectedClass.name)}&subject=${encodeURIComponent(sub.name)}&add=1`}
                                     className="inline-flex items-center gap-1 text-[11px] text-amber-700 hover:text-amber-900 font-medium"
                                   >
                                     <span>+ Add Textbook</span>
@@ -1363,8 +1363,8 @@ export default function ClassesHierarchyPage() {
                                   </Link>
                                 ) : (
                                   <Link
-                                    href={`/blueprints?className=${encodeURIComponent(selectedClass.name)}&subject=${encodeURIComponent(sub.name)}`}
-                                    className="text-[11px] text-slate-400 hover:text-slate-700"
+                                    href={`/blueprints/new?className=${encodeURIComponent(selectedClass.name)}&subject=${encodeURIComponent(sub.name)}`}
+                                    className="text-[11px] text-indigo-600 hover:text-indigo-800 font-medium"
                                   >
                                     + Create
                                   </Link>
