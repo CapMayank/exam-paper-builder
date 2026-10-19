@@ -1,9 +1,9 @@
 "use client";
 
-import { CheckCircle2, Pencil, Plus, RefreshCw, Sparkles } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Pencil, Plus, RefreshCw, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { QuestionForm } from "@/components/QuestionForm";
-import { QuestionFreshnessAlert, QuestionUsagePills } from "@/components/QuestionUsageHistory";
+import { isExhaustedUsage, QuestionFreshnessAlert, QuestionUsagePills } from "@/components/QuestionUsageHistory";
 import { QuestionView } from "@/components/QuestionView";
 import { ErrorBanner, Modal, Spinner } from "@/components/ui";
 import { whyCannotAdd, type BlueprintDef } from "@/lib/blueprint";
@@ -440,12 +440,18 @@ export function QuestionPicker({
                   {q.usages && q.usages.length > 0 && (
                     <div className="mt-2.5 space-y-1.5 border-t border-slate-100 pt-2">
                       <QuestionFreshnessAlert usages={q.usages} currentPaper={paper} />
-                      <QuestionUsagePills usages={q.usages} currentPaperId={paper.id} />
+                      <QuestionUsagePills usages={q.usages} currentPaperId={paper.id} currentPaper={paper} />
                     </div>
                   )}
 
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2 text-xs text-slate-500">
                     <div className="flex flex-wrap items-center gap-2">
+                      {q.usages?.some((u) => isExhaustedUsage(u, paper)) && (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-950 border border-amber-300 ring-1 ring-amber-400/40">
+                          <AlertTriangle size={12} className="text-amber-700 shrink-0" />
+                          Exhausted in Earlier Exam
+                        </span>
+                      )}
                       <span className="badge font-semibold">{q.difficulty}</span>
                       <span className="badge !bg-slate-100 text-slate-700 font-medium">
                         Ch {q.chapter?.number}. {q.chapter?.title}

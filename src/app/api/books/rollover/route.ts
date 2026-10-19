@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { rolloverBookSchema } from "@/lib/schemas";
 export { rolloverBookSchema };
 
-export const POST = route(async (req, _ctx, user) => {
+export const POST = route(
+  async (req, _ctx, user) => {
   const { sourceBookId, targetAcademicSession, title, chapters, selectedChapterIds, includeQuestions } = await body(
     req,
     rolloverBookSchema,
@@ -100,4 +101,6 @@ export const POST = route(async (req, _ctx, user) => {
   });
 
   return createdBook;
-});
+  },
+  { roles: ["ADMIN"] },
+);

@@ -43,7 +43,6 @@ export const DELETE = route(async (_req, { id }, user) => {
   });
   if (!paper) throw new HttpError(404, "Paper not found");
   assertCanModifyPaper(user, paper);
-  if (paper.status === "FINAL") throw new HttpError(409, "Reopen the finalised paper before deleting it.");
   await prisma.paper.delete({ where: { id } });
 
   await recordAudit(user, "PAPER_UPDATE", "PAPER", id, {

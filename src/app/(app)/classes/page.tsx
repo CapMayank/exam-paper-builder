@@ -18,6 +18,7 @@ import {
   Search,
   Sparkles,
   Trash2,
+  Users,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -50,6 +51,7 @@ import type {
   Book,
   ClassSubjectDto,
   PaperListItem,
+  SectionDetail,
 } from "@/lib/types";
 
 function subjectMatches(bookSubject: string, classSubjectName: string): boolean {
@@ -61,6 +63,83 @@ function subjectMatches(bookSubject: string, classSubjectName: string): boolean 
   return aParts.some((p) => bParts.includes(p));
 }
 
+function SectionRosterItem({
+  sec,
+  isAdmin,
+  disabled,
+  canRemove,
+  onSaveCount,
+  onRemove,
+}: {
+  sec: SectionDetail;
+  isAdmin: boolean;
+  disabled: boolean;
+  canRemove: boolean;
+  onSaveCount: (count: number) => void;
+  onRemove: () => void;
+}) {
+  const [val, setVal] = useState(String(sec.studentCount));
+
+  useEffect(() => {
+    setVal(String(sec.studentCount));
+  }, [sec.studentCount]);
+
+  const commitChange = () => {
+    const parsed = parseInt(val, 10);
+    const valid = Number.isFinite(parsed) ? Math.max(1, Math.min(500, parsed)) : sec.studentCount;
+    if (valid !== sec.studentCount) {
+      onSaveCount(valid);
+    } else {
+      setVal(String(sec.studentCount));
+    }
+  };
+
+  return (
+    <div className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-800 shadow-2xs">
+      <span className="text-slate-700">Section {sec.name}</span>
+      {isAdmin ? (
+        <div className="inline-flex items-center gap-1 pl-1 border-l border-slate-200">
+          <input
+            type="number"
+            min={1}
+            max={500}
+            value={val}
+            disabled={disabled}
+            onChange={(e) => setVal(e.target.value)}
+            onBlur={commitChange}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                (e.target as HTMLInputElement).blur();
+              }
+            }}
+            className="w-14 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-center font-mono font-medium text-slate-800 focus:bg-white focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            title={`Enrollment capacity for Section ${sec.name} (1–500 students)`}
+            aria-label={`Enrollment capacity for Section ${sec.name}`}
+          />
+          <span className="text-[11px] font-normal text-slate-500">students</span>
+        </div>
+      ) : (
+        <span className="text-slate-500 font-normal border-l border-slate-200 pl-1.5">
+          <strong className="font-semibold text-slate-700">{sec.studentCount}</strong> students
+        </span>
+      )}
+      {isAdmin && canRemove && (
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={onRemove}
+          className="text-slate-400 hover:text-red-600 transition ml-1"
+          title={`Remove Section ${sec.name}`}
+          aria-label={`Remove Section ${sec.name}`}
+        >
+          <X size={12} />
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function ClassesHierarchyPage() {
   const toast = useToast();
   const confirm = useConfirm();
@@ -70,6 +149,7 @@ export default function ClassesHierarchyPage() {
   const [books, setBooks] = useState<Book[]>([]);
   const [blueprints, setBlueprints] = useState<Blueprint[]>([]);
   const [papers, setPapers] = useState<PaperListItem[]>([]);
+  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; email: string; role: string } | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -95,16 +175,18 @@ export default function ClassesHierarchyPage() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [cls, bks, bps, pps] = await Promise.all([
+      const [cls, bks, bps, pps, me] = await Promise.all([
         api<AcademicClassDto[]>(`/api/classes?session=${encodeURIComponent(activeSession)}`),
         api<Book[]>("/api/books"),
         api<Blueprint[]>("/api/blueprints"),
         api<PaperListItem[]>("/api/papers"),
+        api<{ id: string; name: string; email: string; role: string }>("/api/me").catch(() => null),
       ]);
       setClasses(cls);
       setBooks(bks);
       setBlueprints(bps);
       setPapers(pps);
+      if (me) setCurrentUser(me);
       setSelectedClassId((prev) => {
         if (prev && cls.some((c) => c.id === prev)) return prev;
         return cls[0]?.id ?? null;
@@ -232,6 +314,18 @@ export default function ClassesHierarchyPage() {
     };
   }, [selectedClass, sessionBooks, sessionBlueprints, sessionPapers, classSubjects]);
 
+  const selectedClassSections = useMemo((): SectionDetail[] => {
+    if (!selectedClass) return [];
+    if (selectedClass.sectionDetails && selectedClass.sectionDetails.length > 0) {
+      return selectedClass.sectionDetails;
+    }
+    return (selectedClass.sections || ["A"]).map((s) => ({ name: s, studentCount: 40 }));
+  }, [selectedClass]);
+
+  const selectedClassTotalEnrollment = useMemo(() => {
+    return selectedClassSections.reduce((sum, s) => sum + s.studentCount, 0);
+  }, [selectedClassSections]);
+
   // Subject matrix metadata mapper
   const subjectMetadata = useMemo(() => {
     if (!selectedClass) return new Map<string, { books: Book[]; blueprints: Blueprint[]; papers: PaperListItem[]; questions: number }>();
@@ -262,18 +356,24 @@ export default function ClassesHierarchyPage() {
     return map;
   }, [selectedClass, classSubjects, sessionBooks, sessionBlueprints, sessionPapers]);
 
+  const isAdmin = currentUser?.role === "ADMIN";
+
   // Direct Section Actions
   async function addSectionToClass(cls: AcademicClassDto) {
-    const existing = cls.sections && cls.sections.length > 0 ? cls.sections : ["A"];
+    if (!isAdmin) return;
+    const existing = cls.sectionDetails && cls.sectionDetails.length > 0
+      ? cls.sectionDetails
+      : (cls.sections || ["A"]).map((s) => ({ name: s, studentCount: 40 }));
+    const existingNames = existing.map((s) => s.name);
     const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     let nextLetter = "A";
     for (let i = 0; i < alphabet.length; i++) {
-      if (!existing.includes(alphabet[i])) {
+      if (!existingNames.includes(alphabet[i])) {
         nextLetter = alphabet[i];
         break;
       }
     }
-    const nextSections = [...existing, nextLetter];
+    const nextSections = [...existing, { name: nextLetter, studentCount: 40 }];
     setBusy(true);
     setError(null);
     try {
@@ -291,7 +391,11 @@ export default function ClassesHierarchyPage() {
   }
 
   async function removeSectionFromClass(cls: AcademicClassDto, secToRemove: string) {
-    if (cls.sections.length <= 1) {
+    if (!isAdmin) return;
+    const current = cls.sectionDetails && cls.sectionDetails.length > 0
+      ? cls.sectionDetails
+      : (cls.sections || ["A"]).map((s) => ({ name: s, studentCount: 40 }));
+    if (current.length <= 1) {
       toast.error("A class must maintain at least one active section.");
       return;
     }
@@ -306,7 +410,7 @@ export default function ClassesHierarchyPage() {
     setBusy(true);
     setError(null);
     try {
-      const nextSections = cls.sections.filter((s) => s !== secToRemove);
+      const nextSections = current.filter((s) => s.name !== secToRemove);
       await api(`/api/classes/${cls.id}`, {
         method: "PATCH",
         json: { sections: nextSections },
@@ -320,8 +424,33 @@ export default function ClassesHierarchyPage() {
     }
   }
 
+  async function updateSectionStudentCount(cls: AcademicClassDto, secName: string, newCount: number) {
+    if (!isAdmin) return;
+    const count = Math.max(1, Math.min(500, Math.floor(newCount) || 40));
+    const current = cls.sectionDetails && cls.sectionDetails.length > 0
+      ? cls.sectionDetails
+      : (cls.sections || ["A"]).map((s) => ({ name: s, studentCount: 40 }));
+    const nextSections = current.map((sec) =>
+      sec.name === secName ? { ...sec, studentCount: count } : sec
+    );
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/api/classes/${cls.id}`, {
+        method: "PATCH",
+        json: { sections: nextSections },
+      });
+      toast.success(`Updated Section ${secName} enrollment (${count} students)`);
+      await load();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function addMissingStandardSubjects() {
-    if (!selectedClass || missingStandardSubjects.length === 0) return;
+    if (!isAdmin || !selectedClass || missingStandardSubjects.length === 0) return;
     setBusy(true);
     setError(null);
     try {
@@ -345,6 +474,7 @@ export default function ClassesHierarchyPage() {
   }
 
   async function seedStandardClasses() {
+    if (!isAdmin) return;
     setBusy(true);
     setError(null);
     try {
@@ -363,13 +493,25 @@ export default function ClassesHierarchyPage() {
 
   async function saveClass(e: React.FormEvent) {
     e.preventDefault();
+    if (!isAdmin) return;
     if (!classForm.name.trim()) return;
     setBusy(true);
     setError(null);
-    const sections = classForm.sectionsText
+    const parsedSections = classForm.sectionsText
       .split(",")
       .map((s) => s.trim())
-      .filter(Boolean);
+      .filter(Boolean)
+      .map((part) => {
+        const match = part.match(/^([A-Za-z0-9_-]+)(?:[:=]\s*(\d+))?$/);
+        if (match) {
+          const name = match[1];
+          const studentCount = match[2] ? parseInt(match[2], 10) : 40;
+          return { name, studentCount: Math.max(1, Math.min(500, studentCount)) };
+        }
+        return { name: part, studentCount: 40 };
+      });
+    const sections =
+      parsedSections.length > 0 ? parsedSections : [{ name: "A", studentCount: 40 }];
     try {
       if (classModal?.editing) {
         await api(`/api/classes/${classModal.editing.id}`, {
@@ -377,7 +519,7 @@ export default function ClassesHierarchyPage() {
           json: {
             name: classForm.name.trim(),
             stream: classForm.stream.trim(),
-            sections: sections.length > 0 ? sections : ["A"],
+            sections,
           },
         });
         toast.success(`Updated ${classForm.name.trim()}`);
@@ -387,7 +529,7 @@ export default function ClassesHierarchyPage() {
           json: {
             name: classForm.name.trim(),
             stream: classForm.stream.trim(),
-            sections: sections.length > 0 ? sections : ["A"],
+            sections,
             academicSession: activeSession,
           },
         });
@@ -404,6 +546,7 @@ export default function ClassesHierarchyPage() {
   }
 
   async function deleteClass(cls: AcademicClassDto) {
+    if (!isAdmin) return;
     const ok = await confirm({
       title: `Delete ${cls.name}?`,
       message:
@@ -429,6 +572,7 @@ export default function ClassesHierarchyPage() {
 
   async function saveSubject(e: React.FormEvent) {
     e.preventDefault();
+    if (!isAdmin) return;
     if (!selectedClass || !subjectForm.name.trim()) return;
     setBusy(true);
     setError(null);
@@ -457,6 +601,7 @@ export default function ClassesHierarchyPage() {
   }
 
   async function deleteSubject(subjectId?: string, subjectName?: string) {
+    if (!isAdmin) return;
     if (!selectedClass) return;
     if (!subjectId) {
       toast.error("This subject was imported from existing textbooks and cannot be deleted here.");
@@ -490,39 +635,41 @@ export default function ClassesHierarchyPage() {
         title="Curriculum & Classes Studio"
         description={`Institutional class grades, section configurations, and board subject rosters for Academic Session ${activeSession}.`}
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              disabled={busy}
-              onClick={seedStandardClasses}
-              className="btn btn-ghost border border-amber-200 bg-amber-50/70 text-amber-900 hover:bg-amber-100 shadow-2xs font-medium text-xs sm:text-sm"
-              title="Initialize standard school classes (Nursery to Class 12) with foundational & CBSE/NCERT subjects"
-            >
-              <Sparkles size={15} className="text-amber-600" />
-              <span>Initialize Nursery–12th</span>
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => setRolloverModalOpen(true)}
-              className="btn btn-ghost border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 shadow-2xs text-xs sm:text-sm"
-              title="Rollover classes, syllabus, and blueprints into a new academic year"
-            >
-              <RotateCcw size={15} />
-              <span>Rollover Session</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setClassForm({ name: "", stream: "", sectionsText: "A" });
-                setClassModal({ editing: null });
-              }}
-              className="btn btn-primary text-xs sm:text-sm"
-            >
-              <Plus size={16} />
-              <span>Add Class</span>
-            </button>
-          </div>
+          isAdmin ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={seedStandardClasses}
+                className="btn btn-ghost border border-amber-200 bg-amber-50/70 text-amber-900 hover:bg-amber-100 shadow-2xs font-medium text-xs sm:text-sm"
+                title="Initialize standard school classes (Nursery to Class 12) with foundational & CBSE/NCERT subjects"
+              >
+                <Sparkles size={15} className="text-amber-600" />
+                <span>Initialize Nursery–12th</span>
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setRolloverModalOpen(true)}
+                className="btn btn-ghost border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 shadow-2xs text-xs sm:text-sm"
+                title="Rollover classes, syllabus, and blueprints into a new academic year"
+              >
+                <RotateCcw size={15} />
+                <span>Rollover Session</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setClassForm({ name: "", stream: "", sectionsText: "A" });
+                  setClassModal({ editing: null });
+                }}
+                className="btn btn-primary text-xs sm:text-sm"
+              >
+                <Plus size={16} />
+                <span>Add Class</span>
+              </button>
+            </div>
+          ) : null
         }
       />
 
@@ -789,7 +936,12 @@ export default function ClassesHierarchyPage() {
                               setClassForm({
                                 name: cls.name,
                                 stream: cls.stream,
-                                sectionsText: cls.sections.join(", "),
+                                sectionsText:
+                                  cls.sectionDetails && cls.sectionDetails.length > 0
+                                    ? cls.sectionDetails
+                                        .map((s) => `${s.name}: ${s.studentCount}`)
+                                        .join(", ")
+                                    : cls.sections.join(", "),
                               });
                               setClassModal({ editing: cls });
                             }}
@@ -864,82 +1016,94 @@ export default function ClassesHierarchyPage() {
                   </div>
 
                   {/* Primary Class Actions */}
-                  <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingSubject(null);
-                        setSubjectForm({ name: "", code: "" });
-                        setSubjectModalOpen(true);
-                      }}
-                      className="btn btn-primary text-xs py-1.5 px-2.5 sm:px-3"
-                    >
-                      <Plus size={14} /> Add Subject
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setClassForm({
-                          name: selectedClass.name,
-                          stream: selectedClass.stream,
-                          sectionsText: selectedClass.sections.join(", "),
-                        });
-                        setClassModal({ editing: selectedClass });
-                      }}
-                      className="btn btn-ghost border border-slate-200 text-xs py-1.5 px-2.5 sm:px-3"
-                      title="Edit class name or stream"
-                    >
-                      <Pencil size={13} /> Edit Class
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => deleteClass(selectedClass)}
-                      className="btn btn-ghost border border-slate-200 text-red-600 hover:bg-red-50 text-xs py-1.5 px-2"
-                      title="Delete class"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
+                  {isAdmin && (
+                    <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingSubject(null);
+                          setSubjectForm({ name: "", code: "" });
+                          setSubjectModalOpen(true);
+                        }}
+                        className="btn btn-primary text-xs py-1.5 px-2.5 sm:px-3"
+                      >
+                        <Plus size={14} /> Add Subject
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setClassForm({
+                            name: selectedClass.name,
+                            stream: selectedClass.stream,
+                            sectionsText:
+                              selectedClass.sectionDetails &&
+                              selectedClass.sectionDetails.length > 0
+                                ? selectedClass.sectionDetails
+                                    .map((s) => `${s.name}: ${s.studentCount}`)
+                                    .join(", ")
+                                : selectedClass.sections.join(", "),
+                          });
+                          setClassModal({ editing: selectedClass });
+                        }}
+                        className="btn btn-ghost border border-slate-200 text-xs py-1.5 px-2.5 sm:px-3"
+                        title="Edit class name or stream"
+                      >
+                        <Pencil size={13} /> Edit Class
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteClass(selectedClass)}
+                        className="btn btn-ghost border border-slate-200 text-red-600 hover:bg-red-50 text-xs py-1.5 px-2"
+                        title="Delete class"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Interactive Sections Roster */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/70 rounded-xl p-3 border border-slate-100 min-w-0 max-w-full">
-                  <div className="flex flex-wrap items-center gap-2 min-w-0">
-                    <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider text-[11px] shrink-0">
-                      Active Sections:
-                    </span>
-                    <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-                      {selectedClass.sections.map((sec) => (
-                        <span
-                          key={sec}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-800 shadow-2xs"
-                        >
-                          <span>Section {sec}</span>
-                          {selectedClass.sections.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => removeSectionFromClass(selectedClass, sec)}
-                              className="text-slate-400 hover:text-red-600 transition"
-                              title={`Remove Section ${sec}`}
-                              aria-label={`Remove Section ${sec}`}
-                            >
-                              <X size={12} />
-                            </button>
-                          )}
+                <div className="flex flex-col gap-3 bg-slate-50/70 rounded-xl p-3 border border-slate-100 min-w-0 max-w-full">
+                  <div className="flex flex-wrap items-center justify-between gap-2.5 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 min-w-0">
+                      <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider text-[11px] shrink-0">
+                        Active Sections:
+                      </span>
+                      {/* Total Enrollment Summary Chip */}
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 border border-indigo-200/80 px-2.5 py-0.5 text-[11px] font-semibold text-indigo-800 shrink-0 shadow-2xs">
+                        <Users size={12} className="text-indigo-600" />
+                        <span>
+                          Total: {selectedClassTotalEnrollment} students across {selectedClassSections.length} section{selectedClassSections.length === 1 ? "" : "s"}
                         </span>
-                      ))}
+                      </span>
                     </div>
+
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => addSectionToClass(selectedClass)}
+                        className="btn btn-ghost border border-slate-200 bg-white text-xs py-1 px-2.5 text-indigo-700 hover:bg-indigo-50 font-semibold shrink-0 self-start sm:self-auto"
+                        title="Add sequential next section (e.g. Section B)"
+                      >
+                        <Plus size={13} /> Add Section
+                      </button>
+                    )}
                   </div>
 
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => addSectionToClass(selectedClass)}
-                    className="btn btn-ghost border border-slate-200 bg-white text-xs py-1 px-2.5 text-indigo-700 hover:bg-indigo-50 font-semibold shrink-0 self-start sm:self-auto"
-                    title="Add sequential next section (e.g. Section B)"
-                  >
-                    <Plus size={13} /> Add Section
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2 min-w-0">
+                    {selectedClassSections.map((sec) => (
+                      <SectionRosterItem
+                        key={sec.name}
+                        sec={sec}
+                        isAdmin={isAdmin}
+                        disabled={busy}
+                        canRemove={selectedClassSections.length > 1}
+                        onSaveCount={(newCount) => updateSectionStudentCount(selectedClass, sec.name, newCount)}
+                        onRemove={() => removeSectionFromClass(selectedClass, sec.name)}
+                      />
+                    ))}
+                  </div>
                 </div>
 
                 {/* Class Health Metrics Bar */}
@@ -1013,7 +1177,7 @@ export default function ClassesHierarchyPage() {
 
                   <div className="flex flex-wrap items-center gap-2 min-w-0">
                     {/* Auto-add missing standard subjects prompt */}
-                    {missingStandardSubjects.length > 0 && (
+                    {isAdmin && missingStandardSubjects.length > 0 && (
                       <button
                         type="button"
                         disabled={busy}
@@ -1064,29 +1228,31 @@ export default function ClassesHierarchyPage() {
                       </p>
                     </div>
 
-                    <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
-                      {missingStandardSubjects.length > 0 && (
+                    {isAdmin && (
+                      <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                        {missingStandardSubjects.length > 0 && (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={addMissingStandardSubjects}
+                            className="btn btn-primary text-xs py-1.5 px-3.5"
+                          >
+                            <Sparkles size={14} /> Add Standard Subjects for {selectedClass.name}
+                          </button>
+                        )}
                         <button
                           type="button"
-                          disabled={busy}
-                          onClick={addMissingStandardSubjects}
-                          className="btn btn-primary text-xs py-1.5 px-3.5"
+                          onClick={() => {
+                            setEditingSubject(null);
+                            setSubjectForm({ name: "", code: "" });
+                            setSubjectModalOpen(true);
+                          }}
+                          className="btn btn-ghost border border-slate-300 bg-white text-xs py-1.5 px-3.5"
                         >
-                          <Sparkles size={14} /> Add Standard Subjects for {selectedClass.name}
+                          <Plus size={14} /> Add Custom Subject
                         </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingSubject(null);
-                          setSubjectForm({ name: "", code: "" });
-                          setSubjectModalOpen(true);
-                        }}
-                        className="btn btn-ghost border border-slate-300 bg-white text-xs py-1.5 px-3.5"
-                      >
-                        <Plus size={14} /> Add Custom Subject
-                      </button>
-                    </div>
+                      </div>
+                    )}
                   </div>
                 ) : filteredClassSubjects.length === 0 ? (
                   <div className="p-6 text-center text-xs text-slate-500">
@@ -1108,7 +1274,7 @@ export default function ClassesHierarchyPage() {
                             <th className="py-2.5 px-2.5 min-w-[6.5rem]">Question Bank</th>
                             <th className="py-2.5 px-2.5 min-w-[6.5rem]">Blueprints</th>
                             <th className="py-2.5 px-2.5 min-w-[5.5rem]">Papers</th>
-                            <th className="py-2.5 px-3 text-right w-16">Actions</th>
+                            {isAdmin && <th className="py-2.5 px-3 text-right w-16">Actions</th>}
                           </tr>
                         </thead>
                       <tbody className="divide-y divide-slate-100 bg-white">
@@ -1221,36 +1387,38 @@ export default function ClassesHierarchyPage() {
                               </td>
 
                               {/* Actions */}
-                              <td className="py-3 px-3 text-right align-middle whitespace-nowrap">
-                                <div className="inline-flex items-center gap-1">
-                                  {sub.id && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setEditingSubject(sub as ClassSubjectDto);
-                                        setSubjectForm({ name: sub.name, code: sub.code });
-                                        setSubjectModalOpen(true);
-                                      }}
-                                      className="btn btn-ghost btn-icon btn-xs p-1 text-slate-500 hover:text-slate-800"
-                                      title="Edit Subject"
-                                      aria-label={`Edit ${sub.name}`}
-                                    >
-                                      <Pencil size={13} />
-                                    </button>
-                                  )}
-                                  {sub.id && (
-                                    <button
-                                      type="button"
-                                      onClick={() => void deleteSubject(sub.id, sub.name)}
-                                      className="btn btn-ghost btn-icon btn-xs p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
-                                      title="Remove Subject"
-                                      aria-label={`Remove ${sub.name}`}
-                                    >
-                                      <Trash2 size={13} />
-                                    </button>
-                                  )}
-                                </div>
-                              </td>
+                              {isAdmin && (
+                                <td className="py-3 px-3 text-right align-middle whitespace-nowrap">
+                                  <div className="inline-flex items-center gap-1">
+                                    {sub.id && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setEditingSubject(sub as ClassSubjectDto);
+                                          setSubjectForm({ name: sub.name, code: sub.code });
+                                          setSubjectModalOpen(true);
+                                        }}
+                                        className="btn btn-ghost btn-icon btn-xs p-1 text-slate-500 hover:text-slate-800"
+                                        title="Edit Subject"
+                                        aria-label={`Edit ${sub.name}`}
+                                      >
+                                        <Pencil size={13} />
+                                      </button>
+                                    )}
+                                    {sub.id && (
+                                      <button
+                                        type="button"
+                                        onClick={() => void deleteSubject(sub.id, sub.name)}
+                                        className="btn btn-ghost btn-icon btn-xs p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
+                                        title="Remove Subject"
+                                        aria-label={`Remove ${sub.name}`}
+                                      >
+                                        <Trash2 size={13} />
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              )}
                             </tr>
                           );
                         })}

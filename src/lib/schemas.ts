@@ -65,12 +65,22 @@ export const userProfileUpdateSchema = z.object({
 });
 
 
+export const sectionDetailSchema = z.object({
+  name: z.string().trim().min(1).max(20),
+  studentCount: z.number().int().min(1).max(500).default(40),
+});
+
+export const sectionItemSchema = z.union([
+  z.string().trim().min(1).max(20),
+  sectionDetailSchema,
+]);
+
 export const academicClassSchema = z.object({
   name: text(40),
   displayOrder: z.number().int().min(-10).max(100).optional(),
   stream: z.string().trim().max(40).optional().default(""),
   academicSession: z.string().trim().max(40).optional().default(DEFAULT_ACADEMIC_SESSION),
-  sections: z.array(z.string().trim().min(1).max(20)).optional().default(["A"]),
+  sections: z.array(sectionItemSchema).optional().default(["A"]),
   subjects: z
     .array(
       z.object({
@@ -84,6 +94,21 @@ export const academicClassSchema = z.object({
 export const classSubjectSchema = z.object({
   name: text(80),
   code: z.string().trim().max(40).optional().default(""),
+});
+
+export const patchClassSchema = z.object({
+  name: z.string().trim().min(1).max(40).optional(),
+  stream: z.string().trim().max(40).optional(),
+  sections: z.array(sectionItemSchema).optional(),
+  addSubject: classSubjectSchema.optional(),
+  updateSubject: z
+    .object({
+      id: z.string().min(1),
+      name: z.string().trim().min(1).max(80),
+      code: z.string().trim().max(40).optional().default(""),
+    })
+    .optional(),
+  removeSubjectId: z.string().min(1).optional(),
 });
 
 export const bookSchema = z.object({

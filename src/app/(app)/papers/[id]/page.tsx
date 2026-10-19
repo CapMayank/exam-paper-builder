@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AlertTriangle,
   ArrowDown,
   ArrowUp,
   CheckCircle2,
@@ -29,7 +30,7 @@ import { AIPaperAuditModal } from "@/components/AIPaperAuditModal";
 import { PaperImportModal } from "@/components/PaperImportModal";
 import { QuestionForm } from "@/components/QuestionForm";
 import { QuestionPicker } from "@/components/QuestionPicker";
-import { QuestionFreshnessAlert, QuestionUsagePills } from "@/components/QuestionUsageHistory";
+import { isExhaustedUsage, QuestionFreshnessAlert, QuestionUsagePills } from "@/components/QuestionUsageHistory";
 import { QuestionView } from "@/components/QuestionView";
 import { ErrorBanner, Field, Modal } from "@/components/ui";
 import { api, imageUrl } from "@/lib/client";
@@ -181,6 +182,12 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
     }
   }
 
+  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; email: string; role: string; department?: string } | null>(null);
+
+  useEffect(() => {
+    api<{ id: string; name: string; email: string; role: string; department?: string }>("/api/me").then(setCurrentUser, () => undefined);
+  }, []);
+
   const reloadPaper = useCallback(() => {
     api<PaperData>(`/api/papers/${id}`).then(adopt, (e) => setError(e.message));
   }, [id, adopt]);
@@ -205,8 +212,17 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
     }
   }
 
-  const patch = (json: Record<string, unknown>) =>
+  const patch = (json: Record<string, unknown>) => {
+    const isFin = paper?.status === "FINAL";
+    const isAdm = currentUser?.role === "ADMIN";
+    const isOwn = Boolean(currentUser?.id && paper?.createdById && currentUser.id === paper.createdById);
+    const canEdit = !isFin && (isAdm || isOwn);
+    if (!canEdit && !(isFin && isAdm && json.status === "DRAFT")) {
+      setError("Forbidden: You do not have permission to modify this paper.");
+      return;
+    }
     call(() => api<PaperData>(`/api/papers/${id}`, { method: "PATCH", json }), adopt);
+  };
 
   if (!paper) {
     return error ? (
@@ -223,6 +239,9 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
 
   const { blueprint, progress } = paper;
   const final = paper.status === "FINAL";
+  const isAdmin = currentUser?.role === "ADMIN";
+  const isOwner = Boolean(currentUser?.id && paper.createdById && currentUser.id === paper.createdById);
+  const canEditPaper = !final && (isAdmin || isOwner);
   const resolvedExamType = resolvePaperExamType(paper);
   const pickerSection = blueprint.sections.find((s) => s.id === pickerSectionId) ?? null;
 
@@ -324,7 +343,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                     </div>
                   </button>
 
-                  {!final && (
+                  {canEditPaper && (
                     <button
                       type="button"
                       onClick={() => {
@@ -452,33 +471,55 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
             {/* 3. Primary Contextual CTA */}
             <div className="border-l border-slate-200 pl-2">
               {final ? (
-                <button
-                  className="btn border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 text-xs shadow-2xs font-semibold flex items-center gap-1.5"
-                  onClick={() => patch({ status: "DRAFT" })}
-                  title="Unlock paper to add, remove, or rearrange questions"
-                >
-                  <Unlock size={14} />
-                  <span>Reopen for editing</span>
-                </button>
+                isAdmin ? (
+                  <button
+                    className="btn border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 text-xs shadow-2xs font-semibold flex items-center gap-1.5"
+                    onClick={() => patch({ status: "DRAFT" })}
+                    title="Unlock paper to add, remove, or rearrange questions"
+                  >
+                    <Unlock size={14} />
+                    <span>Reopen for editing</span>
+                  </button>
+                ) : (
+                  <span
+                    className="badge border border-emerald-300 bg-emerald-50 text-emerald-800 font-semibold text-xs flex items-center gap-1 py-1.5 px-2.5"
+                    title="This exam paper is finalized and locked. Only an Administrator can unlock it."
+                  >
+                    <Lock size={12} className="text-emerald-700" />
+                    <span>Finalized (Locked)</span>
+                  </span>
+                )
               ) : progress.complete ? (
-                <button
-                  className="btn bg-emerald-600 hover:bg-emerald-700 text-white text-xs shadow-xs font-semibold flex items-center gap-1.5"
-                  onClick={() => patch({ status: "FINAL" })}
-                  title="Lock and finalize paper"
-                >
-                  <Lock size={14} />
-                  <span>Finalise Paper</span>
-                </button>
+                canEditPaper ? (
+                  <button
+                    className="btn bg-emerald-600 hover:bg-emerald-700 text-white text-xs shadow-xs font-semibold flex items-center gap-1.5"
+                    onClick={() => patch({ status: "FINAL" })}
+                    title="Lock and finalize paper"
+                  >
+                    <Lock size={14} />
+                    <span>Finalise Paper</span>
+                  </button>
+                ) : (
+                  <span className="badge border border-slate-200 bg-slate-50 text-slate-600 font-medium text-xs py-1.5 px-2.5">
+                    Draft (View Only)
+                  </span>
+                )
               ) : (
-                <button
-                  className="btn bg-indigo-600 hover:bg-indigo-700 text-white text-xs shadow-xs font-semibold flex items-center gap-1.5"
-                  disabled={autofilling}
-                  onClick={handleAutofill}
-                  title="Automatically fill all remaining question slots using blueprint rules"
-                >
-                  <Sparkles size={14} className={autofilling ? "animate-spin" : ""} />
-                  <span>{autofilling ? "Auto-filling…" : "Smart Auto-Fill"}</span>
-                </button>
+                canEditPaper ? (
+                  <button
+                    className="btn bg-indigo-600 hover:bg-indigo-700 text-white text-xs shadow-xs font-semibold flex items-center gap-1.5"
+                    disabled={autofilling}
+                    onClick={handleAutofill}
+                    title="Automatically fill all remaining question slots using blueprint rules"
+                  >
+                    <Sparkles size={14} className={autofilling ? "animate-spin" : ""} />
+                    <span>{autofilling ? "Auto-filling…" : "Smart Auto-Fill"}</span>
+                  </button>
+                ) : (
+                  <span className="badge border border-slate-200 bg-slate-50 text-slate-600 font-medium text-xs py-1.5 px-2.5">
+                    Draft (View Only)
+                  </span>
+                )
               )}
             </div>
           </div>
@@ -654,6 +695,13 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
 
           {/* TAB 2: Paper Header & Print Settings */}
           <div className={`space-y-3.5 ${sidebarTab === "settings" ? "block" : "hidden"}`}>
+            {!canEditPaper && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 font-medium flex items-center gap-2">
+                <Lock size={14} className="shrink-0 text-amber-700" />
+                <span>Read-Only: You can view formatting and details, but only the paper author or an administrator can modify settings.</span>
+              </div>
+            )}
+            <fieldset disabled={!canEditPaper} className="space-y-3.5 border-none p-0 m-0">
             {/* Card 1: Exam & School Identity */}
             <section className="card space-y-3 p-4 shadow-xs">
               <h2 className="text-xs font-bold uppercase tracking-wider text-slate-600">
@@ -953,6 +1001,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                 </div>
               </Field>
             </section>
+            </fieldset>
           </div>
           </div>
         </aside>
@@ -970,7 +1019,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  {!final &&
+                  {canEditPaper &&
                     paper.implications.some(
                       (i) => i.code === "SECTION_UNDERFILLED" || i.code === "CHAPTER_DEFICIT",
                     ) && (
@@ -1118,7 +1167,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                   </div>
 
                   <div className="flex items-center gap-1.5">
-                    {!final && items.length < s.count && (
+                    {canEditPaper && items.length < s.count && (
                       <button
                         className="btn btn-sm btn-primary shadow-2xs"
                         onClick={() => {
@@ -1222,7 +1271,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                 {it.question.usages && it.question.usages.length > 0 && (
                                   <div className="space-y-1">
                                     <QuestionFreshnessAlert usages={it.question.usages} currentPaper={paper} />
-                                    <QuestionUsagePills usages={it.question.usages} currentPaperId={paper.id} />
+                                    <QuestionUsagePills usages={it.question.usages} currentPaperId={paper.id} currentPaper={paper} />
                                   </div>
                                 )}
                                 {it.orQuestion?.usages && it.orQuestion.usages.length > 0 && (
@@ -1231,7 +1280,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                       Alternate (OR) Question Usage:
                                     </div>
                                     <QuestionFreshnessAlert usages={it.orQuestion.usages} currentPaper={paper} />
-                                    <QuestionUsagePills usages={it.orQuestion.usages} currentPaperId={paper.id} />
+                                    <QuestionUsagePills usages={it.orQuestion.usages} currentPaperId={paper.id} currentPaper={paper} />
                                   </div>
                                 )}
                               </div>
@@ -1240,6 +1289,12 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                             {/* Metadata Tagline & Action Toolbar */}
                             <div className="mt-3.5 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2.5 text-xs text-slate-500">
                               <div className="flex flex-wrap items-center gap-1.5">
+                                {it.question.usages?.some((u) => isExhaustedUsage(u, paper)) && (
+                                  <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-950 border border-amber-300 ring-1 ring-amber-400/40">
+                                    <AlertTriangle size={11} className="text-amber-700 shrink-0" />
+                                    Exhausted Question
+                                  </span>
+                                )}
                                 <span className="badge font-semibold !bg-slate-100 !text-slate-700 border border-slate-200">{it.question.difficulty}</span>
                                 <span className="badge !bg-slate-100 text-slate-700 font-medium border border-slate-200">
                                   Ch {it.question.chapter?.number}. {it.question.chapter?.title}
@@ -1251,7 +1306,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                 )}
                               </div>
 
-                              {!final && (
+                              {canEditPaper && (
                                 <div className="flex flex-wrap items-center gap-1.5 ml-auto">
                                   {!it.orQuestion ? (
                                     <button
@@ -1370,7 +1425,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                         const slotNum = items.length + i + 1;
                         return (
                           <li key={`empty-${i}`}>
-                            {!final ? (
+                            {canEditPaper ? (
                               <button
                                 type="button"
                                 onClick={() => setPickerSectionId(s.id)}

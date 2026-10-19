@@ -40,9 +40,13 @@ describe("Milestone 2 Empirical Stress Tests: Route Guardrails & Subparts Logic"
   let qCsAltMismatchMarksCh1Id: string;
 
   beforeAll(async () => {
-    // 1. User
-    const user = await prisma.user.findFirst();
-    if (!user) throw new Error("Database missing user");
+    // 1. User (ADMIN fixture so item mutations test final-paper business logic)
+    let user = await prisma.user.findFirst({ where: { role: "ADMIN", active: true } });
+    if (!user) {
+      user = await prisma.user.create({
+        data: { name: "M2 Admin User", email: `m2_admin_${Date.now()}@school.edu`, passwordHash: "test", role: "ADMIN" },
+      });
+    }
     testUserId = user.id;
     mockSessionUserId = testUserId;
 

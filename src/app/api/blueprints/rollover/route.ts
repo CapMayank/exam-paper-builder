@@ -4,7 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { rolloverBlueprintsSchema } from "@/lib/schemas";
 export { rolloverBlueprintsSchema };
 
-export const POST = route(async (req) => {
+export const POST = route(
+  async (req) => {
   const { sourceBlueprintIds, targetAcademicSession, namePrefix, targetBookIdMap } = await body(
     req,
     rolloverBlueprintsSchema,
@@ -76,4 +77,6 @@ export const POST = route(async (req) => {
     targetAcademicSession: normalizedSession,
     blueprints: createdBlueprints,
   };
-});
+  },
+  { roles: ["ADMIN"] },
+);

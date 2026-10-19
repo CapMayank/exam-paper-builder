@@ -12,6 +12,11 @@ export type ClassSubjectDto = {
   code: string;
 };
 
+export type SectionDetail = {
+  name: string;
+  studentCount: number;
+};
+
 export type AcademicClassDto = {
   id: string;
   name: string;
@@ -19,6 +24,7 @@ export type AcademicClassDto = {
   stream: string;
   academicSession: string;
   sections: string[];
+  sectionDetails: SectionDetail[];
   subjects: ClassSubjectDto[];
 };
 
@@ -75,6 +81,8 @@ export type QuestionUsageTag = {
   examDate: string;
   academicSession: string;
   className: string;
+  subject?: string;
+  status?: string;
   isOrChoice: boolean;
 };
 
@@ -176,6 +184,7 @@ export type PaperData = {
   createdAt?: string;
   updatedAt?: string;
   snapshots?: PaperSnapshot[];
+  createdById?: string;
 };
 
 export type PaperListItem = {
@@ -190,6 +199,7 @@ export type PaperListItem = {
   blueprint: { name: string; examType: string; book: { title: string; subject: string; className: string } };
   filled: number;
   needed: number;
+  createdById?: string;
   academicSession?: string;
   paperSet?: string;
   subjectCode?: string;

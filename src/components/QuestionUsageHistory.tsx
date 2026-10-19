@@ -9,12 +9,60 @@ export type CurrentPaperContext = {
   paperId?: string;
   academicSession?: string;
   className?: string;
+  subject?: string;
   blueprint?: {
     book?: {
       className?: string;
+      subject?: string;
     };
   };
 };
+
+/**
+ * Detects whether a question usage represents an earlier finalized exam
+ * for the same class and subject in the active academic session.
+ */
+export function isExhaustedUsage(
+  usage: QuestionUsageTag,
+  currentPaper?: CurrentPaperContext | null,
+): boolean {
+  if (!usage || !currentPaper) return false;
+
+  const currentPaperId = currentPaper.id || currentPaper.paperId;
+  if (currentPaperId && usage.paperId === currentPaperId) return false;
+
+  const normSession = (s?: string) => s?.replace(/[\u2013\u2014]/g, "-").trim();
+  const currentSession = normSession(currentPaper.academicSession);
+  const usageSession = normSession(usage.academicSession);
+  if (!currentSession || !usageSession || currentSession !== usageSession) {
+    return false;
+  }
+
+  const currentClass = currentPaper.className || currentPaper.blueprint?.book?.className;
+  if (
+    currentClass &&
+    usage.className &&
+    currentClass.trim().toLowerCase() !== usage.className.trim().toLowerCase()
+  ) {
+    return false;
+  }
+
+  const currentSubject = currentPaper.subject || currentPaper.blueprint?.book?.subject;
+  if (
+    currentSubject &&
+    usage.subject &&
+    currentSubject.trim().toLowerCase() !== usage.subject.trim().toLowerCase()
+  ) {
+    return false;
+  }
+
+  // If status is present, it must be "FINAL". If omitted/undefined in tests, treat as finalized.
+  if (usage.status && usage.status !== "FINAL") {
+    return false;
+  }
+
+  return true;
+}
 
 /**
  * Detects whether a question has already been used in another paper
@@ -29,7 +77,8 @@ export function findFreshnessConflicts(
   }
 
   const currentPaperId = currentPaper.id || currentPaper.paperId;
-  const currentSession = currentPaper.academicSession;
+  const normSession = (s?: string) => s?.replace(/[\u2013\u2014]/g, "-").trim();
+  const currentSession = normSession(currentPaper.academicSession);
   const currentClass = currentPaper.className || currentPaper.blueprint?.book?.className;
 
   return usages.filter((u) => {
@@ -37,12 +86,17 @@ export function findFreshnessConflicts(
     if (currentPaperId && u.paperId === currentPaperId) return false;
 
     // Must match academic session
-    if (!currentSession || !u.academicSession || u.academicSession !== currentSession) {
+    const usageSession = normSession(u.academicSession);
+    if (!currentSession || !usageSession || currentSession !== usageSession) {
       return false;
     }
 
     // Must match student cohort/class if both are specified
-    if (currentClass && u.className && currentClass !== u.className) {
+    if (
+      currentClass &&
+      u.className &&
+      currentClass.trim().toLowerCase() !== u.className.trim().toLowerCase()
+    ) {
       return false;
     }
 
@@ -267,33 +321,43 @@ export function QuestionFreshnessAlert({
 export function QuestionUsagePills({
   usages,
   currentPaperId,
+  currentPaper,
   className = "",
 }: {
   usages?: QuestionUsageTag[] | null;
   currentPaperId?: string;
+  currentPaper?: CurrentPaperContext | null;
   className?: string;
 }) {
   if (!usages || !Array.isArray(usages) || usages.length === 0) return null;
 
-  const filtered = currentPaperId ? usages.filter((u) => u.paperId !== currentPaperId) : usages;
+  const effectivePaperId = currentPaperId || currentPaper?.id || currentPaper?.paperId;
+  const filtered = effectivePaperId ? usages.filter((u) => u.paperId !== effectivePaperId) : usages;
   if (filtered.length === 0) return null;
 
   return (
     <div className={`flex flex-wrap items-center gap-1.5 ${className}`}>
       {filtered.map((u, i) => {
         const info = parseCompactExamTag(u);
+        const isExhausted = isExhaustedUsage(u, currentPaper);
 
-        const tooltip = [
-          `Exam: ${u.paperTitle || "Untitled"}`,
-          u.paperSet ? `Set: ${u.paperSet}` : null,
-          u.examDate ? `Date: ${u.examDate}` : null,
-          u.academicSession ? `Session: ${u.academicSession}` : null,
-          u.className ? `Cohort: ${u.className}` : null,
-          u.isOrChoice ? `Role: Alternate Choice (OR Question)` : `Role: Primary Question`,
-          `Click to open paper ↗`,
-        ]
-          .filter(Boolean)
-          .join(" | ");
+        const tooltip = isExhausted
+          ? `⚠️ Exhausted Question: Finalized in ${u.paperTitle || info.displayLabel} for ${u.className} ${u.subject || ""} in session ${u.academicSession}. Click to inspect paper ↗`
+          : [
+              `Exam: ${u.paperTitle || "Untitled"}`,
+              u.paperSet ? `Set: ${u.paperSet}` : null,
+              u.examDate ? `Date: ${u.examDate}` : null,
+              u.academicSession ? `Session: ${u.academicSession}` : null,
+              u.className ? `Cohort: ${u.className}` : null,
+              u.isOrChoice ? `Role: Alternate Choice (OR Question)` : `Role: Primary Question`,
+              `Click to open paper ↗`,
+            ]
+              .filter(Boolean)
+              .join(" | ");
+
+        const badgeClass = isExhausted
+          ? "bg-amber-100 text-amber-950 border-amber-300 ring-1 ring-amber-400/40 hover:bg-amber-200 hover:border-amber-400 font-bold"
+          : `${info.badgeStyle.bg} ${info.badgeStyle.text} ${info.badgeStyle.border} ${info.badgeStyle.hover} font-semibold`;
 
         return (
           <Link
@@ -302,12 +366,21 @@ export function QuestionUsagePills({
             title={tooltip}
             target="_blank"
             rel="noopener noreferrer"
-            className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-semibold transition shadow-2xs ${info.badgeStyle.bg} ${info.badgeStyle.text} ${info.badgeStyle.border} ${info.badgeStyle.hover}`}
+            className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] transition shadow-2xs ${badgeClass}`}
           >
-            <span className={`inline-block h-1.5 w-1.5 rounded-full shrink-0 ${info.badgeStyle.dot}`} />
+            {isExhausted ? (
+              <AlertTriangle size={11} className="text-amber-700 shrink-0" />
+            ) : (
+              <span className={`inline-block h-1.5 w-1.5 rounded-full shrink-0 ${info.badgeStyle.dot}`} />
+            )}
             <span>{info.displayLabel}</span>
             {u.paperSet && (
               <span className="font-normal opacity-75">· {u.paperSet}</span>
+            )}
+            {isExhausted && (
+              <span className="rounded bg-amber-500/25 px-1 py-0.2 text-[9px] font-extrabold uppercase tracking-tight text-amber-900 border border-amber-400/30">
+                Exhausted
+              </span>
             )}
             {u.isOrChoice && (
               <span className="rounded bg-black/10 px-1 py-0.2 text-[9.5px] font-bold uppercase tracking-tight">

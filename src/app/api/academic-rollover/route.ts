@@ -3,7 +3,8 @@ import { ensureClassAndSubject, normalizeAcademicSession } from "@/lib/classes";
 import { prisma } from "@/lib/prisma";
 import { unifiedRolloverSchema } from "@/lib/schemas";
 
-export const POST = route(async (req) => {
+export const POST = route(
+  async (req) => {
   const data = await body(req, unifiedRolloverSchema);
   const sourceSession = normalizeAcademicSession(data.sourceSession);
   const targetSession = normalizeAcademicSession(data.targetSession);
@@ -220,4 +221,6 @@ export const POST = route(async (req) => {
       blueprintsCloned,
     },
   };
-});
+  },
+  { roles: ["ADMIN"] },
+);

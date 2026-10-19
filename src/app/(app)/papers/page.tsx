@@ -23,6 +23,7 @@ export default function PapersPage() {
   const [papers, setPapers] = useState<PaperListItem[]>([]);
   const [blueprints, setBlueprints] = useState<Blueprint[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; email: string; role: string; department?: string } | null>(null);
   const [creating, setCreating] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -62,10 +63,15 @@ export default function PapersPage() {
 
   const load = useCallback(
     () =>
-      Promise.all([api<PaperListItem[]>("/api/papers"), api<Blueprint[]>("/api/blueprints")]).then(
-        ([p, b]) => {
+      Promise.all([
+        api<PaperListItem[]>("/api/papers"),
+        api<Blueprint[]>("/api/blueprints"),
+        api<{ id: string; name: string; email: string; role: string; department?: string }>("/api/me").catch(() => null),
+      ]).then(
+        ([p, b, me]) => {
           setPapers(p);
           setBlueprints(b);
+          if (me) setCurrentUser(me);
           setLoaded(true);
         },
         (e) => {
@@ -116,6 +122,10 @@ export default function PapersPage() {
   }
 
   async function remove(p: PaperListItem) {
+    if (currentUser && currentUser.role !== "ADMIN" && (p.createdById !== currentUser.id || p.status === "FINAL")) {
+      setError("You can only delete your own draft papers. Finalized papers cannot be deleted.");
+      return;
+    }
     const ok = await confirm({
       title: "Delete this paper?",
       message: (
@@ -386,9 +396,19 @@ export default function PapersPage() {
         )
       ) : (
         <ul className="divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-200 bg-white" style={{ boxShadow: "var(--shadow-card)" }}>
-          {filteredPapers.map((p) => (
-            <PaperRow key={p.id} p={p} onDelete={remove} />
-          ))}
+          {filteredPapers.map((p) => {
+            const isOwner = currentUser?.id && p.createdById ? p.createdById === currentUser.id : false;
+            const isAdmin = currentUser?.role === "ADMIN";
+            const canDelete = currentUser ? (isAdmin || (isOwner && p.status !== "FINAL")) : false;
+            return (
+              <PaperRow
+                key={p.id}
+                p={p}
+                currentUser={currentUser}
+                onDelete={canDelete ? remove : undefined}
+              />
+            );
+          })}
         </ul>
       )}
 

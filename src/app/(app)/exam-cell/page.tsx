@@ -58,11 +58,17 @@ import type {
 
 type Tab = "calculator" | "timetable" | "audit";
 
-function getSectionsForClass(cls?: AcademicClassDto | null): ClassSectionInput[] {
+export function getSectionsForClass(cls?: AcademicClassDto | null): ClassSectionInput[] {
   if (!cls) {
     return [
       { name: "Section A", count: 40 },
     ];
+  }
+  if (cls.sectionDetails && cls.sectionDetails.length > 0) {
+    return cls.sectionDetails.map((sec) => ({
+      name: `${cls.name} - Section ${sec.name}`,
+      count: sec.studentCount > 0 ? sec.studentCount : 40,
+    }));
   }
   const secs = cls.sections && cls.sections.length > 0 ? cls.sections : ["A"];
   return secs.map((s) => ({
@@ -296,7 +302,7 @@ export default function ExamCellPage() {
   const wastageSheets = Math.ceil(rawSheets * (wastagePercent / 100));
   const totalSheetsRequired = rawSheets + wastageSheets;
   const totalReamsRequired = parseFloat((totalSheetsRequired / 500).toFixed(2));
-  const reamsToOrder = Math.ceil(totalReamsRequired);
+  const reamsToOrder = Math.ceil(totalSheetsRequired / 500);
 
   // Auto-distribute sets across total students
   const computedSets = useMemo(() => {

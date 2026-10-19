@@ -95,6 +95,7 @@ Diff: HARD`;
 export default function QuestionsPage() {
   const [books, setBooks] = useState<Book[]>([]);
   const [questions, setQuestions] = useState<QuestionDto[]>([]);
+  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; email: string; role: string } | null>(null);
   const [classFilter, setClassFilter] = useState<string>("");
   const [subjectFilter, setSubjectFilter] = useState<string>("");
   const [filters, setFilters] = useState({ bookId: "", chapterId: "", type: "", difficulty: "", q: "", freshness: "ALL" });
@@ -117,6 +118,8 @@ export default function QuestionsPage() {
   const [aiGenModalOpen, setAiGenModalOpen] = useState(false);
 
   useEffect(() => {
+    api<{ id: string; name: string; email: string; role: string }>("/api/me").then(setCurrentUser, () => undefined);
+
     const sp = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
     const urlClass = sp?.get("className") || "";
     const urlSubject = sp?.get("subject") || "";
@@ -210,6 +213,12 @@ export default function QuestionsPage() {
     setFilters((f) => ({ ...f, [k]: v, ...(k === "bookId" ? { chapterId: "" } : {}) }));
 
   async function remove(q: QuestionDto) {
+    const isOwner = Boolean(currentUser?.id && q.createdById && q.createdById === currentUser.id);
+    const isAdmin = currentUser?.role === "ADMIN";
+    if (!isAdmin && !isOwner) {
+      setError("You do not have permission to delete questions authored by other faculty members.");
+      return;
+    }
     if (!confirm("Delete this question from the bank?")) return;
     setError(null);
     try {
@@ -537,22 +546,30 @@ export default function QuestionsPage() {
                   )}
                 </div>
 
-                <div className="flex items-center gap-1.5 ml-auto">
-                  <button
-                    className="btn btn-sm text-slate-700 hover:text-slate-900"
-                    title="Edit question text, type, or answers"
-                    onClick={() => setEditing(q)}
-                  >
-                    <Pencil size={12} /> Edit
-                  </button>
-                  <button
-                    className="btn btn-sm btn-danger"
-                    title="Delete question from bank"
-                    onClick={() => remove(q)}
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                </div>
+                {(() => {
+                  const isOwner = Boolean(currentUser?.id && q.createdById && q.createdById === currentUser.id);
+                  const isAdmin = currentUser?.role === "ADMIN";
+                  const canEditOrDelete = isAdmin || isOwner;
+                  if (!canEditOrDelete) return null;
+                  return (
+                    <div className="flex items-center gap-1.5 ml-auto">
+                      <button
+                        className="btn btn-sm text-slate-700 hover:text-slate-900"
+                        title="Edit question text, type, or answers"
+                        onClick={() => setEditing(q)}
+                      >
+                        <Pencil size={12} /> Edit
+                      </button>
+                      <button
+                        className="btn btn-sm btn-danger"
+                        title="Delete question from bank"
+                        onClick={() => remove(q)}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
             </li>
           );

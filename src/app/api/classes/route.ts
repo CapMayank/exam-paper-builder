@@ -4,6 +4,7 @@ import {
   ensureClassAndSubject,
   inferClassOrder,
   normalizeAcademicSession,
+  normalizeSectionDetails,
   STANDARD_SCHOOL_CLASSES,
   syncClassesFromBooks,
   toAcademicClassDto,
@@ -49,7 +50,8 @@ export const GET = route(async (req) => {
   return rows.map(toAcademicClassDto);
 });
 
-export const POST = route(async (req) => {
+export const POST = route(
+  async (req) => {
   const data = await body(req, postClassUnionSchema);
 
   if ("action" in data && data.action === "SEED_STANDARD") {
@@ -76,7 +78,7 @@ export const POST = route(async (req) => {
           displayOrder: preset.displayOrder,
           stream: preset.stream,
           academicSession: session,
-          sectionsJson: JSON.stringify(["A"]),
+          sectionsJson: JSON.stringify(normalizeSectionDetails(["A"])),
         },
       });
 
@@ -171,14 +173,14 @@ export const POST = route(async (req) => {
     update: {
       displayOrder,
       stream: data.stream || "",
-      sectionsJson: JSON.stringify(data.sections || ["A"]),
+      sectionsJson: JSON.stringify(normalizeSectionDetails(data.sections)),
     },
     create: {
       name: data.name,
       displayOrder,
       stream: data.stream || "",
       academicSession: session,
-      sectionsJson: JSON.stringify(data.sections || ["A"]),
+      sectionsJson: JSON.stringify(normalizeSectionDetails(data.sections)),
     },
   });
 
@@ -194,4 +196,6 @@ export const POST = route(async (req) => {
   });
 
   return toAcademicClassDto(full);
-});
+  },
+  { roles: ["ADMIN"] },
+);

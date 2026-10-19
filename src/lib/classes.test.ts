@@ -80,7 +80,7 @@ describe("Academic Class & Subject Hierarchy", () => {
     expect(class10?.subjects.some((s) => s.name === "Science" && s.code === "086")).toBe(true);
   });
 
-  it("maps database rows to AcademicClassDto safely", () => {
+  it("maps database rows to AcademicClassDto safely with legacy string sections", () => {
     const dto = toAcademicClassDto({
       id: "cls-10",
       name: "Class 10",
@@ -92,20 +92,58 @@ describe("Academic Class & Subject Hierarchy", () => {
     });
     expect(dto.academicSession).toBe("2026–27");
     expect(dto.sections).toEqual(["A", "B"]);
+    expect(dto.sectionDetails).toEqual([
+      { name: "A", studentCount: 40 },
+      { name: "B", studentCount: 40 },
+    ]);
     expect(dto.subjects).toHaveLength(1);
     expect(dto.subjects[0].code).toBe("041");
   });
 
-  it("validates academicClassSchema and classSubjectSchema", () => {
-    const validClass = academicClassSchema.parse({
+  it("maps database rows with structured section objects and custom capacities", () => {
+    const dto = toAcademicClassDto({
+      id: "cls-10",
+      name: "Class 10",
+      displayOrder: 10,
+      stream: "Secondary",
+      academicSession: "2025–26",
+      sectionsJson: JSON.stringify([
+        { name: "A", studentCount: 42 },
+        { name: "B", studentCount: 38 },
+      ]),
+      subjects: [],
+    });
+    expect(dto.sections).toEqual(["A", "B"]);
+    expect(dto.sectionDetails).toEqual([
+      { name: "A", studentCount: 42 },
+      { name: "B", studentCount: 38 },
+    ]);
+  });
+
+  it("validates academicClassSchema and classSubjectSchema with both string and object sections", () => {
+    const validClassWithStrings = academicClassSchema.parse({
       name: "Class 10",
       stream: "Secondary",
       academicSession: "2026–27",
       sections: ["A", "B"],
       subjects: [{ name: "Science", code: "086" }],
     });
-    expect(validClass.name).toBe("Class 10");
-    expect(validClass.subjects).toHaveLength(1);
+    expect(validClassWithStrings.name).toBe("Class 10");
+    expect(validClassWithStrings.subjects).toHaveLength(1);
+    expect(validClassWithStrings.sections).toEqual(["A", "B"]);
+
+    const validClassWithObjects = academicClassSchema.parse({
+      name: "Class 12",
+      stream: "Science",
+      sections: [
+        { name: "A", studentCount: 45 },
+        { name: "B", studentCount: 40 },
+      ],
+    });
+    expect(validClassWithObjects.sections).toEqual([
+      { name: "A", studentCount: 45 },
+      { name: "B", studentCount: 40 },
+    ]);
 
     const validSubj = classSubjectSchema.parse({ name: "Physics", code: "042" });
     expect(validSubj.name).toBe("Physics");

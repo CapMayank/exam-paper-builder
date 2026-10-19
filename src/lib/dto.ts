@@ -22,6 +22,7 @@ export type QuestionDto = {
   spaceMm: number;
   showGrid: boolean;
   createdAt: string;
+  createdById?: string;
   chapter?: { id: string; number: number; title: string };
   timesUsed?: number;
   subparts: SubPart[];
@@ -89,7 +90,8 @@ export function toQuestionDto(
         paperSet: string;
         examDate: string;
         academicSession?: string;
-        blueprint?: { book?: { className: string } };
+        status?: string;
+        blueprint?: { book?: { className: string; subject?: string } };
       };
     }>;
     orPaperQuestions?: Array<{
@@ -100,7 +102,8 @@ export function toQuestionDto(
         paperSet: string;
         examDate: string;
         academicSession?: string;
-        blueprint?: { book?: { className: string } };
+        status?: string;
+        blueprint?: { book?: { className: string; subject?: string } };
       };
     }>;
   },
@@ -128,7 +131,7 @@ export function toQuestionDto(
     if (hasPaperQuestions && q.paperQuestions) {
       for (const pq of q.paperQuestions) {
         if (!pq) continue;
-        usages.push({
+        const usageItem: QuestionUsageTag = {
           paperId: pq.paperId,
           paperTitle: pq.paper?.title ?? "",
           paperSet: pq.paper?.paperSet ?? "",
@@ -136,13 +139,20 @@ export function toQuestionDto(
           academicSession: pq.paper?.academicSession ?? "2025–26",
           className: pq.paper?.blueprint?.book?.className ?? "",
           isOrChoice: Boolean(pq.orQuestionId && pq.orQuestionId === q.id),
-        });
+        };
+        if (pq.paper?.status) {
+          usageItem.status = pq.paper.status;
+        }
+        if (pq.paper?.blueprint?.book?.subject) {
+          usageItem.subject = pq.paper.blueprint.book.subject;
+        }
+        usages.push(usageItem);
       }
     }
     if (hasOrPaperQuestions && q.orPaperQuestions) {
       for (const opq of q.orPaperQuestions) {
         if (!opq) continue;
-        usages.push({
+        const usageItem: QuestionUsageTag = {
           paperId: opq.paperId,
           paperTitle: opq.paper?.title ?? "",
           paperSet: opq.paper?.paperSet ?? "",
@@ -150,7 +160,14 @@ export function toQuestionDto(
           academicSession: opq.paper?.academicSession ?? "2025–26",
           className: opq.paper?.blueprint?.book?.className ?? "",
           isOrChoice: true,
-        });
+        };
+        if (opq.paper?.status) {
+          usageItem.status = opq.paper.status;
+        }
+        if (opq.paper?.blueprint?.book?.subject) {
+          usageItem.subject = opq.paper.blueprint.book.subject;
+        }
+        usages.push(usageItem);
       }
     }
   }
@@ -168,6 +185,7 @@ export function toQuestionDto(
     spaceMm: q.spaceMm,
     showGrid: q.showGrid,
     createdAt: q.createdAt instanceof Date ? q.createdAt.toISOString() : String(q.createdAt),
+    createdById: (q as { createdById?: string }).createdById,
     chapter: q.chapter && { id: q.chapter.id, number: q.chapter.number, title: q.chapter.title },
     timesUsed: q._count
       ? (q._count.paperQuestions ?? 0) + (q._count.orPaperQuestions ?? 0)

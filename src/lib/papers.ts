@@ -6,15 +6,57 @@ import { diagnosePaperImplications, paperStatus } from "./blueprint";
 import { blueprintInclude } from "./blueprints";
 import { prisma } from "./prisma";
 
-export function canModifyPaper(user: SessionUser, paper: { createdById: string }): boolean {
-  return paper.createdById === user.id || user.role === "ADMIN" || user.role === "HOD";
+export function canModifyPaper(
+  user: SessionUser,
+  paper: { createdById: string; status?: string },
+): boolean {
+  if (paper.status === "FINAL") {
+    return user.role === "ADMIN";
+  }
+  return (
+    Boolean(paper.createdById && paper.createdById === user.id) ||
+    user.role === "ADMIN" ||
+    user.role === "HOD"
+  );
 }
 
-export function assertCanModifyPaper(user: SessionUser, paper: { createdById: string }): void {
+export function assertCanModifyPaper(
+  user: SessionUser,
+  paper: { createdById: string; status?: string },
+): void {
+  if (paper.status === "FINAL" && user.role !== "ADMIN") {
+    throw new HttpError(
+      403,
+      "Cannot modify or delete a finalized paper. Only an Administrator can unlock it.",
+    );
+  }
   if (!canModifyPaper(user, paper)) {
     throw new HttpError(
       403,
       "Only the paper creator, Department Head (HOD), or Administrator can modify or delete this paper.",
+    );
+  }
+}
+
+export function canModifyQuestion(
+  user: SessionUser,
+  question: { createdById: string },
+): boolean {
+  return (
+    Boolean(question.createdById && question.createdById === user.id) ||
+    user.role === "ADMIN" ||
+    user.role === "HOD"
+  );
+}
+
+export function assertCanModifyQuestion(
+  user: SessionUser,
+  question: { createdById: string },
+): void {
+  if (!canModifyQuestion(user, question)) {
+    throw new HttpError(
+      403,
+      "Forbidden: You can only edit or delete your own questions.",
     );
   }
 }
@@ -32,7 +74,8 @@ const questionUsageInclude = {
           paperSet: true,
           examDate: true,
           academicSession: true,
-          blueprint: { select: { book: { select: { className: true } } } },
+          status: true,
+          blueprint: { select: { book: { select: { className: true, subject: true } } } },
         },
       },
     },
@@ -47,7 +90,8 @@ const questionUsageInclude = {
           paperSet: true,
           examDate: true,
           academicSession: true,
-          blueprint: { select: { book: { select: { className: true } } } },
+          status: true,
+          blueprint: { select: { book: { select: { className: true, subject: true } } } },
         },
       },
     },

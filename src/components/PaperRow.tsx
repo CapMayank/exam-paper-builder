@@ -28,10 +28,20 @@ export function Progress({ filled, needed }: { filled: number; needed: number })
   );
 }
 
-/** One paper in a list: title, status, progress against the blueprint, and quick actions. */
-export function PaperRow({ p, onDelete }: { p: PaperListItem; onDelete?: (p: PaperListItem) => void }) {
+export function PaperRow({
+  p,
+  onDelete,
+  currentUser,
+}: {
+  p: PaperListItem;
+  onDelete?: (p: PaperListItem) => void;
+  currentUser?: { id: string; role?: string } | null;
+}) {
   const ready = p.needed > 0 && p.filled >= p.needed;
   const examType = resolvePaperExamType(p);
+  const isOwner = currentUser?.id && p.createdById ? p.createdById === currentUser.id : false;
+  const isAdmin = currentUser?.role === "ADMIN";
+  const canDelete = currentUser ? (isAdmin || (isOwner && p.status !== "FINAL")) : (p.status !== "FINAL");
   return (
     <li className="group grid gap-x-4 gap-y-2 px-4 py-3.5 transition-colors hover:bg-slate-50 sm:grid-cols-[minmax(0,1fr)_11rem_auto] sm:items-center">
       <div className="min-w-0">
@@ -69,7 +79,7 @@ export function PaperRow({ p, onDelete }: { p: PaperListItem; onDelete?: (p: Pap
         <Link href={`/papers/${p.id}/solutions`} target="_blank" className="btn btn-sm btn-ghost btn-icon" title="Marking scheme" aria-label={`Marking scheme for ${p.title}`}>
           <KeyRound size={15} />
         </Link>
-        {onDelete && (
+        {onDelete && canDelete && (
           <button
             type="button"
             className="btn btn-sm btn-ghost btn-icon text-slate-500 hover:bg-red-50 hover:text-red-700"
