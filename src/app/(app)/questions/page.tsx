@@ -27,7 +27,7 @@ import { ErrorBanner, Field, Modal } from "@/components/ui";
 import type { BatchImportReport } from "@/lib/batchQuestionIo";
 import { parseBulkQuestions } from "@/lib/bulkImport";
 import { api } from "@/lib/client";
-import { DIFFICULTIES, QUESTION_TYPES, QUESTION_TYPE_LABEL, sortClassNames, type QuestionType } from "@/lib/constants";
+import { DIFFICULTIES, isKindergartenType, QUESTION_TYPES, QUESTION_TYPE_LABEL, sortClassNames, type QuestionType } from "@/lib/constants";
 import type { Book, QuestionDto } from "@/lib/types";
 
 const SAMPLE_CSV = `type,marks,text,answer,chapterNumber,difficulty,options,subparts
@@ -525,7 +525,14 @@ export default function QuestionsPage() {
 
               <div className="mt-3.5 flex flex-wrap items-center justify-between gap-2.5 border-t border-slate-100 pt-2.5 text-xs text-slate-500">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="badge !bg-slate-100 text-slate-700 font-bold">
+                  <span
+                    className={`badge font-bold ${
+                      isKindergartenType(q.type)
+                        ? "!bg-amber-100 !text-amber-900 border border-amber-300"
+                        : "!bg-slate-100 text-slate-700"
+                    }`}
+                  >
+                    {isKindergartenType(q.type) ? "🎨 " : ""}
                     {QUESTION_TYPE_LABEL[q.type as keyof typeof QUESTION_TYPE_LABEL]}
                   </span>
                   <span className={`badge border font-semibold ${diffBadgeClass}`}>{q.difficulty}</span>

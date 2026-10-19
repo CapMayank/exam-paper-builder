@@ -1,10 +1,15 @@
 import { imageUrl } from "@/lib/client";
 import {
+  isKindergartenType,
   isMcqLikeType,
   normalizeMcqAnswer,
   parseMatchColumnPairs,
   type MarksStyle,
 } from "@/lib/constants";
+import {
+  getKindergartenActivity,
+  parseKindergartenConfig,
+} from "@/lib/kindergarten/registry";
 import type { QuestionDto } from "@/lib/types";
 import { MathText } from "@/components/MathText";
 
@@ -26,6 +31,26 @@ function SingleQuestionBody({
   marksStyle?: MarksStyle;
   showAnswer?: boolean;
 }) {
+  const displayLabel = numberLabel ?? (number !== undefined ? `${number}.` : undefined);
+
+  if (isKindergartenType(q.type)) {
+    const plugin = getKindergartenActivity(q.type);
+    if (plugin) {
+      const rawCfg = q.options && q.options.length > 0 ? q.options[0] : "";
+      const config = parseKindergartenConfig(q.type, rawCfg);
+      const PrintComp = plugin.renderPrint;
+      return (
+        <PrintComp
+          config={config}
+          instructionText={q.text}
+          marks={marks}
+          number={number}
+          numberLabel={displayLabel}
+        />
+      );
+    }
+  }
+
   const isMcq = isMcqLikeType(q.type);
   const maxOptionLen = q.options && q.options.length > 0 ? Math.max(...q.options.map((o) => o.length)) : 0;
   const isMathComplex = q.options?.some((o) => o.includes("\\frac") || o.includes("\\sqrt") || o.includes("\n"));
@@ -36,7 +61,6 @@ function SingleQuestionBody({
       ? "repeat(4, 1fr)"
       : "1fr 1fr";
 
-  const displayLabel = numberLabel ?? (number !== undefined ? `${number}.` : undefined);
   const normalizedMcq = isMcq ? normalizeMcqAnswer(q.answer, q.options) : null;
   const matchPairs = q.type === "MATCH_COLUMN" ? parseMatchColumnPairs(q.options) : [];
   const hasHindi = /[\u0900-\u097F]/.test(q.text) || q.options.some((o) => /[\u0900-\u097F]/.test(o));
@@ -227,7 +251,8 @@ export function QuestionView({
   showAnswer?: boolean;
   compact?: boolean;
 }) {
-  const maxSpaceMm = compact ? 0 : Math.max(q.spaceMm, orQuestion?.spaceMm ?? 0);
+  const isKdg = isKindergartenType(q.type);
+  const maxSpaceMm = compact || isKdg ? 0 : Math.max(q.spaceMm, orQuestion?.spaceMm ?? 0);
   const showGrid = q.showGrid || !!orQuestion?.showGrid;
   const isDraw =
     q.type === "DRAW" ||

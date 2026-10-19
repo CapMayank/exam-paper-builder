@@ -134,7 +134,7 @@ export const questionSchema = z
     chapterId: z.string().min(1),
     type: z.enum(QUESTION_TYPES),
     text: text(5000),
-    options: z.array(z.string().trim().min(1).max(500)).max(MAX_OPTIONS).default([]),
+    options: z.array(z.string().max(20000)).default([]),
     subparts: z.array(subPartSchema).optional().default([]),
     answer: z.string().max(5000).default(""),
     difficulty: z.enum(DIFFICULTIES).default("MEDIUM"),
@@ -147,8 +147,13 @@ export const questionSchema = z
     showGrid: z.boolean().default(false),
   })
   .superRefine((q, ctx) => {
-    if ((q.type === "MCQ" || q.type === "ASSERTION_REASON") && q.options.length < MIN_OPTIONS) {
-      ctx.addIssue({ code: "custom", path: ["options"], message: `MCQ needs at least ${MIN_OPTIONS} options` });
+    if (q.type === "MCQ" || q.type === "ASSERTION_REASON") {
+      if (q.options.length < MIN_OPTIONS) {
+        ctx.addIssue({ code: "custom", path: ["options"], message: `MCQ needs at least ${MIN_OPTIONS} options` });
+      }
+      if (q.options.length > MAX_OPTIONS) {
+        ctx.addIssue({ code: "custom", path: ["options"], message: `MCQ cannot have more than ${MAX_OPTIONS} options` });
+      }
     }
     if (q.type === "MATCH_COLUMN" && q.options.length < MIN_OPTIONS) {
       ctx.addIssue({
@@ -161,7 +166,7 @@ export const questionSchema = z
 
 export const questionPatchSchema = z.object({
   text: text(5000).optional(),
-  options: z.array(z.string().trim().min(1).max(500)).max(MAX_OPTIONS).optional(),
+  options: z.array(z.string().max(20000)).optional(),
   subparts: z.array(subPartSchema).optional(),
   answer: z.string().max(5000).optional(),
   difficulty: z.enum(DIFFICULTIES).optional(),

@@ -8,7 +8,7 @@ import { QuestionView } from "@/components/QuestionView";
 import { ErrorBanner, Modal, Spinner } from "@/components/ui";
 import { whyCannotAdd, type BlueprintDef } from "@/lib/blueprint";
 import { api } from "@/lib/client";
-import { DIFFICULTIES, QUESTION_TYPE_LABEL } from "@/lib/constants";
+import { DIFFICULTIES, isKindergartenType, QUESTION_TYPE_LABEL } from "@/lib/constants";
 import { type Book, type PaperData, type QuestionDto, type Section, subpartsTotalMarks } from "@/lib/types";
 import { MathText } from "./MathText";
 import type { GeneratedQuestionItem } from "@/lib/gemini";
@@ -450,6 +450,11 @@ export function QuestionPicker({
                         <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-950 border border-amber-300 ring-1 ring-amber-400/40">
                           <AlertTriangle size={12} className="text-amber-700 shrink-0" />
                           Exhausted in Earlier Exam
+                        </span>
+                      )}
+                      {isKindergartenType(q.type) && (
+                        <span className="badge !bg-amber-100 !text-amber-900 border border-amber-300 font-bold">
+                          🎨 {QUESTION_TYPE_LABEL[q.type as keyof typeof QUESTION_TYPE_LABEL]?.split(" (")[0] || "Activity"}
                         </span>
                       )}
                       <span className="badge font-semibold">{q.difficulty}</span>

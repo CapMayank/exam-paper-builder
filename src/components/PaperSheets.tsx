@@ -8,9 +8,11 @@ import {
   DEFAULT_SCHOOL_NAME,
   EXAM_TYPE_LABEL,
   isBookletLayout,
+  isPrePrimaryClass,
   QUESTION_TYPE_LABEL,
   resolvePaperExamType,
 } from "@/lib/constants";
+import { WorkbookHeader } from "@/lib/kindergarten/components/WorkbookHeader";
 import { formatQuestionNumber, imposeBooklet, paginate } from "@/lib/layout";
 import type { PaperData } from "@/lib/types";
 
@@ -48,14 +50,34 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean): Block
       ? imageUrl(paper.logoPath)
       : paper.schoolLogo || DEFAULT_SCHOOL_LOGO;
   const logoBoxSize = isA5 ? "12.5mm" : "15.5mm";
+  const isPrePrimary = isPrePrimaryClass(blueprint.book.className);
 
-  blocks.push({
-    key: "header",
-    keepWithNext: true,
-    node: (
-      <div style={{ paddingBottom: "3mm" }}>
-        {/* Top Board Meta Bar: Question Count, Set Box, Subject Code */}
-        <div
+  if (isPrePrimary) {
+    blocks.push({
+      key: "kdg-header",
+      keepWithNext: true,
+      node: (
+        <div style={{ paddingBottom: "3mm" }}>
+          <WorkbookHeader
+            schoolName={paper.schoolName || DEFAULT_SCHOOL_NAME}
+            logoSrc={resolvedLogoSrc}
+            classNameTitle={blueprint.book.className}
+            subjectTitle={blueprint.book.subject}
+            sessionText={sessionText}
+            examHeading={examHeading}
+            examDate={paper.examDate}
+          />
+        </div>
+      ),
+    });
+  } else {
+    blocks.push({
+      key: "header",
+      keepWithNext: true,
+      node: (
+        <div style={{ paddingBottom: "3mm" }}>
+          {/* Top Board Meta Bar: Question Count, Set Box, Subject Code */}
+          <div
           style={{
             display: "flex",
             justifyContent: "space-between",
@@ -232,6 +254,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean): Block
       </div>
     ),
   });
+  }
 
   let n = 0;
   let sectionGroupCounter = 0;

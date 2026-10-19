@@ -5,7 +5,9 @@ import { useRef, useState } from "react";
 import { api, imageUrl, uploadImage } from "@/lib/client";
 import {
   DIFFICULTIES,
+  isKindergartenType,
   isMcqLikeType,
+  isPrePrimaryClass,
   isSubpartQuestionType,
   MAX_OPTIONS,
   MIN_OPTIONS,
@@ -15,6 +17,12 @@ import {
   serializeMatchColumnPair,
   type MatchColumnPair,
 } from "@/lib/constants";
+import {
+  getAllKindergartenActivities,
+  getKindergartenActivity,
+  parseKindergartenConfig,
+  serializeKindergartenConfig,
+} from "@/lib/kindergarten/registry";
 import { type Book, type QuestionDto, type SubPart, subpartsTotalMarks } from "@/lib/types";
 import { MathText } from "./MathText";
 import { MathToolbar } from "./MathToolbar";
@@ -163,6 +171,14 @@ export function QuestionForm({
     }
     return getDefaultSubpartsForType(resolvedInitialType, targetMarks);
   });
+  const [kdgConfig, setKdgConfig] = useState<any>(() => {
+    if (isKindergartenType(resolvedInitialType)) {
+      const raw = initial?.options?.[0] ? initial.options[0] : JSON.stringify(initial?.options || []);
+      return parseKindergartenConfig(resolvedInitialType, raw, book?.subject);
+    }
+    const plugin = getKindergartenActivity(resolvedInitialType);
+    return plugin ? plugin.defaultConfig(book?.subject) : null;
+  });
   const [answer, setAnswer] = useState(initial?.answer ?? "");
   const [difficulty, setDifficulty] = useState(initial?.difficulty ?? "MEDIUM");
   const [imagePath, setImagePath] = useState<string | null>(initial?.imagePath ?? null);
@@ -307,14 +323,20 @@ export function QuestionForm({
       }
     }
 
+    const isKdg = isKindergartenType(type);
+    if (isKdg && !text.trim()) {
+      return setError("Please provide an activity instruction for the question.");
+    }
+
     setBusy(true);
     try {
-      const serializedOptions =
-        type === "MATCH_COLUMN"
-          ? matchPairs.map((p) => serializeMatchColumnPair(p.left, p.right))
-          : isMcq
-          ? options.map((o) => o.trim())
-          : [];
+      const serializedOptions = isKdg
+        ? [serializeKindergartenConfig(kdgConfig)]
+        : type === "MATCH_COLUMN"
+        ? matchPairs.map((p) => serializeMatchColumnPair(p.left, p.right))
+        : isMcq
+        ? options.map((o) => o.trim())
+        : [];
 
       const payload = {
         bookId,
@@ -420,7 +442,16 @@ export function QuestionForm({
               const newType = e.target.value;
               setType(newType);
               if (!initial) setSpaceMm(DEFAULT_SPACE[newType] ?? 0);
-              if (newType === "ASSERTION_REASON") {
+              if (isKindergartenType(newType)) {
+                const plugin = getKindergartenActivity(newType);
+                if (plugin) {
+                  const defCfg = plugin.defaultConfig(book?.subject);
+                  setKdgConfig(defCfg);
+                  if (!text.trim() || isKindergartenType(type)) {
+                    setText(defCfg.instruction);
+                  }
+                }
+              } else if (newType === "ASSERTION_REASON") {
                 setOptions([...DEFAULT_ASSERTION_OPTIONS_EN]);
                 if (!text.trim()) {
                   setText(
@@ -437,11 +468,30 @@ export function QuestionForm({
               }
             }}
           >
-            {QUESTION_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {QUESTION_TYPE_LABEL[t]}
-              </option>
-            ))}
+            {isPrePrimaryClass(book?.className) ? (
+              <>
+                <optgroup label="Kindergarten & Pre-Primary Activities">
+                  {getAllKindergartenActivities().map((act) => (
+                    <option key={act.type} value={act.type}>
+                      {act.label}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Standard Questions">
+                  {QUESTION_TYPES.filter((t) => !isKindergartenType(t)).map((t) => (
+                    <option key={t} value={t}>
+                      {QUESTION_TYPE_LABEL[t]}
+                    </option>
+                  ))}
+                </optgroup>
+              </>
+            ) : (
+              QUESTION_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {QUESTION_TYPE_LABEL[t]}
+                </option>
+              ))
+            )}
           </select>
         </Field>
         <Field label="Difficulty">
@@ -453,10 +503,82 @@ export function QuestionForm({
         </Field>
       </div>
 
-      {/* Visual Math & Science Equation Editor Toolbar */}
-      <div>
-        <MathToolbar onInsert={handleInsertSnippet} />
-      </div>
+      {isPrePrimaryClass(book?.className) && (
+        <div className="p-3 bg-gradient-to-r from-amber-50 to-indigo-50 border border-amber-200 rounded-2xl">
+          <div className="text-xs font-black text-amber-900 uppercase tracking-wider mb-2 flex items-center justify-between">
+            <span>🎨 Preschool Activity Types ({book?.className})</span>
+            <span className="text-[11px] font-medium text-slate-500">Click to switch activity type</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {getAllKindergartenActivities().map((act) => (
+              <button
+                key={act.type}
+                type="button"
+                onClick={() => {
+                  setType(act.type);
+                  const defCfg = act.defaultConfig(book?.subject);
+                  setKdgConfig(defCfg);
+                  if (!text.trim() || isKindergartenType(type)) {
+                    setText(defCfg.instruction);
+                  }
+                }}
+                className={`p-2.5 text-left border rounded-xl transition-all flex flex-col justify-between ${
+                  type === act.type
+                    ? "bg-white border-indigo-600 ring-2 ring-indigo-500/20 shadow-xs"
+                    : "bg-white/80 border-slate-200 hover:border-slate-300 hover:bg-white"
+                }`}
+              >
+                <span className="font-bold text-xs text-slate-900">{act.shortLabel}</span>
+                <span className="text-[10px] text-slate-500 leading-tight mt-0.5 line-clamp-1">
+                  {act.description}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {isKindergartenType(type) ? (
+        <div className="p-4 border-2 border-indigo-200 rounded-2xl bg-indigo-50/20 space-y-4">
+          <div className="flex items-center justify-between pb-2 border-b border-indigo-100">
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-1 bg-indigo-600 text-white font-bold text-xs rounded-full uppercase tracking-wider">
+                Kindergarten Activity Editor
+              </span>
+              <span className="text-xs font-semibold text-slate-700">
+                {QUESTION_TYPE_LABEL[type as keyof typeof QUESTION_TYPE_LABEL] || type}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setAiImproverOpen(true)}
+              className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-white px-2.5 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 shadow-2xs"
+            >
+              <Sparkles size={13} className="text-indigo-600" />
+              AI Activity Polish
+            </button>
+          </div>
+
+          {(() => {
+            const plugin = getKindergartenActivity(type);
+            if (!plugin) return null;
+            const Editor = plugin.renderEditor;
+            return (
+              <Editor
+                config={kdgConfig}
+                onChange={(newCfg) => setKdgConfig(newCfg)}
+                instructionText={text}
+                onInstructionChange={(newText) => setText(newText)}
+              />
+            );
+          })()}
+        </div>
+      ) : (
+        <>
+          {/* Visual Math & Science Equation Editor Toolbar */}
+          <div>
+            <MathToolbar onInsert={handleInsertSnippet} />
+          </div>
 
       <div>
         <div className="flex flex-wrap items-center justify-between gap-1 mb-1">
@@ -1120,6 +1242,8 @@ export function QuestionForm({
           </label>
         )}
       </div>
+      </>
+      )}
 
       {showPaperEditModes && (
         <div className="rounded-md border border-indigo-200 bg-indigo-50/60 p-3 space-y-1.5 text-xs text-slate-700">

@@ -1,4 +1,5 @@
 import "server-only";
+import { isKindergartenType } from "./constants";
 
 export interface GeminiCallResult<T> {
   success: boolean;
@@ -225,6 +226,127 @@ Return a JSON array strictly matching this TypeScript structure:
 ]`;
 
   const fallbackQuestions = (): GeneratedQuestionItem[] => {
+    if (isKindergartenType(type)) {
+      if (type === "KDG_TRACE_WRITE") {
+        return [
+          {
+            type: "KDG_TRACE_WRITE",
+            text: language === "hi" ? "चार-लाइन पर सुंदर अक्षरों में लिखिए:" : "Trace and copy the letters neatly on the four-line guide:",
+            options: [JSON.stringify({ guideType: "FOUR_LINE", targetText: "A B C D E", showDotted: true, repeatRows: 2 })],
+            subparts: [],
+            answer: "A B C D E",
+            marks: marks || 5,
+            difficulty: "EASY",
+            cognitiveLevel: "REMEMBERING",
+            explanation: "Trace capital letters on four-line guide.",
+          },
+        ];
+      }
+      if (type === "KDG_NUMBER_GRID") {
+        return [
+          {
+            type: "KDG_NUMBER_GRID",
+            text: language === "hi" ? "खाली स्थानों में छूटी हुई संख्याएँ भरिए:" : "Fill in the missing numbers in the grid from 1 to 50:",
+            options: [JSON.stringify({ maxNumber: 50, columns: 5, blankIndices: [1, 3, 5, 7, 9, 11, 13, 15] })],
+            subparts: [],
+            answer: "2, 4, 6, 8, 10, 12, 14, 16",
+            marks: marks || 5,
+            difficulty: "EASY",
+            cognitiveLevel: "REMEMBERING",
+            explanation: "Practice number sequencing in 1-50 grid.",
+          },
+        ];
+      }
+      if (type === "KDG_COUNT_ITEMS") {
+        return [
+          {
+            type: "KDG_COUNT_ITEMS",
+            text: language === "hi" ? "गुब्बारे गिनिए और डिब्बे में संख्या लिखिए:" : "Count the balloons and write the correct number in the box:",
+            options: [JSON.stringify({ clipartId: "balloon", count: 4, mode: "write_box" })],
+            subparts: [],
+            answer: "4",
+            marks: marks || 5,
+            difficulty: "EASY",
+            cognitiveLevel: "UNDERSTANDING",
+            explanation: "Count outline objects and write the numeral.",
+          },
+        ];
+      }
+      if (type === "KDG_PICTURE_MATCH") {
+        return [
+          {
+            type: "KDG_PICTURE_MATCH",
+            text: language === "hi" ? "चित्र पहचानकर सही अक्षर से रेखा खींचकर मिलाइए:" : "Look at the pictures and draw a line to match with the correct letter:",
+            options: [
+              JSON.stringify({
+                pairs: [
+                  { clipartId: "apple", label: "Apple", target: "A" },
+                  { clipartId: "ball", label: "Ball", target: "B" },
+                  { clipartId: "cat", label: "Cat", target: "C" },
+                  { clipartId: "duck", label: "Duck", target: "D" },
+                ],
+                shuffleTargets: true,
+              }),
+            ],
+            subparts: [],
+            answer: "Apple->A, Ball->B, Cat->C, Duck->D",
+            marks: marks || 5,
+            difficulty: "EASY",
+            cognitiveLevel: "UNDERSTANDING",
+            explanation: "Picture to letter phonics matching.",
+          },
+        ];
+      }
+      if (type === "KDG_CIRCLE_TARGET") {
+        return [
+          {
+            type: "KDG_CIRCLE_TARGET",
+            text: language === "hi" ? "प्रत्येक पंक्ति में भिन्न चित्र पर गोला लगाइए:" : "Circle the odd picture in each row:",
+            options: [
+              JSON.stringify({
+                rows: [
+                  { items: ["apple", "apple", "car", "apple"], targetIndex: 2 },
+                  { items: ["cat", "kite", "cat", "cat"], targetIndex: 1 },
+                ],
+              }),
+            ],
+            subparts: [],
+            answer: "Row 1: Car, Row 2: Kite",
+            marks: marks || 5,
+            difficulty: "EASY",
+            cognitiveLevel: "ANALYZING",
+            explanation: "Identify the odd object in each row.",
+          },
+        ];
+      }
+      if (type === "KDG_SEQUENCE_CHAIN") {
+        return [
+          {
+            type: "KDG_SEQUENCE_CHAIN",
+            text: language === "hi" ? "इल्ली के शरीर में छूटे हुए अक्षर भरिए:" : "Fill in the missing letters in the caterpillar's body:",
+            options: [
+              JSON.stringify({
+                style: "caterpillar",
+                items: [
+                  { value: "A", isBlank: false },
+                  { value: "B", isBlank: true },
+                  { value: "C", isBlank: false },
+                  { value: "D", isBlank: true },
+                  { value: "E", isBlank: false },
+                ],
+              }),
+            ],
+            subparts: [],
+            answer: "B, D",
+            marks: marks || 5,
+            difficulty: "EASY",
+            cognitiveLevel: "REMEMBERING",
+            explanation: "Complete the missing letter chain.",
+          },
+        ];
+      }
+    }
+
     if (type === "MCQ") {
       return [
         {
@@ -358,17 +480,29 @@ export async function improveQuestionWithGemini(params: {
   apiKey?: string | null;
 }): Promise<GeminiCallResult<QuestionImproveResult>> {
   const { questionText, options, answer, type, task, apiKey } = params;
+  const isKdg = isKindergartenType(type);
 
-  const systemPrompt = `You are a senior CBSE Paper Setter and Moderator.
+  const systemPrompt = isKdg
+    ? `You are an expert Early Childhood & Kindergarten (ECCE / Pre-Primary) Curriculum Specialist for Nursery, LKG, and UKG.
+Evaluate the given preschool workbook activity instruction and improve it so it is warm, clear, age-appropriate, encouraging, and bilingual (English + simple Hindi).`
+    : `You are a senior CBSE Paper Setter and Moderator.
 Evaluate the given question and improve it strictly according to CBSE board standards, LaTeX math formatting, and grammatical precision.`;
 
-  const taskDescription = {
-    refine_cbse: "Refine language to formal, rigorous CBSE Board Examination phrasing. Remove ambiguity, ensure accurate scientific units, and format equations in LaTeX $...$.",
-    generate_distractors: "Generate 4 plausible, high-quality MCQ options (one correct, three distractors based on genuine student conceptual mistakes).",
-    bilingual_hindi: "Add accurate Hindi (Devanagari script) translation in parentheses alongside the English text and options, using official NCERT vocabulary.",
-    step_marking_scheme: "Structure a detailed step-wise marking scheme breakdown (e.g. formula [½m], substitution [1m], final unit [½m]).",
-    fix_ambiguity: "Identify any vagueness, missing given values, or multiple valid interpretations, and fix them cleanly.",
-  }[task];
+  const taskDescription = isKdg
+    ? {
+        refine_cbse: "Refine language into clear, encouraging, child-friendly activity instructions for Nursery/KG students.",
+        generate_distractors: "Refine activity items and options to be distinct and child-friendly.",
+        bilingual_hindi: "Add simple Hindi instructions (e.g. चित्र देखकर सही अक्षर से मिलाइए / सुंदर अक्षरों में लिखिए) alongside English.",
+        step_marking_scheme: "Structure a simple teacher assessment guide with star rating and smiley evaluation.",
+        fix_ambiguity: "Ensure the visual task instruction is clear, unambiguous, and easy for 3-5 year olds to follow with teacher help.",
+      }[task]
+    : {
+        refine_cbse: "Refine language to formal, rigorous CBSE Board Examination phrasing. Remove ambiguity, ensure accurate scientific units, and format equations in LaTeX $...$.",
+        generate_distractors: "Generate 4 plausible, high-quality MCQ options (one correct, three distractors based on genuine student conceptual mistakes).",
+        bilingual_hindi: "Add accurate Hindi (Devanagari script) translation in parentheses alongside the English text and options, using official NCERT vocabulary.",
+        step_marking_scheme: "Structure a detailed step-wise marking scheme breakdown (e.g. formula [½m], substitution [1m], final unit [½m]).",
+        fix_ambiguity: "Identify any vagueness, missing given values, or multiple valid interpretations, and fix them cleanly.",
+      }[task];
 
   const qText = questionText || "";
   const opts = options || [];
@@ -393,6 +527,40 @@ Return a JSON object strictly matching this TypeScript structure:
 }`;
 
   const mockFallback = (): QuestionImproveResult => {
+    if (isKdg) {
+      if (task === "bilingual_hindi") {
+        const hindiSuffix =
+          type === "KDG_TRACE_WRITE"
+            ? "चार-लाइन पर सुंदर अक्षर लिखिए"
+            : type === "KDG_NUMBER_GRID"
+            ? "खाली स्थानों में सही संख्या भरिए"
+            : type === "KDG_PICTURE_MATCH"
+            ? "चित्र पहचानकर सही अक्षर से मिलाइए"
+            : type === "KDG_COUNT_ITEMS"
+            ? "वस्तुएं गिनिए और डिब्बे में संख्या लिखिए"
+            : type === "KDG_CIRCLE_TARGET"
+            ? "भिन्न चित्र पर गोला लगाइए"
+            : "छूटे हुए अक्षर अथवा संख्याएँ भरिए";
+        return {
+          improvedText: `${qText.trim()} (${hindiSuffix})`,
+          improvedOptions: opts,
+          improvedAnswer: ans || "Activity verified for preschool level",
+          bilingualDevanagari: hindiSuffix,
+          critique: ["Added clear Devanagari preschool activity instruction for bilingual kindergarten workbook."],
+        };
+      }
+      return {
+        improvedText: qText.endsWith(":") || qText.endsWith(".") ? qText : `${qText}:`,
+        improvedOptions: opts,
+        improvedAnswer: ans || "Full marks for neat tracing, matching, or counting.",
+        stepMarkingScheme: "Total: 5 Marks (1 Mark each for neatness and accuracy)",
+        critique: [
+          "Preschool activity phrasing polished to age-appropriate ECCE kindergarten standards.",
+          "Clear, gentle instruction designed for Nursery / LKG / UKG workbook sheets.",
+        ],
+      };
+    }
+
     if (task === "bilingual_hindi") {
       return {
         improvedText: `${qText.trim()} (${qText.trim()} - हिंदी अनुवाद)`,

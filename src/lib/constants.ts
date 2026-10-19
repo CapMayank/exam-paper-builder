@@ -1,4 +1,13 @@
-export const QUESTION_TYPES = [
+export const KINDERGARTEN_QUESTION_TYPES = [
+  "KDG_TRACE_WRITE",
+  "KDG_NUMBER_GRID",
+  "KDG_PICTURE_MATCH",
+  "KDG_COUNT_ITEMS",
+  "KDG_CIRCLE_TARGET",
+  "KDG_SEQUENCE_CHAIN",
+] as const;
+
+export const STANDARD_QUESTION_TYPES = [
   "MCQ",
   "ASSERTION_REASON",
   "TRUE_FALSE",
@@ -14,6 +23,11 @@ export const QUESTION_TYPES = [
   "GRAMMAR",
   "DRAW",
   "MAP_WORK",
+] as const;
+
+export const QUESTION_TYPES = [
+  ...STANDARD_QUESTION_TYPES,
+  ...KINDERGARTEN_QUESTION_TYPES,
 ] as const;
 export type QuestionType = (typeof QUESTION_TYPES)[number];
 
@@ -33,7 +47,32 @@ export const QUESTION_TYPE_LABEL: Record<QuestionType, string> = {
   GRAMMAR: "Grammar / व्याकरण (निर्देशानुसार)",
   DRAW: "Draw / diagram",
   MAP_WORK: "Map work / मानचित्र कार्य",
+  KDG_TRACE_WRITE: "Letter & Word Tracing / 4-Line Writing",
+  KDG_NUMBER_GRID: "Number Writing Grid (1 to 50 / 1 to 100)",
+  KDG_PICTURE_MATCH: "Picture-to-Alphabet Match",
+  KDG_COUNT_ITEMS: "Count Objects & Write/Match",
+  KDG_CIRCLE_TARGET: "Circle Target / Odd One Out",
+  KDG_SEQUENCE_CHAIN: "Missing Sequence Chain (Caterpillar/Train)",
 };
+
+export function isKindergartenType(type?: string | null): boolean {
+  if (!type) return false;
+  return (
+    type === "KDG_TRACE_WRITE" ||
+    type === "KDG_NUMBER_GRID" ||
+    type === "KDG_PICTURE_MATCH" ||
+    type === "KDG_COUNT_ITEMS" ||
+    type === "KDG_CIRCLE_TARGET" ||
+    type === "KDG_SEQUENCE_CHAIN" ||
+    type.startsWith("KDG_")
+  );
+}
+
+export function isPrePrimaryClass(className?: string | null): boolean {
+  if (!className) return false;
+  const order = inferClassOrder(className);
+  return order <= 0;
+}
 
 export function isMcqLikeType(type?: string | null): boolean {
   return type === "MCQ" || type === "ASSERTION_REASON";
