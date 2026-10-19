@@ -19,6 +19,7 @@ import {
 } from "@/lib/blueprint";
 import { api } from "@/lib/client";
 import { DEFAULT_SCHOOL_NAME, EXAM_TYPES, EXAM_TYPE_LABEL, QUESTION_TYPES, QUESTION_TYPE_LABEL, sortClassNames } from "@/lib/constants";
+import { isSubjectMatching } from "@/lib/schoolCurriculum";
 import type { AcademicClassDto, Blueprint, Book, PaperData } from "@/lib/types";
 
 let qtSeq = 0;
@@ -111,7 +112,7 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
             (urlClassName && urlSubject && bs.find(
               (b) =>
                 b.className.trim().toLowerCase() === urlClassName.trim().toLowerCase() &&
-                b.subject.trim().toLowerCase() === urlSubject.trim().toLowerCase()
+                isSubjectMatching(b.subject, urlSubject)
             )) ||
             (urlClassName && !urlSubject && bs.find((b) => b.className.trim().toLowerCase() === urlClassName.trim().toLowerCase())) ||
             (!urlClassName && !urlSubject ? (bs[0] ?? null) : null);
@@ -126,7 +127,15 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
             if (urlSubject) setSelectedSubjectFilter(urlSubject);
             setName(`${urlClassName} ${urlSubject || ""} – Blueprint`.trim());
           }
-          if (urlCode) setSubjectCode(urlCode);
+          const activeClass = initialBook?.className || urlClassName;
+          const activeSub = initialBook?.subject || urlSubject;
+          const matchingClass = clsList.find((c) => c.name.trim().toLowerCase() === activeClass.trim().toLowerCase());
+          const matchingSubject = matchingClass?.subjects.find((s) => isSubjectMatching(s.name, activeSub));
+          if (urlCode) {
+            setSubjectCode(urlCode);
+          } else if (matchingSubject?.code) {
+            setSubjectCode(matchingSubject.code);
+          }
           setAcademicSession(currentSession);
           setSectionGroups([
             newSectionGroup(
@@ -175,7 +184,7 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
     return books.filter(
       (b) =>
         (!selectedClassFilter || b.className.trim().toLowerCase() === selectedClassFilter.trim().toLowerCase()) &&
-        (!selectedSubjectFilter || b.subject.trim().toLowerCase() === selectedSubjectFilter.trim().toLowerCase())
+        (!selectedSubjectFilter || isSubjectMatching(b.subject, selectedSubjectFilter))
     );
   }, [books, selectedClassFilter, selectedSubjectFilter]);
 
@@ -494,7 +503,7 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
               const firstMatch = books.find(
                 (b) =>
                   (!selectedClassFilter || b.className.trim().toLowerCase() === selectedClassFilter.trim().toLowerCase()) &&
-                  (!sub || b.subject.trim().toLowerCase() === sub.trim().toLowerCase())
+                  (!sub || isSubjectMatching(b.subject, sub))
               );
               if (firstMatch) {
                 setBookId(firstMatch.id);
@@ -502,6 +511,13 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
               } else {
                 setBookId("");
                 setMarks({});
+              }
+              const matchedCls = classes.find(
+                (c) => !selectedClassFilter || c.name.trim().toLowerCase() === selectedClassFilter.trim().toLowerCase()
+              );
+              const matchedSub = matchedCls?.subjects.find((s) => isSubjectMatching(s.name, sub));
+              if (matchedSub?.code) {
+                setSubjectCode(matchedSub.code);
               }
             }}
           >

@@ -248,3 +248,53 @@ export function getMissingStandardSubjects(
   const existingSet = new Set(existingSubjectNames.map((s) => s.trim().toLowerCase()));
   return preset.subjects.filter((s) => !existingSet.has(s.name.trim().toLowerCase()));
 }
+
+/**
+ * Canonical subject matcher that accounts for:
+ * 1. Exact match (case insensitive)
+ * 2. Bilingual slash separator (e.g. "Mathematics / गणित" matching "Mathematics")
+ * 3. Standard school curriculum aliases (e.g. Maths, Mathematics, Ganit)
+ */
+export function isSubjectMatching(subjectA?: string | null, subjectB?: string | null): boolean {
+  if (!subjectA || !subjectB) return false;
+  if (subjectA === "ALL" || subjectB === "ALL") return true;
+  const a = subjectA.trim().toLowerCase();
+  const b = subjectB.trim().toLowerCase();
+  if (a === b) return true;
+
+  const aParts = a.split("/").map((s) => s.trim());
+  const bParts = b.split("/").map((s) => s.trim());
+  if (aParts.some((ap) => bParts.includes(ap))) return true;
+
+  const aliases: Array<string[]> = [
+    ["math", "maths", "mathematics", "ganit", "गणित"],
+    ["science", "sci", "vigyan", "विज्ञान"],
+    ["social science", "social studies", "sst", "samajik vigyan", "सामाजिक विज्ञान"],
+    ["evs", "environmental studies", "environmental science", "paryavaran", "पर्यावरण"],
+    ["english", "eng", "angrezi", "अंग्रेजी"],
+    ["hindi", "hin", "हिंदी", "हिन्दी"],
+    ["sanskrit", "sans", "संस्कृत"],
+    ["computer", "information technology", "it", "cs", "computer science"],
+  ];
+  for (const group of aliases) {
+    const aInGroup = aParts.some((p) => group.includes(p));
+    const bInGroup = bParts.some((p) => group.includes(p));
+    if (aInGroup && bInGroup) return true;
+  }
+
+  return false;
+}
+
+/**
+ * Normalizes preset or imported subject names to match an existing class/subject context,
+ * stripping out unwanted bilingual slash suffixes when appropriate.
+ */
+export function normalizePresetSubject(presetSubject: string, targetSubject?: string): string {
+  if (targetSubject && isSubjectMatching(presetSubject, targetSubject)) {
+    return targetSubject.trim();
+  }
+  if (presetSubject.includes("/")) {
+    return presetSubject.split("/")[0].trim();
+  }
+  return presetSubject.trim();
+}

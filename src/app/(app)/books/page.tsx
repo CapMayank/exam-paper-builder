@@ -11,19 +11,10 @@ import { normalizeSession, useAcademicSession } from "@/lib/academicSession";
 import { api } from "@/lib/client";
 import { sortClassNames } from "@/lib/constants";
 import { plural } from "@/lib/format";
+import { isSubjectMatching } from "@/lib/schoolCurriculum";
 import type { AcademicClassDto, Book, Chapter } from "@/lib/types";
 
 const emptyBook = { title: "", subject: "", className: "", academicSession: "" };
-
-function subjectMatchesFilter(bookSubject: string, filterSub: string): boolean {
-  if (!filterSub || filterSub === "ALL") return true;
-  const a = bookSubject.trim().toLowerCase();
-  const b = filterSub.trim().toLowerCase();
-  if (a === b) return true;
-  const aParts = a.split("/").map((s) => s.trim());
-  const bParts = b.split("/").map((s) => s.trim());
-  return aParts.some((p) => bParts.includes(p));
-}
 
 export default function BooksPage() {
   const toast = useToast();
@@ -44,6 +35,8 @@ export default function BooksPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [importInitialTab, setImportInitialTab] = useState<"preset" | "rollover" | "ai_scan" | "text" | "csv" | "json">("preset");
   const [importTargetBook, setImportTargetBook] = useState<{ id: string; title: string; className: string; subject: string } | null>(null);
+  const [importTargetClass, setImportTargetClass] = useState<string | undefined>(undefined);
+  const [importTargetSubject, setImportTargetSubject] = useState<string | undefined>(undefined);
   const [combineOpen, setCombineOpen] = useState(false);
   const [rolloverModalOpen, setRolloverModalOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState<"directory" | "details">("directory");
@@ -85,7 +78,7 @@ export default function BooksPage() {
         ([data, clsData]) => {
           setBooks(data);
           setClasses(clsData);
-          setSelectedId((cur) => (cur && data.some((b) => b.id === cur) ? cur : (data[0]?.id ?? null)));
+          setSelectedId((cur) => (cur && data.some((b) => b.id === cur) ? cur : null));
           setLoaded(true);
         },
         (e) => {
@@ -137,7 +130,7 @@ export default function BooksPage() {
       if (classFilter !== "ALL" && b.className.trim().toLowerCase() !== classFilter.trim().toLowerCase()) {
         return false;
       }
-      if (subjectFilter !== "ALL" && !subjectMatchesFilter(b.subject, subjectFilter)) {
+      if (subjectFilter !== "ALL" && !isSubjectMatching(b.subject, subjectFilter)) {
         return false;
       }
       return true;
@@ -179,7 +172,7 @@ export default function BooksPage() {
         let existing = map.get(key);
         if (!existing) {
           const matchedEntry = Array.from(map.values()).find((item) =>
-            subjectMatchesFilter(b.subject, item.subjectName)
+            isSubjectMatching(b.subject, item.subjectName)
           );
           if (matchedEntry) {
             existing = matchedEntry;
@@ -199,7 +192,7 @@ export default function BooksPage() {
 
       let items = Array.from(map.values());
       if (subjectFilter !== "ALL") {
-        items = items.filter((item) => subjectMatchesFilter(item.subjectName, subjectFilter));
+        items = items.filter((item) => isSubjectMatching(item.subjectName, subjectFilter));
       }
       return items;
     }
@@ -210,7 +203,7 @@ export default function BooksPage() {
     if (subjectFilter !== "ALL") {
       for (const cls of classes) {
         if (sessionFilter !== "ALL" && normalizeSession(cls.academicSession) !== sessionFilter) continue;
-        const matchingSub = cls.subjects.find((s) => subjectMatchesFilter(s.name, subjectFilter));
+        const matchingSub = cls.subjects.find((s) => isSubjectMatching(s.name, subjectFilter));
         if (matchingSub) {
           const key = `${cls.name}__${matchingSub.name}`.toLowerCase();
           map.set(key, {
@@ -224,7 +217,7 @@ export default function BooksPage() {
     }
 
     for (const b of sessionBooks) {
-      if (subjectFilter !== "ALL" && !subjectMatchesFilter(b.subject, subjectFilter)) continue;
+      if (subjectFilter !== "ALL" && !isSubjectMatching(b.subject, subjectFilter)) continue;
       const key = `${b.className}__${b.subject}`.toLowerCase();
       let existing = map.get(key);
       if (!existing) {
@@ -245,22 +238,41 @@ export default function BooksPage() {
 
   const selected = useMemo(() => {
     if (selectedId) {
-      const match = sessionBooks.find((b) => b.id === selectedId);
+      const match = displayedBooks.find((b) => b.id === selectedId);
       if (match) return match;
     }
+    if (selectedSubjectKey) {
+      const subjectBook = displayedBooks.find(
+        (b) =>
+          isSubjectMatching(b.subject, selectedSubjectKey) &&
+          (classFilter === "ALL" || b.className.trim().toLowerCase() === classFilter.trim().toLowerCase())
+      );
+      if (subjectBook) return subjectBook;
+      // Targeted subject has no books yet: return null so activeEmptySubject shows
+      return null;
+    }
+    if (subjectFilter !== "ALL") {
+      const subjectBook = displayedBooks.find(
+        (b) =>
+          isSubjectMatching(b.subject, subjectFilter) &&
+          (classFilter === "ALL" || b.className.trim().toLowerCase() === classFilter.trim().toLowerCase())
+      );
+      if (subjectBook) return subjectBook;
+      return null;
+    }
     return displayedBooks[0] ?? null;
-  }, [selectedId, sessionBooks, displayedBooks]);
+  }, [selectedId, selectedSubjectKey, displayedBooks, classFilter, subjectFilter]);
 
   const activeEmptySubject = useMemo(() => {
     if (selected) return null;
     if (selectedSubjectKey) {
       const match = subjectDirectory.find(
-        (g) => g.subjectName.trim().toLowerCase() === selectedSubjectKey.trim().toLowerCase()
+        (g) => isSubjectMatching(g.subjectName, selectedSubjectKey)
       );
       if (match) return match;
     }
     if (subjectFilter !== "ALL") {
-      const match = subjectDirectory.find((g) => subjectMatchesFilter(g.subjectName, subjectFilter));
+      const match = subjectDirectory.find((g) => isSubjectMatching(g.subjectName, subjectFilter));
       if (match) return match;
     }
     const firstEmpty = subjectDirectory.find((g) => g.books.length === 0);
@@ -268,6 +280,13 @@ export default function BooksPage() {
   }, [selected, selectedSubjectKey, subjectFilter, subjectDirectory]);
 
   const nextChapterNumber = selected ? Math.max(0, ...selected.chapters.map((c) => c.number)) + 1 : 1;
+
+  const selectedSubjectCode = useMemo(() => {
+    if (!selected) return "";
+    const cls = classes.find((c) => c.name.trim().toLowerCase() === selected.className.trim().toLowerCase());
+    const sub = cls?.subjects.find((s) => isSubjectMatching(s.name, selected.subject));
+    return sub?.code || "";
+  }, [classes, selected]);
 
   async function run(fn: () => Promise<unknown>, success?: string) {
     setError(null);
@@ -287,13 +306,16 @@ export default function BooksPage() {
 
   function openBookDialog(b?: Book, overrideClass?: string, overrideSubject?: string) {
     setError(null);
+    const initialSub = overrideSubject || (selectedSubjectKey || (subjectFilter !== "ALL" ? subjectFilter : ""));
+    const initialCls = overrideClass || (classFilter !== "ALL" ? classFilter : availableClasses[0] || "");
     setBookForm(
       b
         ? { title: b.title, subject: b.subject, className: b.className, academicSession: b.academicSession || currentSession }
         : {
             ...emptyBook,
-            className: overrideClass || (classFilter !== "ALL" ? classFilter : availableClasses[0] || ""),
-            subject: overrideSubject || (subjectFilter !== "ALL" ? subjectFilter : ""),
+            className: initialCls,
+            subject: initialSub,
+            title: initialSub ? `NCERT ${initialSub}` : "",
             academicSession: sessionFilter !== "ALL" ? sessionFilter : currentSession,
           },
     );
@@ -389,6 +411,8 @@ export default function BooksPage() {
               className="btn btn-ghost border border-slate-200 hover:border-slate-300"
               onClick={() => {
                 setImportTargetBook(null);
+                setImportTargetClass(classFilter !== "ALL" ? classFilter : undefined);
+                setImportTargetSubject(subjectFilter !== "ALL" ? subjectFilter : undefined);
                 setImportInitialTab("preset");
                 setImportOpen(true);
               }}
@@ -485,6 +509,8 @@ export default function BooksPage() {
                 className="btn btn-primary"
                 onClick={() => {
                   setImportTargetBook(null);
+                  setImportTargetClass(classFilter !== "ALL" ? classFilter : undefined);
+                  setImportTargetSubject(subjectFilter !== "ALL" ? subjectFilter : undefined);
                   setImportInitialTab("preset");
                   setImportOpen(true);
                 }}
@@ -681,6 +707,8 @@ export default function BooksPage() {
                                 type="button"
                                 onClick={() => {
                                   setImportTargetBook(null);
+                                  setImportTargetClass(group.className);
+                                  setImportTargetSubject(group.subjectName);
                                   setImportInitialTab("preset");
                                   setImportOpen(true);
                                 }}
@@ -735,7 +763,7 @@ export default function BooksPage() {
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <Link
-                        href={`/blueprints/new?bookId=${selected.id}&className=${encodeURIComponent(selected.className)}&subject=${encodeURIComponent(selected.subject)}`}
+                        href={`/blueprints/new?bookId=${selected.id}&className=${encodeURIComponent(selected.className)}&subject=${encodeURIComponent(selected.subject)}${selectedSubjectCode ? `&subjectCode=${encodeURIComponent(selectedSubjectCode)}` : ""}`}
                         className="btn btn-sm btn-ghost border border-indigo-200 bg-indigo-50/70 text-indigo-900 hover:bg-indigo-100 flex items-center gap-1.5 font-semibold shadow-2xs"
                         title="Create an exam blueprint for this textbook"
                       >
@@ -758,6 +786,8 @@ export default function BooksPage() {
                             className: selected.className,
                             subject: selected.subject,
                           });
+                          setImportTargetClass(selected.className);
+                          setImportTargetSubject(selected.subject);
                           setImportOpen(true);
                         }}
                       >
@@ -903,6 +933,8 @@ export default function BooksPage() {
                         className="btn btn-ghost border border-amber-200 bg-white text-xs py-2 px-3.5 text-amber-900 hover:bg-amber-100 gap-1.5 shadow-2xs"
                         onClick={() => {
                           setImportTargetBook(null);
+                          setImportTargetClass(activeEmptySubject.className);
+                          setImportTargetSubject(activeEmptySubject.subjectName);
                           setImportInitialTab("preset");
                           setImportOpen(true);
                         }}
@@ -989,6 +1021,8 @@ export default function BooksPage() {
       {importOpen && (
         <SyllabusImportModal
           targetBook={importTargetBook}
+          targetClass={importTargetClass}
+          targetSubject={importTargetSubject}
           initialTab={importInitialTab}
           onClose={() => setImportOpen(false)}
           onSuccess={({ bookId }) => {

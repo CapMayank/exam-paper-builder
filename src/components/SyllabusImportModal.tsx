@@ -24,6 +24,7 @@ import {
 import { Modal, Spinner, useToast } from "@/components/ui";
 import { api } from "@/lib/client";
 import { useAcademicSession } from "@/lib/academicSession";
+import { isSubjectMatching, normalizePresetSubject } from "@/lib/schoolCurriculum";
 import type { Book } from "@/lib/types";
 import {
   parseSyllabusContent,
@@ -51,6 +52,8 @@ interface SyllabusImportModalProps {
   onClose: () => void;
   onSuccess: (result: { bookId?: string }) => void;
   targetBook?: { id: string; title: string; className: string; subject: string } | null;
+  targetClass?: string;
+  targetSubject?: string;
   initialTab?: ImportFormat;
 }
 
@@ -117,18 +120,53 @@ UNIT 2: Supplementary Reader (Footprints)
 3. The Midnight Visitor - Robert Arthur (pg 14)
 4. A Question of Trust - Victor Canning (pg 20)`;
 
-export function SyllabusImportModal({ onClose, onSuccess, targetBook, initialTab }: SyllabusImportModalProps) {
+export function SyllabusImportModal({
+  onClose,
+  onSuccess,
+  targetBook,
+  targetClass,
+  targetSubject,
+  initialTab,
+}: SyllabusImportModalProps) {
   const toast = useToast();
   const fileInputId = useId();
+
+  const initialClass = targetClass || targetBook?.className;
+  const initialSubject = targetSubject || targetBook?.subject;
 
   // Active Tab
   const [activeTab, setActiveTab] = useState<ImportFormat>(initialTab || (targetBook ? "text" : "preset"));
 
+  // Computed matching initial preset based on target class and subject
+  const initialPresetId = useMemo(() => {
+    if (initialClass && initialSubject) {
+      const match = STANDARD_CURRICULUM_PRESETS.find(
+        (p) =>
+          p.className.toLowerCase() === initialClass.toLowerCase() &&
+          isSubjectMatching(p.subject, initialSubject)
+      );
+      if (match) return match.id;
+    }
+    if (initialClass) {
+      const match = STANDARD_CURRICULUM_PRESETS.find(
+        (p) => p.className.toLowerCase() === initialClass.toLowerCase()
+      );
+      if (match) return match.id;
+    }
+    return "cbse-10-science";
+  }, [initialClass, initialSubject]);
+
   // Preset Filters
-  const [filterClass, setFilterClass] = useState<string>("ALL");
-  const [filterSubject, setFilterSubject] = useState<string>("ALL");
+  const [filterClass, setFilterClass] = useState<string>(initialClass || "ALL");
+  const [filterSubject, setFilterSubject] = useState<string>(initialSubject || "ALL");
   const [filterCompositeOnly, setFilterCompositeOnly] = useState<boolean>(false);
-  const [selectedPresetId, setSelectedPresetId] = useState<string>("cbse-10-science");
+  const [selectedPresetId, setSelectedPresetId] = useState<string>(initialPresetId);
+
+  useEffect(() => {
+    if (initialPresetId) {
+      setSelectedPresetId(initialPresetId);
+    }
+  }, [initialPresetId]);
 
   // Raw Content Inputs
   const [textContent, setTextContent] = useState<string>(SAMPLE_TEXT_SYLLABUS);
@@ -137,8 +175,8 @@ export function SyllabusImportModal({ onClose, onSuccess, targetBook, initialTab
 
   // AI Scanner State
   const [aiRawText, setAiRawText] = useState<string>(SAMPLE_AI_INDEX);
-  const [aiClass, setAiClass] = useState<string>(targetBook?.className || "Class 10");
-  const [aiSubject, setAiSubject] = useState<string>(targetBook?.subject || "English");
+  const [aiClass, setAiClass] = useState<string>(initialClass || "Class 10");
+  const [aiSubject, setAiSubject] = useState<string>(initialSubject || "English");
   const [aiBusy, setAiBusy] = useState<boolean>(false);
   const [aiError, setAiError] = useState<string | null>(null);
 
@@ -176,9 +214,11 @@ export function SyllabusImportModal({ onClose, onSuccess, targetBook, initialTab
   }, [selectedRolloverBookId, existingBooks]);
 
   // Metadata Defaults
-  const [defaultTitle, setDefaultTitle] = useState<string>(targetBook?.title || "NCERT Science");
-  const [defaultClass, setDefaultClass] = useState<string>(targetBook?.className || "Class 10");
-  const [defaultSubject, setDefaultSubject] = useState<string>(targetBook?.subject || "Science");
+  const [defaultTitle, setDefaultTitle] = useState<string>(
+    targetBook?.title || (initialSubject ? `NCERT ${initialSubject}` : "NCERT Science")
+  );
+  const [defaultClass, setDefaultClass] = useState<string>(initialClass || "Class 10");
+  const [defaultSubject, setDefaultSubject] = useState<string>(initialSubject || "Science");
   const [upsert, setUpsert] = useState<boolean>(true);
 
   // Editable Books State (Interactive Checklist & Customizer)
@@ -192,7 +232,7 @@ export function SyllabusImportModal({ onClose, onSuccess, targetBook, initialTab
   const filteredPresets = useMemo(() => {
     return STANDARD_CURRICULUM_PRESETS.filter((p) => {
       if (filterClass !== "ALL" && p.className !== filterClass) return false;
-      if (filterSubject !== "ALL" && !p.subject.toLowerCase().includes(filterSubject.toLowerCase())) return false;
+      if (filterSubject !== "ALL" && !isSubjectMatching(p.subject, filterSubject)) return false;
       if (filterCompositeOnly && !p.isComposite) return false;
       return true;
     });
@@ -217,11 +257,16 @@ export function SyllabusImportModal({ onClose, onSuccess, targetBook, initialTab
     } else if (activeTab === "preset") {
       const preset = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === selectedPresetId);
       if (preset) {
+        const finalClass = initialClass || preset.className;
+        const finalSubject = normalizePresetSubject(
+          preset.subject,
+          initialSubject || (filterSubject !== "ALL" ? filterSubject : undefined)
+        );
         sourceBooks = [
           {
             title: preset.title,
-            className: preset.className,
-            subject: preset.subject,
+            className: finalClass,
+            subject: finalSubject,
             chapters: preset.chapters,
           },
         ];
@@ -490,18 +535,31 @@ export function SyllabusImportModal({ onClose, onSuccess, targetBook, initialTab
 
       // Build customBooks payload containing ONLY selected and edited chapters
       const booksToImport = editableBooks
-        .map((b) => ({
-          title: b.title.trim(),
-          className: b.className.trim(),
-          subject: b.subject.trim(),
-          academicSession: currentSession,
-          chapters: b.chapters
-            .filter((c) => c.selected)
-            .map((c) => ({
-              number: c.number,
-              title: c.title.trim(),
-            })),
-        }))
+        .map((b) => {
+          let bSubject = b.subject.trim();
+          if (initialSubject && isSubjectMatching(bSubject, initialSubject)) {
+            bSubject = initialSubject.trim();
+          } else {
+            bSubject = normalizePresetSubject(bSubject);
+          }
+          let bClass = b.className.trim();
+          if (initialClass) {
+            bClass = initialClass.trim();
+          }
+
+          return {
+            title: b.title.trim(),
+            className: bClass,
+            subject: bSubject,
+            academicSession: currentSession,
+            chapters: b.chapters
+              .filter((c) => c.selected)
+              .map((c) => ({
+                number: c.number,
+                title: c.title.trim(),
+              })),
+          };
+        })
         .filter((b) => b.chapters.length > 0);
 
       const payload = {
@@ -545,8 +603,14 @@ export function SyllabusImportModal({ onClose, onSuccess, targetBook, initialTab
         onSuccess({ bookId: targetBook.id });
       } else {
         const primaryId = res.bookIds?.[0] || res.book?.id;
+        const totalBooksAffected =
+          (res.createdBooks ?? 0) + (res.updatedBooks ?? 0) || booksToImport.length;
+        const actionLabel =
+          res.createdBooks === 0 && (res.updatedBooks ?? 0) > 0
+            ? "Updated syllabus for"
+            : "Successfully imported";
         toast.success(
-          `Imported ${res.createdBooks ?? booksToImport.length} textbook(s) with ${selectedChaptersCount} selected chapters!`,
+          `${actionLabel} ${totalBooksAffected} textbook(s) (${selectedChaptersCount} chapters)!`,
         );
         onSuccess({ bookId: primaryId });
       }

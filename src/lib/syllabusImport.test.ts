@@ -7,6 +7,7 @@ import {
   parseTextSyllabus,
   STANDARD_CURRICULUM_PRESETS,
 } from "./syllabusImport";
+import { isSubjectMatching, normalizePresetSubject } from "./schoolCurriculum";
 
 describe("STANDARD_CURRICULUM_PRESETS", () => {
   it("contains standard CBSE/NCERT curriculum presets with complete chapter lists", () => {
@@ -271,5 +272,34 @@ describe("parseSyllabusContent dispatcher", () => {
 
     const jsonRes = parseSyllabusContent("json", JSON.stringify([{ number: 1, title: "Ch 1" }]));
     expect(jsonRes.books[0].chapters.length).toBe(1);
+  });
+});
+
+describe("isSubjectMatching and normalizePresetSubject", () => {
+  it("matches identical subject strings regardless of case and whitespace", () => {
+    expect(isSubjectMatching("Mathematics", "mathematics")).toBe(true);
+    expect(isSubjectMatching("  Science  ", "science")).toBe(true);
+    expect(isSubjectMatching("English", "Hindi")).toBe(false);
+  });
+
+  it("matches bilingual preset subjects with standard class subjects", () => {
+    expect(isSubjectMatching("Mathematics / गणित", "Mathematics")).toBe(true);
+    expect(isSubjectMatching("Mathematics / गणित", "Ganit")).toBe(true);
+    expect(isSubjectMatching("Science / विज्ञान", "Science")).toBe(true);
+    expect(isSubjectMatching("Social Science / सामाजिक विज्ञान", "Social Science")).toBe(true);
+    expect(isSubjectMatching("Social Science / सामाजिक विज्ञान", "SST")).toBe(true);
+  });
+
+  it("matches curriculum aliases properly", () => {
+    expect(isSubjectMatching("Maths", "Mathematics")).toBe(true);
+    expect(isSubjectMatching("Environmental Studies", "EVS")).toBe(true);
+    expect(isSubjectMatching("Information Technology", "Computer")).toBe(true);
+  });
+
+  it("normalizes preset subjects to target subject without creating duplicate subjects", () => {
+    expect(normalizePresetSubject("Mathematics / गणित", "Mathematics")).toBe("Mathematics");
+    expect(normalizePresetSubject("Science / विज्ञान", "Science")).toBe("Science");
+    expect(normalizePresetSubject("Mathematics / गणित")).toBe("Mathematics");
+    expect(normalizePresetSubject("English")).toBe("English");
   });
 });
