@@ -33,9 +33,11 @@ import { sortClassNames } from "@/lib/constants";
 import { plural } from "@/lib/format";
 import {
   EDUCATIONAL_STAGES,
+  getCanonicalSubjectName,
   getEducationalStage,
   getMissingStandardSubjects,
   getStandardPresetForClass,
+  isSubjectMatching,
   STANDARD_SCHOOL_CLASSES,
 } from "@/lib/schoolCurriculum";
 import type {
@@ -46,12 +48,7 @@ import type {
 } from "@/lib/types";
 
 function subjectMatches(bookSubject: string, classSubjectName: string): boolean {
-  const a = bookSubject.trim().toLowerCase();
-  const b = classSubjectName.trim().toLowerCase();
-  if (a === b) return true;
-  const aParts = a.split("/").map((s) => s.trim());
-  const bParts = b.split("/").map((s) => s.trim());
-  return aParts.some((p) => bParts.includes(p));
+  return isSubjectMatching(bookSubject, classSubjectName);
 }
 
 function SectionRosterItem({
@@ -511,19 +508,20 @@ export default function ClassesHierarchyPage() {
     if (!selectedClass || !subjectForm.name.trim()) return;
     setBusy(true);
     setError(null);
+    const subName = getCanonicalSubjectName(subjectForm.name) || subjectForm.name.trim();
     try {
       if (editingSubject?.id) {
         await api(`/api/classes/${selectedClass.id}/subjects/${editingSubject.id}`, {
           method: "PATCH",
-          json: { name: subjectForm.name.trim(), code: subjectForm.code.trim() },
+          json: { name: subName, code: subjectForm.code.trim() },
         });
-        toast.success(`Updated subject ${subjectForm.name.trim()}`);
+        toast.success(`Updated subject ${subName}`);
       } else {
         await api(`/api/classes/${selectedClass.id}/subjects`, {
           method: "POST",
-          json: { name: subjectForm.name.trim(), code: subjectForm.code.trim() },
+          json: { name: subName, code: subjectForm.code.trim() },
         });
-        toast.success(`Added ${subjectForm.name.trim()} to ${selectedClass.name}`);
+        toast.success(`Added ${subName} to ${selectedClass.name}`);
       }
       setSubjectModalOpen(false);
       setEditingSubject(null);

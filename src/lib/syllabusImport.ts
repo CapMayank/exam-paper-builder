@@ -45,6 +45,7 @@ export interface StandardCurriculumPreset {
 }
 
 import { STANDARD_CURRICULUM_PRESETS } from "./curriculumPresets";
+import { getCanonicalSubjectName } from "./schoolCurriculum";
 export { STANDARD_CURRICULUM_PRESETS };
 
 /**
@@ -177,7 +178,7 @@ export function parseTextSyllabus(
 
   if (!bookTitle) bookTitle = "Imported Textbook";
   if (!className) className = "Class 10";
-  if (!subject) subject = "General";
+  subject = getCanonicalSubjectName(subject) || subject || "General";
 
   // Check for duplicate chapter numbers
   const seenNumbers = new Set<number>();
@@ -259,7 +260,8 @@ export function parseCsvSyllabus(
 
     const rowBookTitle = (titleCol !== -1 ? row[titleCol] : "") || defaults.defaultTitle || "Imported Textbook";
     const rowClass = (classCol !== -1 ? row[classCol] : "") || defaults.defaultClass || "Class 10";
-    const rowSubject = (subjectCol !== -1 ? row[subjectCol] : "") || defaults.defaultSubject || "General";
+    const rawSubject = (subjectCol !== -1 ? row[subjectCol] : "") || defaults.defaultSubject || "General";
+    const rowSubject = getCanonicalSubjectName(rawSubject) || rawSubject;
 
     let chNum: number;
     if (numCol !== -1 && row[numCol]) {
@@ -335,7 +337,8 @@ export function parseJsonSyllabus(
         const b = item as Record<string, unknown>;
         const title = String(b.title || defaults.defaultTitle || "Imported Textbook").trim();
         const className = String(b.className || defaults.defaultClass || "Class 10").trim();
-        const subject = String(b.subject || defaults.defaultSubject || "General").trim();
+        const rawSub = String(b.subject || defaults.defaultSubject || "General").trim();
+        const subject = getCanonicalSubjectName(rawSub) || rawSub;
         const rawChapters = Array.isArray(b.chapters) ? b.chapters : [];
 
         const chapters: ParsedChapterItem[] = [];
@@ -363,10 +366,11 @@ export function parseJsonSyllabus(
         chapters.push({ number: num, title });
         autoNum = num + 1;
       }
+      const rawSub = defaults.defaultSubject || "General";
       books.push({
         title: defaults.defaultTitle || "Imported Textbook",
         className: defaults.defaultClass || "Class 10",
-        subject: defaults.defaultSubject || "General",
+        subject: getCanonicalSubjectName(rawSub) || rawSub,
         chapters: chapters.sort((a, b) => a.number - b.number),
       });
     }
@@ -375,7 +379,8 @@ export function parseJsonSyllabus(
     const b = parsed as Record<string, unknown>;
     const title = String(b.title || defaults.defaultTitle || "Imported Textbook").trim();
     const className = String(b.className || defaults.defaultClass || "Class 10").trim();
-    const subject = String(b.subject || defaults.defaultSubject || "General").trim();
+    const rawSub = String(b.subject || defaults.defaultSubject || "General").trim();
+    const subject = getCanonicalSubjectName(rawSub) || rawSub;
     const rawChapters = Array.isArray(b.chapters) ? b.chapters : [];
 
     const chapters: ParsedChapterItem[] = [];

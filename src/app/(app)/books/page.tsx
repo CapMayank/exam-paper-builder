@@ -11,7 +11,7 @@ import { normalizeSession, useAcademicSession } from "@/lib/academicSession";
 import { api } from "@/lib/client";
 import { sortClassNames } from "@/lib/constants";
 import { plural } from "@/lib/format";
-import { isSubjectMatching } from "@/lib/schoolCurriculum";
+import { getCanonicalSubjectName, isSubjectMatching } from "@/lib/schoolCurriculum";
 import type { AcademicClassDto, Book, Chapter } from "@/lib/types";
 
 const emptyBook = { title: "", subject: "", className: "", academicSession: "" };
@@ -118,10 +118,12 @@ export default function BooksPage() {
         (sessionFilter === "ALL" || normalizeSession(c.academicSession) === sessionFilter) &&
         (classFilter === "ALL" || c.name.trim().toLowerCase() === classFilter.trim().toLowerCase())
     );
-    const fromClasses = relevantClasses.flatMap((c) => c.subjects.map((s) => s.name));
+    const fromClasses = relevantClasses.flatMap((c) =>
+      c.subjects.map((s) => getCanonicalSubjectName(s.name) || s.name)
+    );
     const fromBooks = sessionBooks
       .filter((b) => classFilter === "ALL" || b.className.trim().toLowerCase() === classFilter.trim().toLowerCase())
-      .map((b) => b.subject);
+      .map((b) => getCanonicalSubjectName(b.subject) || b.subject);
     return Array.from(new Set([...fromClasses, ...fromBooks]));
   }, [classes, sessionBooks, sessionFilter, classFilter]);
 
@@ -153,22 +155,27 @@ export default function BooksPage() {
       );
       const map = new Map<string, SubjectBookGroup>();
 
-      // 1. Add all enrolled subjects for this class
+      // 1. Add all enrolled subjects for this class (canonicalized)
       if (clsObj) {
         for (const sub of clsObj.subjects) {
-          map.set(sub.name.trim().toLowerCase(), {
-            subjectName: sub.name,
-            subjectCode: sub.code,
-            className: clsObj.name,
-            books: [],
-          });
+          const canon = getCanonicalSubjectName(sub.name) || sub.name;
+          const key = canon.trim().toLowerCase();
+          if (!map.has(key)) {
+            map.set(key, {
+              subjectName: canon,
+              subjectCode: sub.code,
+              className: clsObj.name,
+              books: [],
+            });
+          }
         }
       }
 
       // 2. Add books for this class
       for (const b of sessionBooks) {
         if (b.className.trim().toLowerCase() !== classFilter.trim().toLowerCase()) continue;
-        const key = b.subject.trim().toLowerCase();
+        const canonSub = getCanonicalSubjectName(b.subject) || b.subject;
+        const key = canonSub.trim().toLowerCase();
         let existing = map.get(key);
         if (!existing) {
           const matchedEntry = Array.from(map.values()).find((item) =>
@@ -178,7 +185,7 @@ export default function BooksPage() {
             existing = matchedEntry;
           } else {
             existing = {
-              subjectName: b.subject,
+              subjectName: canonSub,
               className: b.className,
               books: [],
             };
@@ -205,24 +212,28 @@ export default function BooksPage() {
         if (sessionFilter !== "ALL" && normalizeSession(cls.academicSession) !== sessionFilter) continue;
         const matchingSub = cls.subjects.find((s) => isSubjectMatching(s.name, subjectFilter));
         if (matchingSub) {
-          const key = `${cls.name}__${matchingSub.name}`.toLowerCase();
-          map.set(key, {
-            subjectName: matchingSub.name,
-            subjectCode: matchingSub.code,
-            className: cls.name,
-            books: [],
-          });
+          const canon = getCanonicalSubjectName(matchingSub.name) || matchingSub.name;
+          const key = `${cls.name}__${canon}`.toLowerCase();
+          if (!map.has(key)) {
+            map.set(key, {
+              subjectName: canon,
+              subjectCode: matchingSub.code,
+              className: cls.name,
+              books: [],
+            });
+          }
         }
       }
     }
 
     for (const b of sessionBooks) {
       if (subjectFilter !== "ALL" && !isSubjectMatching(b.subject, subjectFilter)) continue;
-      const key = `${b.className}__${b.subject}`.toLowerCase();
+      const canonSub = getCanonicalSubjectName(b.subject) || b.subject;
+      const key = `${b.className}__${canonSub}`.toLowerCase();
       let existing = map.get(key);
       if (!existing) {
         existing = {
-          subjectName: b.subject,
+          subjectName: canonSub,
           className: b.className,
           books: [],
         };
@@ -306,11 +317,12 @@ export default function BooksPage() {
 
   function openBookDialog(b?: Book, overrideClass?: string, overrideSubject?: string) {
     setError(null);
-    const initialSub = overrideSubject || (selectedSubjectKey || (subjectFilter !== "ALL" ? subjectFilter : ""));
+    const rawSub = overrideSubject || (selectedSubjectKey || (subjectFilter !== "ALL" ? subjectFilter : ""));
+    const initialSub = getCanonicalSubjectName(rawSub) || rawSub;
     const initialCls = overrideClass || (classFilter !== "ALL" ? classFilter : availableClasses[0] || "");
     setBookForm(
       b
-        ? { title: b.title, subject: b.subject, className: b.className, academicSession: b.academicSession || currentSession }
+        ? { title: b.title, subject: getCanonicalSubjectName(b.subject) || b.subject, className: b.className, academicSession: b.academicSession || currentSession }
         : {
             ...emptyBook,
             className: initialCls,
@@ -325,10 +337,15 @@ export default function BooksPage() {
   async function saveBook(e: React.FormEvent) {
     e.preventDefault();
     const editingId = bookDialog?.editingId;
+    const canonicalSubject = getCanonicalSubjectName(bookForm.subject) || bookForm.subject.trim();
+    const payload = {
+      ...bookForm,
+      subject: canonicalSubject,
+    };
     const ok = await run(async () => {
-      if (editingId) await api(`/api/books/${editingId}`, { method: "PATCH", json: bookForm });
+      if (editingId) await api(`/api/books/${editingId}`, { method: "PATCH", json: payload });
       else {
-        const created = await api<Book>("/api/books", { method: "POST", json: bookForm });
+        const created = await api<Book>("/api/books", { method: "POST", json: payload });
         setSelectedId(created.id);
       }
     }, editingId ? "Textbook updated" : "Textbook added");
@@ -708,7 +725,7 @@ export default function BooksPage() {
                                 onClick={() => {
                                   setImportTargetBook(null);
                                   setImportTargetClass(group.className);
-                                  setImportTargetSubject(group.subjectName);
+                                  setImportTargetSubject(getCanonicalSubjectName(group.subjectName) || group.subjectName);
                                   setImportInitialTab("preset");
                                   setImportOpen(true);
                                 }}
@@ -784,10 +801,10 @@ export default function BooksPage() {
                             id: selected.id,
                             title: selected.title,
                             className: selected.className,
-                            subject: selected.subject,
+                            subject: getCanonicalSubjectName(selected.subject) || selected.subject,
                           });
                           setImportTargetClass(selected.className);
-                          setImportTargetSubject(selected.subject);
+                          setImportTargetSubject(getCanonicalSubjectName(selected.subject) || selected.subject);
                           setImportOpen(true);
                         }}
                       >
@@ -934,7 +951,7 @@ export default function BooksPage() {
                         onClick={() => {
                           setImportTargetBook(null);
                           setImportTargetClass(activeEmptySubject.className);
-                          setImportTargetSubject(activeEmptySubject.subjectName);
+                          setImportTargetSubject(getCanonicalSubjectName(activeEmptySubject.subjectName) || activeEmptySubject.subjectName);
                           setImportInitialTab("preset");
                           setImportOpen(true);
                         }}

@@ -24,7 +24,7 @@ import {
 import { Modal, Spinner, useToast } from "@/components/ui";
 import { api } from "@/lib/client";
 import { useAcademicSession } from "@/lib/academicSession";
-import { isSubjectMatching, normalizePresetSubject } from "@/lib/schoolCurriculum";
+import { getCanonicalSubjectName, isSubjectMatching, normalizePresetSubject } from "@/lib/schoolCurriculum";
 import type { Book } from "@/lib/types";
 import {
   parseSyllabusContent,
@@ -132,7 +132,8 @@ export function SyllabusImportModal({
   const fileInputId = useId();
 
   const initialClass = targetClass || targetBook?.className;
-  const initialSubject = targetSubject || targetBook?.subject;
+  const rawSubject = targetSubject || targetBook?.subject;
+  const initialSubject = getCanonicalSubjectName(rawSubject) || rawSubject;
 
   // Active Tab
   const [activeTab, setActiveTab] = useState<ImportFormat>(initialTab || (targetBook ? "text" : "preset"));
@@ -335,6 +336,7 @@ export function SyllabusImportModal({
       const customKey = typeof window !== "undefined" ? localStorage.getItem("exam_gemini_api_key") : null;
       if (customKey) headers["x-gemini-api-key"] = customKey;
 
+      const canonicalAiSubject = getCanonicalSubjectName(aiSubject) || aiSubject.trim();
       const res = await api<{
         success: boolean;
         isMock: boolean;
@@ -357,7 +359,7 @@ export function SyllabusImportModal({
         json: {
           rawText: aiRawText,
           className: aiClass,
-          subject: aiSubject,
+          subject: canonicalAiSubject,
         },
       });
 
@@ -376,7 +378,7 @@ export function SyllabusImportModal({
         scannedBooks.map((b, bIdx) => ({
           title: b.title,
           className: b.className,
-          subject: b.subject,
+          subject: getCanonicalSubjectName(b.subject) || canonicalAiSubject || b.subject,
           chapters: b.chapters.map((c, cIdx) => ({
             number: c.number,
             title: c.title,
@@ -536,9 +538,9 @@ export function SyllabusImportModal({
       // Build customBooks payload containing ONLY selected and edited chapters
       const booksToImport = editableBooks
         .map((b) => {
-          let bSubject = b.subject.trim();
+          let bSubject = getCanonicalSubjectName(b.subject) || b.subject.trim();
           if (initialSubject && isSubjectMatching(bSubject, initialSubject)) {
-            bSubject = initialSubject.trim();
+            bSubject = getCanonicalSubjectName(initialSubject) || initialSubject.trim();
           } else {
             bSubject = normalizePresetSubject(bSubject);
           }
@@ -776,20 +778,41 @@ export function SyllabusImportModal({
                 onChange={(e) => setFilterSubject(e.target.value)}
               >
                 <option value="ALL">All Subjects</option>
-                <option value="Science">Science</option>
-                <option value="Math">Mathematics</option>
                 <option value="English">English</option>
-                <option value="Social">Social Science</option>
                 <option value="Hindi">Hindi</option>
+                <option value="Mathematics">Mathematics</option>
+                <option value="Science">Science</option>
+                <option value="Social Science">Social Science</option>
                 <option value="Sanskrit">Sanskrit</option>
                 <option value="EVS">EVS / पर्यावरण</option>
                 <option value="Physics">Physics</option>
                 <option value="Chemistry">Chemistry</option>
                 <option value="Biology">Biology</option>
                 <option value="Accountancy">Accountancy</option>
-                <option value="Business">Business Studies</option>
+                <option value="Business Studies">Business Studies</option>
                 <option value="Economics">Economics</option>
-                <option value="Computer">Computer / IT</option>
+                <option value="Information Technology">Information Technology</option>
+                <option value="Foundational English & Math">Foundational English & Math</option>
+                {filterSubject !== "ALL" &&
+                  ![
+                    "English",
+                    "Hindi",
+                    "Mathematics",
+                    "Science",
+                    "Social Science",
+                    "Sanskrit",
+                    "EVS",
+                    "Physics",
+                    "Chemistry",
+                    "Biology",
+                    "Accountancy",
+                    "Business Studies",
+                    "Economics",
+                    "Information Technology",
+                    "Foundational English & Math",
+                  ].includes(filterSubject) && (
+                    <option value={filterSubject}>{filterSubject}</option>
+                  )}
               </select>
 
               {/* Multi-Book Toggle */}
@@ -974,11 +997,29 @@ export function SyllabusImportModal({
                 <span className="text-[11px] font-semibold text-slate-700">Target Subject:</span>
                 <input
                   type="text"
+                  list="ai-scan-subject-suggestions"
                   className="input text-xs py-1"
                   value={aiSubject}
                   onChange={(e) => setAiSubject(e.target.value)}
-                  placeholder="e.g. Science, English, etc."
+                  placeholder="e.g. English, Science, Mathematics, Hindi"
                 />
+                <datalist id="ai-scan-subject-suggestions">
+                  <option value="English" />
+                  <option value="Hindi" />
+                  <option value="Mathematics" />
+                  <option value="Science" />
+                  <option value="Social Science" />
+                  <option value="Sanskrit" />
+                  <option value="EVS" />
+                  <option value="Physics" />
+                  <option value="Chemistry" />
+                  <option value="Biology" />
+                  <option value="Accountancy" />
+                  <option value="Business Studies" />
+                  <option value="Economics" />
+                  <option value="Information Technology" />
+                  <option value="Foundational English & Math" />
+                </datalist>
               </label>
             </div>
 

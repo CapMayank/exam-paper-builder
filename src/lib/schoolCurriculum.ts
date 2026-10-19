@@ -167,8 +167,8 @@ export const STANDARD_SCHOOL_CLASSES: StandardClassPreset[] = [
     displayOrder: 11,
     stream: "Senior Secondary",
     subjects: [
-      { name: "English Core", code: "301" },
-      { name: "Hindi Core", code: "302" },
+      { name: "English", code: "301" },
+      { name: "Hindi", code: "302" },
       { name: "Physics", code: "042" },
       { name: "Chemistry", code: "043" },
       { name: "Mathematics", code: "041" },
@@ -183,8 +183,8 @@ export const STANDARD_SCHOOL_CLASSES: StandardClassPreset[] = [
     displayOrder: 12,
     stream: "Senior Secondary",
     subjects: [
-      { name: "English Core", code: "301" },
-      { name: "Hindi Core", code: "302" },
+      { name: "English", code: "301" },
+      { name: "Hindi", code: "302" },
       { name: "Physics", code: "042" },
       { name: "Chemistry", code: "043" },
       { name: "Mathematics", code: "041" },
@@ -250,10 +250,120 @@ export function getMissingStandardSubjects(
 }
 
 /**
+ * Resolves any school subject variant (e.g. "English Core", "English Language & Literature",
+ * "Mathematics / गणित", "Maths", "Hindi Core", "Environmental Studies (EVS)")
+ * into its single, clean, canonical department subject name.
+ */
+export function getCanonicalSubjectName(rawSubject?: string | null): string {
+  if (!rawSubject || !rawSubject.trim()) return "";
+  const s = rawSubject.trim();
+  const lower = s.toLowerCase();
+
+  // If bilingual slash separator exists (e.g. "Mathematics / गणित"), take first part
+  const base = lower.split("/")[0].trim();
+
+  // English variants
+  if (
+    base === "english" ||
+    base.startsWith("english ") ||
+    base === "eng" ||
+    base === "angrezi" ||
+    base === "अंग्रेजी"
+  ) {
+    return "English";
+  }
+
+  // Hindi variants
+  if (
+    base === "hindi" ||
+    base.startsWith("hindi ") ||
+    base === "hin" ||
+    base === "हिंदी" ||
+    base === "हिन्दी"
+  ) {
+    return "Hindi";
+  }
+
+  // Mathematics variants
+  if (
+    base === "math" ||
+    base === "maths" ||
+    base === "mathematics" ||
+    base.startsWith("mathematics ") ||
+    base.startsWith("math ") ||
+    base === "ganit" ||
+    base === "गणित"
+  ) {
+    return "Mathematics";
+  }
+
+  // Social Science variants
+  if (
+    base === "social science" ||
+    base === "social studies" ||
+    base === "sst" ||
+    base === "samajik vigyan" ||
+    base === "सामाजिक विज्ञान" ||
+    base === "social"
+  ) {
+    return "Social Science";
+  }
+
+  // General Science variants
+  if (
+    base === "science" ||
+    base === "general science" ||
+    base === "sci" ||
+    base === "vigyan" ||
+    base === "विज्ञान"
+  ) {
+    return "Science";
+  }
+
+  // Sanskrit variants
+  if (base === "sanskrit" || base === "sans" || base === "संस्कृत") {
+    return "Sanskrit";
+  }
+
+  // EVS variants
+  if (
+    base === "evs" ||
+    base.includes("environmental") ||
+    base.includes("general awareness") ||
+    base === "paryavaran" ||
+    base === "पर्यावरण"
+  ) {
+    return "EVS";
+  }
+
+  // Computer / IT variants
+  if (
+    base === "computer" ||
+    base === "computer science" ||
+    base === "information technology" ||
+    base === "it" ||
+    base === "cs" ||
+    base === "ip" ||
+    base === "informatics practices" ||
+    base === "artificial intelligence" ||
+    base === "ai"
+  ) {
+    return "Information Technology";
+  }
+
+  if (s.includes("/")) {
+    return s.split("/")[0].trim();
+  }
+
+  return s;
+}
+
+/**
  * Canonical subject matcher that accounts for:
  * 1. Exact match (case insensitive)
- * 2. Bilingual slash separator (e.g. "Mathematics / गणित" matching "Mathematics")
- * 3. Standard school curriculum aliases (e.g. Maths, Mathematics, Ganit)
+ * 2. Canonical subject resolution (e.g. "English Core", "English Language & Literature", "English" all match)
+ * 3. Bilingual slash separator (e.g. "Mathematics / गणित" matching "Mathematics")
+ * 4. Standard school curriculum aliases (e.g. Maths, Mathematics, Ganit)
  */
 export function isSubjectMatching(subjectA?: string | null, subjectB?: string | null): boolean {
   if (!subjectA || !subjectB) return false;
@@ -262,23 +372,90 @@ export function isSubjectMatching(subjectA?: string | null, subjectB?: string | 
   const b = subjectB.trim().toLowerCase();
   if (a === b) return true;
 
+  // Direct canonical match
+  const canonA = getCanonicalSubjectName(subjectA);
+  const canonB = getCanonicalSubjectName(subjectB);
+  if (canonA && canonB && canonA === canonB) return true;
+
   const aParts = a.split("/").map((s) => s.trim());
   const bParts = b.split("/").map((s) => s.trim());
   if (aParts.some((ap) => bParts.includes(ap))) return true;
 
   const aliases: Array<string[]> = [
-    ["math", "maths", "mathematics", "ganit", "गणित"],
-    ["science", "sci", "vigyan", "विज्ञान"],
-    ["social science", "social studies", "sst", "samajik vigyan", "सामाजिक विज्ञान"],
-    ["evs", "environmental studies", "environmental science", "paryavaran", "पर्यावरण"],
-    ["english", "eng", "angrezi", "अंग्रेजी"],
-    ["hindi", "hin", "हिंदी", "हिन्दी"],
+    [
+      "math",
+      "maths",
+      "mathematics",
+      "ganit",
+      "गणित",
+      "mathematics standard",
+      "mathematics basic",
+      "applied mathematics",
+      "pre-maths",
+    ],
+    ["science", "sci", "vigyan", "विज्ञान", "general science"],
+    ["social science", "social studies", "sst", "samajik vigyan", "सामाजिक विज्ञान", "social"],
+    [
+      "evs",
+      "environmental studies",
+      "environmental science",
+      "paryavaran",
+      "पर्यावरण",
+      "general awareness (evs)",
+      "general awareness",
+      "environmental studies (evs)",
+    ],
+    [
+      "english",
+      "eng",
+      "angrezi",
+      "अंग्रेजी",
+      "english core",
+      "english elective",
+      "english language & literature",
+      "english language and literature",
+      "english literature",
+      "general english",
+      "special english",
+      "communicative english",
+      "foundational english",
+      "foundational english & math",
+    ],
+    [
+      "hindi",
+      "hin",
+      "हिंदी",
+      "हिन्दी",
+      "hindi core",
+      "hindi elective",
+      "hindi course-a",
+      "hindi course-b",
+      "hindi a",
+      "hindi b",
+      "samanya hindi",
+      "vishesh hindi",
+    ],
     ["sanskrit", "sans", "संस्कृत"],
-    ["computer", "information technology", "it", "cs", "computer science"],
+    [
+      "computer",
+      "information technology",
+      "it",
+      "cs",
+      "computer science",
+      "ip",
+      "informatics practices",
+      "artificial intelligence",
+      "ai",
+    ],
   ];
+
   for (const group of aliases) {
-    const aInGroup = aParts.some((p) => group.includes(p));
-    const bInGroup = bParts.some((p) => group.includes(p));
+    const aInGroup = aParts.some(
+      (p) => group.includes(p) || group.some((g) => p.startsWith(g + " ") || g.startsWith(p + " "))
+    );
+    const bInGroup = bParts.some(
+      (p) => group.includes(p) || group.some((g) => p.startsWith(g + " ") || g.startsWith(p + " "))
+    );
     if (aInGroup && bInGroup) return true;
   }
 
@@ -287,12 +464,19 @@ export function isSubjectMatching(subjectA?: string | null, subjectB?: string | 
 
 /**
  * Normalizes preset or imported subject names to match an existing class/subject context,
- * stripping out unwanted bilingual slash suffixes when appropriate.
+ * stripping out unwanted course qualifiers (e.g. "Core", "Language & Literature") and bilingual slash suffixes.
  */
 export function normalizePresetSubject(presetSubject: string, targetSubject?: string): string {
+  // If targetSubject is provided, check if it matches
   if (targetSubject && isSubjectMatching(presetSubject, targetSubject)) {
+    const canonTarget = getCanonicalSubjectName(targetSubject);
+    if (canonTarget) return canonTarget;
     return targetSubject.trim();
   }
+
+  const canonPreset = getCanonicalSubjectName(presetSubject);
+  if (canonPreset) return canonPreset;
+
   if (presetSubject.includes("/")) {
     return presetSubject.split("/")[0].trim();
   }

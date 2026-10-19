@@ -7,7 +7,11 @@ import {
   parseTextSyllabus,
   STANDARD_CURRICULUM_PRESETS,
 } from "./syllabusImport";
-import { isSubjectMatching, normalizePresetSubject } from "./schoolCurriculum";
+import {
+  getCanonicalSubjectName,
+  isSubjectMatching,
+  normalizePresetSubject,
+} from "./schoolCurriculum";
 
 describe("STANDARD_CURRICULUM_PRESETS", () => {
   it("contains standard CBSE/NCERT curriculum presets with complete chapter lists", () => {
@@ -296,10 +300,54 @@ describe("isSubjectMatching and normalizePresetSubject", () => {
     expect(isSubjectMatching("Information Technology", "Computer")).toBe(true);
   });
 
-  it("normalizes preset subjects to target subject without creating duplicate subjects", () => {
+  it("canonicalizes English Core and English Language & Literature to English", () => {
+    expect(getCanonicalSubjectName("English Core")).toBe("English");
+    expect(getCanonicalSubjectName("English Language & Literature")).toBe("English");
+    expect(getCanonicalSubjectName("English Literature")).toBe("English");
+    expect(getCanonicalSubjectName("Hindi Core")).toBe("Hindi");
+    expect(getCanonicalSubjectName("Hindi Course-A")).toBe("Hindi");
+    expect(getCanonicalSubjectName("Mathematics / गणित")).toBe("Mathematics");
+    expect(getCanonicalSubjectName("Maths")).toBe("Mathematics");
+  });
+
+  it("matches English Core and English Language & Literature with English presets and class subjects", () => {
+    expect(isSubjectMatching("English", "English Core")).toBe(true);
+    expect(isSubjectMatching("English Core", "English")).toBe(true);
+    expect(isSubjectMatching("English", "English Language & Literature")).toBe(true);
+    expect(isSubjectMatching("English Language & Literature", "English Core")).toBe(true);
+    expect(isSubjectMatching("Hindi", "Hindi Core")).toBe(true);
+    expect(isSubjectMatching("Hindi Course-A", "Hindi")).toBe(true);
+  });
+
+  it("normalizes preset subjects to canonical subject without coercing into course qualifiers", () => {
     expect(normalizePresetSubject("Mathematics / गणित", "Mathematics")).toBe("Mathematics");
     expect(normalizePresetSubject("Science / विज्ञान", "Science")).toBe("Science");
     expect(normalizePresetSubject("Mathematics / गणित")).toBe("Mathematics");
     expect(normalizePresetSubject("English")).toBe("English");
+    // Crucial: When targetSubject is "English Core", normalized subject must be canonical "English"
+    expect(normalizePresetSubject("English", "English Core")).toBe("English");
+    expect(normalizePresetSubject("English Core")).toBe("English");
+    expect(normalizePresetSubject("English Language & Literature")).toBe("English");
+  });
+
+  it("ensures parsers automatically output canonical subject names", () => {
+    const textRes = parseTextSyllabus("1. A Letter to God\n2. Nelson Mandela", {
+      defaultTitle: "First Flight",
+      defaultClass: "Class 10",
+      defaultSubject: "English Language & Literature",
+    });
+    expect(textRes.books[0].subject).toBe("English");
+
+    const csvRes = parseCsvSyllabus("Chapter,Title\n1,The Portrait of a Lady", {
+      defaultTitle: "Hornbill",
+      defaultClass: "Class 11",
+      defaultSubject: "English Core",
+    });
+    expect(csvRes.books[0].subject).toBe("English");
+
+    const jsonRes = parseJsonSyllabus(
+      JSON.stringify([{ title: "Hornbill", className: "Class 11", subject: "English Core", chapters: [{ number: 1, title: "The Portrait of a Lady" }] }])
+    );
+    expect(jsonRes.books[0].subject).toBe("English");
   });
 });

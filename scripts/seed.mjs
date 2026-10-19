@@ -582,8 +582,8 @@ async function main() {
       displayOrder: 9,
       stream: "Secondary",
       subjects: [
-        { name: "English Language & Literature", code: "184" },
-        { name: "Hindi Course-A", code: "002" },
+        { name: "English", code: "184" },
+        { name: "Hindi", code: "002" },
         { name: "Mathematics", code: "041" },
         { name: "Science", code: "086" },
         { name: "Social Science", code: "087" },
@@ -595,8 +595,8 @@ async function main() {
       displayOrder: 10,
       stream: "Secondary",
       subjects: [
-        { name: "English Language & Literature", code: "184" },
-        { name: "Hindi Course-A", code: "002" },
+        { name: "English", code: "184" },
+        { name: "Hindi", code: "002" },
         { name: "Mathematics", code: "041" },
         { name: "Science", code: "086" },
         { name: "Social Science", code: "087" },
@@ -608,7 +608,8 @@ async function main() {
       displayOrder: 11,
       stream: "Senior Secondary",
       subjects: [
-        { name: "English Core", code: "301" },
+        { name: "English", code: "301" },
+        { name: "Hindi", code: "302" },
         { name: "Physics", code: "042" },
         { name: "Chemistry", code: "043" },
         { name: "Mathematics", code: "041" },
@@ -623,7 +624,8 @@ async function main() {
       displayOrder: 12,
       stream: "Senior Secondary",
       subjects: [
-        { name: "English Core", code: "301" },
+        { name: "English", code: "301" },
+        { name: "Hindi", code: "302" },
         { name: "Physics", code: "042" },
         { name: "Chemistry", code: "043" },
         { name: "Mathematics", code: "041" },
