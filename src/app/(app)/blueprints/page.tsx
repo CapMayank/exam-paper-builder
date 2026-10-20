@@ -6,6 +6,7 @@ import {
   Calendar,
   CheckCircle2,
   ChevronRight,
+  Code2,
   Copy,
   FileText,
   GraduationCap,
@@ -23,6 +24,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AcademicRolloverModal } from "@/components/AcademicRolloverModal";
+import { BlueprintJsonModal } from "@/components/BlueprintJsonModal";
 import {
   EmptyState,
   ErrorBanner,
@@ -77,6 +79,7 @@ export default function BlueprintsPage() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [rolloverOpen, setRolloverOpen] = useState(false);
+  const [jsonModalBlueprint, setJsonModalBlueprint] = useState<Blueprint | null>(null);
   const [mobileTab, setMobileTab] = useState<"directory" | "details">("directory");
 
   // Quick Paper Build Modal
@@ -556,6 +559,15 @@ export default function BlueprintsPage() {
                         <button
                           type="button"
                           className="btn btn-ghost btn-icon btn-xs p-1"
+                          title="View and download blueprint specification in JSON format"
+                          aria-label={`View JSON for ${bp.name}`}
+                          onClick={() => setJsonModalBlueprint(bp)}
+                        >
+                          <Code2 size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-icon btn-xs p-1"
                           title="Duplicate blueprint"
                           aria-label={`Duplicate ${bp.name}`}
                           onClick={() => duplicate(bp)}
@@ -638,6 +650,14 @@ export default function BlueprintsPage() {
                     >
                       <Pencil size={13} /> Edit
                     </Link>
+                    <button
+                      type="button"
+                      onClick={() => setJsonModalBlueprint(selected)}
+                      className="btn btn-ghost border border-slate-200 text-xs py-1.5 px-2.5 inline-flex items-center gap-1"
+                      title="View and download blueprint specification in JSON format"
+                    >
+                      <Code2 size={13} /> JSON
+                    </button>
                     <button
                       type="button"
                       onClick={() => duplicate(selected)}
@@ -882,6 +902,12 @@ export default function BlueprintsPage() {
           </form>
         </Modal>
       )}
+
+      <BlueprintJsonModal
+        isOpen={Boolean(jsonModalBlueprint)}
+        onClose={() => setJsonModalBlueprint(null)}
+        blueprint={jsonModalBlueprint}
+      />
     </div>
   );
 }

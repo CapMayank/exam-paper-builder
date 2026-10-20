@@ -190,4 +190,52 @@ Section C,LONG,3,5,Answer with detailed diagrams`;
       expect(res.errors[0]).toContain("Invalid JSON");
     });
   });
+
+  describe("Blueprint JSON Export & Round-Trip Compatibility", () => {
+    it("exports blueprint to canonical JSON that parses back cleanly without errors", async () => {
+      const { exportBlueprintToJsonObject, exportBlueprintToJsonString, getBlueprintJsonFilename } = await import("./blueprintExport");
+
+      const mockBp = {
+        name: "Class 10 Science Annual Examination",
+        examType: "ANNUAL",
+        durationMin: 180,
+        academicSession: "2026–27",
+        subjectCode: "086",
+        book: {
+          className: "Class 10",
+          subject: "Science",
+          title: "NCERT Science Class 10",
+        },
+        sections: [
+          { position: 0, title: "Section A", instructions: "All compulsory", type: "MCQ", count: 10, marksEach: 1 },
+          { position: 1, title: "Section A", instructions: "All compulsory", type: "FILL_BLANK", count: 10, marksEach: 1 },
+          { position: 2, title: "Section B", instructions: "Short answer", type: "SHORT", count: 15, marksEach: 2 },
+        ],
+        chapters: [
+          { marks: 20, chapter: { number: 1, title: "Chemical Reactions" } },
+          { marks: 30, chapter: { number: 2, title: "Acids and Bases" } },
+        ],
+      };
+
+      const jsonObj = exportBlueprintToJsonObject(mockBp);
+      expect(jsonObj.name).toBe("Class 10 Science Annual Examination");
+      expect(jsonObj.sections.length).toBe(2); // Grouped into Section A and Section B
+      expect(jsonObj.sections[0].questionTypes.length).toBe(2); // Section A has MCQ + FILL_BLANK
+      expect(jsonObj.chapters.length).toBe(2);
+
+      const jsonStr = exportBlueprintToJsonString(mockBp);
+      expect(jsonStr).toContain('"name": "Class 10 Science Annual Examination"');
+
+      // Round-trip parse check
+      const parseResult = parseBlueprintImport(jsonStr, "json");
+      expect(parseResult.success).toBe(true);
+      expect(parseResult.errors).toEqual([]);
+      expect(parseResult.totalSectionMarks).toBe(50); // (10*1) + (10*1) + (15*2) = 50
+      expect(parseResult.totalChapterMarks).toBe(50); // 20 + 30 = 50
+      expect(parseResult.totalQuestions).toBe(35); // 10 + 10 + 15 = 35
+
+      const filename = getBlueprintJsonFilename(mockBp, mockBp.book);
+      expect(filename).toBe("Class_10_Science_ANNUAL_Blueprint.json");
+    });
+  });
 });

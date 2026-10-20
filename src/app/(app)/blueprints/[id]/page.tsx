@@ -1,11 +1,13 @@
 "use client";
 
-import { ArrowDown, ArrowUp, BookOpen, FileText, Plus, Sparkles, Trash2, Upload } from "lucide-react";
+import { ArrowDown, ArrowUp, BookOpen, Code2, Download, FileText, Plus, Sparkles, Trash2, Upload } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useEffect, useMemo, useState } from "react";
 import { ErrorBanner, Field, useConfirm, useToast } from "@/components/ui";
 import { BlueprintImportModal } from "@/components/BlueprintImportModal";
+import { BlueprintJsonModal } from "@/components/BlueprintJsonModal";
+import { downloadBlueprintJson, type BlueprintWithExportRelations } from "@/lib/blueprintExport";
 import { useAcademicSession } from "@/lib/academicSession";
 import {
   blueprintTotalMarks,
@@ -66,6 +68,7 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
+  const [jsonModalOpen, setJsonModalOpen] = useState(false);
 
   const [selectedClassFilter, setSelectedClassFilter] = useState("");
   const [selectedSubjectFilter, setSelectedSubjectFilter] = useState("");
@@ -163,6 +166,26 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
   const chapterTotal = chapterQuotas.reduce((s, c) => s + c.marks, 0);
   const problems = validateBlueprint({ sections, chapters: chapterQuotas });
   const feasibilityWarnings = checkBlueprintFeasibility({ sections, chapters: chapterQuotas });
+
+  const currentBlueprintData = useMemo<BlueprintWithExportRelations>(() => {
+    const flatSections = flattenSectionGroups(sectionGroups);
+    const chapterAllocations = (book?.chapters || []).map((ch) => ({
+      chapterId: ch.id,
+      marks: marks[ch.id] || 0,
+      chapter: ch,
+    }));
+
+    return {
+      name,
+      examType,
+      durationMin,
+      academicSession,
+      subjectCode,
+      book,
+      sections: flatSections,
+      chapters: chapterAllocations,
+    };
+  }, [name, examType, durationMin, academicSession, subjectCode, book, sectionGroups, marks]);
 
   const availableClasses = useMemo(() => {
     const classNamesFromClasses = classes.map((c) => c.name);
@@ -411,14 +434,32 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
     <form onSubmit={save} className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold">{id === "new" ? "New blueprint" : "Edit blueprint"}</h1>
-        <button
-          type="button"
-          onClick={() => setImportModalOpen(true)}
-          className="btn btn-ghost border border-indigo-200 bg-indigo-50/70 text-indigo-900 hover:bg-indigo-100 flex items-center gap-1.5 text-xs font-semibold shadow-2xs"
-          title="Import blueprint specification from JSON or CSV"
-        >
-          <Upload size={14} className="text-indigo-600" /> Import blueprint
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setJsonModalOpen(true)}
+            className="btn btn-ghost border border-slate-200 bg-white text-slate-800 hover:bg-slate-50 flex items-center gap-1.5 text-xs font-semibold shadow-2xs"
+            title="View blueprint specification in JSON format"
+          >
+            <Code2 size={14} className="text-slate-600" /> View JSON
+          </button>
+          <button
+            type="button"
+            onClick={() => downloadBlueprintJson(currentBlueprintData, book)}
+            className="btn btn-ghost border border-slate-200 bg-white text-slate-800 hover:bg-slate-50 flex items-center gap-1.5 text-xs font-semibold shadow-2xs"
+            title="Download blueprint specification as a .json file"
+          >
+            <Download size={14} className="text-slate-600" /> Download JSON
+          </button>
+          <button
+            type="button"
+            onClick={() => setImportModalOpen(true)}
+            className="btn btn-ghost border border-indigo-200 bg-indigo-50/70 text-indigo-900 hover:bg-indigo-100 flex items-center gap-1.5 text-xs font-semibold shadow-2xs"
+            title="Import blueprint specification from JSON or CSV"
+          >
+            <Upload size={14} className="text-indigo-600" /> Import blueprint
+          </button>
+        </div>
       </div>
 
       {id === "new" && (
@@ -884,6 +925,13 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
         onApply={handleImportedBlueprint}
         book={book}
         books={books}
+      />
+
+      <BlueprintJsonModal
+        isOpen={jsonModalOpen}
+        onClose={() => setJsonModalOpen(false)}
+        blueprint={currentBlueprintData}
+        book={book}
       />
     </form>
   );

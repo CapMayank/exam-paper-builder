@@ -901,8 +901,11 @@ export interface BlueprintSectionCandidate {
 
 /**
  * Intelligently matches an imported question to the best matching blueprint section slot.
- * Prioritizes matching section title + question type + marksEach, tracking slot capacities
- * to support composite multi-type sections (e.g. Section A containing MCQ, FillBlank, TrueFalse, Match, Short).
+ * Uses a multi-factor scoring model that respects:
+ *  1. Section Title alignment (highest priority for named sections e.g. Section A vs Section B).
+ *  2. Marks compatibility (short answer always carries more marks than very short / one word).
+ *  3. Question type tier hierarchy (Tier 1 Objective/VSA < Tier 2 Short Answer < Tier 3 Long Answer).
+ *  4. Blueprint section capacity and overflow retention without misrouting to incompatible sections.
  */
 export function matchQuestionToBlueprintSection(
   q: ImportedPaperQuestion,
@@ -915,83 +918,63 @@ export function matchQuestionToBlueprintSection(
 
   const normImpTitle = normalizeText(impSecTitle);
   const normQType = normalizeQuestionType(q.type);
+  const qTier = getQuestionTypeTier(normQType);
   const qMarks = q.marks ?? 1;
 
-  // 1. Blueprint sections that share the imported section title
-  const titleMatches = bpSections.filter(
-    (s) => normalizeText(s.title) === normImpTitle
-  );
+  let bestSection: BlueprintSectionCandidate | null = null;
+  let bestScore = -Infinity;
 
-  if (titleMatches.length > 0) {
-    // 1A. Title match + Type match + Marks match (with remaining capacity)
-    const exactSlot = titleMatches.find(
-      (s) =>
-        s.type === normQType &&
-        s.marksEach === qMarks &&
-        (allocatedCounts.get(s.id) ?? 0) < s.count
-    );
-    if (exactSlot) return exactSlot;
+  for (let idx = 0; idx < bpSections.length; idx++) {
+    const s = bpSections[idx];
+    const sNormTitle = normalizeText(s.title);
+    const sTier = getQuestionTypeTier(s.type);
+    const allocated = allocatedCounts.get(s.id) ?? 0;
+    const hasCapacity = allocated < s.count;
 
-    // 1B. Title match + Type match (with remaining capacity)
-    const typeSlot = titleMatches.find(
-      (s) => s.type === normQType && (allocatedCounts.get(s.id) ?? 0) < s.count
-    );
-    if (typeSlot) return typeSlot;
+    let score = 0;
 
-    // 1C. Title match + Type match + Marks match (overflow beyond quota)
-    const exactOverflow = titleMatches.find(
-      (s) => s.type === normQType && s.marksEach === qMarks
-    );
-    if (exactOverflow) return exactOverflow;
+    // 1. Title match (High priority if imported paper has matching section title)
+    if (sNormTitle && normImpTitle && sNormTitle === normImpTitle) {
+      score += 100;
+    } else if (sNormTitle && normImpTitle && (sNormTitle.includes(normImpTitle) || normImpTitle.includes(sNormTitle))) {
+      score += 75;
+    }
 
-    // 1D. Title match + Type match (overflow beyond quota)
-    const typeOverflow = titleMatches.find((s) => s.type === normQType);
-    if (typeOverflow) return typeOverflow;
+    // 2. Marks match (Primary exam scoring constraint)
+    // Marks alignment is crucial: short answer always has more marks than very short/one word.
+    if (s.marksEach === qMarks) {
+      score += 65;
+    } else {
+      score -= Math.abs(s.marksEach - qMarks) * 25;
+    }
 
-    // 1E. Title match + Marks match (with remaining capacity)
-    const marksSlot = titleMatches.find(
-      (s) => s.marksEach === qMarks && (allocatedCounts.get(s.id) ?? 0) < s.count
-    );
-    if (marksSlot) return marksSlot;
+    // 3. Question Type & Tier hierarchy match
+    if (s.type === normQType) {
+      score += 45;
+    } else if (sTier === qTier) {
+      score += 25;
+    } else {
+      // Cross-tier penalty: e.g. placing a Long question in Very Short, or vice-versa
+      score -= Math.abs(sTier - qTier) * 15;
+    }
 
-    // 1F. Any title match with remaining capacity
-    const anyCapacity = titleMatches.find(
-      (s) => (allocatedCounts.get(s.id) ?? 0) < s.count
-    );
-    if (anyCapacity) return anyCapacity;
+    // 4. Remaining capacity preference (encourages filling blueprint section quotas)
+    if (hasCapacity) {
+      score += 15;
+    }
 
-    // 1G. Fallback to first section of this title
-    return titleMatches[0];
+    // 5. Position alignment (sequential fallback if sections align by order)
+    if (s.position !== undefined && s.position === impSecIdx) {
+      score += 10;
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestSection = s;
+    }
   }
 
-  // 2. No title match (e.g. unnamed sections or mismatched names like "Part 1" vs "Section A")
-  // 2A. Global Type + Marks match with remaining capacity
-  const globalExact = bpSections.find(
-    (s) =>
-      s.type === normQType &&
-      s.marksEach === qMarks &&
-      (allocatedCounts.get(s.id) ?? 0) < s.count
-  );
-  if (globalExact) return globalExact;
-
-  // 2B. Global Type match with remaining capacity
-  const globalType = bpSections.find(
-    (s) => s.type === normQType && (allocatedCounts.get(s.id) ?? 0) < s.count
-  );
-  if (globalType) return globalType;
-
-  // 2C. Global Marks match with remaining capacity
-  const globalMarks = bpSections.find(
-    (s) => s.marksEach === qMarks && (allocatedCounts.get(s.id) ?? 0) < s.count
-  );
-  if (globalMarks) return globalMarks;
-
-  // 2D. Global Type match (overflow)
-  const globalTypeOverflow = bpSections.find((s) => s.type === normQType);
-  if (globalTypeOverflow) return globalTypeOverflow;
-
-  // 2E. Sequential position fallback
-  return bpSections[impSecIdx] || bpSections[0];
+  return bestSection || bpSections[0];
 }
 
 /**
@@ -1098,7 +1081,15 @@ export function verifyPaperAgainstBlueprint(
       message = `Section contains ${impCount} questions (${impCount - bpSec.count} extra beyond blueprint quota of ${bpSec.count}).`;
       warnings.push(`Section '${bpSec.title}' (${bpSec.type}): contains ${impCount} questions (blueprint quota is ${bpSec.count}).`);
     } else {
-      const typeMismatches = assigned.filter((q) => normalizeQuestionType(q.type) !== bpSec.type);
+      const typeMismatches = assigned.filter((q) => {
+        const norm = normalizeQuestionType(q.type);
+        if (norm === bpSec.type) return false;
+        // Compatible tier: e.g. VERY_SHORT / SHORT aligned with marks
+        const qTier = getQuestionTypeTier(norm);
+        const secTier = getQuestionTypeTier(bpSec.type);
+        if (qTier === secTier && q.marks === bpSec.marksEach) return false;
+        return true;
+      });
       const marksMismatches = assigned.filter((q) => q.marks !== bpSec.marksEach);
       if (typeMismatches.length > 0) {
         status = "TYPE_MISMATCH";
@@ -1231,12 +1222,55 @@ export function normalizeQuestionType(raw: string): string {
   if (upper.includes("MAP") || upper.includes("MANCHITRA")) return "MAP_WORK";
   if (upper.includes("MCQ") || upper.includes("CHOICE")) return "MCQ";
   if (upper.includes("CASE")) return "CASE_STUDY";
-  if (upper.includes("VERY_SHORT") || upper.includes("VSA")) return "VERY_SHORT";
+  if (upper.includes("VERY_SHORT") || upper.includes("VSA") || upper.includes("ONE_WORD") || upper.includes("ONEWORD") || upper.includes("ONE_LINE")) return "VERY_SHORT";
   if (upper.includes("LONG") || upper.includes("LA")) return "LONG";
   if (upper.includes("BLANK") || upper.includes("FILL") || upper.includes("RIKT")) return "FILL_BLANK";
   if (upper.includes("TRUE") || upper.includes("FALSE") || upper.includes("SATYA") || upper.includes("ASATYA")) return "TRUE_FALSE";
   if (upper.includes("DRAW") || upper.includes("DIAGRAM")) return "DRAW";
   return "SHORT";
+}
+
+/**
+ * Returns the hierarchical tier of a question type:
+ *  - Tier 1: Objective / Very Short / One Word (lowest marks e.g. 1 mark)
+ *  - Tier 2: Short Answer / Grammar / Writing / Drawing (carries more marks than very short)
+ *  - Tier 3: Long Answer / Case Study / Passages (carries highest marks)
+ */
+export function getQuestionTypeTier(type: string): number {
+  const norm = normalizeQuestionType(type);
+  if (
+    [
+      "MCQ",
+      "FILL_BLANK",
+      "TRUE_FALSE",
+      "MATCH_COLUMN",
+      "ASSERTION_REASON",
+      "VERY_SHORT",
+      "KDG_TRACE_WRITE",
+      "KDG_NUMBER_GRID",
+      "KDG_PICTURE_MATCH",
+      "KDG_COUNT_ITEMS",
+      "KDG_CIRCLE_TARGET",
+      "KDG_SEQUENCE_CHAIN",
+    ].includes(norm)
+  ) {
+    return 1;
+  }
+  if (["SHORT", "GRAMMAR", "WRITING_SKILL", "DRAW"].includes(norm)) {
+    return 2;
+  }
+  if (
+    [
+      "LONG",
+      "CASE_STUDY",
+      "UNSEEN_PASSAGE",
+      "REFERENCE_CONTEXT",
+      "MAP_WORK",
+    ].includes(norm)
+  ) {
+    return 3;
+  }
+  return 2;
 }
 
 function normalizeText(str: string): string {

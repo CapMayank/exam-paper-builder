@@ -483,6 +483,56 @@ describe("Paper Import & Blueprint Verification Engine", () => {
       expect(fibQ?.id).toBe("s_fib");
     });
 
+    it("smartly routes questions respecting marks hierarchy (Very Short / 1m vs Short / 2m)", () => {
+      const bpSections = [
+        { id: "sec_a", position: 0, title: "Section A", type: "VERY_SHORT", count: 10, marksEach: 1 },
+        { id: "sec_b", position: 1, title: "Section B", type: "SHORT", count: 10, marksEach: 2 },
+        { id: "sec_c", position: 2, title: "Section C", type: "SHORT", count: 5, marksEach: 3 },
+        { id: "sec_d", position: 3, title: "Section D", type: "LONG", count: 3, marksEach: 5 },
+      ];
+      const allocated = new Map<string, number>();
+
+      // Question labeled "SHORT" with 1 mark in Section A routes to sec_a (1m)
+      const q1 = matchQuestionToBlueprintSection(
+        { text: "What is Ohm's law?", type: "SHORT", marks: 1 },
+        "Section A",
+        0,
+        bpSections,
+        allocated
+      );
+      expect(q1?.id).toBe("sec_a");
+
+      // Question labeled "SHORT" with 1 mark without section title still routes to sec_a (1m)
+      const q2 = matchQuestionToBlueprintSection(
+        { text: "Name the unit of power.", type: "SHORT", marks: 1 },
+        "",
+        0,
+        bpSections,
+        allocated
+      );
+      expect(q2?.id).toBe("sec_a");
+
+      // Question labeled "VERY_SHORT" with 2 marks routes to sec_b (2m) because Short has more marks
+      const q3 = matchQuestionToBlueprintSection(
+        { text: "Differentiate between scalar and vector quantities.", type: "VERY_SHORT", marks: 2 },
+        "",
+        1,
+        bpSections,
+        allocated
+      );
+      expect(q3?.id).toBe("sec_b");
+
+      // Question with 3 marks routes to sec_c (3m)
+      const q4 = matchQuestionToBlueprintSection(
+        { text: "Derive lens formula.", type: "SHORT", marks: 3 },
+        "Section C",
+        2,
+        bpSections,
+        allocated
+      );
+      expect(q4?.id).toBe("sec_c");
+    });
+
     it("verifies the exact user prompt JSON for Class 12 Mathematics Annual Examination", () => {
       const userPromptJson = {
         title: "Class 12 Mathematics Annual Examination 2026–27",

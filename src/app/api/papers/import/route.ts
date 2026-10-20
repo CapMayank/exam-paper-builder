@@ -130,11 +130,19 @@ export const POST = route(async (req, _params, user) => {
           }
         }
 
+        let orType = normalizeQuestionType(q.orQuestion.type || bpSec.type);
+        if (
+          (bpSec.type === "VERY_SHORT" && orType === "SHORT") ||
+          (bpSec.type === "SHORT" && orType === "VERY_SHORT" && bpSec.marksEach > 1)
+        ) {
+          orType = bpSec.type;
+        }
+
         const createdOr = await prisma.question.create({
           data: {
             bookId: blueprint.bookId,
             chapterId: orChapterId,
-            type: normalizeQuestionType(q.orQuestion.type || bpSec.type),
+            type: orType,
             text: q.orQuestion.text.trim(),
             optionsJson: JSON.stringify(q.orQuestion.options ?? []),
             subpartsJson: "[]",
@@ -147,7 +155,13 @@ export const POST = route(async (req, _params, user) => {
       }
 
       // Create primary question
-      const finalType = normalizeQuestionType(q.type || bpSec.type);
+      let finalType = normalizeQuestionType(q.type || bpSec.type);
+      if (
+        (bpSec.type === "VERY_SHORT" && finalType === "SHORT") ||
+        (bpSec.type === "SHORT" && finalType === "VERY_SHORT" && bpSec.marksEach > 1)
+      ) {
+        finalType = bpSec.type;
+      }
       const createdQ = await prisma.question.create({
         data: {
           bookId: blueprint.bookId,
