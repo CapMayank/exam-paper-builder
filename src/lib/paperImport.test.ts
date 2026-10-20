@@ -580,6 +580,22 @@ describe("Paper Import & Blueprint Verification Engine", () => {
       expect(parsed.totalQuestions).toBe(50);
       expect(parsed.totalMarks).toBe(80);
 
+      const exactChapters: Chapter[] = [
+        { id: "ch1", bookId: "b_math12", number: 1, title: "Relations and Functions" },
+        { id: "ch2", bookId: "b_math12", number: 2, title: "Inverse Trigonometric Functions" },
+        { id: "ch3", bookId: "b_math12", number: 3, title: "Matrices" },
+        { id: "ch4", bookId: "b_math12", number: 4, title: "Determinants" },
+        { id: "ch5", bookId: "b_math12", number: 5, title: "Continuity and Differentiability" },
+        { id: "ch6", bookId: "b_math12", number: 6, title: "Applications of Derivatives" },
+        { id: "ch7", bookId: "b_math12", number: 7, title: "Integrals" },
+        { id: "ch8", bookId: "b_math12", number: 8, title: "Applications of Integrals" },
+        { id: "ch9", bookId: "b_math12", number: 9, title: "Differential Equations" },
+        { id: "ch10", bookId: "b_math12", number: 10, title: "Vector Algebra" },
+        { id: "ch11", bookId: "b_math12", number: 11, title: "Three-Dimensional Geometry" },
+        { id: "ch12", bookId: "b_math12", number: 12, title: "Linear Programming" },
+        { id: "ch13", bookId: "b_math12", number: 13, title: "Probability" },
+      ];
+
       const mathBlueprint: Blueprint = {
         id: "bp_math12_exact",
         name: "Class 12 Mathematics Annual Examination",
@@ -603,26 +619,15 @@ describe("Paper Import & Blueprint Verification Engine", () => {
           { id: "sec_c", position: 6, title: "Section C", instructions: "Short", type: "SHORT", count: 4, marksEach: 3 },
           { id: "sec_d", position: 7, title: "Section D", instructions: "Long", type: "LONG", count: 4, marksEach: 4 },
         ],
-        chapters: [
-          { chapterId: "ch1", marks: 5, chapter: { id: "ch1", bookId: "b_math12", number: 1, title: "Relations and Functions" } },
-          { chapterId: "ch2", marks: 6, chapter: { id: "ch2", bookId: "b_math12", number: 2, title: "Inverse Trigonometric Functions" } },
-          { chapterId: "ch3", marks: 6, chapter: { id: "ch3", bookId: "b_math12", number: 3, title: "Matrices" } },
-          { chapterId: "ch4", marks: 6, chapter: { id: "ch4", bookId: "b_math12", number: 4, title: "Determinants" } },
-          { chapterId: "ch5", marks: 8, chapter: { id: "ch5", bookId: "b_math12", number: 5, title: "Continuity and Differentiability" } },
-          { chapterId: "ch6", marks: 6, chapter: { id: "ch6", bookId: "b_math12", number: 6, title: "Applications of Derivatives" } },
-          { chapterId: "ch7", marks: 12, chapter: { id: "ch7", bookId: "b_math12", number: 7, title: "Integrals" } },
-          { chapterId: "ch8", marks: 3, chapter: { id: "ch8", bookId: "b_math12", number: 8, title: "Applications of Integrals" } },
-          { chapterId: "ch9", marks: 6, chapter: { id: "ch9", bookId: "b_math12", number: 9, title: "Differential Equations" } },
-          { chapterId: "ch10", marks: 7, chapter: { id: "ch10", bookId: "b_math12", number: 10, title: "Vector Algebra" } },
-          { chapterId: "ch11", marks: 7, chapter: { id: "ch11", bookId: "b_math12", number: 11, title: "Three-Dimensional Geometry" } },
-          { chapterId: "ch12", marks: 3, chapter: { id: "ch12", bookId: "b_math12", number: 12, title: "Linear Programming" } },
-          { chapterId: "ch13", marks: 5, chapter: { id: "ch13", bookId: "b_math12", number: 13, title: "Probability" } },
-        ],
+        chapters: exactChapters.map((ch, idx) => ({
+          chapterId: ch.id,
+          marks: [5, 6, 6, 6, 8, 6, 12, 3, 6, 7, 7, 3, 5][idx],
+          chapter: { id: ch.id, number: ch.number, title: ch.title },
+        })),
         _count: { papers: 1 },
       };
 
-      const chapters = mathBlueprint.chapters.map((c) => c.chapter);
-      const report = verifyPaperAgainstBlueprint(parsed.paper, mathBlueprint, chapters);
+      const report = verifyPaperAgainstBlueprint(parsed.paper, mathBlueprint, exactChapters);
 
       expect(report.isValid).toBe(true);
       expect(report.canProceed).toBe(true);
