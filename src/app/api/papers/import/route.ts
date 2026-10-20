@@ -7,7 +7,11 @@ import {
 } from "@/lib/constants";
 import { loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
-import type { PaperImportData } from "@/lib/paperImport";
+import {
+  matchQuestionToBlueprintSection,
+  normalizeQuestionType,
+  type PaperImportData,
+} from "@/lib/paperImport";
 
 export const POST = route(async (req, _params, user) => {
   const json = await req.json();
@@ -75,26 +79,32 @@ export const POST = route(async (req, _params, user) => {
     },
   });
 
-  // 2. Map and ingest questions section by section
+  // 2. Map and ingest questions section by section with smart type & marks routing
   let totalImportedQuestions = 0;
+  const bpSections = [...blueprint.sections].sort((a, b) => a.position - b.position);
+  const allocatedCounts = new Map<string, number>();
+  const sectionPositions = new Map<string, number>();
 
   for (let sIdx = 0; sIdx < paperData.sections.length; sIdx++) {
     const impSec = paperData.sections[sIdx];
-    // Find matching blueprint section
-    const bpSec =
-      blueprint.sections.find(
-        (s) =>
-          s.title.toLowerCase().replace(/[^a-z0-9]/g, "") ===
-          impSec.title.toLowerCase().replace(/[^a-z0-9]/g, "")
-      ) ||
-      blueprint.sections[sIdx] ||
-      blueprint.sections[blueprint.sections.length - 1];
-
-    if (!bpSec) continue;
 
     for (let qIdx = 0; qIdx < impSec.questions.length; qIdx++) {
       const q = impSec.questions[qIdx];
       if (!q.text?.trim()) continue;
+
+      // Smart match to best blueprint section slot
+      const bpSec =
+        matchQuestionToBlueprintSection(
+          q,
+          impSec.title,
+          sIdx,
+          bpSections,
+          allocatedCounts
+        ) || bpSections[0];
+
+      allocatedCounts.set(bpSec.id, (allocatedCounts.get(bpSec.id) ?? 0) + 1);
+      const pos = sectionPositions.get(bpSec.id) ?? 0;
+      sectionPositions.set(bpSec.id, pos + 1);
 
       // Determine chapter
       let chapterId = fallbackChapterId;
@@ -124,7 +134,7 @@ export const POST = route(async (req, _params, user) => {
           data: {
             bookId: blueprint.bookId,
             chapterId: orChapterId,
-            type: q.orQuestion.type || bpSec.type,
+            type: normalizeQuestionType(q.orQuestion.type || bpSec.type),
             text: q.orQuestion.text.trim(),
             optionsJson: JSON.stringify(q.orQuestion.options ?? []),
             subpartsJson: "[]",
@@ -137,11 +147,12 @@ export const POST = route(async (req, _params, user) => {
       }
 
       // Create primary question
+      const finalType = normalizeQuestionType(q.type || bpSec.type);
       const createdQ = await prisma.question.create({
         data: {
           bookId: blueprint.bookId,
           chapterId,
-          type: q.type || bpSec.type,
+          type: finalType,
           text: q.text.trim(),
           optionsJson: JSON.stringify(q.options ?? []),
           subpartsJson: JSON.stringify(q.subparts ?? []),
@@ -158,7 +169,7 @@ export const POST = route(async (req, _params, user) => {
           sectionId: bpSec.id,
           questionId: createdQ.id,
           orQuestionId,
-          position: qIdx,
+          position: pos,
         },
       });
 

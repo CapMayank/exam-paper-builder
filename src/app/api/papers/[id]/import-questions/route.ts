@@ -2,7 +2,11 @@ import { HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
-import type { PaperImportData } from "@/lib/paperImport";
+import {
+  matchQuestionToBlueprintSection,
+  normalizeQuestionType,
+  type PaperImportData,
+} from "@/lib/paperImport";
 
 export const POST = route(async (req, { id }, user) => {
   const json = await req.json();
@@ -55,31 +59,48 @@ export const POST = route(async (req, { id }, user) => {
   }
 
   let importedCount = 0;
+  const bpSections = [...blueprint.sections].sort((a, b) => a.position - b.position);
+  const allocatedCounts = new Map<string, number>();
+  const sectionPositions = new Map<string, number>();
+
+  for (const s of bpSections) {
+    if (mode === "append") {
+      const existingInSec = await prisma.paperQuestion.findMany({
+        where: { paperId: id, sectionId: s.id },
+        orderBy: { position: "desc" },
+        take: 1,
+      });
+      sectionPositions.set(s.id, existingInSec.length > 0 ? existingInSec[0].position + 1 : 0);
+      const existingCount = await prisma.paperQuestion.count({
+        where: { paperId: id, sectionId: s.id },
+      });
+      allocatedCounts.set(s.id, existingCount);
+    } else {
+      sectionPositions.set(s.id, 0);
+      allocatedCounts.set(s.id, 0);
+    }
+  }
 
   for (let sIdx = 0; sIdx < paperData.sections.length; sIdx++) {
     const impSec = paperData.sections[sIdx];
-    const bpSec =
-      blueprint.sections.find(
-        (s) =>
-          s.title.toLowerCase().replace(/[^a-z0-9]/g, "") ===
-          impSec.title.toLowerCase().replace(/[^a-z0-9]/g, "")
-      ) ||
-      blueprint.sections[sIdx] ||
-      blueprint.sections[blueprint.sections.length - 1];
-
-    if (!bpSec) continue;
-
-    // Find current max position in this section
-    const existingInSec = await prisma.paperQuestion.findMany({
-      where: { paperId: id, sectionId: bpSec.id },
-      orderBy: { position: "desc" },
-      take: 1,
-    });
-    let startPos = existingInSec.length > 0 ? existingInSec[0].position + 1 : 0;
 
     for (let qIdx = 0; qIdx < impSec.questions.length; qIdx++) {
       const q = impSec.questions[qIdx];
       if (!q.text?.trim()) continue;
+
+      // Smart match to best blueprint section slot
+      const bpSec =
+        matchQuestionToBlueprintSection(
+          q,
+          impSec.title,
+          sIdx,
+          bpSections,
+          allocatedCounts
+        ) || bpSections[0];
+
+      allocatedCounts.set(bpSec.id, (allocatedCounts.get(bpSec.id) ?? 0) + 1);
+      const pos = sectionPositions.get(bpSec.id) ?? 0;
+      sectionPositions.set(bpSec.id, pos + 1);
 
       let chapterId = fallbackChapterId;
       if (q.chapterNumber !== undefined && chapterByNum.has(q.chapterNumber)) {
@@ -107,7 +128,7 @@ export const POST = route(async (req, { id }, user) => {
           data: {
             bookId: blueprint.bookId,
             chapterId: orChapterId,
-            type: q.orQuestion.type || bpSec.type,
+            type: normalizeQuestionType(q.orQuestion.type || bpSec.type),
             text: q.orQuestion.text.trim(),
             optionsJson: JSON.stringify(q.orQuestion.options ?? []),
             subpartsJson: "[]",
@@ -119,11 +140,12 @@ export const POST = route(async (req, { id }, user) => {
         orQuestionId = createdOr.id;
       }
 
+      const finalType = normalizeQuestionType(q.type || bpSec.type);
       const createdQ = await prisma.question.create({
         data: {
           bookId: blueprint.bookId,
           chapterId,
-          type: q.type || bpSec.type,
+          type: finalType,
           text: q.text.trim(),
           optionsJson: JSON.stringify(q.options ?? []),
           subpartsJson: JSON.stringify(q.subparts ?? []),
@@ -139,7 +161,7 @@ export const POST = route(async (req, { id }, user) => {
           sectionId: bpSec.id,
           questionId: createdQ.id,
           orQuestionId,
-          position: startPos + qIdx,
+          position: pos,
         },
       });
 

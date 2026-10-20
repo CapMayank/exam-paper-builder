@@ -444,7 +444,13 @@ export function parsePaperJson(jsonStr: string): PaperImportResult {
       }
 
       const qMarks = Number(q.marks) > 0 ? Number(q.marks) : 1;
-      const qType = normalizeQuestionType(typeof q.type === "string" ? q.type : "SHORT");
+      const rawType =
+        typeof q.type === "string" && q.type.trim()
+          ? q.type.trim()
+          : Array.isArray(q.options) && q.options.length >= 2
+          ? "MCQ"
+          : "SHORT";
+      const qType = normalizeQuestionType(rawType);
       const chapterNumber =
         q.chapterNumber !== undefined && !isNaN(Number(q.chapterNumber))
           ? Number(q.chapterNumber)
@@ -883,6 +889,111 @@ export function parsePaperImport(
 // Blueprint Verification & Matching Engine
 // -----------------------------------------------------------------------------
 
+export interface BlueprintSectionCandidate {
+  id: string;
+  title: string;
+  type: string;
+  count: number;
+  marksEach: number;
+  position: number;
+  instructions?: string | null;
+}
+
+/**
+ * Intelligently matches an imported question to the best matching blueprint section slot.
+ * Prioritizes matching section title + question type + marksEach, tracking slot capacities
+ * to support composite multi-type sections (e.g. Section A containing MCQ, FillBlank, TrueFalse, Match, Short).
+ */
+export function matchQuestionToBlueprintSection(
+  q: ImportedPaperQuestion,
+  impSecTitle: string,
+  impSecIdx: number,
+  bpSections: BlueprintSectionCandidate[],
+  allocatedCounts: Map<string, number>
+): BlueprintSectionCandidate | null {
+  if (bpSections.length === 0) return null;
+
+  const normImpTitle = normalizeText(impSecTitle);
+  const normQType = normalizeQuestionType(q.type);
+  const qMarks = q.marks ?? 1;
+
+  // 1. Blueprint sections that share the imported section title
+  const titleMatches = bpSections.filter(
+    (s) => normalizeText(s.title) === normImpTitle
+  );
+
+  if (titleMatches.length > 0) {
+    // 1A. Title match + Type match + Marks match (with remaining capacity)
+    const exactSlot = titleMatches.find(
+      (s) =>
+        s.type === normQType &&
+        s.marksEach === qMarks &&
+        (allocatedCounts.get(s.id) ?? 0) < s.count
+    );
+    if (exactSlot) return exactSlot;
+
+    // 1B. Title match + Type match (with remaining capacity)
+    const typeSlot = titleMatches.find(
+      (s) => s.type === normQType && (allocatedCounts.get(s.id) ?? 0) < s.count
+    );
+    if (typeSlot) return typeSlot;
+
+    // 1C. Title match + Type match + Marks match (overflow beyond quota)
+    const exactOverflow = titleMatches.find(
+      (s) => s.type === normQType && s.marksEach === qMarks
+    );
+    if (exactOverflow) return exactOverflow;
+
+    // 1D. Title match + Type match (overflow beyond quota)
+    const typeOverflow = titleMatches.find((s) => s.type === normQType);
+    if (typeOverflow) return typeOverflow;
+
+    // 1E. Title match + Marks match (with remaining capacity)
+    const marksSlot = titleMatches.find(
+      (s) => s.marksEach === qMarks && (allocatedCounts.get(s.id) ?? 0) < s.count
+    );
+    if (marksSlot) return marksSlot;
+
+    // 1F. Any title match with remaining capacity
+    const anyCapacity = titleMatches.find(
+      (s) => (allocatedCounts.get(s.id) ?? 0) < s.count
+    );
+    if (anyCapacity) return anyCapacity;
+
+    // 1G. Fallback to first section of this title
+    return titleMatches[0];
+  }
+
+  // 2. No title match (e.g. unnamed sections or mismatched names like "Part 1" vs "Section A")
+  // 2A. Global Type + Marks match with remaining capacity
+  const globalExact = bpSections.find(
+    (s) =>
+      s.type === normQType &&
+      s.marksEach === qMarks &&
+      (allocatedCounts.get(s.id) ?? 0) < s.count
+  );
+  if (globalExact) return globalExact;
+
+  // 2B. Global Type match with remaining capacity
+  const globalType = bpSections.find(
+    (s) => s.type === normQType && (allocatedCounts.get(s.id) ?? 0) < s.count
+  );
+  if (globalType) return globalType;
+
+  // 2C. Global Marks match with remaining capacity
+  const globalMarks = bpSections.find(
+    (s) => s.marksEach === qMarks && (allocatedCounts.get(s.id) ?? 0) < s.count
+  );
+  if (globalMarks) return globalMarks;
+
+  // 2D. Global Type match (overflow)
+  const globalTypeOverflow = bpSections.find((s) => s.type === normQType);
+  if (globalTypeOverflow) return globalTypeOverflow;
+
+  // 2E. Sequential position fallback
+  return bpSections[impSecIdx] || bpSections[0];
+}
+
 /**
  * Deeply validates and verifies an imported paper against an active Blueprint and its book chapters.
  */
@@ -915,80 +1026,40 @@ export function verifyPaperAgainstBlueprint(
     chapterMarksAccumulated.set(ch.id, 0);
   }
 
-  // 1. Verify Sections
-  const sectionResults: SectionVerificationResult[] = [];
-  const bpSections = [...blueprint.sections].sort((a, b) => a.position - b.position);
+  // Index Blueprint sections
+  const bpSections: BlueprintSectionCandidate[] = [...blueprint.sections].sort((a, b) => a.position - b.position);
+  const allocatedCounts = new Map<string, number>();
+  const assignedQuestionsBySection = new Map<string, ImportedPaperQuestion[]>();
+  for (const s of bpSections) {
+    allocatedCounts.set(s.id, 0);
+    assignedQuestionsBySection.set(s.id, []);
+  }
 
-  for (let idx = 0; idx < imported.sections.length; idx++) {
-    const impSec = imported.sections[idx];
-    const impCount = impSec.questions.length;
-    const impSecMarks = impSec.questions.reduce((sum, q) => sum + q.marks, 0);
-    totalImportedMarks += impSecMarks;
-    totalImportedQuestions += impCount;
+  const unmatchedQuestions: { title: string; question: ImportedPaperQuestion }[] = [];
 
-    // Try to match blueprint section by position or title
-    const bpSec =
-      bpSections.find(
-        (s) =>
-          normalizeText(s.title) === normalizeText(impSec.title) ||
-          s.position === idx
-      ) || bpSections[idx];
-
-    if (!bpSec) {
-      sectionResults.push({
-        sectionTitle: impSec.title,
-        expectedCount: 0,
-        importedCount: impCount,
-        expectedType: "UNKNOWN",
-        expectedMarksEach: 0,
-        status: "UNMATCHED_SECTION",
-        message: `Section '${impSec.title}' has no corresponding section in blueprint '${blueprint.name}'.`,
-      });
-      warnings.push(`Section '${impSec.title}' is extra and does not match the blueprint.`);
-      continue;
-    }
-
-    let status: SectionVerificationResult["status"] = "MATCH";
-    let message = `All ${impCount} questions match blueprint specifications (${bpSec.type}, ${bpSec.marksEach}m).`;
-
-    if (impCount < bpSec.count) {
-      status = "UNDERFILLED";
-      message = `Section contains ${impCount} questions (short by ${bpSec.count - impCount} vs. blueprint quota of ${bpSec.count}).`;
-      warnings.push(`Section '${bpSec.title}': ${impCount}/${bpSec.count} questions provided (${bpSec.count - impCount} missing).`);
-    } else if (impCount > bpSec.count) {
-      status = "OVERFILLED";
-      message = `Section contains ${impCount} questions (${impCount - bpSec.count} extra beyond blueprint quota of ${bpSec.count}).`;
-      warnings.push(`Section '${bpSec.title}': contains ${impCount} questions (blueprint only takes ${bpSec.count}).`);
-    }
-
-    // Check question types and marks
-    const typeMismatches = impSec.questions.filter((q) => q.type !== bpSec.type);
-    if (typeMismatches.length > 0 && status === "MATCH") {
-      status = "TYPE_MISMATCH";
-      message = `${typeMismatches.length} question(s) have type mismatch (expected ${bpSec.type}).`;
-      warnings.push(`Section '${bpSec.title}': expected ${bpSec.type} but found ${typeMismatches.length} mismatched questions.`);
-    }
-
-    const marksMismatches = impSec.questions.filter((q) => q.marks !== bpSec.marksEach);
-    if (marksMismatches.length > 0 && status === "MATCH") {
-      status = "MARKS_MISMATCH";
-      message = `${marksMismatches.length} question(s) have marks mismatch (expected ${bpSec.marksEach}m each).`;
-      warnings.push(`Section '${bpSec.title}': expected ${bpSec.marksEach} marks each but questions have varying marks.`);
-    }
-
-    sectionResults.push({
-      sectionTitle: bpSec.title,
-      blueprintSectionId: bpSec.id,
-      expectedCount: bpSec.count,
-      importedCount: impCount,
-      expectedType: bpSec.type,
-      expectedMarksEach: bpSec.marksEach,
-      status,
-      message,
-    });
-
-    // Accumulate chapter marks from questions in this section
+  // Map each imported question to its best matching blueprint section slot
+  for (let sIdx = 0; sIdx < imported.sections.length; sIdx++) {
+    const impSec = imported.sections[sIdx];
     for (const q of impSec.questions) {
+      totalImportedMarks += q.marks;
+      totalImportedQuestions++;
+
+      const bpSec = matchQuestionToBlueprintSection(
+        q,
+        impSec.title,
+        sIdx,
+        bpSections,
+        allocatedCounts
+      );
+
+      if (bpSec) {
+        allocatedCounts.set(bpSec.id, (allocatedCounts.get(bpSec.id) ?? 0) + 1);
+        assignedQuestionsBySection.get(bpSec.id)!.push(q);
+      } else {
+        unmatchedQuestions.push({ title: impSec.title, question: q });
+      }
+
+      // Track chapter marks accumulated
       let matchedCh: Chapter | undefined;
       if (q.chapterNumber !== undefined && chapterByNum.has(q.chapterNumber)) {
         matchedCh = chapterByNum.get(q.chapterNumber);
@@ -1005,21 +1076,64 @@ export function verifyPaperAgainstBlueprint(
     }
   }
 
-  // Check for any blueprint sections completely missing in imported paper
+  // 1. Build Section Verification Results for every Blueprint Section
+  const sectionResults: SectionVerificationResult[] = [];
+
   for (const bpSec of bpSections) {
-    if (!sectionResults.some((sr) => sr.blueprintSectionId === bpSec.id)) {
-      sectionResults.push({
-        sectionTitle: bpSec.title,
-        blueprintSectionId: bpSec.id,
-        expectedCount: bpSec.count,
-        importedCount: 0,
-        expectedType: bpSec.type,
-        expectedMarksEach: bpSec.marksEach,
-        status: "UNDERFILLED",
-        message: `Section '${bpSec.title}' (${bpSec.count} questions needed) is completely missing from imported paper.`,
-      });
-      warnings.push(`Missing Section: '${bpSec.title}' (${bpSec.count} questions) was not found in the import.`);
+    const assigned = assignedQuestionsBySection.get(bpSec.id) ?? [];
+    const impCount = assigned.length;
+    let status: SectionVerificationResult["status"] = "MATCH";
+    let message = `All ${impCount} questions match blueprint specifications (${bpSec.type}, ${bpSec.marksEach}m).`;
+
+    if (impCount === 0 && bpSec.count > 0) {
+      status = "UNDERFILLED";
+      message = `Section contains 0 questions (missing all ${bpSec.count} questions vs. blueprint quota).`;
+      warnings.push(`Section '${bpSec.title}' (${bpSec.type}): missing all ${bpSec.count} questions.`);
+    } else if (impCount < bpSec.count) {
+      status = "UNDERFILLED";
+      message = `Section contains ${impCount} questions (short by ${bpSec.count - impCount} vs. blueprint quota of ${bpSec.count}).`;
+      warnings.push(`Section '${bpSec.title}' (${bpSec.type}): ${impCount}/${bpSec.count} questions provided (${bpSec.count - impCount} missing).`);
+    } else if (impCount > bpSec.count) {
+      status = "OVERFILLED";
+      message = `Section contains ${impCount} questions (${impCount - bpSec.count} extra beyond blueprint quota of ${bpSec.count}).`;
+      warnings.push(`Section '${bpSec.title}' (${bpSec.type}): contains ${impCount} questions (blueprint quota is ${bpSec.count}).`);
+    } else {
+      const typeMismatches = assigned.filter((q) => normalizeQuestionType(q.type) !== bpSec.type);
+      const marksMismatches = assigned.filter((q) => q.marks !== bpSec.marksEach);
+      if (typeMismatches.length > 0) {
+        status = "TYPE_MISMATCH";
+        message = `${typeMismatches.length} question(s) have type mismatch (expected ${bpSec.type}).`;
+        warnings.push(`Section '${bpSec.title}' (${bpSec.type}): expected ${bpSec.type} but found ${typeMismatches.length} mismatched questions.`);
+      } else if (marksMismatches.length > 0) {
+        status = "MARKS_MISMATCH";
+        message = `${marksMismatches.length} question(s) have marks mismatch (expected ${bpSec.marksEach}m each).`;
+        warnings.push(`Section '${bpSec.title}' (${bpSec.type}): expected ${bpSec.marksEach} marks each but questions have varying marks.`);
+      }
     }
+
+    sectionResults.push({
+      sectionTitle: bpSec.title,
+      blueprintSectionId: bpSec.id,
+      expectedCount: bpSec.count,
+      importedCount: impCount,
+      expectedType: bpSec.type,
+      expectedMarksEach: bpSec.marksEach,
+      status,
+      message,
+    });
+  }
+
+  if (unmatchedQuestions.length > 0) {
+    sectionResults.push({
+      sectionTitle: "Unmatched Questions",
+      expectedCount: 0,
+      importedCount: unmatchedQuestions.length,
+      expectedType: "UNKNOWN",
+      expectedMarksEach: 0,
+      status: "UNMATCHED_SECTION",
+      message: `${unmatchedQuestions.length} question(s) could not be mapped to any blueprint section.`,
+    });
+    warnings.push(`${unmatchedQuestions.length} question(s) could not be matched to the blueprint.`);
   }
 
   // 2. Verify Chapter Quota & Weightage Balance
@@ -1075,7 +1189,7 @@ export function verifyPaperAgainstBlueprint(
   // Match percentage calculation
   const totalSlots = Math.max(1, totalBlueprintQuestions);
   const matchedSlots = sectionResults.reduce(
-    (acc, s) => acc + Math.min(s.expectedCount, s.importedCount),
+    (acc, s) => acc + (s.status === "MATCH" ? s.expectedCount : Math.min(s.expectedCount, s.importedCount)),
     0
   );
   const matchPercentage = Math.min(100, Math.round((matchedSlots / totalSlots) * 100));
@@ -1103,13 +1217,13 @@ export function verifyPaperAgainstBlueprint(
 // Helper Utilities
 // -----------------------------------------------------------------------------
 
-function normalizeQuestionType(raw: string): string {
+export function normalizeQuestionType(raw: string): string {
   const upper = raw.trim().toUpperCase().replace(/[\s-]+/g, "_");
   if (QUESTION_TYPES.includes(upper as QuestionType)) {
     return upper;
   }
   if (upper.includes("ASSERTION")) return "ASSERTION_REASON";
-  if (upper.includes("MATCH") || upper.includes("JODI") || upper.includes("SUMELIT")) return "MATCH_COLUMN";
+  if (upper.includes("MATCH") || upper.includes("JODI") || upper.includes("SUMELIT") || upper.includes("COLUMN")) return "MATCH_COLUMN";
   if (upper.includes("UNSEEN") || upper.includes("APATHIT")) return "UNSEEN_PASSAGE";
   if (upper.includes("SANDARBH") || upper.includes("PRASANG") || upper.includes("VYAKHYA") || upper.includes("REFERENCE")) return "REFERENCE_CONTEXT";
   if (upper.includes("WRITING") || upper.includes("PATRA") || upper.includes("NIBANDH")) return "WRITING_SKILL";
@@ -1119,8 +1233,8 @@ function normalizeQuestionType(raw: string): string {
   if (upper.includes("CASE")) return "CASE_STUDY";
   if (upper.includes("VERY_SHORT") || upper.includes("VSA")) return "VERY_SHORT";
   if (upper.includes("LONG") || upper.includes("LA")) return "LONG";
-  if (upper.includes("BLANK") || upper.includes("FILL")) return "FILL_BLANK";
-  if (upper.includes("TRUE") || upper.includes("FALSE")) return "TRUE_FALSE";
+  if (upper.includes("BLANK") || upper.includes("FILL") || upper.includes("RIKT")) return "FILL_BLANK";
+  if (upper.includes("TRUE") || upper.includes("FALSE") || upper.includes("SATYA") || upper.includes("ASATYA")) return "TRUE_FALSE";
   if (upper.includes("DRAW") || upper.includes("DIAGRAM")) return "DRAW";
   return "SHORT";
 }
