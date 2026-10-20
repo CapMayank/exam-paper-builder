@@ -829,19 +829,10 @@ export default function BlueprintsPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <Field label="Exam Term">
-                <select
-                  className="input text-xs"
-                  value={paperForm.examType}
-                  onChange={(e) =>
-                    setPaperForm({ ...paperForm, examType: e.target.value as ExamType })
-                  }
-                >
-                  {EXAM_TYPES.map((t) => (
-                    <option key={t} value={t}>
-                      {EXAM_TYPE_LABEL[t]}
-                    </option>
-                  ))}
-                </select>
+                <div className="input text-xs bg-slate-50 flex items-center justify-between font-semibold text-slate-800">
+                  <span>{EXAM_TYPE_LABEL[paperForm.examType as ExamType] || paperForm.examType}</span>
+                  <span className="text-[10px] text-slate-500 font-normal">Blueprint Locked</span>
+                </div>
               </Field>
 
               <Field label="Print Layout">

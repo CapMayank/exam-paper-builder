@@ -9,7 +9,7 @@ import { PaperRow } from "@/components/PaperRow";
 import { EmptyState, ErrorBanner, Field, ListSkeleton, Modal, PageHeader, Spinner, useConfirm, useToast } from "@/components/ui";
 import { normalizeSession, useAcademicSession } from "@/lib/academicSession";
 import { api } from "@/lib/client";
-import { DEFAULT_ACADEMIC_SESSION, DEFAULT_SCHOOL_NAME, EXAM_TYPES, EXAM_TYPE_LABEL, inferExamTypeFromText, LAYOUTS, LAYOUT_LABEL, sortClassNames, type ExamType } from "@/lib/constants";
+import { DEFAULT_ACADEMIC_SESSION, DEFAULT_SCHOOL_NAME, EXAM_TYPE_LABEL, LAYOUTS, LAYOUT_LABEL, sortClassNames, type ExamType } from "@/lib/constants";
 import type { Blueprint, PaperData, PaperListItem } from "@/lib/types";
 
 const SCHOOL_KEY = "epb:schoolName";
@@ -437,15 +437,7 @@ export default function PapersPage() {
                 required
                 placeholder="Science, Half-Yearly Examination 2026"
                 value={form.title}
-                onChange={(e) => {
-                  const nextTitle = e.target.value;
-                  const inferred = inferExamTypeFromText(nextTitle);
-                  setForm({
-                    ...form,
-                    title: nextTitle,
-                    ...(inferred ? { examType: inferred } : {}),
-                  });
-                }}
+                onChange={(e) => setForm({ ...form, title: e.target.value })}
               />
             </Field>
 
@@ -524,9 +516,7 @@ export default function PapersPage() {
                       setForm({
                         ...form,
                         blueprintId: e.target.value,
-                        ...(nextBp?.examType && !inferExamTypeFromText(form.title)
-                          ? { examType: nextBp.examType as ExamType }
-                          : {}),
+                        examType: (nextBp?.examType as ExamType) || "ANNUAL",
                         ...(nextBp?.subjectCode ? { subjectCode: nextBp.subjectCode } : {}),
                       });
                     }}
@@ -539,18 +529,13 @@ export default function PapersPage() {
                   </select>
                 </Field>
 
-                <Field label="Examination Term (Print Heading)" helper="Controls Quarterly / Half Yearly / Annual heading on print.">
-                  <select
-                    className="input bg-white"
-                    value={form.examType}
-                    onChange={(e) => setForm({ ...form, examType: e.target.value as ExamType })}
-                  >
-                    {EXAM_TYPES.map((t) => (
-                      <option key={t} value={t}>
-                        {EXAM_TYPE_LABEL[t]} Examination
-                      </option>
-                    ))}
-                  </select>
+                <Field label="Examination Term (Blueprint Specification)" helper="Defined and locked by the selected Blueprint.">
+                  <div className="input bg-slate-50 flex items-center justify-between font-semibold text-slate-800">
+                    <span>{EXAM_TYPE_LABEL[form.examType as ExamType] || form.examType} Examination</span>
+                    <span className="text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded bg-slate-200 text-slate-700">
+                      Blueprint Locked
+                    </span>
+                  </div>
                 </Field>
               </div>
             </div>

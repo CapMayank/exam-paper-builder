@@ -40,30 +40,6 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
 
   const onInfo = useCallback((i: SheetsInfo) => setInfo(i), []);
 
-  async function handleExamTypeChange(nextExamType: ExamType) {
-    if (!paper) return;
-    const termLabel = EXAM_TYPE_LABEL[nextExamType];
-    const updatedTitle = paper.title.replace(
-      /\b(half[- ]yearly|quarterly|annual)\b/gi,
-      termLabel,
-    );
-    setPaper({
-      ...paper,
-      title: updatedTitle,
-      examType: nextExamType,
-      blueprint: { ...paper.blueprint, examType: nextExamType },
-    });
-    try {
-      const updated = await api<PaperData>(`/api/papers/${id}`, {
-        method: "PATCH",
-        json: { examType: nextExamType, title: updatedTitle },
-      });
-      setPaper(updated);
-    } catch {
-      // keep optimistic update
-    }
-  }
-
   if (error) return <p className="p-8 text-red-700">{error}</p>;
   if (!paper) {
     return (
@@ -97,19 +73,12 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
             </Link>
             <div className="border-l border-slate-200 pl-3 flex items-center gap-2">
               <span className="font-bold text-slate-900">{paper.title}</span>
-              <select
-                aria-label="Exam Term Heading"
-                value={currentExamType}
-                onChange={(e) => handleExamTypeChange(e.target.value as ExamType)}
-                className="rounded-md border border-indigo-200 bg-indigo-50/80 px-2 py-0.5 text-xs font-bold text-indigo-900 shadow-2xs"
-                title="Change printed examination heading (Quarterly / Half Yearly / Annual)"
+              <span
+                className="inline-flex items-center rounded-md border border-indigo-200 bg-indigo-50/80 px-2 py-0.5 text-xs font-bold text-indigo-900 shadow-2xs"
+                title={`Exam Type locked to blueprint: ${EXAM_TYPE_LABEL[currentExamType]}`}
               >
-                {EXAM_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {EXAM_TYPE_LABEL[t]} Exam
-                  </option>
-                ))}
-              </select>
+                {EXAM_TYPE_LABEL[currentExamType]} Exam
+              </span>
               {paper.paperSet && (
                 <span className="badge !bg-purple-50 !text-purple-700 border border-purple-200 font-bold text-[10px]">
                   {paper.paperSet}

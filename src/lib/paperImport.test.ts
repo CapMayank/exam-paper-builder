@@ -213,32 +213,41 @@ describe("Paper Import & Blueprint Verification Engine", () => {
       expect(inferExamTypeFromText("Quarterly Unit Test 1")).toBe("QUARTERLY");
       expect(inferExamTypeFromText("Class 10 Annual Board Exam")).toBe("ANNUAL");
 
-      // Explicit paper.examType takes precedence over title and blueprint
+      // Blueprint examType is the primary source of truth over paper.examType and title
       expect(
         resolvePaperExamType({
           examType: "QUARTERLY",
           title: "Science Half-Yearly Examination",
           blueprint: { examType: "ANNUAL" },
         }),
+      ).toBe("ANNUAL");
+
+      // Uses paper.examType when no blueprint examType is set
+      expect(
+        resolvePaperExamType({
+          examType: "QUARTERLY",
+          title: "Science Half-Yearly Examination 2026–27",
+          blueprint: null,
+        }),
       ).toBe("QUARTERLY");
 
-      // Inferred from title when paper.examType is empty
+      // Inferred from title when neither blueprint nor paper.examType is set
       expect(
         resolvePaperExamType({
           examType: "",
           title: "Science Half-Yearly Examination 2026–27",
-          blueprint: { examType: "ANNUAL" },
+          blueprint: null,
         }),
       ).toBe("HALF_YEARLY");
 
-      // Falls back to blueprint.examType when neither paper.examType nor title specifies a term
+      // Defaults to ANNUAL when no blueprint, paper.examType, or title indicator exists
       expect(
         resolvePaperExamType({
           examType: "",
           title: "Class 10 Science Set A",
-          blueprint: { examType: "QUARTERLY" },
+          blueprint: null,
         }),
-      ).toBe("QUARTERLY");
+      ).toBe("ANNUAL");
 
       // MCQ normalization
       expect(normalizeMcqAnswer("(b)", ["Opt 1", "Opt 2", "Opt 3", "Opt 4"])).toEqual({

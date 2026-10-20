@@ -708,27 +708,15 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                 School &amp; Exam Identity
               </h2>
 
-              <Field label="Examination Term (Print Heading)">
-                <select
-                  className="input text-xs font-semibold text-indigo-950"
-                  value={resolvedExamType}
-                  onChange={(e) => {
-                    const nextType = e.target.value as ExamType;
-                    const termLabel = EXAM_TYPE_LABEL[nextType];
-                    const updatedTitle = details.title.replace(
-                      /\b(half[- ]yearly|quarterly|annual)\b/gi,
-                      termLabel,
-                    );
-                    setDetails((d) => ({ ...d, title: updatedTitle }));
-                    patch({ examType: nextType, title: updatedTitle });
-                  }}
-                >
-                  {EXAM_TYPES.map((t) => (
-                    <option key={t} value={t}>
-                      {EXAM_TYPE_LABEL[t]} Examination
-                    </option>
-                  ))}
-                </select>
+              <Field label="Examination Term (Blueprint Specification)">
+                <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-1.5 text-xs">
+                  <span className="font-bold text-slate-900">
+                    {EXAM_TYPE_LABEL[resolvedExamType] || resolvedExamType} Examination
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    Locked to Blueprint
+                  </span>
+                </div>
               </Field>
 
               <Field label="Paper Title">
@@ -739,11 +727,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                   onBlur={() => {
                     const trimmed = details.title.trim();
                     if (trimmed && trimmed !== paper.title) {
-                      const inferred = inferExamTypeFromText(trimmed);
-                      patch({
-                        title: trimmed,
-                        ...(inferred ? { examType: inferred } : {}),
-                      });
+                      patch({ title: trimmed });
                     }
                   }}
                 />

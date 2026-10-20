@@ -148,14 +148,18 @@ export function resolvePaperExamType(paper: {
   title?: string | null;
   blueprint?: { examType?: string | null } | null;
 }): ExamType {
-  if (paper.examType && (EXAM_TYPES as readonly string[]).includes(paper.examType)) {
-    return paper.examType as ExamType;
-  }
-  const inferred = inferExamTypeFromText(paper.title);
-  if (inferred) return inferred;
+  // 1. Primary Source of Truth: Blueprint
   if (paper.blueprint?.examType && (EXAM_TYPES as readonly string[]).includes(paper.blueprint.examType)) {
     return paper.blueprint.examType as ExamType;
   }
+  // 2. Direct paper field (for standalone papers or during initial paper import)
+  if (paper.examType && (EXAM_TYPES as readonly string[]).includes(paper.examType)) {
+    return paper.examType as ExamType;
+  }
+  // 3. Fallback inference from title only if neither blueprint nor paper record has an exam type
+  const inferred = inferExamTypeFromText(paper.title);
+  if (inferred) return inferred;
+
   return "ANNUAL";
 }
 
