@@ -61,6 +61,103 @@ describe("Multi-Book & Granular Syllabus System", () => {
     expect(class12Chem?.isComposite).toBe(true);
   });
 
+  it("includes complete NCERT presets for Hindi, Sanskrit, and Humanities across Senior Secondary and High School", () => {
+    // Class 12 Hindi Core & Elective
+    const hindi12Core = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "cbse-12-hindi-core");
+    expect(hindi12Core).toBeDefined();
+    expect(hindi12Core?.className).toBe("Class 12");
+    expect(hindi12Core?.subject).toBe("Hindi / हिंदी");
+    expect(hindi12Core?.isComposite).toBe(true);
+    expect(hindi12Core?.subBooks).toEqual(["Aroh Part 2 (आरोह भाग 2)", "Vitan Part 2 (वितान भाग 2)"]);
+    expect(hindi12Core?.chapters.length).toBe(18);
+    expect(hindi12Core?.chapters[0].title).toContain("[आरोह]");
+    expect(hindi12Core?.chapters[15].title).toContain("[वितान]");
+
+    const hindi12Elective = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "cbse-12-hindi-elective");
+    expect(hindi12Elective).toBeDefined();
+    expect(hindi12Elective?.isComposite).toBe(true);
+    expect(hindi12Elective?.subBooks).toEqual(["Antra Part 2 (अंतरा भाग 2)", "Antral Part 2 (अंतराल भाग 2)"]);
+    expect(hindi12Elective?.chapters.length).toBe(20);
+
+    // Class 11 Hindi Core, History, Pol Science, Geography, IP, Sociology, Psychology
+    const hindi11 = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "cbse-11-hindi-core");
+    expect(hindi11).toBeDefined();
+    expect(hindi11?.isComposite).toBe(true);
+    expect(hindi11?.chapters.length).toBe(19);
+
+    const hist11 = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "cbse-11-history");
+    expect(hist11).toBeDefined();
+    expect(hist11?.chapters.length).toBe(7);
+
+    const pol11 = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "cbse-11-polscience");
+    expect(pol11).toBeDefined();
+    expect(pol11?.isComposite).toBe(true);
+    expect(pol11?.chapters.length).toBe(17);
+
+    const geo11 = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "cbse-11-geography");
+    expect(geo11).toBeDefined();
+    expect(geo11?.isComposite).toBe(true);
+    expect(geo11?.chapters.length).toBe(19);
+
+    const ip11 = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "cbse-11-ip");
+    expect(ip11).toBeDefined();
+    expect(ip11?.chapters.length).toBe(5);
+
+    const soc11 = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "cbse-11-sociology");
+    expect(soc11).toBeDefined();
+    expect(soc11?.chapters.length).toBe(10);
+
+    const psych11 = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "cbse-11-psychology");
+    expect(psych11).toBeDefined();
+    expect(psych11?.chapters.length).toBe(8);
+
+    // Class 12 Geography, IP, Sociology, Psychology
+    const geo12 = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "cbse-12-geography");
+    expect(geo12).toBeDefined();
+    expect(geo12?.isComposite).toBe(true);
+    expect(geo12?.chapters.length).toBe(17);
+
+    const ip12 = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "cbse-12-ip");
+    expect(ip12).toBeDefined();
+    expect(ip12?.chapters.length).toBe(6);
+
+    const soc12 = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "cbse-12-sociology");
+    expect(soc12).toBeDefined();
+    expect(soc12?.chapters.length).toBe(11);
+
+    const psych12 = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "cbse-12-psychology");
+    expect(psych12).toBeDefined();
+    expect(psych12?.chapters.length).toBe(7);
+
+    // Class 10 Hindi Course B, Sanskrit, Artificial Intelligence
+    const hindi10b = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "cbse-10-hindi-b");
+    expect(hindi10b).toBeDefined();
+    expect(hindi10b?.isComposite).toBe(true);
+    expect(hindi10b?.chapters.length).toBe(17);
+
+    const sanskrit10 = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "cbse-10-sanskrit");
+    expect(sanskrit10).toBeDefined();
+    expect(sanskrit10?.chapters.length).toBe(10);
+
+    const ai10 = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "cbse-10-ai");
+    expect(ai10).toBeDefined();
+    expect(ai10?.chapters.length).toBe(8);
+
+    // Pre-primary Hindi
+    const nurseryHindi = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "pre-nursery-hindi");
+    expect(nurseryHindi).toBeDefined();
+    expect(nurseryHindi?.className).toBe("Nursery");
+    expect(nurseryHindi?.chapters.length).toBe(4);
+
+    const lkgHindi = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "pre-lkg-hindi");
+    expect(lkgHindi).toBeDefined();
+    expect(lkgHindi?.className).toBe("LKG");
+
+    const ukgHindi = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "pre-ukg-hindi");
+    expect(ukgHindi).toBeDefined();
+    expect(ukgHindi?.className).toBe("UKG");
+  });
+
   it("ensures all presets have sequential, non-duplicate, positive chapter numbers", () => {
     for (const preset of STANDARD_CURRICULUM_PRESETS) {
       const numbers = preset.chapters.map((c) => c.number);

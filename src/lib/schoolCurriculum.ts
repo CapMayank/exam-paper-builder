@@ -146,7 +146,9 @@ export const STANDARD_SCHOOL_CLASSES: StandardClassPreset[] = [
       { name: "Mathematics", code: "041" },
       { name: "Science", code: "086" },
       { name: "Social Science", code: "087" },
+      { name: "Sanskrit", code: "122" },
       { name: "Information Technology", code: "402" },
+      { name: "Artificial Intelligence", code: "417" },
     ],
   },
   {
@@ -159,7 +161,9 @@ export const STANDARD_SCHOOL_CLASSES: StandardClassPreset[] = [
       { name: "Mathematics", code: "041" },
       { name: "Science", code: "086" },
       { name: "Social Science", code: "087" },
+      { name: "Sanskrit", code: "122" },
       { name: "Information Technology", code: "402" },
+      { name: "Artificial Intelligence", code: "417" },
     ],
   },
   {
@@ -176,6 +180,13 @@ export const STANDARD_SCHOOL_CLASSES: StandardClassPreset[] = [
       { name: "Accountancy", code: "055" },
       { name: "Business Studies", code: "054" },
       { name: "Economics", code: "030" },
+      { name: "History", code: "027" },
+      { name: "Political Science", code: "028" },
+      { name: "Geography", code: "029" },
+      { name: "Computer Science", code: "083" },
+      { name: "Informatics Practices", code: "065" },
+      { name: "Psychology", code: "037" },
+      { name: "Sociology", code: "039" },
     ],
   },
   {
@@ -192,6 +203,13 @@ export const STANDARD_SCHOOL_CLASSES: StandardClassPreset[] = [
       { name: "Accountancy", code: "055" },
       { name: "Business Studies", code: "054" },
       { name: "Economics", code: "030" },
+      { name: "History", code: "027" },
+      { name: "Political Science", code: "028" },
+      { name: "Geography", code: "029" },
+      { name: "Computer Science", code: "083" },
+      { name: "Informatics Practices", code: "065" },
+      { name: "Psychology", code: "037" },
+      { name: "Sociology", code: "039" },
     ],
   },
 ];
@@ -351,6 +369,72 @@ export function getCanonicalSubjectName(rawSubject?: string | null): string {
     return "Information Technology";
   }
 
+  // History variants
+  if (base === "history" || base === "इतिहास" || base.startsWith("history ")) {
+    return "History";
+  }
+
+  // Political Science variants
+  if (
+    base === "political science" ||
+    base === "pol science" ||
+    base === "polscience" ||
+    base === "राजनीति विज्ञान" ||
+    base === "civics"
+  ) {
+    return "Political Science";
+  }
+
+  // Geography variants
+  if (base === "geography" || base === "भूगोल" || base === "geo") {
+    return "Geography";
+  }
+
+  // Economics variants
+  if (base === "economics" || base === "अर्थशास्त्र" || base === "eco") {
+    return "Economics";
+  }
+
+  // Business Studies variants
+  if (
+    base === "business studies" ||
+    base === "business" ||
+    base === "व्यवसाय अध्ययन" ||
+    base === "bst"
+  ) {
+    return "Business Studies";
+  }
+
+  // Accountancy variants
+  if (base === "accountancy" || base === "accounts" || base === "लेखाशास्त्र" || base === "acc") {
+    return "Accountancy";
+  }
+
+  // Physics variants
+  if (base === "physics" || base === "भौतिक विज्ञान" || base === "भौतिकी") {
+    return "Physics";
+  }
+
+  // Chemistry variants
+  if (base === "chemistry" || base === "रसायन विज्ञान" || base === "रसायन") {
+    return "Chemistry";
+  }
+
+  // Biology variants
+  if (base === "biology" || base === "जीव विज्ञान") {
+    return "Biology";
+  }
+
+  // Sociology variants
+  if (base === "sociology" || base === "समाजशास्त्र") {
+    return "Sociology";
+  }
+
+  // Psychology variants
+  if (base === "psychology" || base === "मनोविज्ञान") {
+    return "Psychology";
+  }
+
   if (s.includes("/")) {
     return s.split("/")[0].trim();
   }
@@ -447,6 +531,17 @@ export function isSubjectMatching(subjectA?: string | null, subjectB?: string | 
       "artificial intelligence",
       "ai",
     ],
+    ["history", "इतिहास", "world history", "indian history", "themes in world history", "themes in indian history"],
+    ["political science", "pol science", "polscience", "राजनीति विज्ञान", "civics", "political theory", "indian constitution"],
+    ["geography", "भूगोल", "geo", "physical geography", "human geography"],
+    ["economics", "अर्थशास्त्र", "eco", "macroeconomics", "microeconomics", "indian economic development"],
+    ["business studies", "business", "व्यवसाय अध्ययन", "bst", "management"],
+    ["accountancy", "accounts", "लेखाशास्त्र", "acc", "accounting"],
+    ["physics", "भौतिक विज्ञान", "भौतिकी"],
+    ["chemistry", "रसायन विज्ञान", "रसायन"],
+    ["biology", "जीव विज्ञान", "bio"],
+    ["sociology", "समाजशास्त्र"],
+    ["psychology", "मनोविज्ञान"],
   ];
 
   for (const group of aliases) {

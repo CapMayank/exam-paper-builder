@@ -791,7 +791,13 @@ export function SyllabusImportModal({
                 <option value="Accountancy">Accountancy</option>
                 <option value="Business Studies">Business Studies</option>
                 <option value="Economics">Economics</option>
+                <option value="History">History</option>
+                <option value="Political Science">Political Science</option>
+                <option value="Geography">Geography</option>
+                <option value="Sociology">Sociology</option>
+                <option value="Psychology">Psychology</option>
                 <option value="Information Technology">Information Technology</option>
+                <option value="Computer Science">Computer Science</option>
                 <option value="Foundational English & Math">Foundational English & Math</option>
                 {filterSubject !== "ALL" &&
                   ![
@@ -808,7 +814,13 @@ export function SyllabusImportModal({
                     "Accountancy",
                     "Business Studies",
                     "Economics",
+                    "History",
+                    "Political Science",
+                    "Geography",
+                    "Sociology",
+                    "Psychology",
                     "Information Technology",
+                    "Computer Science",
                     "Foundational English & Math",
                   ].includes(filterSubject) && (
                     <option value={filterSubject}>{filterSubject}</option>
