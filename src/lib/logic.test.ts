@@ -227,6 +227,83 @@ describe("parseMathSegments", () => {
       expect(segments[1].html).toContain("katex-display");
     }
   });
+
+  it("parses natural integral questions without raw carets", async () => {
+    const { parseMathSegments } = await import("./math");
+    const segments = parseMathSegments("The value of ∫ e^x [f(x) + f'(x)] dx is equal to:");
+    expect(segments.length).toBe(3);
+    expect(segments[0]).toEqual({ type: "text", text: "The value of " });
+    expect(segments[1].type).toBe("math");
+    if (segments[1].type === "math") {
+      expect(segments[1].tex).toContain("\\int");
+      expect(segments[1].tex).toContain("e^{x}");
+      expect(segments[1].tex).not.toContain("e^x ");
+      expect(segments[1].html).toContain("katex");
+    }
+    expect(segments[2]).toEqual({ type: "text", text: " is equal to:" });
+  });
+
+  it("parses standalone math options and short formulas cleanly", async () => {
+    const { parseMathSegments } = await import("./math");
+    const opt1 = parseMathSegments("e^x f(x) + C");
+    expect(opt1.length).toBe(1);
+    expect(opt1[0].type).toBe("math");
+    if (opt1[0].type === "math") {
+      expect(opt1[0].tex).toBe("e^{x} f(x) + C");
+      expect(opt1[0].html).toContain("katex");
+    }
+
+    const opt2 = parseMathSegments("e^(-x)");
+    expect(opt2.length).toBe(1);
+    expect(opt2[0].type).toBe("math");
+    if (opt2[0].type === "math") {
+      expect(opt2[0].tex).toBe("e^{-x}");
+      expect(opt2[0].html).toContain("katex");
+    }
+
+    const opt3 = parseMathSegments("y^(3/2)");
+    expect(opt3.length).toBe(1);
+    expect(opt3[0].type).toBe("math");
+    if (opt3[0].type === "math") {
+      expect(opt3[0].tex).toBe("y^{3/2}");
+    }
+
+    const proseOpt = parseMathSegments("Skew-symmetric matrix");
+    expect(proseOpt.length).toBe(1);
+    expect(proseOpt[0].type).toBe("text");
+    expect(proseOpt[0]).toEqual({ type: "text", text: "Skew-symmetric matrix" });
+  });
+
+  it("parses inline caret exponents in differential equation questions", async () => {
+    const { parseMathSegments } = await import("./math");
+    const segments = parseMathSegments("The integrating factor of the differential equation dy/dx + y = e^(-x) is:");
+    expect(segments.length).toBe(3);
+    expect(segments[0]).toEqual({ type: "text", text: "The integrating factor of the differential equation dy/dx + y = " });
+    expect(segments[1].type).toBe("math");
+    if (segments[1].type === "math") {
+      expect(segments[1].tex).toBe("e^{-x}");
+      expect(segments[1].html).toContain("katex");
+    }
+    expect(segments[2]).toEqual({ type: "text", text: " is:" });
+  });
+
+  it("formats Word (.docx) TextRuns with true superscripts without carets", async () => {
+    const { formatMathTextRuns } = await import("./docxMath");
+    const runs = formatMathTextRuns("The value of ∫ e^x [f(x) + f'(x)] dx is equal to:");
+    expect(runs.length).toBeGreaterThan(1);
+    // Ensure no raw ^ character exists in any run
+    for (const r of runs) {
+      // docx stores text in root[1].root[1] or similar
+      const rawRunJson = JSON.stringify(r);
+      expect(rawRunJson).not.toContain('"^"');
+    }
+
+    const expRuns = formatMathTextRuns("e^(-x)");
+    const expJson = JSON.stringify(expRuns);
+    expect(expJson).toContain("superscript");
+    expect(expJson).toContain("-x");
+    expect(expJson).not.toContain("^");
+  });
 });
 
 describe("multiset helpers", () => {

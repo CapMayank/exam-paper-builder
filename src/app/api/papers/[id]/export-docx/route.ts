@@ -17,6 +17,7 @@ import {
 } from "docx";
 import { HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
+import { formatMathTextRuns, formatOptionPairRuns } from "@/lib/docxMath";
 import {
   DEFAULT_SCHOOL_NAME,
   EXAM_TYPE_LABEL,
@@ -256,7 +257,7 @@ export const GET = route(async (_req, params, user) => {
           spacing: { before: 100, after: 60 },
           children: [
             new TextRun({ text: `${qLabel}  `, bold: true, font: "Times New Roman" }),
-            new TextRun({ text: q.text, font: "Times New Roman" }),
+            ...formatMathTextRuns(q.text, { font: "Times New Roman" }),
             new TextRun({ text: `  [${section.marksEach} Mark${section.marksEach > 1 ? "s" : ""}]`, bold: true, font: "Times New Roman" }),
           ],
         }),
@@ -275,10 +276,7 @@ export const GET = route(async (_req, params, user) => {
                 new Paragraph({
                   indent: { left: 720 }, // 0.5 inch indent
                   spacing: { after: 40 },
-                  children: [
-                    new TextRun({ text: leftOpt.padEnd(45, " "), font: "Times New Roman" }),
-                    new TextRun({ text: rightOpt, font: "Times New Roman" }),
-                  ],
+                  children: formatOptionPairRuns(leftOpt, rightOpt, { font: "Times New Roman" }),
                 }),
               );
             }
@@ -330,7 +328,7 @@ export const GET = route(async (_req, params, user) => {
                               new Paragraph({
                                 children: [
                                   new TextRun({ text: `${roman[idx] ?? `(${idx + 1})`} `, bold: true, font: "Times New Roman" }),
-                                  new TextRun({ text: pair.left, font: "Times New Roman" }),
+                                  ...formatMathTextRuns(pair.left, { font: "Times New Roman" }),
                                 ],
                               }),
                             ],
@@ -341,7 +339,7 @@ export const GET = route(async (_req, params, user) => {
                               new Paragraph({
                                 children: [
                                   new TextRun({ text: `(${letters[idx] ?? idx + 1}) `, bold: true, font: "Times New Roman" }),
-                                  new TextRun({ text: pair.right, font: "Times New Roman" }),
+                                  ...formatMathTextRuns(pair.right, { font: "Times New Roman" }),
                                 ],
                               }),
                             ],
@@ -370,7 +368,7 @@ export const GET = route(async (_req, params, user) => {
                   spacing: { after: 40 },
                   children: [
                     new TextRun({ text: `${sp.label || "(i)"} `, bold: true, font: "Times New Roman" }),
-                    new TextRun({ text: sp.text || "", font: "Times New Roman" }),
+                    ...formatMathTextRuns(sp.text || "", { font: "Times New Roman" }),
                     new TextRun({ text: ` [${sp.marks} Mark${sp.marks > 1 ? "s" : ""}]`, bold: true, font: "Times New Roman" }),
                   ],
                 }),
@@ -397,7 +395,7 @@ export const GET = route(async (_req, params, user) => {
             spacing: { after: 60 },
             children: [
               new TextRun({ text: `Q.${qNum} (OR)  `, bold: true, font: "Times New Roman" }),
-              new TextRun({ text: orQ.text, font: "Times New Roman" }),
+              ...formatMathTextRuns(orQ.text, { font: "Times New Roman" }),
               new TextRun({ text: `  [${section.marksEach} Mark${section.marksEach > 1 ? "s" : ""}]`, bold: true, font: "Times New Roman" }),
             ],
           }),
@@ -415,10 +413,7 @@ export const GET = route(async (_req, params, user) => {
                   new Paragraph({
                     indent: { left: 720 },
                     spacing: { after: 40 },
-                    children: [
-                      new TextRun({ text: leftOpt.padEnd(45, " "), font: "Times New Roman" }),
-                      new TextRun({ text: rightOpt, font: "Times New Roman" }),
-                    ],
+                    children: formatOptionPairRuns(leftOpt, rightOpt, { font: "Times New Roman" }),
                   }),
                 );
               }
