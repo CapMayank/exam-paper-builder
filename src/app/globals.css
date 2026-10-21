@@ -463,8 +463,8 @@ input[type="range"] {
 /* A5 Page (for A4 sheets folded in half into A5 booklets) */
 .a5,
 .a5-measure {
-  font-size: 8.5pt;
-  line-height: 1.25;
+  font-size: 9.5pt;
+  line-height: 1.32;
 }
 
 .a5 {
@@ -474,7 +474,7 @@ input[type="range"] {
   position: relative;
   overflow: hidden;
   box-sizing: border-box;
-  padding: 8mm 9mm 15mm 9mm;
+  padding: 8mm 9mm 14mm 9mm;
 }
 .a5 .page-footer {
   position: absolute;
@@ -484,7 +484,7 @@ input[type="range"] {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 7.5pt;
+  font-size: 8pt;
   color: #333;
 }
 .a5 .page-no {
@@ -493,15 +493,15 @@ input[type="range"] {
   left: 0;
   right: 0;
   text-align: center;
-  font-size: 7.5pt;
+  font-size: 8pt;
   color: #333;
 }
 
 /* A5 specific typography scaling for optimal booklet fit */
 .a5 .opt-text,
 .a5-measure .opt-text {
-  font-size: 8pt !important;
-  line-height: 1.2 !important;
+  font-size: 9.5pt !important;
+  line-height: 1.25 !important;
 }
 
 /* A4 Sheet (Landscape 297x210mm containing two A5 pages side-by-side for folding) */
@@ -612,7 +612,7 @@ input[type="range"] {
     max-height: 209.8mm !important;
     overflow: hidden !important;
     box-sizing: border-box !important;
-    padding: 8mm 9mm 15mm 9mm !important;
+    padding: 8mm 9mm 14mm 9mm !important;
   }
   .a4-sheet {
     width: 297mm !important;

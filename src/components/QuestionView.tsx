@@ -42,12 +42,12 @@ function SingleQuestionBody({
   isA5?: boolean;
 }) {
   const displayLabel = numberLabel ?? (number !== undefined ? `${number}.` : undefined);
-  const optFontSize = isA5 ? "8pt" : "10pt";
-  const marksFontSize = isA5 ? "8pt" : "9.5pt";
-  const tableFontSize = isA5 ? "8pt" : "9.5pt";
-  const metaFontSize = isA5 ? "7.5pt" : "9pt";
-  const subpartMarginLeft = isA5 ? "5mm" : "7mm";
-  const lineHeight = isA5 ? 1.3 : 1.45;
+  const optFontSize = isA5 ? "9.5pt" : "10pt";
+  const marksFontSize = isA5 ? "9pt" : "9.5pt";
+  const tableFontSize = isA5 ? "9pt" : "9.5pt";
+  const metaFontSize = isA5 ? "8.5pt" : "9pt";
+  const subpartMarginLeft = isA5 ? "6mm" : "7mm";
+  const lineHeight = isA5 ? 1.35 : 1.45;
 
   if (renderMode === "SUBPART_ONLY") {
     const sp = q.subparts && subpartIndex !== undefined ? q.subparts[subpartIndex] : null;
@@ -65,7 +65,7 @@ function SingleQuestionBody({
               display: "flex",
               alignItems: "center",
               gap: "2mm",
-              fontSize: isA5 ? "7.5pt" : "8.5pt",
+              fontSize: isA5 ? "8pt" : "8.5pt",
               fontWeight: 700,
               color: "#475569",
               padding: "0.5mm 0 1.5mm 0",
@@ -276,7 +276,7 @@ function SingleQuestionBody({
                       </div>
                     )}
                     {showAnswer && sp.answer && (
-                      <div style={{ marginTop: "1mm", fontSize: isA5 ? "7.5pt" : "0.85em", color: "#166534" }}>
+                      <div style={{ marginTop: "1mm", fontSize: isA5 ? "8pt" : "0.85em", color: "#166534" }}>
                         <span style={{ fontWeight: 600 }}>Answer:</span> <MathText text={sp.answer} />
                       </div>
                     )}
@@ -306,7 +306,7 @@ function SingleQuestionBody({
         )}
       </div>
       {renderMode !== "STEM_ONLY" && showAnswer && q.answer && (
-        <div style={{ marginTop: "1.5mm", marginLeft: displayLabel !== undefined ? (isA5 ? "7.5mm" : "9.5mm") : 0, fontSize: isA5 ? "7.5pt" : "0.85em", color: "#166534" }}>
+        <div style={{ marginTop: "1.5mm", marginLeft: displayLabel !== undefined ? (isA5 ? "7.5mm" : "9.5mm") : 0, fontSize: isA5 ? "8pt" : "0.85em", color: "#166534" }}>
           <span style={{ fontWeight: 600 }}>Answer:</span>{" "}
           {isMcq && normalizedMcq ? (
             <span>

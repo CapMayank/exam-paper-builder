@@ -154,7 +154,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
           <div style={{ flex: 1, textAlign: "center", minWidth: 0 }}>
             <div
               style={{
-                fontSize: isA5 ? "11.5pt" : "14pt",
+                fontSize: isA5 ? "13pt" : "14pt",
                 fontWeight: 800,
                 textTransform: "uppercase",
                 letterSpacing: "0.025em",
@@ -163,11 +163,11 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
             >
               {paper.schoolName || DEFAULT_SCHOOL_NAME}
             </div>
-            <div style={{ fontSize: isA5 ? "9pt" : "11pt", fontWeight: 700, marginTop: "0.6mm" }}>
+            <div style={{ fontSize: isA5 ? "10pt" : "11pt", fontWeight: 700, marginTop: "0.6mm" }}>
               {examHeading} ({sessionText})
               {paper.examDate ? ` · ${new Date(paper.examDate + "T00:00:00").toLocaleDateString("en-GB")}` : ""}
             </div>
-            <div style={{ fontSize: isA5 ? "8.5pt" : "10.5pt", fontWeight: 600, marginTop: "0.5mm" }}>
+            <div style={{ fontSize: isA5 ? "9.5pt" : "10.5pt", fontWeight: 600, marginTop: "0.5mm" }}>
               {blueprint.book.className} — {blueprint.book.subject}
             </div>
           </div>
@@ -182,7 +182,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
             justifyContent: "space-between",
             marginTop: isA5 ? "1.5mm" : "2mm",
             fontWeight: 700,
-            fontSize: isA5 ? "8pt" : "9.5pt",
+            fontSize: isA5 ? "9pt" : "9.5pt",
             borderTop: "1.2px solid #000",
             borderBottom: "1.2px solid #000",
             padding: isA5 ? "1mm 0.8mm" : "1.2mm 1mm",
@@ -207,9 +207,9 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
               justifyContent: "space-between",
               alignItems: "center",
               marginTop: isA5 ? "1.5mm" : "2.5mm",
-              fontSize: isA5 ? "7.5pt" : "8.5pt",
+              fontSize: "8.5pt",
               border: "1px solid #333",
-              padding: isA5 ? "1.2mm 2mm" : "2mm 2.5mm",
+              padding: isA5 ? "1.5mm 2mm" : "2mm 2.5mm",
               borderRadius: "2px",
               backgroundColor: "#fafafa",
             }}
@@ -229,7 +229,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
                   <span
                     key={i}
                     style={{
-                      width: isA5 ? "3.6mm" : "4.5mm",
+                      width: isA5 ? "3.8mm" : "4.5mm",
                       height: isA5 ? "4.5mm" : "5.2mm",
                       border: "1.2px solid #000",
                       display: "inline-block",
@@ -257,8 +257,8 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
               backgroundColor: "#f8fafc",
               border: "1px solid #cbd5e1",
               borderRadius: "3px",
-              fontSize: isA5 ? "7.5pt" : "8.5pt",
-              lineHeight: 1.35,
+              fontSize: "8.5pt",
+              lineHeight: 1.4,
             }}
           >
             <div style={{ fontWeight: 700, textDecoration: "underline", marginBottom: "0.5mm", color: "#0f172a" }}>
@@ -312,16 +312,16 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
                 borderBottom: "1.5px solid #000",
                 paddingBottom: "0.8mm",
                 textTransform: "uppercase",
-                fontSize: isA5 ? "9.5pt" : "11pt",
+                fontSize: isA5 ? "10.5pt" : "11pt",
               }}
             >
               <span>{s.title}</span>
-              <span style={{ fontWeight: 600, fontSize: isA5 ? "8pt" : "9.5pt" }}>
+              <span style={{ fontWeight: 600, fontSize: isA5 ? "9pt" : "9.5pt" }}>
                 {groupCount} Questions · {groupMarks} Marks
               </span>
             </div>
             {s.instructions && (
-              <div style={{ fontStyle: "italic", marginTop: "0.8mm", fontSize: isA5 ? "7.5pt" : "8.5pt", color: "#334155" }}>
+              <div style={{ fontStyle: "italic", marginTop: "0.8mm", fontSize: "8.5pt", color: "#334155" }}>
                 {s.instructions}
               </div>
             )}
@@ -341,7 +341,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
               display: "flex",
               justifyContent: "space-between",
               fontWeight: 600,
-              fontSize: isA5 ? "8pt" : "9pt",
+              fontSize: isA5 ? "8.5pt" : "9pt",
               color: "#1e293b",
               backgroundColor: "#f8fafc",
               borderLeft: "2.5px solid #475569",
@@ -453,7 +453,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
           textAlign: "center",
           paddingTop: isA5 ? "3mm" : "5mm",
           paddingBottom: "2mm",
-          fontSize: isA5 ? "8pt" : "9pt",
+          fontSize: isA5 ? "8.5pt" : "9pt",
           fontWeight: 700,
           letterSpacing: "0.06em",
           borderTop: "1.2px dashed #94a3b8",
