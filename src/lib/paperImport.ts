@@ -11,6 +11,7 @@ export interface ImportedPaperSubpart {
   text: string;
   marks: number;
   answer?: string;
+  options?: string[];
 }
 
 export interface ImportedPaperQuestion {
@@ -490,10 +491,12 @@ export function parsePaperJson(jsonStr: string): PaperImportResult {
           text: typeof sp.text === "string" ? sp.text.trim() : "",
           marks: Number(sp.marks) || 1,
           answer: typeof sp.answer === "string" ? sp.answer.trim() : undefined,
+          options: Array.isArray(sp.options) ? sp.options.map((opt) => String(opt).trim()) : undefined,
         }));
       }
 
-      if (qType === "MCQ" && (!options || options.length < 2)) {
+      const hasSubpartsWithOptions = Boolean(subparts && subparts.some((sp) => sp.options && sp.options.length >= 2));
+      if (qType === "MCQ" && (!options || options.length < 2) && !hasSubpartsWithOptions) {
         warnings.push(`${secTitle} Question ${qIdx + 1}: MCQ requires at least 2 options.`);
       }
 
@@ -942,15 +945,32 @@ export function matchQuestionToBlueprintSection(
 
     // 2. Marks match (Primary exam scoring constraint)
     // Marks alignment is crucial: short answer always has more marks than very short/one word.
-    if (s.marksEach === qMarks) {
+    const hasSubparts = Array.isArray(q.subparts) && q.subparts.length > 0;
+    const subpartMarksEach = hasSubparts
+      ? (q.subparts![0].marks || Math.round(qMarks / q.subparts!.length))
+      : qMarks;
+    const isCompoundMatch =
+      hasSubparts &&
+      (s.count === q.subparts!.length || s.count * s.marksEach === qMarks) &&
+      s.marksEach === subpartMarksEach;
+
+    if (s.marksEach === qMarks || isCompoundMatch) {
       score += 65;
     } else {
-      score -= Math.abs(s.marksEach - qMarks) * 25;
+      score -= Math.abs(s.marksEach - (hasSubparts ? subpartMarksEach : qMarks)) * 25;
     }
 
     // 3. Question Type & Tier hierarchy match
+    // Support subjective bridge: SHORT and LONG for 3-4 mark subjective questions
+    const isSubjectiveBridge =
+      (normQType === "SHORT" || normQType === "LONG") &&
+      (s.type === "SHORT" || s.type === "LONG") &&
+      ((qMarks >= 3 && s.marksEach >= 3) || s.marksEach === qMarks);
+
     if (s.type === normQType) {
       score += 45;
+    } else if (isSubjectiveBridge) {
+      score += 40;
     } else if (sTier === qTier) {
       score += 25;
     } else {
@@ -1247,7 +1267,11 @@ export function verifyPaperAgainstBlueprint(
       );
 
       if (bpSec) {
-        allocatedCounts.set(bpSec.id, (allocatedCounts.get(bpSec.id) ?? 0) + 1);
+        const units =
+          Array.isArray(q.subparts) && q.subparts.length > 0 && bpSec.count >= q.subparts.length
+            ? q.subparts.length
+            : 1;
+        allocatedCounts.set(bpSec.id, (allocatedCounts.get(bpSec.id) ?? 0) + units);
         assignedQuestionsBySection.get(bpSec.id)!.push(q);
       } else {
         unmatchedQuestions.push({ title: impSec.title, question: q });
@@ -1270,22 +1294,31 @@ export function verifyPaperAgainstBlueprint(
 
   for (const bpSec of bpSections) {
     const assigned = assignedQuestionsBySection.get(bpSec.id) ?? [];
+    const effectiveUnits = assigned.reduce((sum, q) => {
+      if (Array.isArray(q.subparts) && q.subparts.length > 0 && bpSec.count >= q.subparts.length) {
+        return sum + q.subparts.length;
+      }
+      return sum + 1;
+    }, 0);
     const impCount = assigned.length;
     let status: SectionVerificationResult["status"] = "MATCH";
-    let message = `All ${impCount} questions match blueprint specifications (${bpSec.type}, ${bpSec.marksEach}m).`;
+    let message =
+      impCount === 1 && effectiveUnits > 1
+        ? `Compound question with ${effectiveUnits} sub-questions fulfills section quota (${bpSec.type}, ${bpSec.marksEach}m each).`
+        : `All ${impCount} question(s) match blueprint specifications (${bpSec.type}, ${bpSec.marksEach}m).`;
 
-    if (impCount === 0 && bpSec.count > 0) {
+    if (effectiveUnits === 0 && bpSec.count > 0) {
       status = "UNDERFILLED";
       message = `Section contains 0 questions (missing all ${bpSec.count} questions vs. blueprint quota).`;
       warnings.push(`Section '${bpSec.title}' (${bpSec.type}): missing all ${bpSec.count} questions.`);
-    } else if (impCount < bpSec.count) {
+    } else if (effectiveUnits < bpSec.count) {
       status = "UNDERFILLED";
-      message = `Section contains ${impCount} questions (short by ${bpSec.count - impCount} vs. blueprint quota of ${bpSec.count}).`;
-      warnings.push(`Section '${bpSec.title}' (${bpSec.type}): ${impCount}/${bpSec.count} questions provided (${bpSec.count - impCount} missing).`);
-    } else if (impCount > bpSec.count) {
+      message = `Section contains ${effectiveUnits} units (short by ${bpSec.count - effectiveUnits} vs. blueprint quota of ${bpSec.count}).`;
+      warnings.push(`Section '${bpSec.title}' (${bpSec.type}): ${effectiveUnits}/${bpSec.count} questions/sub-questions provided (${bpSec.count - effectiveUnits} missing).`);
+    } else if (effectiveUnits > bpSec.count) {
       status = "OVERFILLED";
-      message = `Section contains ${impCount} questions (${impCount - bpSec.count} extra beyond blueprint quota of ${bpSec.count}).`;
-      warnings.push(`Section '${bpSec.title}' (${bpSec.type}): contains ${impCount} questions (blueprint quota is ${bpSec.count}).`);
+      message = `Section contains ${effectiveUnits} units (${effectiveUnits - bpSec.count} extra beyond blueprint quota of ${bpSec.count}).`;
+      warnings.push(`Section '${bpSec.title}' (${bpSec.type}): contains ${effectiveUnits} questions/sub-questions (blueprint quota is ${bpSec.count}).`);
     } else {
       const typeMismatches = assigned.filter((q) => {
         const norm = normalizeQuestionType(q.type);
@@ -1293,10 +1326,27 @@ export function verifyPaperAgainstBlueprint(
         // Compatible tier: e.g. VERY_SHORT / SHORT aligned with marks
         const qTier = getQuestionTypeTier(norm);
         const secTier = getQuestionTypeTier(bpSec.type);
-        if (qTier === secTier && q.marks === bpSec.marksEach) return false;
+        if (qTier === secTier && (q.marks === bpSec.marksEach || (q.subparts && q.subparts.length > 0))) return false;
+        // Subjective bridge: 3m/4m questions (लघु उत्तरीय / SHORT vs दीर्घ उत्तरीय / LONG)
+        if (
+          (norm === "SHORT" || norm === "LONG") &&
+          (bpSec.type === "SHORT" || bpSec.type === "LONG") &&
+          ((q.marks >= 3 && bpSec.marksEach >= 3) || q.marks === bpSec.marksEach)
+        ) {
+          return false;
+        }
         return true;
       });
-      const marksMismatches = assigned.filter((q) => q.marks !== bpSec.marksEach);
+
+      const marksMismatches = assigned.filter((q) => {
+        if (q.marks === bpSec.marksEach) return false;
+        if (Array.isArray(q.subparts) && q.subparts.length > 0 && bpSec.count >= q.subparts.length) {
+          const spMarks = q.subparts[0].marks || Math.round(q.marks / q.subparts.length);
+          return spMarks !== bpSec.marksEach;
+        }
+        return true;
+      });
+
       if (typeMismatches.length > 0) {
         status = "TYPE_MISMATCH";
         message = `${typeMismatches.length} question(s) have type mismatch (expected ${bpSec.type}).`;
@@ -1312,7 +1362,7 @@ export function verifyPaperAgainstBlueprint(
       sectionTitle: bpSec.title,
       blueprintSectionId: bpSec.id,
       expectedCount: bpSec.count,
-      importedCount: impCount,
+      importedCount: effectiveUnits,
       expectedType: bpSec.type,
       expectedMarksEach: bpSec.marksEach,
       status,

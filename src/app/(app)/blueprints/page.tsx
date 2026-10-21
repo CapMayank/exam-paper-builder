@@ -24,6 +24,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AcademicRolloverModal } from "@/components/AcademicRolloverModal";
+import { AIBlueprintModal } from "@/components/AIBlueprintModal";
 import { BlueprintJsonModal } from "@/components/BlueprintJsonModal";
 import {
   EmptyState,
@@ -79,6 +80,7 @@ export default function BlueprintsPage() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [rolloverOpen, setRolloverOpen] = useState(false);
+  const [aiBlueprintOpen, setAiBlueprintOpen] = useState(false);
   const [jsonModalBlueprint, setJsonModalBlueprint] = useState<Blueprint | null>(null);
   const [mobileTab, setMobileTab] = useState<"directory" | "details">("directory");
 
@@ -289,6 +291,14 @@ export default function BlueprintsPage() {
         description={`Exam blueprints define marks, section formats, and chapter allocations for each subject in Session ${activeSession}.`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setAiBlueprintOpen(true)}
+              className="btn btn-ghost border border-indigo-200 bg-indigo-50/80 text-indigo-900 hover:bg-indigo-100 text-xs py-1.5 font-bold flex items-center gap-1.5"
+              title="Parse MP Board circular, syllabus image, PDF, or text into a blueprint using Gemini Vision"
+            >
+              <Sparkles size={15} className="text-indigo-600" /> AI Blueprint Creator
+            </button>
             <button
               type="button"
               onClick={() => setRolloverOpen(true)}
@@ -798,6 +808,20 @@ export default function BlueprintsPage() {
           onSuccess={(targetSession) => {
             setRolloverOpen(false);
             setSession(targetSession);
+            void load();
+          }}
+        />
+      )}
+
+      {/* AI Blueprint Creator Modal */}
+      {aiBlueprintOpen && (
+        <AIBlueprintModal
+          open={aiBlueprintOpen}
+          initialAcademicSession={activeSession}
+          onClose={() => setAiBlueprintOpen(false)}
+          onCreated={(created) => {
+            setAiBlueprintOpen(false);
+            setSelectedId(created.id);
             void load();
           }}
         />

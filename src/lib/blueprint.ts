@@ -3,7 +3,12 @@
 export type SectionDef = { id: string; title: string; type: string; count: number; marksEach: number };
 export type ChapterQuota = { chapterId: string; marks: number };
 export type BlueprintDef = { sections: SectionDef[]; chapters: ChapterQuota[] };
-export type PlacedItem = { sectionId: string; chapterId: string };
+export type PlacedItem = {
+  sectionId: string;
+  chapterId: string;
+  marks?: number;
+  subpartsCount?: number;
+};
 
 export type QuestionTypeItem = {
   key: string;
@@ -198,21 +203,48 @@ export type PaperStatus = {
   complete: boolean;
 };
 
+function getItemUnits(item: PlacedItem, secCount: number): number {
+  if (item.subpartsCount && item.subpartsCount > 1 && secCount >= item.subpartsCount) {
+    return item.subpartsCount;
+  }
+  return 1;
+}
+
+function getItemMarks(item: PlacedItem, secMarksEach: number): number {
+  if (item.marks && item.marks > 0) {
+    return item.marks;
+  }
+  if (item.subpartsCount && item.subpartsCount > 1) {
+    return item.subpartsCount * secMarksEach;
+  }
+  return secMarksEach;
+}
+
 export function paperStatus(bp: BlueprintDef, items: PlacedItem[]): PaperStatus {
-  const marksBySection = new Map(bp.sections.map((s) => [s.id, s.marksEach]));
-  const sections = bp.sections.map((s) => ({
-    id: s.id,
-    needed: s.count,
-    filled: items.filter((i) => i.sectionId === s.id).length,
-  }));
+  const sectionById = new Map(bp.sections.map((s) => [s.id, s]));
+  const sections = bp.sections.map((s) => {
+    const placed = items.filter((i) => i.sectionId === s.id);
+    const filledUnits = placed.reduce((sum, i) => sum + getItemUnits(i, s.count), 0);
+    return {
+      id: s.id,
+      needed: s.count,
+      filled: filledUnits,
+    };
+  });
   const chapters = bp.chapters.map((c) => ({
     chapterId: c.chapterId,
     target: c.marks,
     used: items
       .filter((i) => i.chapterId === c.chapterId)
-      .reduce((sum, i) => sum + (marksBySection.get(i.sectionId) ?? 0), 0),
+      .reduce((sum, i) => {
+        const sec = sectionById.get(i.sectionId);
+        return sum + getItemMarks(i, sec?.marksEach ?? 1);
+      }, 0),
   }));
-  const usedMarks = items.reduce((sum, i) => sum + (marksBySection.get(i.sectionId) ?? 0), 0);
+  const usedMarks = items.reduce((sum, i) => {
+    const sec = sectionById.get(i.sectionId);
+    return sum + getItemMarks(i, sec?.marksEach ?? 1);
+  }, 0);
   const complete =
     sections.every((s) => s.filled === s.needed) &&
     chapters.every((c) => c.used === c.target) &&
@@ -265,6 +297,8 @@ export type DiagnosticItem = {
   chapterId: string;
   type?: string;
   text?: string;
+  marks?: number;
+  subpartsCount?: number;
 };
 
 export function diagnosePaperImplications(
@@ -281,41 +315,61 @@ export function diagnosePaperImplications(
   // 1. Check sections
   for (const s of bp.sections) {
     const placed = items.filter((i) => i.sectionId === s.id);
-    if (placed.length < s.count) {
-      const missing = s.count - placed.length;
+    const filledUnits = placed.reduce((sum, i) => {
+      if (i.subpartsCount && i.subpartsCount > 1 && s.count >= i.subpartsCount) {
+        return sum + i.subpartsCount;
+      }
+      return sum + 1;
+    }, 0);
+
+    if (filledUnits < s.count) {
+      const missing = s.count - filledUnits;
       implications.push({
         code: "SECTION_UNDERFILLED",
         severity: "warning",
         sectionId: s.id,
         sectionTitle: s.title,
-        message: `${s.title} requires ${s.count} questions, but only ${placed.length} are placed (${missing} slot${missing > 1 ? "s" : ""} to fill).`,
-        details: { needed: s.count, filled: placed.length, missing },
+        message: `${s.title} requires ${s.count} questions, but only ${filledUnits} are placed (${missing} slot${missing > 1 ? "s" : ""} to fill).`,
+        details: { needed: s.count, filled: filledUnits, missing },
       });
-    } else if (placed.length > s.count) {
-      const excess = placed.length - s.count;
+    } else if (filledUnits > s.count) {
+      const excess = filledUnits - s.count;
       implications.push({
         code: "SECTION_OVERFILLED",
         severity: "error",
         sectionId: s.id,
         sectionTitle: s.title,
-        message: `${s.title} quota was reduced to ${s.count} questions, but has ${placed.length} placed (${excess} excess question${excess > 1 ? "s" : ""} must be removed).`,
-        details: { needed: s.count, filled: placed.length, excess },
+        message: `${s.title} quota was reduced to ${s.count} questions, but has ${filledUnits} placed (${excess} excess question${excess > 1 ? "s" : ""} must be removed).`,
+        details: { needed: s.count, filled: filledUnits, excess },
       });
     }
 
     // Check type mismatches within section
     for (const item of placed) {
       if (item.type && item.type !== s.type) {
-        implications.push({
-          code: "TYPE_MISMATCH",
-          severity: "error",
-          sectionId: s.id,
-          sectionTitle: s.title,
-          questionId: item.id,
-          questionText: item.text,
-          message: `Question in ${s.title} has type ${item.type}, but the section now requires ${s.type}.`,
-          details: { expectedType: s.type, actualType: item.type, questionId: item.id },
-        });
+        // Tolerant compatibility: SHORT vs LONG for 3m/4m questions
+        const isSubjectiveCompat =
+          (item.type === "SHORT" || item.type === "LONG") &&
+          (s.type === "SHORT" || s.type === "LONG") &&
+          s.marksEach >= 3;
+        // Objective types compatibility if section has objective/MCQ
+        const isObjectiveCompat =
+          ["MCQ", "FILL_BLANK", "TRUE_FALSE", "MATCH_COLUMN", "ONE_WORD"].includes(item.type) &&
+          ["MCQ", "FILL_BLANK", "TRUE_FALSE", "MATCH_COLUMN", "ONE_WORD"].includes(s.type) &&
+          s.marksEach === 1;
+
+        if (!isSubjectiveCompat && !isObjectiveCompat) {
+          implications.push({
+            code: "TYPE_MISMATCH",
+            severity: "error",
+            sectionId: s.id,
+            sectionTitle: s.title,
+            questionId: item.id,
+            questionText: item.text,
+            message: `Question in ${s.title} has type ${item.type}, but the section now requires ${s.type}.`,
+            details: { expectedType: s.type, actualType: item.type, questionId: item.id },
+          });
+        }
       }
     }
   }
@@ -335,7 +389,10 @@ export function diagnosePaperImplications(
   for (const c of bp.chapters) {
     const used = items
       .filter((i) => i.chapterId === c.chapterId)
-      .reduce((sum, i) => sum + (marksBySection.get(i.sectionId) ?? 0), 0);
+      .reduce((sum, i) => {
+        const itemMarks = i.marks && i.marks > 0 ? i.marks : (marksBySection.get(i.sectionId) ?? 0);
+        return sum + itemMarks;
+      }, 0);
 
     const chapterName = c.title ? c.title : `Chapter ${c.chapterId}`;
 

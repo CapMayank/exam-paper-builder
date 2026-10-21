@@ -1109,9 +1109,13 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
           {blueprint.sections.map((s, si) => {
             const items = paper.items.filter((i) => i.sectionId === s.id);
             const st = progress.sections.find((x) => x.id === s.id)!;
-            const isOverfilled = items.length > s.count;
-            const isSectionFull = items.length === s.count;
-            const emptySlots = Math.max(0, s.count - items.length);
+            const effectiveUnits = items.reduce((sum, it) => {
+              const subLen = it.question.subparts?.length || 0;
+              return sum + (subLen > 1 && s.count >= subLen ? subLen : 1);
+            }, 0);
+            const isOverfilled = effectiveUnits > s.count;
+            const isSectionFull = effectiveUnits === s.count;
+            const emptySlots = Math.max(0, s.count - effectiveUnits);
             const isCollapsed = !!collapsedSections[s.id];
 
             return (
@@ -1140,7 +1144,10 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                             : "!bg-amber-50 !text-amber-800 border border-amber-200"
                         }`}
                       >
-                        {items.length}/{s.count} questions {isOverfilled ? `(${items.length - s.count} excess!)` : ""}
+                        {items.length === 1 && effectiveUnits > 1
+                          ? `1 question (${effectiveUnits} sub-parts)`
+                          : `${effectiveUnits}/${s.count} questions`}{" "}
+                        {isOverfilled ? `(${effectiveUnits - s.count} excess!)` : ""}
                       </span>
                     </div>
                     <div className="text-xs text-slate-500 mt-0.5">
@@ -1151,7 +1158,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                   </div>
 
                   <div className="flex items-center gap-1.5">
-                    {canEditPaper && items.length < s.count && (
+                    {canEditPaper && effectiveUnits < s.count && (
                       <button
                         className="btn btn-sm btn-primary shadow-2xs"
                         onClick={() => {
@@ -1209,8 +1216,21 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                           secLetter,
                           idx
                         );
-                        const isTypeMismatch = it.question.type !== s.type;
-                        const isExcess = idx >= s.count;
+                        const isSubjectiveCompat =
+                          (it.question.type === "SHORT" || it.question.type === "LONG") &&
+                          (s.type === "SHORT" || s.type === "LONG") &&
+                          s.marksEach >= 3;
+                        const isObjectiveCompat =
+                          ["MCQ", "FILL_BLANK", "TRUE_FALSE", "MATCH_COLUMN", "ONE_WORD"].includes(it.question.type) &&
+                          ["MCQ", "FILL_BLANK", "TRUE_FALSE", "MATCH_COLUMN", "ONE_WORD"].includes(s.type) &&
+                          s.marksEach === 1;
+                        const isTypeMismatch = it.question.type !== s.type && !isSubjectiveCompat && !isObjectiveCompat;
+                        const isExcess = idx >= s.count || effectiveUnits > s.count;
+
+                        const questionTotalMarks =
+                          it.question.subparts && it.question.subparts.length > 0
+                            ? it.question.subparts.reduce((sum, sp) => sum + (sp.marks || 1), 0)
+                            : s.marksEach;
 
                         return (
                           <li
@@ -1243,7 +1263,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                 orQuestion={it.orQuestion}
                                 number={questionNumber}
                                 numberLabel={numberLabel}
-                                marks={s.marksEach}
+                                marks={questionTotalMarks}
                                 marksStyle={paper.marksStyle || "RIGHT_COLUMN"}
                               />
                             </div>
@@ -1406,7 +1426,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
 
                       {/* Interactive Empty Slot Targets */}
                       {Array.from({ length: emptySlots }).map((_, i) => {
-                        const slotNum = items.length + i + 1;
+                        const slotNum = effectiveUnits + i + 1;
                         return (
                           <li key={`empty-${i}`}>
                             {canEditPaper ? (

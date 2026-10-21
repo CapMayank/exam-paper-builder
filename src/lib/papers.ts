@@ -5,6 +5,7 @@ import { toQuestionDto } from "./dto";
 import { diagnosePaperImplications, paperStatus } from "./blueprint";
 import { blueprintInclude } from "./blueprints";
 import { prisma } from "./prisma";
+import { parseSubparts, subpartsTotalMarks } from "./types";
 
 export function canModifyPaper(
   user: SessionUser,
@@ -119,7 +120,16 @@ export async function loadPaperView(id: string) {
       sections: blueprint.sections,
       chapters: blueprint.chapters.map((c) => ({ chapterId: c.chapterId, marks: c.marks })),
     },
-    items.map((i) => ({ sectionId: i.sectionId, chapterId: i.question.chapterId })),
+    items.map((i) => {
+      const subparts = parseSubparts(i.question.subpartsJson);
+      const submarks = subpartsTotalMarks(subparts);
+      return {
+        sectionId: i.sectionId,
+        chapterId: i.question.chapterId,
+        marks: submarks > 0 ? submarks : undefined,
+        subpartsCount: subparts.length > 0 ? subparts.length : undefined,
+      };
+    }),
   );
   const implications = diagnosePaperImplications(
     {
@@ -130,13 +140,19 @@ export async function loadPaperView(id: string) {
         marks: c.marks,
       })),
     },
-    items.map((i) => ({
-      id: i.id,
-      sectionId: i.sectionId,
-      chapterId: i.question.chapterId,
-      type: i.question.type,
-      text: i.question.text,
-    })),
+    items.map((i) => {
+      const subparts = parseSubparts(i.question.subpartsJson);
+      const submarks = subpartsTotalMarks(subparts);
+      return {
+        id: i.id,
+        sectionId: i.sectionId,
+        chapterId: i.question.chapterId,
+        type: i.question.type,
+        text: i.question.text,
+        marks: submarks > 0 ? submarks : undefined,
+        subpartsCount: subparts.length > 0 ? subparts.length : undefined,
+      };
+    }),
   );
   const resolvedExamType = resolvePaperExamType(paper);
   return {

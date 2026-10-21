@@ -5,6 +5,7 @@ import {
   improveQuestionWithGemini,
   isGeminiConfigured,
   normalizeFigureObjects,
+  parseBlueprintWithGemini,
   promptToFigureSceneWithGemini,
 } from "./gemini";
 
@@ -370,6 +371,75 @@ describe("Gemini AI Integration Suite", () => {
       expect(ptB?.lx).toBeLessThan(0);
       // Vertex C is to the right, so label offset must push RIGHT (lx > 0)
       expect(ptC?.lx).toBeGreaterThan(0);
+    });
+  });
+
+  describe("parseBlueprintWithGemini (AI Blueprint Creator)", () => {
+    it("extracts and auto-balances an official board blueprint from text input", async () => {
+      const mockChapters = [
+        { id: "ch_1", number: 1, title: "The Last Lesson" },
+        { id: "ch_2", number: 2, title: "Lost Spring" },
+        { id: "ch_3", number: 3, title: "Deep Water" },
+        { id: "ch_4", number: 4, title: "My Mother at Sixty-Six" },
+      ];
+
+      const res = await parseBlueprintWithGemini({
+        rawText: `
+          Board of Secondary Education, Madhya Pradesh, Bhopal
+          Higher Secondary Examination Session 2025–26
+          Class: XII, Subject: English, Maximum Marks: 80, Time: 3:00 Hours
+          Section A - Reading Skills: 14 Marks (Unseen passage 10m, Note making 4m)
+          Section B - Writing Skills: 12 Marks (Notice 4m, Letter 4m, Article 4m)
+          Section C - Grammar: 10 Marks (Fill ups 5m, Do as directed 5m)
+          Section D - Textbooks: 44 Marks
+        `,
+        className: "Class 12",
+        subject: "English",
+        academicSession: "2025–26",
+        bookChapters: mockChapters,
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.data).toBeDefined();
+      expect(res.data.name).toBeTruthy();
+      expect(res.data.academicSession).toBe("2025–26");
+      expect(res.data.durationMin).toBe(180);
+      expect(res.data.sections.length).toBeGreaterThanOrEqual(1);
+
+      // Verify sections total equals chapters total
+      const totalSectionMarks = res.data.sections.reduce(
+        (sum, s) => sum + s.count * s.marksEach,
+        0,
+      );
+      const totalChapterMarks = res.data.chapters.reduce(
+        (sum, c) => sum + c.marks,
+        0,
+      );
+
+      expect(totalSectionMarks).toBe(res.data.totalMarks);
+      expect(totalChapterMarks).toBe(totalSectionMarks);
+    });
+
+    it("supports multimodal file data (PDF/Image) for official board circulars", async () => {
+      const mockChapters = [
+        { id: "ch_math_1", number: 1, title: "Relations and Functions" },
+        { id: "ch_math_2", number: 2, title: "Inverse Trigonometric Functions" },
+      ];
+
+      const res = await parseBlueprintWithGemini({
+        fileData: "JVBERi0xLjQKJcTl8uXr...", // Dummy base64 PDF
+        mimeType: "application/pdf",
+        className: "Class 12",
+        subject: "Mathematics",
+        academicSession: "2025–26",
+        bookChapters: mockChapters,
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.data.sections.length).toBeGreaterThan(0);
+      const totalSec = res.data.sections.reduce((sum, s) => sum + s.count * s.marksEach, 0);
+      const totalCh = res.data.chapters.reduce((sum, c) => sum + c.marks, 0);
+      expect(totalCh).toBe(totalSec);
     });
   });
 });

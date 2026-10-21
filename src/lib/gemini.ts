@@ -21,12 +21,16 @@ export function isGeminiConfigured(customKey?: string | null): boolean {
   return Boolean(getGeminiApiKey(customKey));
 }
 
+export type GeminiContentPart =
+  | { text: string }
+  | { inlineData: { mimeType: string; data: string } };
+
 /**
  * Low-level caller for Google Gemini API (Gemini 1.5 Flash / 2.0 Flash)
  * using standard HTTPS fetch.
  */
 export async function callGeminiApi<T>(
-  prompt: string,
+  prompt: string | GeminiContentPart[],
   systemInstruction: string,
   opts: {
     json?: boolean;
@@ -65,11 +69,13 @@ export async function callGeminiApi<T>(
     ]),
   );
 
+  const parts = typeof prompt === "string" ? [{ text: prompt }] : prompt;
+
   const payload: Record<string, unknown> = {
     contents: [
       {
         role: "user",
-        parts: [{ text: prompt }],
+        parts,
       },
     ],
     systemInstruction: {
@@ -2032,4 +2038,221 @@ Requirements:
 
   return rawResult;
 }
+
+export interface ParseBlueprintInput {
+  rawText?: string;
+  fileData?: string; // base64
+  mimeType?: string; // application/pdf, image/png, image/jpeg, image/webp
+  className?: string;
+  subject?: string;
+  academicSession?: string;
+  bookChapters?: Array<{ id: string; number: number; title: string }>;
+  apiKey?: string | null;
+}
+
+export interface ParsedBlueprintResponse {
+  name: string;
+  academicSession: string;
+  examType: "QUARTERLY" | "HALF_YEARLY" | "ANNUAL";
+  durationMin: number;
+  subjectCode: string;
+  totalMarks: number;
+  sections: Array<{
+    title: string;
+    instructions: string;
+    type: string;
+    count: number;
+    marksEach: number;
+  }>;
+  chapters: Array<{
+    chapterId: string;
+    marks: number;
+  }>;
+}
+
+/**
+ * Parses official education board blueprint circulars (PDFs, images, or raw text)
+ * into a structured, balanced Blueprint using Gemini Multimodal Vision / OCR.
+ */
+export async function parseBlueprintWithGemini(
+  input: ParseBlueprintInput,
+): Promise<GeminiCallResult<ParsedBlueprintResponse>> {
+  const apiKey = getGeminiApiKey(input.apiKey);
+  const className = input.className || "Class 12";
+  const subject = input.subject || "English";
+  const academicSession = input.academicSession || "2025–26";
+  const chapters = input.bookChapters || [];
+
+  const systemInstruction = `You are an expert exam blueprint and syllabus analyzer for official Indian state and central education boards (e.g., MP Board / MPBSE, CBSE, ICSE, UP Board, etc.).
+Your mission is to extract, normalize, and arithmetically balance an examination blueprint from the provided document (PDF, image, or text) into a strict JSON object.
+
+CRITICAL REQUIREMENTS:
+1. "name": Generate a professional title including board, class, subject, and session (e.g. "MP Board Class 12 English Annual Examination 2025–26").
+2. "academicSession": Return standard academic session (e.g. "${academicSession}").
+3. "examType": Exactly one of: "ANNUAL", "HALF_YEARLY", "QUARTERLY".
+4. "durationMin": Examination time in minutes (e.g. 180 for 3:00 Hours, 150 for 2:30 Hours). Default to 180 if unspecified.
+5. "subjectCode": Official subject code if stated (e.g. "051"), otherwise empty string "".
+6. "sections": Array of question paper sections.
+   - For MP Board / State Board Objective Questions (e.g. Q1 to Q5 carrying 32 objective marks):
+     Break down by question type:
+     - Multiple Choice Questions (e.g., count: 6, marksEach: 1, type: "MCQ")
+     - Fill in the Blanks (e.g., count: 6, marksEach: 1, type: "FILL_BLANK")
+     - True / False (e.g., count: 6, marksEach: 1, type: "TRUE_FALSE")
+     - Match the Columns (e.g., count: 7, marksEach: 1, type: "MATCH_COLUMN")
+     - One Word / Sentence (e.g., count: 7, marksEach: 1, type: "ONE_WORD")
+   - For Subjective Sections:
+     - Very Short Answer (अति लघु उत्तरीय, 2 marks, ~30 words): type: "VERY_SHORT", marksEach: 2
+     - Short Answer (लघु उत्तरीय, 3 marks, ~75 words): type: "SHORT", marksEach: 3
+     - Long Answer / Analytical (दीर्घ उत्तरीय, 4 marks, ~120 words): type: "LONG", marksEach: 4
+     - Case Study / Passage Extracts: type: "CASE_STUDY" or "UNSEEN_PASSAGE"
+   - Question Types must be chosen strictly from: "MCQ", "FILL_BLANK", "TRUE_FALSE", "MATCH_COLUMN", "ONE_WORD", "VERY_SHORT", "SHORT", "LONG", "CASE_STUDY", "UNSEEN_PASSAGE", "GRAMMAR", "WRITING_SKILL".
+7. "chapters": Array of { "chapterId": string, "marks": number }.
+   - Distribute the examination marks across the provided chapter IDs.
+   - CRITICAL INVARIANT: The sum of marks in "chapters" MUST EXACTLY EQUAL the sum of (count * marksEach) across all "sections".
+   - Only assign marks to chapter IDs provided in the chapter list. Do not invent non-existent IDs.
+
+RETURN ONLY VALID JSON matching this schema:
+{
+  "name": "string",
+  "academicSession": "string",
+  "examType": "ANNUAL" | "HALF_YEARLY" | "QUARTERLY",
+  "durationMin": number,
+  "subjectCode": "string",
+  "totalMarks": number,
+  "sections": [
+    {
+      "title": "string",
+      "instructions": "string",
+      "type": "string",
+      "count": number,
+      "marksEach": number
+    }
+  ],
+  "chapters": [
+    {
+      "chapterId": "string",
+      "marks": number
+    }
+  ]
+}`;
+
+  const chaptersPromptList = chapters
+    .map((c) => `- ID: "${c.id}", Number: ${c.number}, Title: "${c.title}"`)
+    .join("\n");
+
+  const promptText = `Please parse the following examination blueprint for ${className} ${subject} (${academicSession}).
+
+Available Book Chapters in System:
+${chaptersPromptList || "No existing chapters provided; distribute marks logically across detected units."}
+
+Provided Document / Text:
+${input.rawText || "Please inspect the attached blueprint document/image and extract the full marks scheme."}`;
+
+  let promptContent: string | GeminiContentPart[];
+  if (input.fileData && input.mimeType) {
+    promptContent = [
+      {
+        inlineData: {
+          mimeType: input.mimeType,
+          data: input.fileData,
+        },
+      },
+      { text: promptText },
+    ];
+  } else {
+    promptContent = promptText;
+  }
+
+  const mockFallback = (): ParsedBlueprintResponse => {
+    // Intelligent fallback modeled on MP Board / State Board 80-mark standard pattern
+    const isLang = /english|hindi|sanskrit/i.test(subject);
+    const sections = isLang
+      ? [
+          { title: "Section A – Objective: Multiple Choice", instructions: "Choose the correct option", type: "MCQ", count: 6, marksEach: 1 },
+          { title: "Section A – Objective: Fill in Blanks", instructions: "Fill in the correct blanks", type: "FILL_BLANK", count: 6, marksEach: 1 },
+          { title: "Section A – Objective: True / False", instructions: "State whether true or false", type: "TRUE_FALSE", count: 6, marksEach: 1 },
+          { title: "Section A – Objective: Match Column", instructions: "Match Column A with Column B", type: "MATCH_COLUMN", count: 7, marksEach: 1 },
+          { title: "Section A – Objective: One Word Answer", instructions: "Answer in one sentence", type: "ONE_WORD", count: 7, marksEach: 1 },
+          { title: "Section B – Very Short Answer", instructions: "Answer in about 30 words (2 marks each)", type: "VERY_SHORT", count: 10, marksEach: 2 },
+          { title: "Section C – Short Answer", instructions: "Answer in about 75 words (3 marks each)", type: "SHORT", count: 4, marksEach: 3 },
+          { title: "Section D – Long Answer", instructions: "Answer in about 120 words (4 marks each)", type: "LONG", count: 4, marksEach: 4 },
+        ]
+      : [
+          { title: "Section A – Multiple Choice Questions", instructions: "All questions carry 1 mark", type: "MCQ", count: 16, marksEach: 1 },
+          { title: "Section B – Very Short Answer", instructions: "Answer questions in 30 words", type: "VERY_SHORT", count: 5, marksEach: 2 },
+          { title: "Section C – Short Answer", instructions: "Answer questions in 75 words", type: "SHORT", count: 6, marksEach: 3 },
+          { title: "Section D – Long Answer", instructions: "Answer questions in 120 words", type: "LONG", count: 4, marksEach: 5 },
+          { title: "Section E – Case Study Questions", instructions: "Case study questions with subparts", type: "CASE_STUDY", count: 3, marksEach: 4 },
+        ];
+
+    const totalSectionMarks = sections.reduce((sum, s) => sum + s.count * s.marksEach, 0);
+
+    // Distribute among available chapters evenly
+    const distributedChapters = chapters.map((c, idx) => {
+      const base = Math.floor(totalSectionMarks / Math.max(1, chapters.length));
+      return { chapterId: c.id, marks: base };
+    });
+
+    // Balance remainder
+    const currentSum = distributedChapters.reduce((sum, c) => sum + c.marks, 0);
+    const remainder = totalSectionMarks - currentSum;
+    if (distributedChapters.length > 0 && remainder !== 0) {
+      distributedChapters[0].marks += remainder;
+    }
+
+    return {
+      name: `${className} ${subject} Annual Examination Blueprint (${academicSession})`,
+      academicSession,
+      examType: "ANNUAL",
+      durationMin: 180,
+      subjectCode: "",
+      totalMarks: totalSectionMarks,
+      sections,
+      chapters: distributedChapters,
+    };
+  };
+
+  const result = await callGeminiApi<ParsedBlueprintResponse>(promptContent, systemInstruction, {
+    json: true,
+    apiKey,
+    mockFallback,
+  });
+
+  // Post-process to ensure mathematical balance between sections and chapters
+  if (result.success && result.data && Array.isArray(result.data.sections)) {
+    const totalSecMarks = result.data.sections.reduce(
+      (sum, s) => sum + (Number(s.count) || 1) * (Number(s.marksEach) || 1),
+      0,
+    );
+    result.data.totalMarks = totalSecMarks;
+
+    // Filter valid chapters and map to known book chapters
+    const validChapters = (result.data.chapters || []).filter(
+      (c) => c && typeof c.chapterId === "string" && chapters.some((ch) => ch.id === c.chapterId),
+    );
+
+    // If chapters were empty or missing, distribute among provided chapters
+    if (validChapters.length === 0 && chapters.length > 0) {
+      const perCh = Math.floor(totalSecMarks / chapters.length);
+      chapters.forEach((ch, idx) => {
+        validChapters.push({
+          chapterId: ch.id,
+          marks: idx === 0 ? perCh + (totalSecMarks % chapters.length) : perCh,
+        });
+      });
+    }
+
+    // Balance check
+    const currentChMarks = validChapters.reduce((sum, c) => sum + (Number(c.marks) || 0), 0);
+    const diff = totalSecMarks - currentChMarks;
+    if (diff !== 0 && validChapters.length > 0) {
+      validChapters[0].marks = Math.max(0, (validChapters[0].marks || 0) + diff);
+    }
+
+    result.data.chapters = validChapters;
+  }
+
+  return result;
+}
+
 

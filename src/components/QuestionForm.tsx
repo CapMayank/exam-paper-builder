@@ -289,12 +289,12 @@ export function QuestionForm({
     e.preventDefault();
     setError(null);
     const isMcq = isMcqLikeType(type);
-    const usesSubparts = isSubpartQuestionType(type);
+    const usesSubparts = isSubpartQuestionType(type) || (subparts && subparts.length > 0);
 
-    if (isMcq && options.some((o) => !o.trim())) {
+    if (isMcq && !usesSubparts && options.some((o) => !o.trim())) {
       return setError("Fill in every option, or remove the empty ones.");
     }
-    if (isMcq && options.length < MIN_OPTIONS) return setError(`Add at least ${MIN_OPTIONS} options.`);
+    if (isMcq && !usesSubparts && options.length < MIN_OPTIONS) return setError(`Add at least ${MIN_OPTIONS} options.`);
 
     if (type === "MATCH_COLUMN") {
       if (matchPairs.length < MIN_OPTIONS) {
@@ -356,6 +356,7 @@ export function QuestionForm({
               label: sp.label.trim() || "(i)",
               text: sp.text.trim(),
               answer: sp.answer?.trim() || "",
+              options: Array.isArray(sp.options) && sp.options.length > 0 ? sp.options.map((o) => o.trim()) : undefined,
             }))
           : [],
       };
@@ -401,7 +402,7 @@ export function QuestionForm({
 
   const typeLocked = !!fixedType || (!!initial && (initial.timesUsed ?? 0) > 0);
   const isMcq = isMcqLikeType(type);
-  const usesSubparts = isSubpartQuestionType(type);
+  const usesSubparts = isSubpartQuestionType(type) || (subparts && subparts.length > 0);
 
   return (
     <form onSubmit={submit} className="space-y-3">
@@ -1076,13 +1077,35 @@ export function QuestionForm({
                     </div>
                   )}
                 </div>
+
+                {sp.options && sp.options.length > 0 && (
+                  <div className="space-y-1.5 pt-1 rounded-md bg-slate-50 p-2.5 border border-slate-200">
+                    <label className="text-[11px] font-semibold text-slate-600">Sub-question Options:</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {sp.options.map((opt, optIdx) => (
+                        <div key={optIdx} className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-slate-500 w-5">({String.fromCharCode(97 + optIdx)})</span>
+                          <input
+                            className="input text-xs flex-1 py-1 px-2"
+                            value={opt}
+                            onChange={(e) => {
+                              const newOpts = [...(sp.options || [])];
+                              newOpts[optIdx] = e.target.value;
+                              setSubparts(subparts.map((s, j) => (j === i ? { ...s, options: newOpts } : s)));
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {isMcq && (
+      {isMcq && !usesSubparts && (
         <div className="space-y-2.5">
           <span className="label">Options (select the correct one)</span>
           {options.map((o, i) => (

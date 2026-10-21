@@ -1011,6 +1011,161 @@ describe("Paper Import & Blueprint Verification Engine", () => {
       expect(secDVistasLa?.importedCount).toBe(1);
       expect(secDVistasLa?.status).toBe("MATCH");
     });
+
+    it("preserves MCQ options inside question subparts during JSON parsing", () => {
+      const json = JSON.stringify({
+        title: "Test Paper",
+        sections: [
+          {
+            title: "खण्ड 'अ' (वस्तुनिष्ठ प्रश्न)",
+            questions: [
+              {
+                text: "प्रश्न 1. सही विकल्प चुनकर लिखिए:",
+                type: "MCQ",
+                marks: 6,
+                subparts: [
+                  {
+                    label: "(i)",
+                    text: "'आत्मपरिचय' कविता में कवि किसका भार लिए फिरता है?",
+                    marks: 1,
+                    options: ["कार्यालय का", "जग-जीवन का", "परिवार का", "कष्टों का"],
+                    answer: "जग-जीवन का",
+                  },
+                  {
+                    label: "(ii)",
+                    text: "'बाजार दर्शन' पाठ के अनुसार बाजार का जादू किस राह से काम करता है?",
+                    marks: 1,
+                    options: ["आँख", "कान", "नाक", "स्पर्श"],
+                    answer: "आँख",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+
+      const res = parsePaperJson(json);
+      expect(res.success).toBe(true);
+      const q = res.paper.sections[0].questions[0];
+      expect(q.subparts).toBeDefined();
+      expect(q.subparts?.length).toBe(2);
+      expect(q.subparts![0].options).toEqual(["कार्यालय का", "जग-जीवन का", "परिवार का", "कष्टों का"]);
+      expect(q.subparts![1].options).toEqual(["आँख", "कान", "नाक", "स्पर्श"]);
+    });
+
+    it("supports MP Board multi-subpart objective questions seamlessly fulfilling section quota", () => {
+      const bp: Blueprint = {
+        id: "bp_mp",
+        name: "MP Board Class 12 Hindi Blueprint",
+        bookId: "b_hin",
+        academicSession: "2025–26",
+        examType: "HALF_YEARLY",
+        durationMin: 180,
+        subjectCode: "051",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        book: { id: "b_hin", title: "Hindi Book", subject: "Hindi", className: "Class 12" },
+        sections: [
+          { id: "sec_mcq", position: 0, title: "खण्ड 'अ' - सही विकल्प", instructions: "", type: "MCQ", count: 6, marksEach: 1 },
+          { id: "sec_short", position: 1, title: "खण्ड 'ब' - लघु उत्तरीय", instructions: "", type: "SHORT", count: 2, marksEach: 3 },
+        ],
+        chapters: [
+          { chapterId: "ch_1", marks: 6, chapter: { id: "ch_1", number: 1, title: "आरोह भाग - 2" } },
+          { chapterId: "ch_2", marks: 6, chapter: { id: "ch_2", number: 2, title: "वितान भाग - 2" } },
+        ],
+        _count: { papers: 0 },
+      };
+
+      const chapters: Chapter[] = [
+        { id: "ch_1", bookId: "b_hin", number: 1, title: "आरोह भाग - 2" },
+        { id: "ch_2", bookId: "b_hin", number: 2, title: "वितान भाग - 2" },
+      ];
+
+      const paperData: PaperImportData = {
+        title: "MP Board Half Yearly Exam",
+        sections: [
+          {
+            title: "खण्ड 'अ' (वस्तुनिष्ठ प्रश्न)",
+            questions: [
+              {
+                text: "प्रश्न 1. सही विकल्प चुनकर लिखिए:",
+                type: "MCQ",
+                marks: 6,
+                chapterNumber: 1,
+                subparts: [
+                  { label: "(i)", text: "Sub 1", marks: 1, options: ["A", "B"], answer: "A" },
+                  { label: "(ii)", text: "Sub 2", marks: 1, options: ["A", "B"], answer: "B" },
+                  { label: "(iii)", text: "Sub 3", marks: 1, options: ["A", "B"], answer: "A" },
+                  { label: "(iv)", text: "Sub 4", marks: 1, options: ["A", "B"], answer: "B" },
+                  { label: "(v)", text: "Sub 5", marks: 1, options: ["A", "B"], answer: "A" },
+                  { label: "(vi)", text: "Sub 6", marks: 1, options: ["A", "B"], answer: "B" },
+                ],
+              },
+            ],
+          },
+          {
+            title: "खण्ड 'ब' (लघु उत्तरीय प्रश्न)",
+            questions: [
+              { text: "लघु उत्तरीय प्रश्न 1", type: "SHORT", marks: 3, chapterNumber: 2 },
+              { text: "लघु उत्तरीय प्रश्न 2", type: "SHORT", marks: 3, chapterNumber: 2 },
+            ],
+          },
+        ],
+      };
+
+      const report = verifyPaperAgainstBlueprint(paperData, bp, chapters);
+      expect(report.isValid).toBe(true);
+      expect(report.canProceed).toBe(true);
+
+      const secMcq = report.sections.find((s) => s.blueprintSectionId === "sec_mcq");
+      expect(secMcq?.status).toBe("MATCH");
+      expect(secMcq?.importedCount).toBe(6);
+
+      const secShort = report.sections.find((s) => s.blueprintSectionId === "sec_short");
+      expect(secShort?.status).toBe("MATCH");
+      expect(secShort?.importedCount).toBe(2);
+    });
+
+    it("bridges 3-mark subjective questions (SHORT vs LONG) without type mismatch errors", () => {
+      const bp: Blueprint = {
+        id: "bp_sub",
+        name: "Subjective Blueprint",
+        bookId: "b_sub",
+        academicSession: "2025–26",
+        examType: "ANNUAL",
+        durationMin: 180,
+        subjectCode: "",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        book: { id: "b_sub", title: "Book", subject: "General", className: "Class 12" },
+        sections: [
+          { id: "sec_c", position: 0, title: "Section C - Short Answer", instructions: "", type: "LONG", count: 2, marksEach: 3 },
+        ],
+        chapters: [{ chapterId: "ch_1", marks: 6, chapter: { id: "ch_1", number: 1, title: "Unit 1" } }],
+        _count: { papers: 0 },
+      };
+
+      const chapters: Chapter[] = [{ id: "ch_1", bookId: "b_sub", number: 1, title: "Unit 1" }];
+
+      const paperData: PaperImportData = {
+        title: "Exam Paper",
+        sections: [
+          {
+            title: "Section C",
+            questions: [
+              { text: "Question 1", type: "SHORT", marks: 3, chapterNumber: 1 },
+              { text: "Question 2", type: "SHORT", marks: 3, chapterNumber: 1 },
+            ],
+          },
+        ],
+      };
+
+      const report = verifyPaperAgainstBlueprint(paperData, bp, chapters);
+      expect(report.isValid).toBe(true);
+      const secC = report.sections.find((s) => s.blueprintSectionId === "sec_c");
+      expect(secC?.status).toBe("MATCH");
+    });
   });
 
   // ---------------------------------------------------------------------------

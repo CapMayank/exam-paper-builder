@@ -53,3 +53,4 @@ prisma/*.db.bak
 /data/uploads/*
 !/data/uploads/.gitkeep
 /scratch/
+.vscode/

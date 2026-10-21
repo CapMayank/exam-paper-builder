@@ -370,6 +370,10 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
 
       const subparts = it.question.subparts;
       const canDecompose = !isPrePrimary && !it.orQuestion && subparts && subparts.length > 1;
+      const totalQuestionMarks =
+        subparts && subparts.length > 0
+          ? subparts.reduce((sum, sp) => sum + (sp.marks || 1), 0)
+          : s.marksEach;
 
       if (canDecompose) {
         // Long passage stems (> 200 chars) are substantial content and do not need to be forced
@@ -385,7 +389,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
                 q={it.question}
                 number={n}
                 numberLabel={numberLabel}
-                marks={s.marksEach}
+                marks={totalQuestionMarks}
                 marksStyle={paper.marksStyle || "RIGHT_COLUMN"}
                 compact={isEffectiveCompact}
                 renderMode="STEM_ONLY"
@@ -432,7 +436,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
                 orQuestion={it.orQuestion}
                 number={n}
                 numberLabel={numberLabel}
-                marks={s.marksEach}
+                marks={totalQuestionMarks}
                 marksStyle={paper.marksStyle || "RIGHT_COLUMN"}
                 compact={isEffectiveCompact}
                 isA5={isA5}

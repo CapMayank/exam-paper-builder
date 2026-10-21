@@ -103,7 +103,11 @@ export const POST = route(async (req, _params, user) => {
           allocatedCounts
         ) || bpSections[0];
 
-      allocatedCounts.set(bpSec.id, (allocatedCounts.get(bpSec.id) ?? 0) + 1);
+      const units =
+        Array.isArray(q.subparts) && q.subparts.length > 0 && bpSec.count >= q.subparts.length
+          ? q.subparts.length
+          : 1;
+      allocatedCounts.set(bpSec.id, (allocatedCounts.get(bpSec.id) ?? 0) + units);
       const pos = sectionPositions.get(bpSec.id) ?? 0;
       sectionPositions.set(bpSec.id, pos + 1);
 
@@ -123,7 +127,8 @@ export const POST = route(async (req, _params, user) => {
         let orType = normalizeQuestionType(q.orQuestion.type || bpSec.type);
         if (
           (bpSec.type === "VERY_SHORT" && orType === "SHORT") ||
-          (bpSec.type === "SHORT" && orType === "VERY_SHORT" && bpSec.marksEach > 1)
+          (bpSec.type === "SHORT" && orType === "VERY_SHORT" && bpSec.marksEach > 1) ||
+          (bpSec.type === "LONG" && orType === "SHORT" && bpSec.marksEach <= 4)
         ) {
           orType = bpSec.type;
         }
@@ -135,7 +140,7 @@ export const POST = route(async (req, _params, user) => {
             type: orType,
             text: q.orQuestion.text.trim(),
             optionsJson: JSON.stringify(q.orQuestion.options ?? []),
-            subpartsJson: "[]",
+            subpartsJson: JSON.stringify(q.orQuestion.subparts ?? []),
             answer: q.orQuestion.answer?.trim() || "",
             difficulty: q.orQuestion.difficulty || "MEDIUM",
             createdById: user.id,
@@ -148,7 +153,8 @@ export const POST = route(async (req, _params, user) => {
       let finalType = normalizeQuestionType(q.type || bpSec.type);
       if (
         (bpSec.type === "VERY_SHORT" && finalType === "SHORT") ||
-        (bpSec.type === "SHORT" && finalType === "VERY_SHORT" && bpSec.marksEach > 1)
+        (bpSec.type === "SHORT" && finalType === "VERY_SHORT" && bpSec.marksEach > 1) ||
+        (bpSec.type === "LONG" && finalType === "SHORT" && bpSec.marksEach <= 4)
       ) {
         finalType = bpSec.type;
       }
