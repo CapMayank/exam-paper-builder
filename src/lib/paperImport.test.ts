@@ -11,6 +11,7 @@ import {
   SAMPLE_PAPER_JSON,
   SAMPLE_PAPER_TEXT,
   verifyPaperAgainstBlueprint,
+  type PaperImportData,
 } from "./paperImport";
 import type { Blueprint, Chapter } from "./types";
 
@@ -1063,8 +1064,6 @@ describe("Paper Import & Blueprint Verification Engine", () => {
         examType: "HALF_YEARLY",
         durationMin: 180,
         subjectCode: "051",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
         book: { id: "b_hin", title: "Hindi Book", subject: "Hindi", className: "Class 12" },
         sections: [
           { id: "sec_mcq", position: 0, title: "खण्ड 'अ' - सही विकल्प", instructions: "", type: "MCQ", count: 6, marksEach: 1 },
@@ -1136,8 +1135,6 @@ describe("Paper Import & Blueprint Verification Engine", () => {
         examType: "ANNUAL",
         durationMin: 180,
         subjectCode: "",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
         book: { id: "b_sub", title: "Book", subject: "General", className: "Class 12" },
         sections: [
           { id: "sec_c", position: 0, title: "Section C - Short Answer", instructions: "", type: "LONG", count: 2, marksEach: 3 },

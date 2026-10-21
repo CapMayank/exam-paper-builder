@@ -32,6 +32,7 @@ export interface ImportedPaperQuestion {
     difficulty?: "EASY" | "MEDIUM" | "HARD";
     options?: string[];
     answer?: string;
+    subparts?: ImportedPaperSubpart[];
   };
   subparts?: ImportedPaperSubpart[];
 }
@@ -479,6 +480,15 @@ export function parsePaperJson(jsonStr: string): PaperImportResult {
               orObj.difficulty === "EASY" || orObj.difficulty === "HARD" ? orObj.difficulty : "MEDIUM",
             options: Array.isArray(orObj.options) ? orObj.options.map((opt) => String(opt).trim()) : undefined,
             answer: typeof orObj.answer === "string" ? orObj.answer.trim() : undefined,
+            subparts: Array.isArray(orObj.subparts)
+              ? orObj.subparts.map((sp: Record<string, unknown>, spIdx: number) => ({
+                  label: typeof sp.label === "string" && sp.label.trim() ? sp.label.trim() : `(${spIdx + 1})`,
+                  text: typeof sp.text === "string" ? sp.text.trim() : "",
+                  marks: Number(sp.marks) || 1,
+                  answer: typeof sp.answer === "string" ? sp.answer.trim() : undefined,
+                  options: Array.isArray(sp.options) ? sp.options.map((opt) => String(opt).trim()) : undefined,
+                }))
+              : undefined,
           };
         }
       }

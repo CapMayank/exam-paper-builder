@@ -52,7 +52,7 @@ export function AIBlueprintModal({
   onCreated,
   initialAcademicSession = DEFAULT_ACADEMIC_SESSION,
 }: AIBlueprintModalProps) {
-  const { toast } = useToast();
+  const toast = useToast();
   const [books, setBooks] = useState<Book[]>([]);
   const [selectedBookId, setSelectedBookId] = useState<string>("");
   const [academicSession, setAcademicSession] = useState<string>(initialAcademicSession);
@@ -222,11 +222,7 @@ export function AIBlueprintModal({
       );
 
       setStep("review");
-      toast({
-        title: "Blueprint Extracted",
-        message: "AI has successfully extracted the blueprint structure. Review and edit before saving.",
-        variant: "success",
-      });
+      toast.success("AI has successfully extracted the blueprint structure. Review and edit before saving.");
     } catch (err: any) {
       setError(err?.message || "Failed to analyze blueprint.");
     } finally {
@@ -243,11 +239,7 @@ export function AIBlueprintModal({
     const updated = [...chapters];
     updated[0].marks = Math.max(0, updated[0].marks + diff);
     setChapters(updated);
-    toast({
-      title: "Auto-Balanced",
-      message: `Adjusted chapter marks to match total section marks (${totalSectionMarks}m).`,
-      variant: "info",
-    });
+    toast.info(`Adjusted chapter marks to match total section marks (${totalSectionMarks}m).`);
   };
 
   const handleSave = async () => {
@@ -297,11 +289,7 @@ export function AIBlueprintModal({
         json: payload,
       });
 
-      toast({
-        title: "Blueprint Created",
-        message: `Successfully created "${created.name}" (${totalSectionMarks} Marks).`,
-        variant: "success",
-      });
+      toast.success(`Successfully created "${created.name}" (${totalSectionMarks} Marks).`);
 
       onCreated(created);
       onClose();
@@ -329,9 +317,10 @@ export function AIBlueprintModal({
     setSections(sections.filter((_, i) => i !== idx));
   };
 
+  if (!open) return null;
+
   return (
     <Modal
-      open={open}
       onClose={onClose}
       title="AI Blueprint Creator"
       size="xl"
