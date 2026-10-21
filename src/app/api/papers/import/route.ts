@@ -3,13 +3,14 @@ import { recordAudit } from "@/lib/audit";
 import {
   DEFAULT_ACADEMIC_SESSION,
   DEFAULT_SCHOOL_NAME,
-  inferExamTypeFromText,
+  resolvePaperExamType,
 } from "@/lib/constants";
 import { loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import {
   matchQuestionToBlueprintSection,
   normalizeQuestionType,
+  resolveQuestionChapter,
   type PaperImportData,
 } from "@/lib/paperImport";
 
@@ -55,11 +56,11 @@ export const POST = route(async (req, _params, user) => {
   const fallbackChapterId = bookChapters[0].id;
 
   const finalTitle = paperData.title?.trim() || `${blueprint.name} (Imported)`;
-  const resolvedExamType =
-    paperData.examType ||
-    inferExamTypeFromText(finalTitle) ||
-    blueprint.examType ||
-    "ANNUAL";
+  const resolvedExamType = resolvePaperExamType({
+    examType: paperData.examType,
+    title: finalTitle,
+    blueprint,
+  });
 
   // 1. Create the Paper
   const paper = await prisma.paper.create({
@@ -107,27 +108,16 @@ export const POST = route(async (req, _params, user) => {
       sectionPositions.set(bpSec.id, pos + 1);
 
       // Determine chapter
-      let chapterId = fallbackChapterId;
-      if (q.chapterNumber !== undefined && chapterByNum.has(q.chapterNumber)) {
-        chapterId = chapterByNum.get(q.chapterNumber)!;
-      } else if (q.chapterTitle) {
-        const cleanTitle = q.chapterTitle.toLowerCase().replace(/[^a-z0-9]/g, "");
-        if (chapterByTitle.has(cleanTitle)) {
-          chapterId = chapterByTitle.get(cleanTitle)!;
-        }
-      }
+      const resolvedChapter = resolveQuestionChapter(q, impSec.title, bookChapters);
+      const chapterId = resolvedChapter?.id || fallbackChapterId;
 
       // Handle optional OR question
       let orQuestionId: string | null = null;
       if (q.orQuestion && q.orQuestion.text?.trim()) {
         let orChapterId = chapterId;
-        if (q.orQuestion.chapterNumber !== undefined && chapterByNum.has(q.orQuestion.chapterNumber)) {
-          orChapterId = chapterByNum.get(q.orQuestion.chapterNumber)!;
-        } else if (q.orQuestion.chapterTitle) {
-          const cleanOrTitle = q.orQuestion.chapterTitle.toLowerCase().replace(/[^a-z0-9]/g, "");
-          if (chapterByTitle.has(cleanOrTitle)) {
-            orChapterId = chapterByTitle.get(cleanOrTitle)!;
-          }
+        const resolvedOrCh = resolveQuestionChapter(q.orQuestion, impSec.title, bookChapters);
+        if (resolvedOrCh) {
+          orChapterId = resolvedOrCh.id;
         }
 
         let orType = normalizeQuestionType(q.orQuestion.type || bpSec.type);

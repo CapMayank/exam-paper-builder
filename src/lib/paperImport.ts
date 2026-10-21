@@ -958,12 +958,31 @@ export function matchQuestionToBlueprintSection(
       score -= Math.abs(sTier - qTier) * 15;
     }
 
-    // 4. Remaining capacity preference (encourages filling blueprint section quotas)
+    // 4. Instructions & Content Semantic Alignment
+    if (s.instructions) {
+      const sInstNorm = normalizeText(s.instructions);
+      const qTextNorm = normalizeText(q.text || "");
+      let instBonus = 0;
+      if (sInstNorm.includes("extract") && qTextNorm.includes("extract")) instBonus += 25;
+      if (sInstNorm.includes("prose") && qTextNorm.includes("prose")) instBonus += 25;
+      if (sInstNorm.includes("poetry") && (qTextNorm.includes("poetry") || qTextNorm.includes("poem"))) instBonus += 25;
+      if (sInstNorm.includes("vistas") && (qTextNorm.includes("vistas") || qTextNorm.includes("supplementary"))) instBonus += 25;
+      if (sInstNorm.includes("unseen") && qTextNorm.includes("unseen")) instBonus += 25;
+      if (sInstNorm.includes("note making") && qTextNorm.includes("note")) instBonus += 25;
+      if (sInstNorm.includes("notice") && qTextNorm.includes("notice")) instBonus += 25;
+      if (sInstNorm.includes("letter") && qTextNorm.includes("letter")) instBonus += 25;
+      if (sInstNorm.includes("article") && qTextNorm.includes("article")) instBonus += 25;
+      if (sInstNorm.includes("grammar") && qTextNorm.includes("grammar")) instBonus += 25;
+      if (sInstNorm.includes("do as directed") && qTextNorm.includes("directed")) instBonus += 25;
+      score += instBonus;
+    }
+
+    // 5. Remaining capacity preference (encourages filling blueprint section quotas)
     if (hasCapacity) {
       score += 15;
     }
 
-    // 5. Position alignment (sequential fallback if sections align by order)
+    // 6. Position alignment (sequential fallback if sections align by order)
     if (s.position !== undefined && s.position === impSecIdx) {
       score += 10;
     }
@@ -975,6 +994,150 @@ export function matchQuestionToBlueprintSection(
   }
 
   return bestSection || bpSections[0];
+}
+
+/**
+ * Resolves the best matching book chapter for an imported question.
+ * Checks explicit chapterNumber, chapterTitle, and intelligently infers
+ * from section title or question keywords (e.g. Reading, Writing, Grammar, Prose, Poetry, Vistas).
+ */
+export function resolveQuestionChapter(
+  q: {
+    text: string;
+    chapterNumber?: number;
+    chapterTitle?: string;
+    type?: string;
+    orQuestion?: { text: string; chapterNumber?: number; chapterTitle?: string; type?: string };
+    subparts?: { text: string }[];
+  },
+  impSecTitle: string,
+  bookChapters: Chapter[]
+): Chapter | undefined {
+  if (bookChapters.length === 0) return undefined;
+
+  // 1. Explicit chapterNumber match
+  if (q.chapterNumber !== undefined) {
+    const ch = bookChapters.find((c) => c.number === q.chapterNumber);
+    if (ch) return ch;
+  }
+
+  // 2. Explicit chapterTitle match
+  if (q.chapterTitle) {
+    const norm = normalizeText(q.chapterTitle);
+    const ch = bookChapters.find((c) => {
+      const cNorm = normalizeText(c.title);
+      return cNorm === norm || cNorm.includes(norm) || norm.includes(cNorm);
+    });
+    if (ch) return ch;
+  }
+
+  // 3. Question text & subparts mention of specific chapter title
+  const fullQText = [
+    q.text || "",
+    q.orQuestion?.text || "",
+    ...(q.subparts?.map((s) => s.text) || []),
+  ].join(" ");
+  const qTextNorm = normalizeText(fullQText);
+
+  for (const c of bookChapters) {
+    const cleanChapterName = c.title
+      .replace(/^\[[^\]]*\]\s*/, "")
+      .replace(/^\d+[\.\s]+/, "")
+      .replace(/\([^\)]*\)/g, "")
+      .trim();
+    const cNorm = normalizeText(cleanChapterName);
+    if (cNorm.length >= 4 && qTextNorm.includes(cNorm)) {
+      return c;
+    }
+  }
+
+  // 4. Section title and question text skill/domain inference (e.g. Reading, Writing, Grammar)
+  const context = (normalizeText(impSecTitle) + " " + qTextNorm).toLowerCase();
+
+  // Reading Skills
+  if (
+    context.includes("reading") ||
+    context.includes("unseen") ||
+    context.includes("note making") ||
+    context.includes("comprehension")
+  ) {
+    const readingCh = bookChapters.find(
+      (c) => /reading\s*skill/i.test(c.title) || /unseen\s*passage/i.test(c.title)
+    );
+    if (readingCh) return readingCh;
+  }
+
+  // Writing Skills
+  if (
+    context.includes("writing") ||
+    context.includes("notice") ||
+    context.includes("poster") ||
+    context.includes("advertisement") ||
+    context.includes("letter") ||
+    context.includes("article") ||
+    context.includes("report") ||
+    context.includes("composition") ||
+    context.includes("speech") ||
+    context.includes("debate")
+  ) {
+    const writingCh = bookChapters.find(
+      (c) => /writing\s*skill/i.test(c.title) || /composition/i.test(c.title)
+    );
+    if (writingCh) return writingCh;
+  }
+
+  // Grammar
+  if (
+    context.includes("grammar") ||
+    context.includes("do as directed") ||
+    context.includes("fill in the blanks") ||
+    context.includes("gap filling") ||
+    context.includes("sentence correction") ||
+    context.includes("voice") ||
+    context.includes("clause")
+  ) {
+    const grammarCh = bookChapters.find((c) => /grammar/i.test(c.title));
+    if (grammarCh) return grammarCh;
+  }
+
+  // Poetry
+  if (
+    context.includes("poetry") ||
+    context.includes("poem") ||
+    context.includes("stanza") ||
+    context.includes("verse")
+  ) {
+    const poetryCh = bookChapters.find(
+      (c) => /poetry/i.test(c.title) || (c.number >= 9 && c.number <= 13)
+    );
+    if (poetryCh) return poetryCh;
+  }
+
+  // Vistas / Supplementary Reader
+  if (context.includes("vistas") || context.includes("supplementary")) {
+    const vistasCh = bookChapters.find(
+      (c) => /vistas/i.test(c.title) || (c.number >= 14 && c.number <= 19)
+    );
+    if (vistasCh) return vistasCh;
+  }
+
+  // Prose / Flamingo
+  if (context.includes("prose") || context.includes("flamingo")) {
+    const proseCh = bookChapters.find(
+      (c) => /prose/i.test(c.title) || /flamingo/i.test(c.title) || c.number <= 8
+    );
+    if (proseCh) return proseCh;
+  }
+
+  // Textbook / Literature Fallback for Section D
+  if (context.includes("textbook") || context.includes("literature")) {
+    const firstProse = bookChapters.find(
+      (c) => /prose/i.test(c.title) || /flamingo/i.test(c.title) || c.number === 1
+    );
+    return firstProse || bookChapters[0];
+  }
+
+  return undefined;
 }
 
 /**
@@ -1043,12 +1206,7 @@ export function verifyPaperAgainstBlueprint(
       }
 
       // Track chapter marks accumulated
-      let matchedCh: Chapter | undefined;
-      if (q.chapterNumber !== undefined && chapterByNum.has(q.chapterNumber)) {
-        matchedCh = chapterByNum.get(q.chapterNumber);
-      } else if (q.chapterTitle) {
-        matchedCh = chapterByTitle.get(normalizeText(q.chapterTitle));
-      }
+      const matchedCh = resolveQuestionChapter(q, impSec.title, bookChapters);
 
       if (matchedCh) {
         const cur = chapterMarksAccumulated.get(matchedCh.id) ?? 0;

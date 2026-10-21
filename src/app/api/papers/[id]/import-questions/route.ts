@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import {
   matchQuestionToBlueprintSection,
   normalizeQuestionType,
+  resolveQuestionChapter,
   type PaperImportData,
 } from "@/lib/paperImport";
 
@@ -102,26 +103,15 @@ export const POST = route(async (req, { id }, user) => {
       const pos = sectionPositions.get(bpSec.id) ?? 0;
       sectionPositions.set(bpSec.id, pos + 1);
 
-      let chapterId = fallbackChapterId;
-      if (q.chapterNumber !== undefined && chapterByNum.has(q.chapterNumber)) {
-        chapterId = chapterByNum.get(q.chapterNumber)!;
-      } else if (q.chapterTitle) {
-        const clean = q.chapterTitle.toLowerCase().replace(/[^a-z0-9]/g, "");
-        if (chapterByTitle.has(clean)) {
-          chapterId = chapterByTitle.get(clean)!;
-        }
-      }
+      const resolvedChapter = resolveQuestionChapter(q, impSec.title, bookChapters);
+      const chapterId = resolvedChapter?.id || fallbackChapterId;
 
       let orQuestionId: string | null = null;
       if (q.orQuestion && q.orQuestion.text?.trim()) {
         let orChapterId = chapterId;
-        if (q.orQuestion.chapterNumber !== undefined && chapterByNum.has(q.orQuestion.chapterNumber)) {
-          orChapterId = chapterByNum.get(q.orQuestion.chapterNumber)!;
-        } else if (q.orQuestion.chapterTitle) {
-          const cleanOr = q.orQuestion.chapterTitle.toLowerCase().replace(/[^a-z0-9]/g, "");
-          if (chapterByTitle.has(cleanOr)) {
-            orChapterId = chapterByTitle.get(cleanOr)!;
-          }
+        const resolvedOrCh = resolveQuestionChapter(q.orQuestion, impSec.title, bookChapters);
+        if (resolvedOrCh) {
+          orChapterId = resolvedOrCh.id;
         }
 
         let orType = normalizeQuestionType(q.orQuestion.type || bpSec.type);

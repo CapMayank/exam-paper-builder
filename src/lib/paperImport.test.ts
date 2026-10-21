@@ -727,5 +727,288 @@ describe("Paper Import & Blueprint Verification Engine", () => {
       expect(dResult?.importedCount).toBe(4);
       expect(dResult?.status).toBe("MATCH");
     });
+
+    it("verifies and routes MP Board Class 12 English Annual Examination (80 marks) with skill units cleanly", () => {
+      const englishChapters: Chapter[] = [
+        { id: "ch_1", bookId: "bk_eng", number: 1, title: "[Flamingo] 1. The Last Lesson" },
+        { id: "ch_2", bookId: "bk_eng", number: 2, title: "[Flamingo] 2. Lost Spring" },
+        { id: "ch_3", bookId: "bk_eng", number: 3, title: "[Flamingo] 3. Deep Water" },
+        { id: "ch_4", bookId: "bk_eng", number: 4, title: "[Flamingo] 4. The Rattrap" },
+        { id: "ch_5", bookId: "bk_eng", number: 5, title: "[Flamingo] 5. Indigo" },
+        { id: "ch_6", bookId: "bk_eng", number: 6, title: "[Flamingo] 6. Poets and Pancakes" },
+        { id: "ch_7", bookId: "bk_eng", number: 7, title: "[Flamingo] 7. The Interview" },
+        { id: "ch_8", bookId: "bk_eng", number: 8, title: "[Flamingo] 8. Going Places" },
+        { id: "ch_9", bookId: "bk_eng", number: 9, title: "[Flamingo] 9. My Mother at Sixty-six" },
+        { id: "ch_10", bookId: "bk_eng", number: 10, title: "[Flamingo] 10. Keeping Quiet" },
+        { id: "ch_11", bookId: "bk_eng", number: 11, title: "[Flamingo] 11. A Thing of Beauty" },
+        { id: "ch_12", bookId: "bk_eng", number: 12, title: "[Flamingo] 12. A Roadside Stand" },
+        { id: "ch_13", bookId: "bk_eng", number: 13, title: "[Flamingo] 13. Aunt Jennifer's Tigers" },
+        { id: "ch_14", bookId: "bk_eng", number: 14, title: "[Vistas] 1. The Third Level" },
+        { id: "ch_15", bookId: "bk_eng", number: 15, title: "[Vistas] 2. The Tiger King" },
+        { id: "ch_16", bookId: "bk_eng", number: 16, title: "[Vistas] 3. Journey to the End of the Earth" },
+        { id: "ch_17", bookId: "bk_eng", number: 17, title: "[Vistas] 4. The Enemy" },
+        { id: "ch_18", bookId: "bk_eng", number: 18, title: "[Vistas] 5. On the Face of It" },
+        { id: "ch_19", bookId: "bk_eng", number: 19, title: "[Vistas] 6. Memories of Childhood" },
+        { id: "ch_20", bookId: "bk_eng", number: 20, title: "Section A: Reading Skills (Unseen Passage & Note Making)" },
+        { id: "ch_21", bookId: "bk_eng", number: 21, title: "Section B: Writing Skills (Notice, Poster, Letter, Long Composition)" },
+        { id: "ch_22", bookId: "bk_eng", number: 22, title: "Section C: Grammar (Gap Filling & Do as Directed)" },
+      ];
+
+      const englishBlueprint: Blueprint = {
+        id: "bp_english_12",
+        name: "Class 12 English Annual Examination (MP Board)",
+        bookId: "bk_eng",
+        examType: "ANNUAL",
+        durationMin: 180,
+        subjectCode: "052",
+        academicSession: "2026–27",
+        book: {
+          id: "bk_eng",
+          title: "English Core (NCERT Class XII)",
+          className: "Class 12",
+          subject: "English",
+        },
+        sections: [
+          // Section A: Reading (14 marks)
+          { id: "sec_a_unseen", position: 0, title: "Section A – Reading Skills", instructions: "Unseen Passage", type: "CASE_STUDY", count: 1, marksEach: 10 },
+          { id: "sec_a_notes", position: 1, title: "Section A – Reading Skills", instructions: "Note Making", type: "LONG", count: 1, marksEach: 4 },
+          // Section B: Writing (12 marks)
+          { id: "sec_b_writing", position: 2, title: "Section B – Writing Skills", instructions: "Notice, Letter, Composition", type: "LONG", count: 3, marksEach: 4 },
+          // Section C: Grammar (10 marks)
+          { id: "sec_c_grammar", position: 3, title: "Section C – Grammar", instructions: "Fill in the blanks & Do as directed", type: "CASE_STUDY", count: 2, marksEach: 5 },
+          // Section D: Textbooks (44 marks)
+          { id: "sec_d_ext_prose", position: 4, title: "Section D – Textbooks", instructions: "Extract from Prose (Flamingo)", type: "CASE_STUDY", count: 1, marksEach: 5 },
+          { id: "sec_d_ext_poetry", position: 5, title: "Section D – Textbooks", instructions: "Extract from Poetry (Flamingo)", type: "CASE_STUDY", count: 1, marksEach: 3 },
+          { id: "sec_d_ext_vistas", position: 6, title: "Section D – Textbooks", instructions: "Extract from Supplementary Reader (Vistas)", type: "CASE_STUDY", count: 1, marksEach: 4 },
+          { id: "sec_d_sa_prose", position: 7, title: "Section D – Textbooks", instructions: "Short Answer Questions from Prose (Flamingo)", type: "CASE_STUDY", count: 1, marksEach: 10 },
+          { id: "sec_d_sa_poetry", position: 8, title: "Section D – Textbooks", instructions: "Short Answer Questions from Poetry (Flamingo)", type: "CASE_STUDY", count: 1, marksEach: 6 },
+          { id: "sec_d_sa_vistas", position: 9, title: "Section D – Textbooks", instructions: "Short Answer Questions from Supplementary Reader (Vistas)", type: "CASE_STUDY", count: 1, marksEach: 4 },
+          { id: "sec_d_la_prose", position: 10, title: "Section D – Textbooks", instructions: "Long Answer Questions from Prose (Flamingo)", type: "CASE_STUDY", count: 1, marksEach: 6 },
+          { id: "sec_d_la_poetry", position: 11, title: "Section D – Textbooks", instructions: "Long Answer Question from Poetry (Flamingo)", type: "LONG", count: 1, marksEach: 3 },
+          { id: "sec_d_la_vistas", position: 12, title: "Section D – Textbooks", instructions: "Long Answer Question from Supplementary Reader (Vistas)", type: "LONG", count: 1, marksEach: 3 },
+        ],
+        chapters: englishChapters.map((c) => ({
+          chapterId: c.id,
+          marks: c.number === 20 ? 14 : c.number === 21 ? 12 : c.number === 22 ? 10 : 2,
+          chapter: c,
+        })),
+        _count: { papers: 0 },
+      };
+
+      const rawJson = JSON.stringify({
+        title: "English Annual Examination 2026–27",
+        examType: "ANNUAL",
+        academicSession: "2026–27",
+        schoolName: "Sarvodaya English Higher Secondary School, Lakhnadon",
+        examDate: "2027-02-15",
+        paperSet: "SET A",
+        subjectCode: "052",
+        layout: "BOOKLET_A4",
+        generalInstructions: "1. All questions are compulsory.",
+        sections: [
+          {
+            title: "Section A – Reading Skills",
+            instructions: "Read the passages carefully and answer the questions that follow.",
+            questions: [
+              {
+                text: "Read the following passage carefully and answer the questions that follow: Artificial Intelligence...",
+                type: "CASE_STUDY",
+                marks: 10,
+                difficulty: "MEDIUM",
+                subparts: [{ label: "i", text: "Primary concern?", marks: 1, type: "MCQ", answer: "Job displacement" }],
+              },
+              {
+                text: "Read the following passage carefully and make notes on it using recognizable abbreviations. Also, give a suitable title.",
+                type: "LONG",
+                marks: 4,
+                difficulty: "MEDIUM",
+              },
+            ],
+          },
+          {
+            title: "Section B – Writing Skills",
+            instructions: "Attempt the writing tasks as directed. Internal choices are provided.",
+            questions: [
+              {
+                text: "You are Mayank, the Head Boy. Draft a Notice...",
+                type: "LONG",
+                marks: 4,
+                difficulty: "EASY",
+                orQuestion: { text: "Design an attractive poster...", marks: 4 },
+              },
+              {
+                text: "Write a formal letter to the District Magistrate...",
+                type: "LONG",
+                marks: 4,
+                difficulty: "MEDIUM",
+                orQuestion: { text: "Write an informal letter to your friend...", marks: 4 },
+              },
+              {
+                text: "Write an Article in about 120 words on 'The Impact of Social Media'...",
+                type: "LONG",
+                marks: 4,
+                difficulty: "HARD",
+                orQuestion: { text: "Write a Report for your school magazine...", marks: 4 },
+              },
+            ],
+          },
+          {
+            title: "Section C – Grammar",
+            instructions: "Answer the grammar questions as directed.",
+            questions: [
+              {
+                text: "Fill in the blanks (Attempt any five):",
+                type: "CASE_STUDY",
+                marks: 5,
+                difficulty: "MEDIUM",
+                subparts: [{ label: "i", text: "He is an honest man.", marks: 1, answer: "an" }],
+              },
+              {
+                text: "Do as directed (Attempt any five):",
+                type: "CASE_STUDY",
+                marks: 5,
+                difficulty: "HARD",
+                subparts: [{ label: "i", text: "Rewrite using so...that", marks: 1, answer: "..." }],
+              },
+            ],
+          },
+          {
+            title: "Section D – Textbooks",
+            instructions: "Questions based on Flamingo and Vistas.",
+            questions: [
+              {
+                text: "Read the extract from Prose (Flamingo) and answer the questions:\n'His face was unwashed...'",
+                type: "CASE_STUDY",
+                marks: 5,
+                chapterNumber: 4,
+                chapterTitle: "The Rattrap",
+                difficulty: "MEDIUM",
+              },
+              {
+                text: "Read the extract from Poetry (Flamingo) and answer the questions:\n'A thing of beauty is a joy forever...'",
+                type: "CASE_STUDY",
+                marks: 3,
+                chapterNumber: 11,
+                chapterTitle: "A Thing of Beauty",
+                difficulty: "EASY",
+              },
+              {
+                text: "Read the extract from the Supplementary Reader (Vistas) and answer the questions:\n'The chief astrologer placed his finger...'",
+                type: "CASE_STUDY",
+                marks: 4,
+                chapterNumber: 15,
+                chapterTitle: "The Tiger King",
+                difficulty: "MEDIUM",
+              },
+              {
+                text: "Answer the following questions from Prose in about 30 words (Attempt any five):",
+                type: "CASE_STUDY",
+                marks: 10,
+                difficulty: "MEDIUM",
+              },
+              {
+                text: "Answer the following questions from Poetry in about 30 words (Attempt any three):",
+                type: "CASE_STUDY",
+                marks: 6,
+                difficulty: "MEDIUM",
+              },
+              {
+                text: "Answer the following questions from Vistas in about 30 words (Attempt any two):",
+                type: "CASE_STUDY",
+                marks: 4,
+                difficulty: "MEDIUM",
+              },
+              {
+                text: "Answer the following questions in about 120 words (Attempt any two):",
+                type: "CASE_STUDY",
+                marks: 6,
+                difficulty: "HARD",
+              },
+              {
+                text: "Answer the following question in about 120 words:",
+                type: "LONG",
+                marks: 3,
+                difficulty: "HARD",
+                orQuestion: { text: "What is the central idea of Aunt Jennifer's Tigers?", marks: 3 },
+              },
+              {
+                text: "Answer the following question in about 120 words:",
+                type: "LONG",
+                marks: 3,
+                difficulty: "HARD",
+                orQuestion: { text: "How does Mr. Lamb try to change Derry's attitude in On the Face of It?", marks: 3 },
+              },
+            ],
+          },
+        ],
+      });
+
+      const parsed = parsePaperImport(rawJson, "json");
+      expect(parsed.success).toBe(true);
+
+      const report = verifyPaperAgainstBlueprint(parsed.paper, englishBlueprint, englishChapters);
+      expect(report.totalImportedQuestions).toBe(16);
+      expect(report.totalBlueprintQuestions).toBe(16);
+      expect(report.totalImportedMarks).toBe(80);
+      expect(report.totalBlueprintMarks).toBe(80);
+      expect(report.unmappedQuestions).toBe(0);
+      expect(report.isValid).toBe(true);
+      expect(report.canProceed).toBe(true);
+      expect(report.matchPercentage).toBe(100);
+      expect(report.errors).toHaveLength(0);
+
+      // Verify clean section routing
+      const secAUnseen = report.sections.find((s) => s.blueprintSectionId === "sec_a_unseen");
+      expect(secAUnseen?.importedCount).toBe(1);
+      expect(secAUnseen?.status).toBe("MATCH");
+
+      const secANotes = report.sections.find((s) => s.blueprintSectionId === "sec_a_notes");
+      expect(secANotes?.importedCount).toBe(1);
+      expect(secANotes?.status).toBe("MATCH");
+
+      const secB = report.sections.find((s) => s.blueprintSectionId === "sec_b_writing");
+      expect(secB?.importedCount).toBe(3);
+      expect(secB?.status).toBe("MATCH");
+
+      const secC = report.sections.find((s) => s.blueprintSectionId === "sec_c_grammar");
+      expect(secC?.importedCount).toBe(2);
+      expect(secC?.status).toBe("MATCH");
+
+      const secDProseExt = report.sections.find((s) => s.blueprintSectionId === "sec_d_ext_prose");
+      expect(secDProseExt?.importedCount).toBe(1);
+      expect(secDProseExt?.status).toBe("MATCH");
+
+      const secDPoetryExt = report.sections.find((s) => s.blueprintSectionId === "sec_d_ext_poetry");
+      expect(secDPoetryExt?.importedCount).toBe(1);
+      expect(secDPoetryExt?.status).toBe("MATCH");
+
+      const secDVistasExt = report.sections.find((s) => s.blueprintSectionId === "sec_d_ext_vistas");
+      expect(secDVistasExt?.importedCount).toBe(1);
+      expect(secDVistasExt?.status).toBe("MATCH");
+
+      const secDProseSa = report.sections.find((s) => s.blueprintSectionId === "sec_d_sa_prose");
+      expect(secDProseSa?.importedCount).toBe(1);
+      expect(secDProseSa?.status).toBe("MATCH");
+
+      const secDPoetrySa = report.sections.find((s) => s.blueprintSectionId === "sec_d_sa_poetry");
+      expect(secDPoetrySa?.importedCount).toBe(1);
+      expect(secDPoetrySa?.status).toBe("MATCH");
+
+      const secDVistasSa = report.sections.find((s) => s.blueprintSectionId === "sec_d_sa_vistas");
+      expect(secDVistasSa?.importedCount).toBe(1);
+      expect(secDVistasSa?.status).toBe("MATCH");
+
+      const secDProseLa = report.sections.find((s) => s.blueprintSectionId === "sec_d_la_prose");
+      expect(secDProseLa?.importedCount).toBe(1);
+      expect(secDProseLa?.status).toBe("MATCH");
+
+      const secDPoetryLa = report.sections.find((s) => s.blueprintSectionId === "sec_d_la_poetry");
+      expect(secDPoetryLa?.importedCount).toBe(1);
+      expect(secDPoetryLa?.status).toBe("MATCH");
+
+      const secDVistasLa = report.sections.find((s) => s.blueprintSectionId === "sec_d_la_vistas");
+      expect(secDVistasLa?.importedCount).toBe(1);
+      expect(secDVistasLa?.status).toBe("MATCH");
+    });
   });
 });

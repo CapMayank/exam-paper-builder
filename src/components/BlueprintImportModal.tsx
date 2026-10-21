@@ -19,6 +19,7 @@ import {
   BlueprintImportResult,
   SAMPLE_BLUEPRINT_CSV,
   SAMPLE_BLUEPRINT_JSON,
+  SAMPLE_ENGLISH_BLUEPRINT_JSON,
   matchChaptersToBook,
   parseBlueprintImport,
 } from "@/lib/blueprintImport";
@@ -60,6 +61,7 @@ export function BlueprintImportModal({
   const [inputText, setInputText] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
   const [exampleFormat, setExampleFormat] = useState<"json" | "csv">("json");
+  const [exampleTemplate, setExampleTemplate] = useState<"science" | "english">("science");
   const [copied, setCopied] = useState(false);
   const [autoBalanceChapters, setAutoBalanceChapters] = useState(true);
   const [targetBookId, setTargetBookId] = useState<string>(book?.id || books[0]?.id || "");
@@ -117,15 +119,20 @@ export function BlueprintImportModal({
     reader.readAsText(file);
   }
 
+  function getTemplateContent() {
+    if (exampleTemplate === "english") return SAMPLE_ENGLISH_BLUEPRINT_JSON;
+    return exampleFormat === "json" ? SAMPLE_BLUEPRINT_JSON : SAMPLE_BLUEPRINT_CSV;
+  }
+
   function downloadSampleFile(format: "json" | "csv") {
-    const content = format === "json" ? SAMPLE_BLUEPRINT_JSON : SAMPLE_BLUEPRINT_CSV;
-    const mimeType = format === "json" ? "application/json" : "text/csv";
-    const extension = format === "json" ? "json" : "csv";
+    const content = getTemplateContent();
+    const mimeType = format === "json" || exampleTemplate === "english" ? "application/json" : "text/csv";
+    const extension = format === "json" || exampleTemplate === "english" ? "json" : "csv";
     const blob = new Blob([content], { type: mimeType });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `sample-blueprint.${extension}`;
+    a.download = `sample-${exampleTemplate}-blueprint.${extension}`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -133,7 +140,7 @@ export function BlueprintImportModal({
   }
 
   function copyExample(format: "json" | "csv") {
-    const text = format === "json" ? SAMPLE_BLUEPRINT_JSON : SAMPLE_BLUEPRINT_CSV;
+    const text = getTemplateContent();
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -244,33 +251,59 @@ export function BlueprintImportModal({
               </div>
             </div>
 
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-lg">
                 <button
                   type="button"
-                  onClick={() => setExampleFormat("json")}
-                  className={`rounded-md px-2.5 py-1 text-xs font-semibold ${
-                    exampleFormat === "json"
-                      ? "bg-slate-900 text-white"
-                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                  onClick={() => setExampleTemplate("science")}
+                  className={`rounded-md px-2.5 py-1 text-xs font-semibold transition ${
+                    exampleTemplate === "science"
+                      ? "bg-white text-indigo-900 shadow-xs"
+                      : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
-                  JSON Format
+                  Class 10 Science (80M)
                 </button>
                 <button
                   type="button"
-                  onClick={() => setExampleFormat("csv")}
-                  className={`rounded-md px-2.5 py-1 text-xs font-semibold ${
-                    exampleFormat === "csv"
-                      ? "bg-slate-900 text-white"
-                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                  onClick={() => setExampleTemplate("english")}
+                  className={`rounded-md px-2.5 py-1 text-xs font-semibold transition ${
+                    exampleTemplate === "english"
+                      ? "bg-white text-indigo-900 shadow-xs"
+                      : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
-                  CSV Format (Excel)
+                  Class 12 English Core (80M)
                 </button>
               </div>
 
               <div className="flex items-center gap-2">
+                {exampleTemplate === "science" && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setExampleFormat("json")}
+                      className={`rounded-md px-2 py-1 text-xs font-semibold ${
+                        exampleFormat === "json"
+                          ? "bg-slate-900 text-white"
+                          : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                      }`}
+                    >
+                      JSON
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExampleFormat("csv")}
+                      className={`rounded-md px-2 py-1 text-xs font-semibold ${
+                        exampleFormat === "csv"
+                          ? "bg-slate-900 text-white"
+                          : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                      }`}
+                    >
+                      CSV
+                    </button>
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={() => copyExample(exampleFormat)}
@@ -282,14 +315,14 @@ export function BlueprintImportModal({
                     </>
                   ) : (
                     <>
-                      <Copy size={13} /> Copy format
+                      <Copy size={13} /> Copy
                     </>
                   )}
                 </button>
                 <button
                   type="button"
                   onClick={() => {
-                    setInputText(exampleFormat === "json" ? SAMPLE_BLUEPRINT_JSON : SAMPLE_BLUEPRINT_CSV);
+                    setInputText(getTemplateContent());
                     setActiveTab("import");
                   }}
                   className="flex items-center gap-1 rounded-md bg-indigo-50 border border-indigo-200 px-2.5 py-1 text-xs font-semibold text-indigo-800 hover:bg-indigo-100 shadow-2xs"
@@ -301,7 +334,7 @@ export function BlueprintImportModal({
 
             <div className="relative rounded-xl border border-slate-200 bg-slate-950 p-4 font-mono text-xs text-slate-100 shadow-inner max-h-[360px] overflow-y-auto">
               <pre className="whitespace-pre overflow-x-auto leading-relaxed">
-                {exampleFormat === "json" ? SAMPLE_BLUEPRINT_JSON : SAMPLE_BLUEPRINT_CSV}
+                {getTemplateContent()}
               </pre>
             </div>
 

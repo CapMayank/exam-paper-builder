@@ -2034,6 +2034,12 @@ export const STANDARD_CURRICULUM_PRESETS: StandardCurriculumPreset[] = [
       { number: 17, title: "[Vistas] 4. The Enemy (Pearl S. Buck)" },
       { number: 18, title: "[Vistas] 5. On the Face of It (Susan Hill)" },
       { number: 19, title: "[Vistas] 6. Memories of Childhood (Zitkala-Sa & Bama)" },
+      // Section A: Reading Skills
+      { number: 20, title: "Section A: Reading Skills (Unseen Passage & Note Making)" },
+      // Section B: Writing Skills
+      { number: 21, title: "Section B: Writing Skills (Notice, Advertisement, Poster, Letter & Long Composition)" },
+      // Section C: Grammar
+      { number: 22, title: "Section C: Grammar (Gap Filling & Do as Directed)" },
     ],
   },
   {

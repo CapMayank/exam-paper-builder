@@ -129,6 +129,129 @@ export const SAMPLE_BLUEPRINT_JSON = `{
   ]
 }`;
 
+export const SAMPLE_ENGLISH_BLUEPRINT_JSON = `{
+  "name": "Class 12 English Annual Examination (MP Board / CBSE)",
+  "examType": "ANNUAL",
+  "durationMin": 180,
+  "academicSession": "2026–27",
+  "subjectCode": "052",
+  "sections": [
+    {
+      "title": "Section A – Reading Skills",
+      "instructions": "Question Nos. 1 to 2: Total 14 marks. Read the passages carefully and answer as directed.",
+      "questionTypes": [
+        {
+          "type": "CASE_STUDY",
+          "count": 1,
+          "marksEach": 10
+        },
+        {
+          "type": "LONG",
+          "count": 1,
+          "marksEach": 4
+        }
+      ]
+    },
+    {
+      "title": "Section B – Writing Skills",
+      "instructions": "Question Nos. 3 to 5: Total 12 marks. Attempt writing tasks as directed. Internal choices are provided.",
+      "questionTypes": [
+        {
+          "type": "LONG",
+          "count": 3,
+          "marksEach": 4
+        }
+      ]
+    },
+    {
+      "title": "Section C – Grammar",
+      "instructions": "Question Nos. 6 to 7: Total 10 marks. Answer grammar questions as directed.",
+      "questionTypes": [
+        {
+          "type": "CASE_STUDY",
+          "count": 2,
+          "marksEach": 5
+        }
+      ]
+    },
+    {
+      "title": "Section D – Textbooks",
+      "instructions": "Question Nos. 8 to 16: Total 44 marks. Questions based on Flamingo and Vistas.",
+      "questionTypes": [
+        {
+          "type": "CASE_STUDY",
+          "count": 1,
+          "marksEach": 5
+        },
+        {
+          "type": "CASE_STUDY",
+          "count": 1,
+          "marksEach": 3
+        },
+        {
+          "type": "CASE_STUDY",
+          "count": 1,
+          "marksEach": 4
+        },
+        {
+          "type": "CASE_STUDY",
+          "count": 1,
+          "marksEach": 10
+        },
+        {
+          "type": "CASE_STUDY",
+          "count": 1,
+          "marksEach": 6
+        },
+        {
+          "type": "CASE_STUDY",
+          "count": 1,
+          "marksEach": 4
+        },
+        {
+          "type": "CASE_STUDY",
+          "count": 1,
+          "marksEach": 6
+        },
+        {
+          "type": "LONG",
+          "count": 1,
+          "marksEach": 3
+        },
+        {
+          "type": "LONG",
+          "count": 1,
+          "marksEach": 3
+        }
+      ]
+    }
+  ],
+  "chapters": [
+    { "chapterNumber": 1, "marks": 4 },
+    { "chapterNumber": 2, "marks": 2 },
+    { "chapterNumber": 3, "marks": 3 },
+    { "chapterNumber": 4, "marks": 5 },
+    { "chapterNumber": 5, "marks": 3 },
+    { "chapterNumber": 6, "marks": 2 },
+    { "chapterNumber": 7, "marks": 0 },
+    { "chapterNumber": 8, "marks": 2 },
+    { "chapterNumber": 9, "marks": 2 },
+    { "chapterNumber": 10, "marks": 2 },
+    { "chapterNumber": 11, "marks": 3 },
+    { "chapterNumber": 12, "marks": 2 },
+    { "chapterNumber": 13, "marks": 3 },
+    { "chapterNumber": 14, "marks": 0 },
+    { "chapterNumber": 15, "marks": 4 },
+    { "chapterNumber": 16, "marks": 0 },
+    { "chapterNumber": 17, "marks": 2 },
+    { "chapterNumber": 18, "marks": 3 },
+    { "chapterNumber": 19, "marks": 2 },
+    { "chapterNumber": 20, "marks": 14 },
+    { "chapterNumber": 21, "marks": 12 },
+    { "chapterNumber": 22, "marks": 10 }
+  ]
+}`;
+
 export const SAMPLE_BLUEPRINT_CSV = `# METADATA
 Name,Class 10 Science Annual Examination
 ExamType,ANNUAL

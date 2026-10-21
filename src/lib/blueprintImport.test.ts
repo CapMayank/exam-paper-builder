@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   SAMPLE_BLUEPRINT_CSV,
   SAMPLE_BLUEPRINT_JSON,
+  SAMPLE_ENGLISH_BLUEPRINT_JSON,
   matchChaptersToBook,
   normalizeExamType,
   normalizeQuestionType,
@@ -64,6 +65,41 @@ describe("blueprintImport", () => {
       expect(secA).toHaveLength(4);
       expect(secA.map((s) => s.type)).toEqual(["MCQ", "FILL_BLANK", "TRUE_FALSE", "SHORT"]);
       expect(secA.reduce((sum, s) => sum + s.count * s.marksEach, 0)).toBe(20);
+    });
+
+    it("successfully parses SAMPLE_ENGLISH_BLUEPRINT_JSON with skills and literature sections totaling 80m", () => {
+      const res = parseBlueprintImport(SAMPLE_ENGLISH_BLUEPRINT_JSON, "json");
+      expect(res.success).toBe(true);
+      expect(res.errors).toHaveLength(0);
+      expect(res.blueprint.name).toBe("Class 12 English Annual Examination (MP Board / CBSE)");
+      expect(res.blueprint.examType).toBe("ANNUAL");
+      expect(res.blueprint.durationMin).toBe(180);
+      expect(res.blueprint.subjectCode).toBe("052");
+      expect(res.totalSectionMarks).toBe(80);
+      expect(res.totalQuestions).toBe(16);
+      expect(res.blueprint.chapters).toHaveLength(22);
+      expect(res.totalChapterMarks).toBe(80);
+      expect(res.warnings).toHaveLength(0);
+
+      // Section A (14 marks): 1x10 CASE_STUDY + 1x4 LONG
+      const secA = res.blueprint.sections.filter((s) => s.title.includes("Section A"));
+      expect(secA).toHaveLength(2);
+      expect(secA.reduce((sum, s) => sum + s.count * s.marksEach, 0)).toBe(14);
+
+      // Section B (12 marks): 3x4 LONG
+      const secB = res.blueprint.sections.filter((s) => s.title.includes("Section B"));
+      expect(secB).toHaveLength(1);
+      expect(secB.reduce((sum, s) => sum + s.count * s.marksEach, 0)).toBe(12);
+
+      // Section C (10 marks): 2x5 CASE_STUDY
+      const secC = res.blueprint.sections.filter((s) => s.title.includes("Section C"));
+      expect(secC).toHaveLength(1);
+      expect(secC.reduce((sum, s) => sum + s.count * s.marksEach, 0)).toBe(10);
+
+      // Section D (44 marks): 9 question type entries
+      const secD = res.blueprint.sections.filter((s) => s.title.includes("Section D"));
+      expect(secD).toHaveLength(9);
+      expect(secD.reduce((sum, s) => sum + s.count * s.marksEach, 0)).toBe(44);
     });
 
     it("handles section array directly without root wrapper", () => {
