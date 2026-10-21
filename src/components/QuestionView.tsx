@@ -16,6 +16,8 @@ import { MathText } from "@/components/MathText";
 const LETTERS = "ABCDEF";
 const ROMAN_LOWER = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)"];
 
+export type QuestionRenderMode = "FULL" | "STEM_ONLY" | "SUBPART_ONLY";
+
 function SingleQuestionBody({
   q,
   number,
@@ -23,6 +25,9 @@ function SingleQuestionBody({
   marks,
   marksStyle = "INLINE",
   showAnswer,
+  renderMode = "FULL",
+  subpartIndex,
+  isContinuation,
 }: {
   q: QuestionDto;
   number?: number;
@@ -30,8 +35,88 @@ function SingleQuestionBody({
   marks?: number;
   marksStyle?: MarksStyle;
   showAnswer?: boolean;
+  renderMode?: QuestionRenderMode;
+  subpartIndex?: number;
+  isContinuation?: boolean;
 }) {
   const displayLabel = numberLabel ?? (number !== undefined ? `${number}.` : undefined);
+
+  if (renderMode === "SUBPART_ONLY") {
+    const sp = q.subparts && subpartIndex !== undefined ? q.subparts[subpartIndex] : null;
+    if (!sp) return null;
+    const contLabel = displayLabel
+      ? displayLabel.startsWith("Q.")
+        ? displayLabel
+        : `Q. ${displayLabel}`
+      : "Question";
+    return (
+      <div style={{ marginLeft: "7mm" }}>
+        {isContinuation && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "2mm",
+              fontSize: "8.5pt",
+              fontWeight: 700,
+              color: "#475569",
+              padding: "0.5mm 0 1.5mm 0",
+              borderBottom: "1px dashed #cbd5e1",
+              marginBottom: "2mm",
+            }}
+          >
+            <span>{contLabel} (Continued / क्रमशः...)</span>
+          </div>
+        )}
+        <div
+          style={{
+            display: "flex",
+            gap: "2mm",
+            alignItems: "flex-start",
+            paddingLeft: "2.5mm",
+            borderLeft: "2px solid #e2e8f0",
+          }}
+        >
+          <span style={{ fontWeight: 700, minWidth: "7mm", color: "#334155" }}>
+            {sp.label || `(${(subpartIndex ?? 0) + 1})`}
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight: 1.45 }}>
+              <MathText text={sp.text} />
+            </div>
+            {sp.options && sp.options.length > 0 && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5mm 4mm", marginTop: "1.5mm" }}>
+                {sp.options.map((opt, optIdx) => (
+                  <div key={optIdx} style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", fontSize: "10pt" }}>
+                    <span style={{ fontWeight: 600 }}>({LETTERS[optIdx].toLowerCase()})</span>{" "}
+                    <MathText text={opt} />
+                  </div>
+                ))}
+              </div>
+            )}
+            {showAnswer && sp.answer && (
+              <div style={{ marginTop: "1mm", fontSize: "0.85em", color: "#166534" }}>
+                <span style={{ fontWeight: 600 }}>Answer:</span> <MathText text={sp.answer} />
+              </div>
+            )}
+          </div>
+          {sp.marks !== undefined && marksStyle !== "SUPPRESSED" && (
+            <div
+              style={{
+                whiteSpace: "nowrap",
+                fontWeight: 700,
+                fontSize: "9pt",
+                paddingLeft: "2.5mm",
+                color: "#475569",
+              }}
+            >
+              [{sp.marks} Mark{sp.marks > 1 ? "s" : ""}]
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   if (isKindergartenType(q.type)) {
     const plugin = getKindergartenActivity(q.type);
@@ -152,7 +237,7 @@ function SingleQuestionBody({
               {hasHindi ? "(सही / गलत — True / False)" : "(True / False)"}
             </div>
           )}
-          {q.subparts && q.subparts.length > 0 && (
+          {renderMode !== "STEM_ONLY" && q.subparts && q.subparts.length > 0 && (
             <div style={{ marginTop: "2.5mm", display: "flex", flexDirection: "column", gap: "2.5mm" }}>
               {q.subparts.map((sp, idx) => (
                 <div
@@ -212,7 +297,7 @@ function SingleQuestionBody({
           </div>
         )}
       </div>
-      {showAnswer && q.answer && (
+      {renderMode !== "STEM_ONLY" && showAnswer && q.answer && (
         <div style={{ marginTop: "1.5mm", marginLeft: displayLabel !== undefined ? "9.5mm" : 0, fontSize: "0.85em", color: "#166534" }}>
           <span style={{ fontWeight: 600 }}>Answer:</span>{" "}
           {isMcq && normalizedMcq ? (
@@ -241,6 +326,9 @@ export function QuestionView({
   marksStyle = "RIGHT_COLUMN",
   showAnswer,
   compact,
+  renderMode = "FULL",
+  subpartIndex,
+  isContinuation,
 }: {
   q: QuestionDto;
   orQuestion?: QuestionDto | null;
@@ -250,7 +338,28 @@ export function QuestionView({
   marksStyle?: MarksStyle;
   showAnswer?: boolean;
   compact?: boolean;
+  renderMode?: QuestionRenderMode;
+  subpartIndex?: number;
+  isContinuation?: boolean;
 }) {
+  if (renderMode === "SUBPART_ONLY") {
+    return (
+      <div style={{ breakInside: "avoid", pageBreakInside: "avoid" }}>
+        <SingleQuestionBody
+          q={q}
+          number={number}
+          numberLabel={numberLabel}
+          marks={marks}
+          marksStyle={marksStyle}
+          showAnswer={showAnswer}
+          renderMode="SUBPART_ONLY"
+          subpartIndex={subpartIndex}
+          isContinuation={isContinuation}
+        />
+      </div>
+    );
+  }
+
   const isKdg = isKindergartenType(q.type);
   const maxSpaceMm = compact || isKdg ? 0 : Math.max(q.spaceMm, orQuestion?.spaceMm ?? 0);
   const showGrid = q.showGrid || !!orQuestion?.showGrid;
@@ -270,6 +379,7 @@ export function QuestionView({
         marks={marks}
         marksStyle={marksStyle}
         showAnswer={showAnswer}
+        renderMode={renderMode}
       />
 
       {orQuestion && (
@@ -290,7 +400,7 @@ export function QuestionView({
         </div>
       )}
 
-      {maxSpaceMm > 0 && (
+      {renderMode !== "STEM_ONLY" && maxSpaceMm > 0 && (
         <div
           className={isDraw && showGrid ? "paper-grid" : isDraw ? "paper-grid" : "paper-ruled"}
           style={{

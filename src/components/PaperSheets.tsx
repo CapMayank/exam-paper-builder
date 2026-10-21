@@ -16,7 +16,18 @@ import { WorkbookHeader } from "@/lib/kindergarten/components/WorkbookHeader";
 import { formatQuestionNumber, imposeBooklet, paginate } from "@/lib/layout";
 import type { PaperData } from "@/lib/types";
 
-type Block = { key: string; keepWithNext: boolean; node: ReactNode };
+type Block = {
+  key: string;
+  keepWithNext: boolean;
+  groupId?: string;
+  node?: ReactNode;
+  render?: (ctx: { isContinuation: boolean }) => ReactNode;
+};
+
+function renderBlock(b: Block, isContinuation: boolean): ReactNode {
+  if (b.render) return b.render({ isContinuation });
+  return b.node;
+}
 
 // A4 minus page padding (see .a4 in globals.css): 14mm sides, 14mm top, 16mm bottom.
 const CONTENT_W_MM = 182;
@@ -351,23 +362,75 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean): Block
       );
       n += 1;
       sectionRelativeCounter += 1;
-      blocks.push({
-        key: it.id,
-        keepWithNext: false,
-        node: (
-          <div style={{ paddingBottom: questionBottomPadding }}>
-            <QuestionView
-              q={it.question}
-              orQuestion={it.orQuestion}
-              number={n}
-              numberLabel={numberLabel}
-              marks={s.marksEach}
-              marksStyle={paper.marksStyle || "RIGHT_COLUMN"}
-              compact={isEffectiveCompact}
-            />
-          </div>
-        ),
-      });
+
+      const subparts = it.question.subparts;
+      const canDecompose = !isPrePrimary && !it.orQuestion && subparts && subparts.length > 1;
+
+      if (canDecompose) {
+        // 1. Passage / Stem block: glued with next (Subpart 0) to prevent orphaning alone at page bottom
+        blocks.push({
+          key: `${it.id}-stem`,
+          keepWithNext: true,
+          groupId: it.id,
+          render: () => (
+            <div style={{ paddingBottom: "2.5mm" }}>
+              <QuestionView
+                q={it.question}
+                number={n}
+                numberLabel={numberLabel}
+                marks={s.marksEach}
+                marksStyle={paper.marksStyle || "RIGHT_COLUMN"}
+                compact={isEffectiveCompact}
+                renderMode="STEM_ONLY"
+              />
+            </div>
+          ),
+        });
+
+        // 2. Individual subparts: can cleanly break across page boundaries
+        subparts.forEach((_, spIdx) => {
+          const isLastSubpart = spIdx === subparts.length - 1;
+          blocks.push({
+            key: `${it.id}-sp-${spIdx}`,
+            keepWithNext: false,
+            groupId: it.id,
+            render: ({ isContinuation }) => (
+              <div style={{ paddingBottom: isLastSubpart ? questionBottomPadding : "2.5mm" }}>
+                <QuestionView
+                  q={it.question}
+                  number={n}
+                  numberLabel={numberLabel}
+                  marks={s.marksEach}
+                  marksStyle={paper.marksStyle || "RIGHT_COLUMN"}
+                  compact={isEffectiveCompact}
+                  renderMode="SUBPART_ONLY"
+                  subpartIndex={spIdx}
+                  isContinuation={isContinuation}
+                />
+              </div>
+            ),
+          });
+        });
+      } else {
+        blocks.push({
+          key: it.id,
+          keepWithNext: false,
+          groupId: it.id,
+          render: () => (
+            <div style={{ paddingBottom: questionBottomPadding }}>
+              <QuestionView
+                q={it.question}
+                orQuestion={it.orQuestion}
+                number={n}
+                numberLabel={numberLabel}
+                marks={s.marksEach}
+                marksStyle={paper.marksStyle || "RIGHT_COLUMN"}
+                compact={isEffectiveCompact}
+              />
+            </div>
+          ),
+        });
+      }
     }
   }
 
@@ -396,13 +459,25 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean): Block
   return blocks;
 }
 
-function Page({ n, total, blocks, isA5 }: { n: number; total: number; blocks: Block[]; isA5?: boolean }) {
+function Page({
+  n,
+  total,
+  blocks,
+  isA5,
+  continuationKeys,
+}: {
+  n: number;
+  total: number;
+  blocks: Block[];
+  isA5?: boolean;
+  continuationKeys?: Set<string>;
+}) {
   const isLastPage = n === total;
   return (
     <div className={`${isA5 ? "a5" : "a4"} paper-font`}>
       {blocks.map((b) => (
         <div key={b.key} style={{ display: "flow-root" }}>
-          {b.node}
+          {renderBlock(b, continuationKeys?.has(b.key) ?? false)}
         </div>
       ))}
       <div className="page-footer">
@@ -519,7 +594,14 @@ export function PaperSheets({
       if (cancelled) return;
       const heights = Array.from(root.children).map((c) => (c as HTMLElement).getBoundingClientRect().height);
       const pageH = probe.getBoundingClientRect().height;
-      setPages(paginate(heights, blocks.map((b) => b.keepWithNext), pageH - 2)); // 2px slack for rounding
+      setPages(
+        paginate(
+          heights,
+          blocks.map((b) => b.keepWithNext),
+          pageH - 2, // 2px slack for rounding
+          blocks.map((b) => b.groupId)
+        )
+      );
     })();
     return () => {
       cancelled = true;
@@ -550,11 +632,40 @@ export function PaperSheets({
     }
   }, [pageCount, sheets.length, isBookletPrint, includeRoughWork, onInfo]);
 
+  const continuationKeys = useMemo(() => {
+    if (!pages) return new Set<string>();
+    const seenGroups = new Set<string>();
+    const contKeys = new Set<string>();
+    for (const pageBlockIndices of pages) {
+      const groupsOnThisPage = new Set<string>();
+      for (const idx of pageBlockIndices) {
+        const b = blocks[idx];
+        if (b.groupId) {
+          if (seenGroups.has(b.groupId) && !groupsOnThisPage.has(b.groupId)) {
+            contKeys.add(b.key);
+          }
+          groupsOnThisPage.add(b.groupId);
+        }
+      }
+      for (const g of groupsOnThisPage) {
+        seenGroups.add(g);
+      }
+    }
+    return contKeys;
+  }, [pages, blocks]);
+
   const pageEl = (i: number | null, key: string) =>
     i === null || !pages ? (
       <BlankPage key={key} showTemplate={includeRoughWork} isA5={isA5} />
     ) : (
-      <Page key={key} n={i + 1} total={pageCount} blocks={pages[i].map((b) => blocks[b])} isA5={isA5} />
+      <Page
+        key={key}
+        n={i + 1}
+        total={pageCount}
+        blocks={pages[i].map((b) => blocks[b])}
+        isA5={isA5}
+        continuationKeys={continuationKeys}
+      />
     );
 
   const reading = pages && (
@@ -612,7 +723,7 @@ export function PaperSheets({
         >
           {blocks.map((b) => (
             <div key={b.key} style={{ display: "flow-root" }}>
-              {b.node}
+              {renderBlock(b, false)}
             </div>
           ))}
         </div>

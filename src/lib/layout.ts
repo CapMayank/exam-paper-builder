@@ -2,15 +2,22 @@
 
 /**
  * Greedy-pack blocks into pages. Blocks flagged keepWithNext are glued to the block after them
- * (so a section heading never sits alone at the bottom of a page). A unit taller than a page
- * gets a page to itself rather than looping forever.
+ * (so a section heading or reading passage stem never sits alone at the bottom of a page).
+ * A unit taller than a page gets a page to itself rather than looping forever.
+ * When blockGroupIds is provided, splitting a question across a page break correctly reserves
+ * height for the continuation header on the continuation page so no content is clipped.
  * Returns, per page, the indices of the blocks placed on it.
  */
-export function paginate(heights: number[], keepWithNext: boolean[], pageHeight: number): number[][] {
-  const units: { idx: number[]; h: number }[] = [];
-  let cur: { idx: number[]; h: number } | null = null;
+export function paginate(
+  heights: number[],
+  keepWithNext: boolean[],
+  pageHeight: number,
+  blockGroupIds?: (string | null | undefined)[]
+): number[][] {
+  const units: { idx: number[]; h: number; groupId?: string | null }[] = [];
+  let cur: { idx: number[]; h: number; groupId?: string | null } | null = null;
   heights.forEach((h, i) => {
-    if (!cur) cur = { idx: [], h: 0 };
+    if (!cur) cur = { idx: [], h: 0, groupId: blockGroupIds ? blockGroupIds[i] : null };
     cur.idx.push(i);
     cur.h += h;
     if (!keepWithNext[i] || i === heights.length - 1) {
@@ -22,14 +29,36 @@ export function paginate(heights: number[], keepWithNext: boolean[], pageHeight:
   const pages: number[][] = [];
   let page: number[] = [];
   let used = 0;
+  const CONTINUATION_EXTRA_PX = 24; // Height of continuation banner
+  const seenGroupsOnEarlierPages = new Set<string>();
+  const currentGroupsOnPage = new Set<string>();
+
   for (const u of units) {
-    if (page.length > 0 && used + u.h > pageHeight) {
+    const isContinuation = Boolean(
+      u.groupId &&
+      seenGroupsOnEarlierPages.has(u.groupId) &&
+      !currentGroupsOnPage.has(u.groupId)
+    );
+    const extraH = isContinuation ? CONTINUATION_EXTRA_PX : 0;
+
+    if (page.length > 0 && used + u.h + extraH > pageHeight) {
       pages.push(page);
       page = [];
       used = 0;
+      currentGroupsOnPage.forEach((g) => seenGroupsOnEarlierPages.add(g));
+      currentGroupsOnPage.clear();
     }
+
+    const isContOnFreshPage = Boolean(
+      u.groupId &&
+      seenGroupsOnEarlierPages.has(u.groupId) &&
+      !currentGroupsOnPage.has(u.groupId)
+    );
+    const appliedExtraH = isContOnFreshPage ? CONTINUATION_EXTRA_PX : 0;
+
     page.push(...u.idx);
-    used += u.h;
+    used += u.h + appliedExtraH;
+    if (u.groupId) currentGroupsOnPage.add(u.groupId);
   }
   if (page.length > 0) pages.push(page);
   return pages;

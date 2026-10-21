@@ -97,6 +97,33 @@ describe("paginate", () => {
   it("handles no blocks", () => {
     expect(paginate([], [], 100)).toEqual([]);
   });
+  it("glues passage stem with first subpart so stem is never orphaned alone", () => {
+    // pageHeight = 100
+    // header: 50px
+    // passage stem: 40px (keepWithNext = true)
+    // subpart 0: 20px (keepWithNext = false)
+    // subpart 1: 20px (keepWithNext = false)
+    // At page 1: header(50) + stem(40) + sp0(20) = 110 > 100.
+    // Because stem has keepWithNext=true, stem and sp0 are glued and move to page 2 together.
+    const heights = [50, 40, 20, 20];
+    const keepWithNext = [false, true, false, false];
+    const groupIds = [null, "passage-1", "passage-1", "passage-1"];
+    const result = paginate(heights, keepWithNext, 100, groupIds);
+    expect(result).toEqual([[0], [1, 2, 3]]);
+  });
+  it("splits subparts across pages and factors continuation header reservation", () => {
+    // pageHeight = 100
+    // header: 20px
+    // stem: 40px (keepWithNext = true)
+    // sp0: 30px (keepWithNext = false) -> total on page 1 = 90px <= 100px. Fits on page 1!
+    // sp1: 20px (groupId: "passage-1") -> moves to page 2.
+    // On page 2, continuation extra (24px) is reserved, so sp1 uses 20 + 24 = 44px.
+    const heights = [20, 40, 30, 20];
+    const keepWithNext = [false, true, false, false];
+    const groupIds = [null, "passage-1", "passage-1", "passage-1"];
+    const result = paginate(heights, keepWithNext, 100, groupIds);
+    expect(result).toEqual([[0, 1, 2], [3]]);
+  });
 });
 
 describe("imposeBooklet", () => {
