@@ -1,5 +1,6 @@
 import "server-only";
 import { isKindergartenType } from "./constants";
+import { ensureLanguageNonChapterUnits } from "./syllabusImport";
 
 export interface GeminiCallResult<T> {
   success: boolean;
@@ -1942,7 +1943,11 @@ Requirements:
    - Set isComposite: true
    - In the 'books' array, output either separate book objects for each reader/part, or group them with clear [Part Name] prefixes in chapter titles.
 3. If it is a single textbook, return a single entry in 'books' with all sequential chapters (1, 2, 3...).
-4. Return strictly valid JSON matching this schema:
+4. For Language subjects (English, Hindi, Sanskrit, etc.), if the raw input contains literature/prose/poetry lessons only, ensure the essential examination non-chapter components (Reading Comprehension / Unseen Passage, Writing Skills / Creative Composition, and Applied Grammar / Vyakaran) are included as distinct units:
+   - English: Reading Skills, Writing Skills, Grammar
+   - Hindi: खंड क: अपठित बोध, खंड ख: रचनात्मक लेखन, खंड ग: व्यावहारिक व्याकरण
+   - Sanskrit: भागः क: अपठित-अवबोधनम्, भागः ख: रचनात्मक-कार्यम्, भागः ग: अनुप्रयुक्त-व्याकरणम्
+5. Return strictly valid JSON matching this schema:
 {
   "bookTitle": "Main Textbook Title",
   "className": "${className}",
@@ -1991,6 +1996,9 @@ Requirements:
     }
 
     const defaultTitle = `${subject} (${className})`;
+    const initialChapters = chapters.length > 0 ? chapters : [{ number: 1, title: "Chapter 1: Introduction" }];
+    const { chapters: finalChapters } = ensureLanguageNonChapterUnits(initialChapters, subject, className);
+
     return {
       bookTitle: defaultTitle,
       className,
@@ -2001,16 +2009,27 @@ Requirements:
           title: defaultTitle,
           className,
           subject,
-          chapters: chapters.length > 0 ? chapters : [{ number: 1, title: "Chapter 1: Introduction" }],
+          chapters: finalChapters,
         },
       ],
     };
   };
 
-  return callGeminiApi<ParsedSyllabusResponse>(userPrompt, systemPrompt, {
+  const rawResult = await callGeminiApi<ParsedSyllabusResponse>(userPrompt, systemPrompt, {
     json: true,
     apiKey,
     mockFallback,
   });
+
+  if (rawResult.data?.books) {
+    for (const b of rawResult.data.books) {
+      const bSub = b.subject || subject;
+      const bCls = b.className || className;
+      const { chapters: finalChapters } = ensureLanguageNonChapterUnits(b.chapters, bSub, bCls);
+      b.chapters = finalChapters;
+    }
+  }
+
+  return rawResult;
 }
 

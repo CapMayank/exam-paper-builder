@@ -6,6 +6,7 @@ import {
   parsePaperImport,
   parsePaperJson,
   parsePaperText,
+  resolveQuestionChapter,
   SAMPLE_PAPER_CSV,
   SAMPLE_PAPER_JSON,
   SAMPLE_PAPER_TEXT,
@@ -1009,6 +1010,83 @@ describe("Paper Import & Blueprint Verification Engine", () => {
       const secDVistasLa = report.sections.find((s) => s.blueprintSectionId === "sec_d_la_vistas");
       expect(secDVistasLa?.importedCount).toBe(1);
       expect(secDVistasLa?.status).toBe("MATCH");
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 6. Language Question-Chapter Resolution (Bilingual English / Hindi / Sanskrit)
+  // ---------------------------------------------------------------------------
+  describe("6. Language Question-Chapter Resolution", () => {
+    it("resolves English questions to Reading, Writing, and Grammar chapters based on question context", () => {
+      const chapters: Chapter[] = [
+        { id: "ch1", bookId: "b_eng", number: 1, title: "The Last Lesson" },
+        { id: "ch20", bookId: "b_eng", number: 20, title: "Section A: Reading Skills (Unseen Comprehension Passage & Note Making)" },
+        { id: "ch21", bookId: "b_eng", number: 21, title: "Section B: Writing Skills (Notice, Advertisement, Poster, Letter, Article & Report Writing)" },
+        { id: "ch22", bookId: "b_eng", number: 22, title: "Section C: Grammar (Tenses, Modals, Voice, Narration, Clauses, Gap Filling & Do as Directed)" },
+      ];
+
+      const readingQ = {
+        text: "Read the passage given below carefully and answer the comprehension questions that follow:",
+      };
+      expect(resolveQuestionChapter(readingQ, "Section A", chapters)?.number).toBe(20);
+
+      const writingQ = {
+        text: "You are the Sports Captain. Draft an attractive notice inviting entries for the Annual Sports Meet.",
+      };
+      expect(resolveQuestionChapter(writingQ, "Section B", chapters)?.number).toBe(21);
+
+      const grammarQ = {
+        text: "Do as directed: Rewrite the following sentence in passive voice without changing its meaning.",
+      };
+      expect(resolveQuestionChapter(grammarQ, "Section C", chapters)?.number).toBe(22);
+    });
+
+    it("resolves Hindi questions to खंड क (अपठित बोध), खंड ख (रचनात्मक लेखन), and खंड ग (व्यावहारिक व्याकरण)", () => {
+      const chapters: Chapter[] = [
+        { id: "ch1", bookId: "b_hin", number: 1, title: "[आरोह] 1. आत्मपरिचय (हरिवंश राय बच्चन)" },
+        { id: "ch19", bookId: "b_hin", number: 19, title: "खंड क: अपठित बोध (अपठित गद्यांश एवं पद्यांश / Unseen Comprehension)" },
+        { id: "ch20", bookId: "b_hin", number: 20, title: "खंड ख: रचनात्मक लेखन एवं अभिव्यक्ति (निबंध, पत्र, विज्ञापन, संदेश, संवाद, अनुच्छेद लेखन / Writing Skills)" },
+        { id: "ch21", bookId: "b_hin", number: 21, title: "खंड ग: व्यावहारिक व्याकरण (संधि, समास, रस, छंद, अलंकार, मुहावरे, वाक्य भेद / Grammar)" },
+      ];
+
+      const readingQ = {
+        text: "निम्नलिखित अपठित गद्यांश को ध्यानपूर्वक पढ़कर दिए गए प्रश्नों के सही उत्तर चुनिए:",
+      };
+      expect(resolveQuestionChapter(readingQ, "खंड क", chapters)?.number).toBe(19);
+
+      const writingQ = {
+        text: "अपने विद्यालय के प्रधानाचार्य को चरित्र प्रमाण-पत्र प्राप्त करने हेतु एक औपचारिक पत्र लिखिए।",
+      };
+      expect(resolveQuestionChapter(writingQ, "खंड ख", chapters)?.number).toBe(20);
+
+      const grammarQ = {
+        text: "निम्नलिखित मुहावरे का अर्थ लिखकर वाक्य में प्रयोग कीजिए: 'अंगूठा दिखाना'। साथ ही संधि विच्छेद कीजिए।",
+      };
+      expect(resolveQuestionChapter(grammarQ, "खंड ग", chapters)?.number).toBe(21);
+    });
+
+    it("resolves Sanskrit questions to भागः क (अपठित-अवबोधनम्), भागः ख (रचनात्मक-कार्यम्), and भागः ग (अनुप्रयुक्त-व्याकरणम्)", () => {
+      const chapters: Chapter[] = [
+        { id: "ch1", bookId: "b_sans", number: 1, title: "भारतीवसन्तगीतिः" },
+        { id: "ch11", bookId: "b_sans", number: 11, title: "भागः क: अपठित-अवबोधनम् (अपठित गद्यांश / Unseen Passage)" },
+        { id: "ch12", bookId: "b_sans", number: 12, title: "भागः ख: रचनात्मक-कार्यम् (पत्र-लेखनम्, चित्र-वर्णनम्, संस्कृतानुवादः / Writing Skills)" },
+        { id: "ch13", bookId: "b_sans", number: 13, title: "भागः ग: अनुप्रयुक्त-व्याकरणम् (संधि, शब्दरूप, धातुरूप, प्रत्यय, कारक-उपपदविभक्ति / Grammar)" },
+      ];
+
+      const readingQ = {
+        text: "अधोलिखितं गद्यांशं पठित्वा प्रदत्तप्रश्नानाम् उत्तराणि संस्कृतेन लिखत (अपठित-अवबोधनम्):",
+      };
+      expect(resolveQuestionChapter(readingQ, "भागः क", chapters)?.number).toBe(11);
+
+      const writingQ = {
+        text: "मञ्जूषातः पदानि चित्वा चित्र-वर्णनम् कुरुत अथवा पत्र-लेखनम् पूर्णं कुरुत।",
+      };
+      expect(resolveQuestionChapter(writingQ, "भागः ख", chapters)?.number).toBe(12);
+
+      const grammarQ = {
+        text: "रेखाङ्कितपदेषु संधिं वा विच्छेदं वा कुरुत। अनुप्रयुक्त-व्याकरणम्: शब्दरूपं धातुरूपं च चिनुत।",
+      };
+      expect(resolveQuestionChapter(grammarQ, "भागः ग", chapters)?.number).toBe(13);
     });
   });
 });

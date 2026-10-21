@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  ensureLanguageNonChapterUnits,
+  getLanguageNonChapterUnits,
+  hasDomainCovered,
+  isLanguageSubject,
+  isPrePrimaryClass,
   parseCsvRows,
   parseCsvSyllabus,
   parseJsonSyllabus,
@@ -349,5 +354,208 @@ describe("isSubjectMatching and normalizePresetSubject", () => {
       JSON.stringify([{ title: "Hornbill", className: "Class 11", subject: "English Core", chapters: [{ number: 1, title: "The Portrait of a Lady" }] }])
     );
     expect(jsonRes.books[0].subject).toBe("English");
+  });
+});
+
+describe("Language Subject & Non-Chapter Unit Helpers", () => {
+  it("identifies language subjects across English, Hindi, Sanskrit, and regional/foreign languages", () => {
+    expect(isLanguageSubject("English")).toBe(true);
+    expect(isLanguageSubject("English Core")).toBe(true);
+    expect(isLanguageSubject("English Language & Literature")).toBe(true);
+    expect(isLanguageSubject("Hindi")).toBe(true);
+    expect(isLanguageSubject("Hindi Core")).toBe(true);
+    expect(isLanguageSubject("Hindi Course-A")).toBe(true);
+    expect(isLanguageSubject("हिंदी")).toBe(true);
+    expect(isLanguageSubject("Sanskrit")).toBe(true);
+    expect(isLanguageSubject("संस्कृत")).toBe(true);
+    expect(isLanguageSubject("French")).toBe(true);
+    expect(isLanguageSubject("Urdu")).toBe(true);
+    expect(isLanguageSubject("German")).toBe(true);
+
+    // Rejects STEM and humanities non-language subjects
+    expect(isLanguageSubject("Mathematics")).toBe(false);
+    expect(isLanguageSubject("Science")).toBe(false);
+    expect(isLanguageSubject("Social Science")).toBe(false);
+    expect(isLanguageSubject("Physics")).toBe(false);
+    expect(isLanguageSubject("Chemistry")).toBe(false);
+    expect(isLanguageSubject("Biology")).toBe(false);
+    expect(isLanguageSubject("Information Technology")).toBe(false);
+    expect(isLanguageSubject("Business Studies")).toBe(false);
+    expect(isLanguageSubject("Accountancy")).toBe(false);
+  });
+
+  it("identifies pre-primary classes to prevent appending secondary board exam sections", () => {
+    expect(isPrePrimaryClass("Nursery")).toBe(true);
+    expect(isPrePrimaryClass("LKG")).toBe(true);
+    expect(isPrePrimaryClass("UKG")).toBe(true);
+    expect(isPrePrimaryClass("Pre-Primary")).toBe(true);
+    expect(isPrePrimaryClass("KG")).toBe(true);
+
+    expect(isPrePrimaryClass("Class 1")).toBe(false);
+    expect(isPrePrimaryClass("Class 5")).toBe(false);
+    expect(isPrePrimaryClass("Class 10")).toBe(false);
+    expect(isPrePrimaryClass("Class 12")).toBe(false);
+  });
+
+  it("returns official bilingual board terminology for each language", () => {
+    const englishUnits = getLanguageNonChapterUnits("English");
+    expect(englishUnits).toHaveLength(3);
+    expect(englishUnits[0].title).toContain("Section A: Reading Skills");
+    expect(englishUnits[1].title).toContain("Section B: Writing Skills");
+    expect(englishUnits[2].title).toContain("Section C: Grammar");
+
+    const hindiUnits = getLanguageNonChapterUnits("Hindi");
+    expect(hindiUnits).toHaveLength(3);
+    expect(hindiUnits[0].title).toContain("खंड क: अपठित बोध");
+    expect(hindiUnits[1].title).toContain("खंड ख: रचनात्मक लेखन");
+    expect(hindiUnits[2].title).toContain("खंड ग: व्यावहारिक व्याकरण");
+
+    const sanskritUnits = getLanguageNonChapterUnits("Sanskrit");
+    expect(sanskritUnits).toHaveLength(3);
+    expect(sanskritUnits[0].title).toContain("भागः क: अपठित-अवबोधनम्");
+    expect(sanskritUnits[1].title).toContain("भागः ख: रचनात्मक-कार्यम्");
+    expect(sanskritUnits[2].title).toContain("भागः ग: अनुप्रयुक्त-व्याकरणम्");
+
+    const frenchUnits = getLanguageNonChapterUnits("French");
+    expect(frenchUnits).toHaveLength(3);
+    expect(frenchUnits[0].title).toContain("Reading Comprehension");
+    expect(frenchUnits[1].title).toContain("Writing Skills");
+    expect(frenchUnits[2].title).toContain("Applied Grammar");
+  });
+
+  it("accurately detects existing domains without false positives on literature chapters", () => {
+    // Literature titles must NOT trigger domain matches
+    expect(hasDomainCovered("[First Flight] 1. A Letter to God & Dust of Snow", "writing")).toBe(false);
+    expect(hasDomainCovered("The Last Lesson", "reading")).toBe(false);
+    expect(hasDomainCovered("Deep Water", "reading")).toBe(false);
+    expect(hasDomainCovered("Going Places", "writing")).toBe(false);
+    expect(hasDomainCovered("Indigo", "grammar")).toBe(false);
+
+    // Real skill sections match accurately
+    expect(hasDomainCovered("Section A: Reading Skills (Unseen Passage & Note Making)", "reading")).toBe(true);
+    expect(hasDomainCovered("Section B: Writing Skills (Notice, Letter, Article)", "writing")).toBe(true);
+    expect(hasDomainCovered("Section C: Grammar (Gap Filling & Do as Directed)", "grammar")).toBe(true);
+
+    expect(hasDomainCovered("खंड क: अपठित बोध (अपठित गद्यांश एवं पद्यांश)", "reading")).toBe(true);
+    expect(hasDomainCovered("खंड ख: रचनात्मक लेखन एवं अभिव्यक्ति", "writing")).toBe(true);
+    expect(hasDomainCovered("खंड ग: व्यावहारिक व्याकरण (संधि, समास)", "grammar")).toBe(true);
+
+    expect(hasDomainCovered("भागः क: अपठित-अवबोधनम्", "reading")).toBe(true);
+    expect(hasDomainCovered("भागः ख: रचनात्मक-कार्यम्", "writing")).toBe(true);
+    expect(hasDomainCovered("भागः ग: अनुप्रयुक्त-व्याकरणम्", "grammar")).toBe(true);
+  });
+
+  it("appends missing units sequentially and does not duplicate existing units", () => {
+    const existing = [
+      { number: 1, title: "The Last Lesson" },
+      { number: 2, title: "Lost Spring" },
+      { number: 3, title: "Section A: Reading Skills (Unseen Comprehension)" },
+    ];
+
+    const { chapters, addedUnits } = ensureLanguageNonChapterUnits(existing, "English", "Class 12");
+    // Reading already existed, so only writing and grammar should be added
+    expect(addedUnits).toEqual(["writing", "grammar"]);
+    expect(chapters).toHaveLength(5);
+    expect(chapters[3]).toEqual({
+      number: 4,
+      title: "Section B: Writing Skills (Notice, Advertisement, Poster, Letter, Article & Report Writing)",
+    });
+    expect(chapters[4]).toEqual({
+      number: 5,
+      title: "Section C: Grammar (Tenses, Modals, Voice, Narration, Clauses, Gap Filling & Do as Directed)",
+    });
+  });
+});
+
+describe("Automatic Non-Chapter Unit Appending across Import Channels", () => {
+  it("appends reading, writing, and grammar to text syllabus for English", () => {
+    const text = `Book: First Flight
+Class: Class 10
+Subject: English
+1. A Letter to God
+2. Nelson Mandela
+3. Two Stories about Flying`;
+
+    const res = parseTextSyllabus(text);
+    expect(res.errors).toEqual([]);
+    expect(res.books[0].chapters).toHaveLength(6);
+    expect(res.books[0].chapters[0].title).toBe("A Letter to God");
+    expect(res.books[0].chapters[1].title).toBe("Nelson Mandela");
+    expect(res.books[0].chapters[2].title).toBe("Two Stories about Flying");
+    expect(res.books[0].chapters[3].title).toContain("Reading Skills");
+    expect(res.books[0].chapters[4].title).toContain("Writing Skills");
+    expect(res.books[0].chapters[5].title).toContain("Grammar");
+  });
+
+  it("appends Hindi bilingual non-chapter units to text syllabus for Hindi", () => {
+    const text = `Book: क्षितिज भाग 2
+Class: Class 10
+Subject: Hindi
+1. सूरदास के पद
+2. राम-लक्ष्मण-परशुराम संवाद`;
+
+    const res = parseTextSyllabus(text);
+    expect(res.errors).toEqual([]);
+    expect(res.books[0].chapters).toHaveLength(5);
+    expect(res.books[0].chapters[0].title).toBe("सूरदास के पद");
+    expect(res.books[0].chapters[1].title).toBe("राम-लक्ष्मण-परशुराम संवाद");
+    expect(res.books[0].chapters[2].title).toContain("खंड क: अपठित बोध");
+    expect(res.books[0].chapters[3].title).toContain("खंड ख: रचनात्मक लेखन");
+    expect(res.books[0].chapters[4].title).toContain("खंड ग: व्यावहारिक व्याकरण");
+  });
+
+  it("appends language units to CSV syllabus for English", () => {
+    const csv = `Chapter,Title
+1,"The Portrait of a Lady"
+2,"We're Not Afraid to Die"`;
+
+    const res = parseCsvSyllabus(csv, {
+      defaultTitle: "Hornbill",
+      defaultClass: "Class 11",
+      defaultSubject: "English Core",
+    });
+
+    expect(res.errors).toEqual([]);
+    expect(res.books[0].chapters).toHaveLength(5);
+    expect(res.books[0].chapters[2].title).toContain("Reading Skills");
+    expect(res.books[0].chapters[3].title).toContain("Writing Skills");
+    expect(res.books[0].chapters[4].title).toContain("Grammar");
+  });
+
+  it("appends Sanskrit bilingual units to JSON syllabus", () => {
+    const json = JSON.stringify([
+      { number: 1, title: "भारतीवसन्तगीतिः" },
+      { number: 2, title: "स्वर्णकाकः" },
+    ]);
+
+    const res = parseJsonSyllabus(json, {
+      defaultTitle: "शेमुषी",
+      defaultClass: "Class 9",
+      defaultSubject: "Sanskrit",
+    });
+
+    expect(res.errors).toEqual([]);
+    expect(res.books[0].chapters).toHaveLength(5);
+    expect(res.books[0].chapters[2].title).toContain("भागः क: अपठित-अवबोधनम्");
+    expect(res.books[0].chapters[3].title).toContain("भागः ख: रचनात्मक-कार्यम्");
+    expect(res.books[0].chapters[4].title).toContain("भागः ग: अनुप्रयुक्त-व्याकरणम्");
+  });
+
+  it("never appends language units to STEM subjects or Pre-Primary classes", () => {
+    const mathText = `1. Real Numbers\n2. Polynomials`;
+    const mathRes = parseTextSyllabus(mathText, {
+      defaultTitle: "Mathematics",
+      defaultClass: "Class 10",
+      defaultSubject: "Mathematics",
+    });
+    expect(mathRes.books[0].chapters).toHaveLength(2);
+
+    const nurseryText = `1. Phonics A to Z\n2. Action Rhymes`;
+    const nurseryRes = parseTextSyllabus(nurseryText, {
+      defaultTitle: "Nursery Rhymes",
+      defaultClass: "Nursery",
+      defaultSubject: "English",
+    });
+    expect(nurseryRes.books[0].chapters).toHaveLength(2);
   });
 });

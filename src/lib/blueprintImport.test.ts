@@ -3,6 +3,7 @@ import {
   SAMPLE_BLUEPRINT_CSV,
   SAMPLE_BLUEPRINT_JSON,
   SAMPLE_ENGLISH_BLUEPRINT_JSON,
+  SAMPLE_HINDI_BLUEPRINT_JSON,
   matchChaptersToBook,
   normalizeExamType,
   normalizeQuestionType,
@@ -100,6 +101,64 @@ describe("blueprintImport", () => {
       const secD = res.blueprint.sections.filter((s) => s.title.includes("Section D"));
       expect(secD).toHaveLength(9);
       expect(secD.reduce((sum, s) => sum + s.count * s.marksEach, 0)).toBe(44);
+    });
+
+    it("successfully parses SAMPLE_HINDI_BLUEPRINT_JSON with 4 sections totaling 80m and 9 units totaling 80m", () => {
+      const res = parseBlueprintImport(SAMPLE_HINDI_BLUEPRINT_JSON, "json");
+      expect(res.success).toBe(true);
+      expect(res.errors).toHaveLength(0);
+      expect(res.blueprint.name).toBe("Class 12 Hindi Annual Examination (MP Board) 2025–26");
+      expect(res.blueprint.examType).toBe("ANNUAL");
+      expect(res.blueprint.durationMin).toBe(180);
+      expect(res.blueprint.academicSession).toBe("2025–26");
+      expect(res.blueprint.subjectCode).toBe("051");
+      expect(res.totalSectionMarks).toBe(80);
+      expect(res.totalChapterMarks).toBe(80);
+      expect(res.warnings).toHaveLength(0);
+
+      // Section A: 32 objective questions (6 MCQ + 6 FIB + 6 TF + 7 Match + 7 Short/VSA = 32m)
+      const secA = res.blueprint.sections.filter((s) => s.title.includes("खण्ड अ"));
+      expect(secA).toHaveLength(5);
+      expect(secA.reduce((sum, s) => sum + s.count * s.marksEach, 0)).toBe(32);
+
+      // Section B: 10 x 2m = 20m
+      const secB = res.blueprint.sections.filter((s) => s.title.includes("खण्ड ब"));
+      expect(secB).toHaveLength(1);
+      expect(secB[0].count).toBe(10);
+      expect(secB[0].marksEach).toBe(2);
+
+      // Section C: 4 x 3m = 12m
+      const secC = res.blueprint.sections.filter((s) => s.title.includes("खण्ड स"));
+      expect(secC).toHaveLength(1);
+      expect(secC[0].count).toBe(4);
+      expect(secC[0].marksEach).toBe(3);
+
+      // Section D: 4 x 4m = 16m
+      const secD = res.blueprint.sections.filter((s) => s.title.includes("खण्ड द"));
+      expect(secD).toHaveLength(1);
+      expect(secD[0].count).toBe(4);
+      expect(secD[0].marksEach).toBe(4);
+
+      // 9 Syllabus units exactly matching the MP Board Blueprint syllabus
+      expect(res.blueprint.chapters).toHaveLength(9);
+      expect(res.blueprint.chapters[0].chapterTitle).toBe("आरोह भाग – 2 (काव्य खंड)");
+      expect(res.blueprint.chapters[0].marks).toBe(17);
+      expect(res.blueprint.chapters[1].chapterTitle).toBe("काव्य बोध");
+      expect(res.blueprint.chapters[1].marks).toBe(9);
+      expect(res.blueprint.chapters[2].chapterTitle).toBe("आरोह भाग – 2 (गद्य खंड)");
+      expect(res.blueprint.chapters[2].marks).toBe(17);
+      expect(res.blueprint.chapters[3].chapterTitle).toBe("भाषा बोध");
+      expect(res.blueprint.chapters[3].marks).toBe(12);
+      expect(res.blueprint.chapters[4].chapterTitle).toBe("वितान भाग – 2");
+      expect(res.blueprint.chapters[4].marks).toBe(7);
+      expect(res.blueprint.chapters[5].chapterTitle).toBe("अभिव्यक्ति और माध्यम");
+      expect(res.blueprint.chapters[5].marks).toBe(7);
+      expect(res.blueprint.chapters[6].chapterTitle).toBe("अपठित बोध (गद्यांश / काव्यांश)");
+      expect(res.blueprint.chapters[6].marks).toBe(3);
+      expect(res.blueprint.chapters[7].chapterTitle).toBe("पत्र लेखन (औपचारिक / अनौपचारिक)");
+      expect(res.blueprint.chapters[7].marks).toBe(4);
+      expect(res.blueprint.chapters[8].chapterTitle).toBe("निबंध लेखन एवं रूपरेखा");
+      expect(res.blueprint.chapters[8].marks).toBe(4);
     });
 
     it("handles section array directly without root wrapper", () => {

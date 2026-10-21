@@ -252,6 +252,132 @@ export const SAMPLE_ENGLISH_BLUEPRINT_JSON = `{
   ]
 }`;
 
+export const SAMPLE_HINDI_BLUEPRINT_JSON = `{
+  "name": "Class 12 Hindi Annual Examination (MP Board) 2025–26",
+  "examType": "ANNUAL",
+  "durationMin": 180,
+  "academicSession": "2025–26",
+  "subjectCode": "051",
+  "sections": [
+    {
+      "title": "खण्ड अ – वस्तुनिष्ठ प्रश्न (Objective Questions)",
+      "instructions": "प्रश्न क्रमांक 1 से 5 तक 32 वस्तुनिष्ठ प्रश्न हैं। प्रत्येक प्रश्न पर 1 अंक निर्धारित है। (कुल 32 अंक)",
+      "questionTypes": [
+        {
+          "type": "MCQ",
+          "count": 6,
+          "marksEach": 1,
+          "instructions": "प्रश्न 1: सही विकल्प चुनकर लिखिए।"
+        },
+        {
+          "type": "FILL_BLANK",
+          "count": 6,
+          "marksEach": 1,
+          "instructions": "प्रश्न 2: रिक्त स्थानों की पूर्ति उचित शब्दों द्वारा कीजिए।"
+        },
+        {
+          "type": "TRUE_FALSE",
+          "count": 6,
+          "marksEach": 1,
+          "instructions": "प्रश्न 3: निम्नलिखित कथनों में सत्य / असत्य लिखिए।"
+        },
+        {
+          "type": "MATCH_COLUMN",
+          "count": 7,
+          "marksEach": 1,
+          "instructions": "प्रश्न 4: सही जोड़ी बनाकर लिखिए।"
+        },
+        {
+          "type": "SHORT",
+          "count": 7,
+          "marksEach": 1,
+          "instructions": "प्रश्न 5: निम्नलिखित प्रश्नों के उत्तर एक वाक्य में लिखिए।"
+        }
+      ]
+    },
+    {
+      "title": "खण्ड ब – अति लघु उत्तरीय प्रश्न (Very Short Answer)",
+      "instructions": "प्रश्न क्रमांक 6 से 15 तक कुल 10 अति लघु उत्तरीय प्रश्न हैं। प्रत्येक प्रश्न पर 2 अंक निर्धारित हैं। आंतरिक विकल्प उपलब्ध हैं। (शब्द सीमा लगभग 30 शब्द, कुल 20 अंक)",
+      "questionTypes": [
+        {
+          "type": "SHORT",
+          "count": 10,
+          "marksEach": 2
+        }
+      ]
+    },
+    {
+      "title": "खण्ड स – लघु उत्तरीय प्रश्न (Short Answer)",
+      "instructions": "प्रश्न क्रमांक 16 से 19 तक कुल 4 लघु उत्तरीय प्रश्न हैं। प्रत्येक प्रश्न पर 3 अंक निर्धारित हैं। आंतरिक विकल्प उपलब्ध हैं। (शब्द सीमा लगभग 75 शब्द, कुल 12 अंक)",
+      "questionTypes": [
+        {
+          "type": "SHORT",
+          "count": 4,
+          "marksEach": 3
+        }
+      ]
+    },
+    {
+      "title": "खण्ड द – विश्लेषणात्मक / दीर्घ उत्तरीय प्रश्न (Long Answer)",
+      "instructions": "प्रश्न क्रमांक 20 से 23 तक कुल 4 विश्लेषणात्मक एवं दीर्घ उत्तरीय प्रश्न हैं। प्रत्येक प्रश्न पर 4 अंक निर्धारित हैं। आंतरिक विकल्प उपलब्ध हैं। (शब्द सीमा लगभग 120 शब्द, कुल 16 अंक)",
+      "questionTypes": [
+        {
+          "type": "LONG",
+          "count": 4,
+          "marksEach": 4
+        }
+      ]
+    }
+  ],
+  "chapters": [
+    {
+      "chapterNumber": 1,
+      "chapterTitle": "आरोह भाग – 2 (काव्य खंड)",
+      "marks": 17
+    },
+    {
+      "chapterNumber": 2,
+      "chapterTitle": "काव्य बोध",
+      "marks": 9
+    },
+    {
+      "chapterNumber": 3,
+      "chapterTitle": "आरोह भाग – 2 (गद्य खंड)",
+      "marks": 17
+    },
+    {
+      "chapterNumber": 4,
+      "chapterTitle": "भाषा बोध",
+      "marks": 12
+    },
+    {
+      "chapterNumber": 5,
+      "chapterTitle": "वितान भाग – 2",
+      "marks": 7
+    },
+    {
+      "chapterNumber": 6,
+      "chapterTitle": "अभिव्यक्ति और माध्यम",
+      "marks": 7
+    },
+    {
+      "chapterNumber": 7,
+      "chapterTitle": "अपठित बोध (गद्यांश / काव्यांश)",
+      "marks": 3
+    },
+    {
+      "chapterNumber": 8,
+      "chapterTitle": "पत्र लेखन (औपचारिक / अनौपचारिक)",
+      "marks": 4
+    },
+    {
+      "chapterNumber": 9,
+      "chapterTitle": "निबंध लेखन एवं रूपरेखा",
+      "marks": 4
+    }
+  ]
+}`;
+
 export const SAMPLE_BLUEPRINT_CSV = `# METADATA
 Name,Class 10 Science Annual Examination
 ExamType,ANNUAL

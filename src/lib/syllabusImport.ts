@@ -44,9 +44,272 @@ export interface StandardCurriculumPreset {
   chapters: ParsedChapterItem[];
 }
 
-import { STANDARD_CURRICULUM_PRESETS } from "./curriculumPresets";
-import { getCanonicalSubjectName } from "./schoolCurriculum";
-export { STANDARD_CURRICULUM_PRESETS };
+import { getCanonicalSubjectName, normalizePresetSubject } from "./schoolCurriculum";
+
+export type LanguageUnitDomain = "reading" | "writing" | "grammar";
+
+export interface LanguageNonChapterUnit {
+  domain: LanguageUnitDomain;
+  title: string;
+}
+
+/**
+ * Checks whether a subject name corresponds to a language subject
+ * (e.g. English, Hindi, Sanskrit, French, Urdu, German, etc.)
+ */
+export function isLanguageSubject(subject?: string | null): boolean {
+  if (!subject) return false;
+  const canon = getCanonicalSubjectName(subject);
+  if (canon === "English" || canon === "Hindi" || canon === "Sanskrit") {
+    return true;
+  }
+  const s = subject.trim().toLowerCase();
+  const knownLanguages = [
+    "english",
+    "hindi",
+    "sanskrit",
+    "urdu",
+    "bengali",
+    "marathi",
+    "gujarati",
+    "tamil",
+    "telugu",
+    "kannada",
+    "malayalam",
+    "punjabi",
+    "odia",
+    "oriya",
+    "assamese",
+    "nepali",
+    "french",
+    "german",
+    "spanish",
+    "russian",
+    "chinese",
+    "japanese",
+    "arabic",
+    "persian",
+    "latin",
+  ];
+  return knownLanguages.some(
+    (lang) =>
+      s === lang ||
+      s.startsWith(lang + " ") ||
+      s.endsWith(" " + lang) ||
+      s.includes(` ${lang} `) ||
+      s.includes(`${lang}/`) ||
+      s.includes(`/${lang}`),
+  );
+}
+
+/**
+ * Checks whether a class level is Pre-Primary (Nursery, LKG, UKG).
+ * Pre-Primary classes focus on foundational strokes, rhymes, and phonics,
+ * and do not include senior examination sections like Note Making or Clauses.
+ */
+export function isPrePrimaryClass(className?: string | null): boolean {
+  if (!className) return false;
+  const c = className.trim().toLowerCase();
+  return (
+    c.includes("nursery") ||
+    c.includes("lkg") ||
+    c.includes("ukg") ||
+    c.includes("pre-primary") ||
+    c === "kg" ||
+    c.startsWith("kg ") ||
+    c.endsWith(" kg")
+  );
+}
+
+/**
+ * Returns the official standard non-chapter examination units for a given language.
+ * Uses official bilingual board terminology for English, Hindi, and Sanskrit.
+ */
+export function getLanguageNonChapterUnits(subject?: string | null): LanguageNonChapterUnit[] {
+  const canon = getCanonicalSubjectName(subject);
+  const s = (subject || "").toLowerCase();
+
+  if (canon === "Hindi" || s.includes("hindi") || s.includes("हिंदी") || s.includes("हिन्दी")) {
+    return [
+      {
+        domain: "reading",
+        title: "खंड क: अपठित बोध (अपठित गद्यांश एवं पद्यांश / Unseen Comprehension)",
+      },
+      {
+        domain: "writing",
+        title: "खंड ख: रचनात्मक लेखन एवं अभिव्यक्ति (निबंध, पत्र, विज्ञापन, संदेश, संवाद, अनुच्छेद लेखन / Writing Skills)",
+      },
+      {
+        domain: "grammar",
+        title: "खंड ग: व्यावहारिक व्याकरण (संधि, समास, रस, छंद, अलंकार, मुहावरे, वाक्य भेद / Grammar)",
+      },
+    ];
+  }
+
+  if (canon === "Sanskrit" || s.includes("sanskrit") || s.includes("संस्कृत")) {
+    return [
+      {
+        domain: "reading",
+        title: "भागः क: अपठित-अवबोधनम् (अपठित गद्यांश / Unseen Passage)",
+      },
+      {
+        domain: "writing",
+        title: "भागः ख: रचनात्मक-कार्यम् (पत्र-लेखनम्, चित्र-वर्णनम्, संस्कृतानुवादः / Writing Skills)",
+      },
+      {
+        domain: "grammar",
+        title: "भागः ग: अनुप्रयुक्त-व्याकरणम् (संधि, शब्दरूप, धातुरूप, प्रत्यय, कारक-उपपदविभक्ति / Grammar)",
+      },
+    ];
+  }
+
+  if (canon === "English" || s.includes("english") || s.includes("angrezi") || s.includes("अंग्रेजी")) {
+    return [
+      {
+        domain: "reading",
+        title: "Section A: Reading Skills (Unseen Comprehension Passage & Note Making)",
+      },
+      {
+        domain: "writing",
+        title: "Section B: Writing Skills (Notice, Advertisement, Poster, Letter, Article & Report Writing)",
+      },
+      {
+        domain: "grammar",
+        title: "Section C: Grammar (Tenses, Modals, Voice, Narration, Clauses, Gap Filling & Do as Directed)",
+      },
+    ];
+  }
+
+  // Any other regional or foreign language
+  return [
+    {
+      domain: "reading",
+      title: "Section A: Reading Comprehension (Unseen Passage)",
+    },
+    {
+      domain: "writing",
+      title: "Section B: Writing Skills (Composition, Letters & Creative Writing)",
+    },
+    {
+      domain: "grammar",
+      title: "Section C: Applied Grammar (Rules, Usage & Syntax)",
+    },
+  ];
+}
+
+/**
+ * Checks whether an existing chapter title already covers a specific language domain
+ * (reading, writing, grammar), avoiding false positives on literature chapters like "A Letter to God".
+ */
+export function hasDomainCovered(title: string, domain: LanguageUnitDomain): boolean {
+  const t = title.toLowerCase();
+  switch (domain) {
+    case "reading":
+      return (
+        /reading\s*skill/i.test(t) ||
+        /unseen\s*(passage|comprehension)/i.test(t) ||
+        /comprehension\s*passage/i.test(t) ||
+        /note\s*making/i.test(t) ||
+        /अपठित\s*(बोध|गद्यांश|पद्यांश|काव्यांश)/i.test(t) ||
+        /अपठित[\-\s]*अवबोधन/i.test(t)
+      );
+    case "writing":
+      return (
+        /writing\s*skill/i.test(t) ||
+        /creative\s*writing/i.test(t) ||
+        /letter\s*writing/i.test(t) ||
+        /notice\s*(writing|making)/i.test(t) ||
+        /poster\s*(writing|making)/i.test(t) ||
+        /advertisement\s*writing/i.test(t) ||
+        /article\s*writing/i.test(t) ||
+        /report\s*writing/i.test(t) ||
+        /paragraph\s*writing/i.test(t) ||
+        /essay\s*writing/i.test(t) ||
+        /long\s*composition/i.test(t) ||
+        /रचनात्मक\s*(लेखन|कार्य)/i.test(t) ||
+        /लेखन\s*कौशल/i.test(t) ||
+        /पत्र[\-\s]*लेखन/i.test(t) ||
+        /चित्र[\-\s]*वर्णन/i.test(t) ||
+        /रचनात्मक[\-\s]*कार्यम्/i.test(t) ||
+        /संस्कृतानुवाद/i.test(t) ||
+        /composition/i.test(t)
+      );
+    case "grammar":
+      return (
+        /grammar/i.test(t) ||
+        /व्याकरण/i.test(t) ||
+        /do\s*as\s*directed/i.test(t) ||
+        /gap\s*filling/i.test(t) ||
+        /sentence\s*correction/i.test(t) ||
+        /अनुप्रयुक्त/i.test(t)
+      );
+  }
+}
+
+/**
+ * Ensures that language syllabus chapters include all core non-chapter exam components:
+ * Reading Skills, Writing Skills, and Grammar.
+ * Only appends missing units sequentially after the maximum chapter number.
+ */
+export function ensureLanguageNonChapterUnits(
+  chapters: ParsedChapterItem[],
+  subject?: string | null,
+  className?: string | null,
+): {
+  chapters: ParsedChapterItem[];
+  addedUnits: string[];
+} {
+  if (!subject || !isLanguageSubject(subject)) {
+    return { chapters, addedUnits: [] };
+  }
+
+  if (isPrePrimaryClass(className)) {
+    return { chapters, addedUnits: [] };
+  }
+
+  if (!chapters || chapters.length === 0) {
+    return { chapters: chapters || [], addedUnits: [] };
+  }
+
+  const defaultUnits = getLanguageNonChapterUnits(subject);
+  const updatedChapters = [...chapters];
+  const addedUnits: string[] = [];
+
+  let nextNumber = updatedChapters.reduce((max, c) => (c.number > max ? c.number : max), 0) + 1;
+
+  for (const unit of defaultUnits) {
+    const alreadyExists = updatedChapters.some((c) => hasDomainCovered(c.title, unit.domain));
+    if (!alreadyExists) {
+      updatedChapters.push({
+        number: nextNumber++,
+        title: unit.title,
+      });
+      addedUnits.push(unit.domain);
+    }
+  }
+
+  return {
+    chapters: updatedChapters.sort((a, b) => a.number - b.number),
+    addedUnits,
+  };
+}
+
+import { STANDARD_CURRICULUM_PRESETS as RAW_CURRICULUM_PRESETS } from "./curriculumPresets";
+
+/**
+ * Standard curriculum presets enriched with non-chapter exam components (Reading, Writing, Grammar)
+ * for all school language subjects across Classes 1-12.
+ */
+export const STANDARD_CURRICULUM_PRESETS: StandardCurriculumPreset[] = RAW_CURRICULUM_PRESETS.map((preset) => {
+  if (isLanguageSubject(preset.subject) && !isPrePrimaryClass(preset.className)) {
+    const { chapters } = ensureLanguageNonChapterUnits([...preset.chapters], preset.subject, preset.className);
+    return {
+      ...preset,
+      chapters,
+    };
+  }
+  return preset;
+});
 
 /**
  * Robust CSV Line Parser that respects quoted fields and commas inside quotes.
@@ -189,13 +452,25 @@ export function parseTextSyllabus(
     seenNumbers.add(ch.number);
   }
 
+  const sortedChapters = chapters.sort((a, b) => a.number - b.number);
+  const { chapters: finalChapters, addedUnits } = ensureLanguageNonChapterUnits(
+    sortedChapters,
+    subject,
+    className
+  );
+  if (addedUnits.length > 0) {
+    warnings.push(
+      `Appended language exam sections (${addedUnits.join(", ")}) to "${bookTitle}".`
+    );
+  }
+
   return {
     books: [
       {
         title: bookTitle,
         className,
         subject,
-        chapters: chapters.sort((a, b) => a.number - b.number),
+        chapters: finalChapters,
       },
     ],
     errors,
@@ -295,10 +570,21 @@ export function parseCsvSyllabus(
     bookItem.chapters.push({ number: chNum, title: chTitle.trim() });
   }
 
-  const books = Array.from(booksMap.values()).map((b) => ({
-    ...b,
-    chapters: b.chapters.sort((a, b) => a.number - b.number),
-  }));
+  const books = Array.from(booksMap.values()).map((b) => {
+    const sorted = b.chapters.sort((a, b) => a.number - b.number);
+    const { chapters: finalChapters, addedUnits } = ensureLanguageNonChapterUnits(
+      sorted,
+      b.subject,
+      b.className,
+    );
+    if (addedUnits.length > 0) {
+      warnings.push(`Appended language exam sections (${addedUnits.join(", ")}) to "${b.title}".`);
+    }
+    return {
+      ...b,
+      chapters: finalChapters,
+    };
+  });
 
   if (books.length === 0) {
     errors.push({ message: "No valid textbooks or chapters could be parsed from the CSV file." });
@@ -352,7 +638,13 @@ export function parseJsonSyllabus(
           autoNum = num + 1;
         }
 
-        books.push({ title, className, subject, chapters: chapters.sort((a, b) => a.number - b.number) });
+        const sorted = chapters.sort((a, b) => a.number - b.number);
+        const { chapters: finalChapters, addedUnits } = ensureLanguageNonChapterUnits(sorted, subject, className);
+        if (addedUnits.length > 0) {
+          warnings.push(`Appended language exam sections (${addedUnits.join(", ")}) to "${title}".`);
+        }
+
+        books.push({ title, className, subject, chapters: finalChapters });
       }
     } else {
       // Array of chapters for a single book
@@ -367,11 +659,21 @@ export function parseJsonSyllabus(
         autoNum = num + 1;
       }
       const rawSub = defaults.defaultSubject || "General";
+      const subject = getCanonicalSubjectName(rawSub) || rawSub;
+      const className = defaults.defaultClass || "Class 10";
+      const title = defaults.defaultTitle || "Imported Textbook";
+
+      const sorted = chapters.sort((a, b) => a.number - b.number);
+      const { chapters: finalChapters, addedUnits } = ensureLanguageNonChapterUnits(sorted, subject, className);
+      if (addedUnits.length > 0) {
+        warnings.push(`Appended language exam sections (${addedUnits.join(", ")}) to "${title}".`);
+      }
+
       books.push({
-        title: defaults.defaultTitle || "Imported Textbook",
-        className: defaults.defaultClass || "Class 10",
-        subject: getCanonicalSubjectName(rawSub) || rawSub,
-        chapters: chapters.sort((a, b) => a.number - b.number),
+        title,
+        className,
+        subject,
+        chapters: finalChapters,
       });
     }
   } else if (parsed && typeof parsed === "object") {
@@ -394,7 +696,13 @@ export function parseJsonSyllabus(
       autoNum = num + 1;
     }
 
-    books.push({ title, className, subject, chapters: chapters.sort((a, b) => a.number - b.number) });
+    const sorted = chapters.sort((a, b) => a.number - b.number);
+    const { chapters: finalChapters, addedUnits } = ensureLanguageNonChapterUnits(sorted, subject, className);
+    if (addedUnits.length > 0) {
+      warnings.push(`Appended language exam sections (${addedUnits.join(", ")}) to "${title}".`);
+    }
+
+    books.push({ title, className, subject, chapters: finalChapters });
   } else {
     errors.push({ message: "JSON root must be an array or an object." });
   }
@@ -410,6 +718,8 @@ export function parseSyllabusContent(
   content: string,
   defaults: { defaultTitle?: string; defaultClass?: string; defaultSubject?: string } = {},
 ): SyllabusImportResult {
+  let result: SyllabusImportResult;
+
   if (format === "preset") {
     const preset = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === content.trim());
     if (!preset) {
@@ -419,28 +729,52 @@ export function parseSyllabusContent(
         warnings: [],
       };
     }
-    return {
+    const finalSubject = defaults.defaultSubject
+      ? normalizePresetSubject(preset.subject, defaults.defaultSubject)
+      : preset.subject;
+    const finalClass = defaults.defaultClass || preset.className;
+    const { chapters: ensuredChapters, addedUnits } = ensureLanguageNonChapterUnits(
+      [...preset.chapters],
+      finalSubject,
+      finalClass,
+    );
+    const warnings: string[] = [];
+    if (addedUnits.length > 0) {
+      warnings.push(`Appended language exam sections (${addedUnits.join(", ")}) to "${preset.title}".`);
+    }
+    result = {
       books: [
         {
-          title: preset.title,
-          className: preset.className,
-          subject: preset.subject,
-          chapters: [...preset.chapters],
+          title: defaults.defaultTitle || preset.title,
+          className: finalClass,
+          subject: finalSubject,
+          chapters: ensuredChapters,
         },
       ],
       errors: [],
-      warnings: [],
+      warnings,
     };
+  } else if (format === "csv") {
+    result = parseCsvSyllabus(content, defaults);
+  } else if (format === "json") {
+    result = parseJsonSyllabus(content, defaults);
+  } else {
+    // Fallback to text / freeform
+    result = parseTextSyllabus(content, defaults);
   }
 
-  if (format === "csv") {
-    return parseCsvSyllabus(content, defaults);
+  // Final assurance across all books returned
+  for (const book of result.books) {
+    const { chapters: ensured, addedUnits } = ensureLanguageNonChapterUnits(
+      book.chapters,
+      book.subject,
+      book.className,
+    );
+    book.chapters = ensured;
+    if (addedUnits.length > 0 && !result.warnings.some((w) => w.includes(book.title))) {
+      result.warnings.push(`Appended language exam sections (${addedUnits.join(", ")}) to "${book.title}".`);
+    }
   }
 
-  if (format === "json") {
-    return parseJsonSyllabus(content, defaults);
-  }
-
-  // Fallback to text / freeform
-  return parseTextSyllabus(content, defaults);
+  return result;
 }

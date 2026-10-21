@@ -1052,22 +1052,34 @@ export function resolveQuestionChapter(
   }
 
   // 4. Section title and question text skill/domain inference (e.g. Reading, Writing, Grammar)
-  const context = (normalizeText(impSecTitle) + " " + qTextNorm).toLowerCase();
+  const context = (impSecTitle + " " + fullQText + " " + normalizeText(impSecTitle) + " " + qTextNorm).toLowerCase();
 
-  // Reading Skills
+  // Reading Skills (English / Hindi / Sanskrit / General)
   if (
     context.includes("reading") ||
     context.includes("unseen") ||
     context.includes("note making") ||
-    context.includes("comprehension")
+    context.includes("comprehension") ||
+    context.includes("passage") ||
+    context.includes("अपठित") ||
+    context.includes("गद्यांश") ||
+    context.includes("पद्यांश") ||
+    context.includes("काव्यांश") ||
+    context.includes("अवबोधन") ||
+    context.includes("बोध")
   ) {
     const readingCh = bookChapters.find(
-      (c) => /reading\s*skill/i.test(c.title) || /unseen\s*passage/i.test(c.title)
+      (c) =>
+        /reading\s*skill/i.test(c.title) ||
+        /unseen/i.test(c.title) ||
+        /comprehension/i.test(c.title) ||
+        /अपठित/i.test(c.title) ||
+        /अवबोधन/i.test(c.title)
     );
     if (readingCh) return readingCh;
   }
 
-  // Writing Skills
+  // Writing Skills (English / Hindi / Sanskrit / General)
   if (
     context.includes("writing") ||
     context.includes("notice") ||
@@ -1078,15 +1090,31 @@ export function resolveQuestionChapter(
     context.includes("report") ||
     context.includes("composition") ||
     context.includes("speech") ||
-    context.includes("debate")
+    context.includes("debate") ||
+    context.includes("essay") ||
+    context.includes("paragraph") ||
+    context.includes("रचनात्मक") ||
+    context.includes("लेखन") ||
+    context.includes("निबंध") ||
+    context.includes("पत्र") ||
+    context.includes("संवाद") ||
+    context.includes("संदेश") ||
+    context.includes("अनुच्छेद") ||
+    context.includes("चित्र-वर्णन") ||
+    context.includes("संस्कृतानुवाद")
   ) {
     const writingCh = bookChapters.find(
-      (c) => /writing\s*skill/i.test(c.title) || /composition/i.test(c.title)
+      (c) =>
+        /writing\s*skill/i.test(c.title) ||
+        /composition/i.test(c.title) ||
+        /रचनात्मक/i.test(c.title) ||
+        /लेखन/i.test(c.title) ||
+        /कार्यम्/i.test(c.title)
     );
     if (writingCh) return writingCh;
   }
 
-  // Grammar
+  // Grammar (English / Hindi / Sanskrit / General)
   if (
     context.includes("grammar") ||
     context.includes("do as directed") ||
@@ -1094,9 +1122,29 @@ export function resolveQuestionChapter(
     context.includes("gap filling") ||
     context.includes("sentence correction") ||
     context.includes("voice") ||
-    context.includes("clause")
+    context.includes("clause") ||
+    context.includes("व्याकरण") ||
+    context.includes("संधि") ||
+    context.includes("समास") ||
+    context.includes("रस") ||
+    context.includes("छंद") ||
+    context.includes("अलंकार") ||
+    context.includes("मुहावरे") ||
+    context.includes("वाक्य") ||
+    context.includes("प्रत्यय") ||
+    context.includes("उपसर्ग") ||
+    context.includes("शब्दरूप") ||
+    context.includes("धातुरूप") ||
+    context.includes("कारक") ||
+    context.includes("विभक्ति") ||
+    context.includes("अनुप्रयुक्त")
   ) {
-    const grammarCh = bookChapters.find((c) => /grammar/i.test(c.title));
+    const grammarCh = bookChapters.find(
+      (c) =>
+        /grammar/i.test(c.title) ||
+        /व्याकरण/i.test(c.title) ||
+        /अनुप्रयुक्त/i.test(c.title)
+    );
     if (grammarCh) return grammarCh;
   }
 
@@ -1435,7 +1483,7 @@ function normalizeText(str: string): string {
   return str
     .toLowerCase()
     .replace(/[–—]/g, "-")
-    .replace(/[^a-z0-9]/g, "")
+    .replace(/[^\p{L}\p{N}]/gu, "")
     .trim();
 }
 

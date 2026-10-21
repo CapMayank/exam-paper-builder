@@ -2,7 +2,7 @@ import { body, HttpError, route } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { syllabusImportSchema } from "@/lib/schemas";
-import { parseSyllabusContent } from "@/lib/syllabusImport";
+import { ensureLanguageNonChapterUnits, isLanguageSubject, parseSyllabusContent } from "@/lib/syllabusImport";
 
 export const POST = route(async (req, _params, user) => {
   const data = await body(req, syllabusImportSchema);
@@ -12,6 +12,23 @@ export const POST = route(async (req, _params, user) => {
     customBooks && customBooks.length > 0
       ? { books: customBooks, errors: [], warnings: [] }
       : parseSyllabusContent(format as any, content || "", defaults);
+
+  // Ensure language non-chapter units (Reading, Writing, Grammar) across all books
+  for (const book of parsed.books) {
+    if (isLanguageSubject(book.subject)) {
+      const { chapters, addedUnits } = ensureLanguageNonChapterUnits(
+        book.chapters,
+        book.subject,
+        book.className,
+      );
+      book.chapters = chapters;
+      if (addedUnits.length > 0) {
+        parsed.warnings.push(
+          `Appended language exam sections (${addedUnits.join(", ")}) to "${book.title}".`,
+        );
+      }
+    }
+  }
 
   if (parsed.errors.length > 0 && parsed.books.length === 0) {
     throw new HttpError(400, parsed.errors.map((e) => e.message).join("; "));
@@ -39,6 +56,24 @@ export const POST = route(async (req, _params, user) => {
     const allParsedChapters = parsed.books.flatMap((b) => b.chapters);
     if (allParsedChapters.length === 0) {
       throw new HttpError(400, "No chapters found in syllabus content to import");
+    }
+
+    if (isLanguageSubject(targetBook.subject)) {
+      const combined = [
+        ...targetBook.chapters.map((c) => ({ number: c.number, title: c.title })),
+        ...allParsedChapters,
+      ];
+      const { chapters: ensuredCombined } = ensureLanguageNonChapterUnits(
+        combined,
+        targetBook.subject,
+        targetBook.className,
+      );
+      const existingTitles = new Set(targetBook.chapters.map((c) => c.title));
+      for (const ch of ensuredCombined) {
+        if (!existingTitles.has(ch.title) && !allParsedChapters.some((c) => c.title === ch.title)) {
+          allParsedChapters.push(ch);
+        }
+      }
     }
 
     let createdCount = 0;

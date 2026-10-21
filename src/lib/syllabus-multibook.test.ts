@@ -20,12 +20,18 @@ describe("Multi-Book & Granular Syllabus System", () => {
     expect(eng10).toBeDefined();
     expect(eng10?.isComposite).toBe(true);
     expect(eng10?.subBooks).toEqual(["First Flight", "Footprints Without Feet"]);
-    expect(eng10?.chapters.length).toBe(18);
+    expect(eng10?.chapters.length).toBe(21);
+    expect(eng10?.chapters[18].title).toContain("Reading Skills");
+    expect(eng10?.chapters[19].title).toContain("Writing Skills");
+    expect(eng10?.chapters[20].title).toContain("Grammar");
 
     const hindi10 = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "cbse-10-hindi-a");
     expect(hindi10).toBeDefined();
     expect(hindi10?.isComposite).toBe(true);
-    expect(hindi10?.chapters.length).toBe(15);
+    expect(hindi10?.chapters.length).toBe(18);
+    expect(hindi10?.chapters[15].title).toContain("अपठित बोध");
+    expect(hindi10?.chapters[16].title).toContain("रचनात्मक लेखन");
+    expect(hindi10?.chapters[17].title).toContain("व्यावहारिक व्याकरण");
   });
 
   it("covers primary, middle, and senior classes (Classes 1 to 12)", () => {
@@ -69,21 +75,24 @@ describe("Multi-Book & Granular Syllabus System", () => {
     expect(hindi12Core?.subject).toBe("Hindi / हिंदी");
     expect(hindi12Core?.isComposite).toBe(true);
     expect(hindi12Core?.subBooks).toEqual(["Aroh Part 2 (आरोह भाग 2)", "Vitan Part 2 (वितान भाग 2)"]);
-    expect(hindi12Core?.chapters.length).toBe(18);
+    expect(hindi12Core?.chapters.length).toBe(21);
     expect(hindi12Core?.chapters[0].title).toContain("[आरोह]");
     expect(hindi12Core?.chapters[15].title).toContain("[वितान]");
+    expect(hindi12Core?.chapters[18].title).toContain("अपठित बोध");
+    expect(hindi12Core?.chapters[19].title).toContain("रचनात्मक लेखन");
+    expect(hindi12Core?.chapters[20].title).toContain("व्यावहारिक व्याकरण");
 
     const hindi12Elective = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "cbse-12-hindi-elective");
     expect(hindi12Elective).toBeDefined();
     expect(hindi12Elective?.isComposite).toBe(true);
     expect(hindi12Elective?.subBooks).toEqual(["Antra Part 2 (अंतरा भाग 2)", "Antral Part 2 (अंतराल भाग 2)"]);
-    expect(hindi12Elective?.chapters.length).toBe(20);
+    expect(hindi12Elective?.chapters.length).toBe(23);
 
     // Class 11 Hindi Core, History, Pol Science, Geography, IP, Sociology, Psychology
     const hindi11 = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "cbse-11-hindi-core");
     expect(hindi11).toBeDefined();
     expect(hindi11?.isComposite).toBe(true);
-    expect(hindi11?.chapters.length).toBe(19);
+    expect(hindi11?.chapters.length).toBe(22);
 
     const hist11 = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "cbse-11-history");
     expect(hist11).toBeDefined();
@@ -133,11 +142,17 @@ describe("Multi-Book & Granular Syllabus System", () => {
     const hindi10b = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "cbse-10-hindi-b");
     expect(hindi10b).toBeDefined();
     expect(hindi10b?.isComposite).toBe(true);
-    expect(hindi10b?.chapters.length).toBe(17);
+    expect(hindi10b?.chapters.length).toBe(20);
+    expect(hindi10b?.chapters[17].title).toContain("अपठित बोध");
+    expect(hindi10b?.chapters[18].title).toContain("रचनात्मक लेखन");
+    expect(hindi10b?.chapters[19].title).toContain("व्यावहारिक व्याकरण");
 
     const sanskrit10 = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "cbse-10-sanskrit");
     expect(sanskrit10).toBeDefined();
-    expect(sanskrit10?.chapters.length).toBe(10);
+    expect(sanskrit10?.chapters.length).toBe(13);
+    expect(sanskrit10?.chapters[10].title).toContain("अपठित-अवबोधनम्");
+    expect(sanskrit10?.chapters[11].title).toContain("रचनात्मक-कार्यम्");
+    expect(sanskrit10?.chapters[12].title).toContain("अनुप्रयुक्त-व्याकरणम्");
 
     const ai10 = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "cbse-10-ai");
     expect(ai10).toBeDefined();

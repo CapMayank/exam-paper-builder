@@ -27,6 +27,8 @@ import { useAcademicSession } from "@/lib/academicSession";
 import { getCanonicalSubjectName, isSubjectMatching, normalizePresetSubject } from "@/lib/schoolCurriculum";
 import type { Book } from "@/lib/types";
 import {
+  ensureLanguageNonChapterUnits,
+  isLanguageSubject,
   parseSyllabusContent,
   STANDARD_CURRICULUM_PRESETS,
   type StandardCurriculumPreset,
@@ -246,12 +248,17 @@ export function SyllabusImportModal({
     if (activeTab === "rollover") {
       const book = existingBooks.find((b) => b.id === selectedRolloverBookId);
       if (book) {
+        const { chapters: ensuredChapters } = ensureLanguageNonChapterUnits(
+          book.chapters,
+          book.subject,
+          book.className,
+        );
         sourceBooks = [
           {
             title: rolloverTitle.trim() || book.title,
             className: book.className,
             subject: book.subject,
-            chapters: book.chapters,
+            chapters: ensuredChapters,
           },
         ];
       }
@@ -263,12 +270,17 @@ export function SyllabusImportModal({
           preset.subject,
           initialSubject || (filterSubject !== "ALL" ? filterSubject : undefined)
         );
+        const { chapters: ensuredChapters } = ensureLanguageNonChapterUnits(
+          preset.chapters,
+          finalSubject,
+          finalClass,
+        );
         sourceBooks = [
           {
             title: preset.title,
             className: finalClass,
             subject: finalSubject,
-            chapters: preset.chapters,
+            chapters: ensuredChapters,
           },
         ];
       }
@@ -549,17 +561,25 @@ export function SyllabusImportModal({
             bClass = initialClass.trim();
           }
 
+          const selectedChapters = b.chapters
+            .filter((c) => c.selected)
+            .map((c) => ({
+              number: c.number,
+              title: c.title.trim(),
+            }));
+
+          const { chapters: finalChapters } = ensureLanguageNonChapterUnits(
+            selectedChapters,
+            bSubject,
+            bClass,
+          );
+
           return {
             title: b.title.trim(),
             className: bClass,
             subject: bSubject,
             academicSession: currentSession,
-            chapters: b.chapters
-              .filter((c) => c.selected)
-              .map((c) => ({
-                number: c.number,
-                title: c.title.trim(),
-              })),
+            chapters: finalChapters,
           };
         })
         .filter((b) => b.chapters.length > 0);
