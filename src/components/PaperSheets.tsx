@@ -33,9 +33,9 @@ function renderBlock(b: Block, isContinuation: boolean): ReactNode {
 const CONTENT_W_MM = 182;
 const CONTENT_H_MM = 267;
 
-// A5 minus page padding (see .a5 in globals.css): 10mm sides, 10mm top, 12mm bottom.
-const A5_CONTENT_W_MM = 128.5;
-const A5_CONTENT_H_MM = 188;
+// A5 minus page padding (see .a5 in globals.css): 9mm sides, 8mm top, 15mm bottom.
+const A5_CONTENT_W_MM = 130.5;
+const A5_CONTENT_H_MM = 184;
 
 function extractSectionLetter(title: string, fallbackIndex: number): string {
   const match = title.match(/\b([A-Z])\b/i);
@@ -43,7 +43,7 @@ function extractSectionLetter(title: string, fallbackIndex: number): string {
   return String.fromCharCode(65 + (fallbackIndex % 26));
 }
 
-function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean): Block[] {
+function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSignatures?: boolean): Block[] {
   const { blueprint } = paper;
   const total = paper.progress.totalMarks;
   const examType = resolvePaperExamType(paper);
@@ -52,21 +52,26 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean): Block
   const blocks: Block[] = [];
 
   const isEffectiveCompact = compact || paper.printDensity === "COMPACT";
+  const effectiveShowSignatures = showSignatures !== undefined ? showSignatures : (paper.showSignatures === true);
   const questionBottomPadding =
-    paper.printDensity === "COMPACT" ? "2.5mm" : paper.printDensity === "COMFORTABLE" ? "5.5mm" : "4mm";
+    paper.printDensity === "COMPACT" || isEffectiveCompact
+      ? isA5 ? "2mm" : "2.5mm"
+      : paper.printDensity === "COMFORTABLE"
+      ? isA5 ? "4mm" : "5.5mm"
+      : isA5 ? "3mm" : "4mm";
   const resolvedLogoSrc =
     paper.schoolLogo === "NONE"
       ? null
       : paper.logoPath
       ? imageUrl(paper.logoPath)
       : paper.schoolLogo || DEFAULT_SCHOOL_LOGO;
-  const logoBoxSize = isA5 ? "12.5mm" : "15.5mm";
+  const logoBoxSize = isA5 ? "12mm" : "15.5mm";
   const isPrePrimary = isPrePrimaryClass(blueprint.book.className);
 
   if (isPrePrimary) {
     blocks.push({
       key: "kdg-header",
-      keepWithNext: true,
+      keepWithNext: false,
       node: (
         <div style={{ paddingBottom: "3mm" }}>
           <WorkbookHeader
@@ -84,17 +89,17 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean): Block
   } else {
     blocks.push({
       key: "header",
-      keepWithNext: true,
+      keepWithNext: false,
       node: (
-        <div style={{ paddingBottom: "3mm" }}>
+        <div style={{ paddingBottom: isA5 ? "2mm" : "3mm" }}>
           {/* Top Board Meta Bar: Question Count, Set Box, Subject Code */}
           <div
           style={{
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
-            marginBottom: "2mm",
-            fontSize: "8.5pt",
+            marginBottom: isA5 ? "1.5mm" : "2mm",
+            fontSize: isA5 ? "7.5pt" : "8.5pt",
             borderBottom: "1px solid #cbd5e1",
             paddingBottom: "1.5mm",
           }}
@@ -107,9 +112,9 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean): Block
             <div
               style={{
                 border: "2px solid #000",
-                padding: "1px 8px",
+                padding: isA5 ? "0.5px 6px" : "1px 8px",
                 fontWeight: 800,
-                fontSize: "9.5pt",
+                fontSize: isA5 ? "8.5pt" : "9.5pt",
                 letterSpacing: "0.05em",
               }}
             >
@@ -158,11 +163,11 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean): Block
             >
               {paper.schoolName || DEFAULT_SCHOOL_NAME}
             </div>
-            <div style={{ fontSize: isA5 ? "9.5pt" : "11pt", fontWeight: 700, marginTop: "0.6mm" }}>
+            <div style={{ fontSize: isA5 ? "9pt" : "11pt", fontWeight: 700, marginTop: "0.6mm" }}>
               {examHeading} ({sessionText})
               {paper.examDate ? ` · ${new Date(paper.examDate + "T00:00:00").toLocaleDateString("en-GB")}` : ""}
             </div>
-            <div style={{ fontSize: isA5 ? "9pt" : "10.5pt", fontWeight: 600, marginTop: "0.5mm" }}>
+            <div style={{ fontSize: isA5 ? "8.5pt" : "10.5pt", fontWeight: 600, marginTop: "0.5mm" }}>
               {blueprint.book.className} — {blueprint.book.subject}
             </div>
           </div>
@@ -175,12 +180,12 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean): Block
           style={{
             display: "flex",
             justifyContent: "space-between",
-            marginTop: "2mm",
+            marginTop: isA5 ? "1.5mm" : "2mm",
             fontWeight: 700,
-            fontSize: isA5 ? "8.5pt" : "9.5pt",
+            fontSize: isA5 ? "8pt" : "9.5pt",
             borderTop: "1.2px solid #000",
             borderBottom: "1.2px solid #000",
-            padding: "1.2mm 1mm",
+            padding: isA5 ? "1mm 0.8mm" : "1.2mm 1mm",
           }}
         >
           <span>
@@ -201,21 +206,21 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean): Block
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
-              marginTop: "2.5mm",
-              fontSize: "8.5pt",
+              marginTop: isA5 ? "1.5mm" : "2.5mm",
+              fontSize: isA5 ? "7.5pt" : "8.5pt",
               border: "1px solid #333",
-              padding: "2mm 2.5mm",
+              padding: isA5 ? "1.2mm 2mm" : "2mm 2.5mm",
               borderRadius: "2px",
               backgroundColor: "#fafafa",
             }}
           >
             <div>
               <span style={{ fontWeight: 700 }}>Student Name: </span>
-              <span style={{ display: "inline-block", width: "42mm", borderBottom: "1px solid #000" }}>&nbsp;</span>
+              <span style={{ display: "inline-block", width: isA5 ? "30mm" : "42mm", borderBottom: "1px solid #000" }}>&nbsp;</span>
             </div>
             <div>
               <span style={{ fontWeight: 700 }}>Class &amp; Sec: </span>
-              <span style={{ display: "inline-block", width: "16mm", borderBottom: "1px solid #000" }}>&nbsp;</span>
+              <span style={{ display: "inline-block", width: isA5 ? "12mm" : "16mm", borderBottom: "1px solid #000" }}>&nbsp;</span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "1.5mm" }}>
               <span style={{ fontWeight: 700 }}>Roll No:</span>
@@ -224,8 +229,8 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean): Block
                   <span
                     key={i}
                     style={{
-                      width: "4.5mm",
-                      height: "5.2mm",
+                      width: isA5 ? "3.6mm" : "4.5mm",
+                      height: isA5 ? "4.5mm" : "5.2mm",
                       border: "1.2px solid #000",
                       display: "inline-block",
                       backgroundColor: "#fff",
@@ -234,10 +239,10 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean): Block
                 ))}
               </span>
             </div>
-            {paper.showSignatures !== false && (
+            {effectiveShowSignatures && (
               <div>
                 <span style={{ fontWeight: 700 }}>Invigilator Sign: </span>
-                <span style={{ display: "inline-block", width: "20mm", borderBottom: "1px solid #000" }}>&nbsp;</span>
+                <span style={{ display: "inline-block", width: isA5 ? "16mm" : "20mm", borderBottom: "1px solid #000" }}>&nbsp;</span>
               </div>
             )}
           </div>
@@ -247,16 +252,16 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean): Block
         {paper.generalInstructions && (
           <div
             style={{
-              marginTop: "2.5mm",
-              padding: "2mm 3mm",
+              marginTop: isA5 ? "1.5mm" : "2.5mm",
+              padding: isA5 ? "1.5mm 2mm" : "2mm 3mm",
               backgroundColor: "#f8fafc",
               border: "1px solid #cbd5e1",
               borderRadius: "3px",
-              fontSize: "8.5pt",
-              lineHeight: 1.45,
+              fontSize: isA5 ? "7.5pt" : "8.5pt",
+              lineHeight: 1.35,
             }}
           >
-            <div style={{ fontWeight: 700, textDecoration: "underline", marginBottom: "1mm", color: "#0f172a" }}>
+            <div style={{ fontWeight: 700, textDecoration: "underline", marginBottom: "0.5mm", color: "#0f172a" }}>
               General Instructions / सामान्य निर्देश:
             </div>
             <div style={{ whiteSpace: "pre-line", color: "#334155" }}>{paper.generalInstructions}</div>
@@ -298,25 +303,25 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean): Block
         key: `sec-main-${s.id}`,
         keepWithNext: true,
         node: (
-          <div style={{ padding: "3mm 0 1.5mm" }}>
+          <div style={{ padding: isA5 ? "2mm 0 1mm" : "3mm 0 1.5mm" }}>
             <div
               style={{
                 display: "flex",
                 justifyContent: "space-between",
                 fontWeight: 700,
                 borderBottom: "1.5px solid #000",
-                paddingBottom: "1mm",
+                paddingBottom: "0.8mm",
                 textTransform: "uppercase",
-                fontSize: isA5 ? "10pt" : "11pt",
+                fontSize: isA5 ? "9.5pt" : "11pt",
               }}
             >
               <span>{s.title}</span>
-              <span style={{ fontWeight: 600, fontSize: isA5 ? "8.5pt" : "9.5pt" }}>
+              <span style={{ fontWeight: 600, fontSize: isA5 ? "8pt" : "9.5pt" }}>
                 {groupCount} Questions · {groupMarks} Marks
               </span>
             </div>
             {s.instructions && (
-              <div style={{ fontStyle: "italic", marginTop: "1mm", fontSize: "8.5pt", color: "#334155" }}>
+              <div style={{ fontStyle: "italic", marginTop: "0.8mm", fontSize: isA5 ? "7.5pt" : "8.5pt", color: "#334155" }}>
                 {s.instructions}
               </div>
             )}
@@ -336,12 +341,12 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean): Block
               display: "flex",
               justifyContent: "space-between",
               fontWeight: 600,
-              fontSize: isA5 ? "8.5pt" : "9pt",
+              fontSize: isA5 ? "8pt" : "9pt",
               color: "#1e293b",
               backgroundColor: "#f8fafc",
               borderLeft: "2.5px solid #475569",
-              padding: "1mm 2mm",
-              margin: "1.5mm 0 2mm",
+              padding: isA5 ? "0.8mm 1.5mm" : "1mm 2mm",
+              margin: isA5 ? "1mm 0 1.5mm" : "1.5mm 0 2mm",
             }}
           >
             <span>{QUESTION_TYPE_LABEL[s.type as keyof typeof QUESTION_TYPE_LABEL] || s.type}</span>
@@ -367,13 +372,15 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean): Block
       const canDecompose = !isPrePrimary && !it.orQuestion && subparts && subparts.length > 1;
 
       if (canDecompose) {
-        // 1. Passage / Stem block: glued with next (Subpart 0) to prevent orphaning alone at page bottom
+        // Long passage stems (> 200 chars) are substantial content and do not need to be forced
+        // onto the same page as subpart 0; short prompt stems (<= 200 chars) keep keepWithNext: true.
+        const isLongStem = (it.question.text || "").length > 200;
         blocks.push({
           key: `${it.id}-stem`,
-          keepWithNext: true,
+          keepWithNext: !isLongStem,
           groupId: it.id,
           render: () => (
-            <div style={{ paddingBottom: "2.5mm" }}>
+            <div style={{ paddingBottom: isA5 ? "1.5mm" : "2.5mm" }}>
               <QuestionView
                 q={it.question}
                 number={n}
@@ -382,6 +389,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean): Block
                 marksStyle={paper.marksStyle || "RIGHT_COLUMN"}
                 compact={isEffectiveCompact}
                 renderMode="STEM_ONLY"
+                isA5={isA5}
               />
             </div>
           ),
@@ -395,7 +403,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean): Block
             keepWithNext: false,
             groupId: it.id,
             render: ({ isContinuation }) => (
-              <div style={{ paddingBottom: isLastSubpart ? questionBottomPadding : "2.5mm" }}>
+              <div style={{ paddingBottom: isLastSubpart ? questionBottomPadding : isA5 ? "1.5mm" : "2.5mm" }}>
                 <QuestionView
                   q={it.question}
                   number={n}
@@ -406,6 +414,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean): Block
                   renderMode="SUBPART_ONLY"
                   subpartIndex={spIdx}
                   isContinuation={isContinuation}
+                  isA5={isA5}
                 />
               </div>
             ),
@@ -426,6 +435,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean): Block
                 marks={s.marksEach}
                 marksStyle={paper.marksStyle || "RIGHT_COLUMN"}
                 compact={isEffectiveCompact}
+                isA5={isA5}
               />
             </div>
           ),
@@ -441,13 +451,13 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean): Block
       <div
         style={{
           textAlign: "center",
-          paddingTop: "5mm",
+          paddingTop: isA5 ? "3mm" : "5mm",
           paddingBottom: "2mm",
-          fontSize: "9pt",
+          fontSize: isA5 ? "8pt" : "9pt",
           fontWeight: 700,
           letterSpacing: "0.06em",
           borderTop: "1.2px dashed #94a3b8",
-          marginTop: "4mm",
+          marginTop: isA5 ? "2.5mm" : "4mm",
           color: "#334155",
         }}
       >
@@ -558,7 +568,8 @@ export function PaperSheets({
   view,
   zoom,
   compact,
-  includeRoughWork = true,
+  includeRoughWork = false,
+  showSignatures,
   onInfo,
 }: {
   paper: PaperData;
@@ -566,11 +577,15 @@ export function PaperSheets({
   zoom: number;
   compact?: boolean;
   includeRoughWork?: boolean;
+  showSignatures?: boolean;
   onInfo?: (i: SheetsInfo) => void;
 }) {
   const isA5 = paper.layout === "BOOKLET_A4";
   const isBooklet = isBookletLayout(paper.layout);
-  const blocks = useMemo(() => buildBlocks(paper, compact, isA5), [paper, compact, isA5]);
+  const blocks = useMemo(
+    () => buildBlocks(paper, compact, isA5, showSignatures),
+    [paper, compact, isA5, showSignatures]
+  );
   const measureRef = useRef<HTMLDivElement>(null);
   const probeRef = useRef<HTMLDivElement>(null);
   const [pages, setPages] = useState<number[][] | null>(null);
@@ -598,7 +613,7 @@ export function PaperSheets({
         paginate(
           heights,
           blocks.map((b) => b.keepWithNext),
-          pageH - 2, // 2px slack for rounding
+          pageH - 6, // 6px safety buffer above bottom margin to prevent footer collision
           blocks.map((b) => b.groupId)
         )
       );

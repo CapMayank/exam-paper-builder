@@ -267,7 +267,7 @@ describe("Milestone 1: DTO Mapping & Safe Fallbacks", () => {
     expect(dto.marksStyle).toBe("INLINE");
     expect(dto.twoColumn).toBe(false);
     expect(dto.showCandidateDetails).toBe(true);
-    expect(dto.showSignatures).toBe(true);
+    expect(dto.showSignatures).toBe(false);
   });
 
   it("toBlueprintDto preserves subjectCode", () => {
@@ -302,7 +302,7 @@ describe("Milestone 1: Zod Schemas & Backward Compatible Defaults", () => {
     expect(parsed.numberingStyle).toBe("CONTINUOUS");
     expect(parsed.marksStyle).toBe("INLINE");
     expect(parsed.showCandidateDetails).toBe(true);
-    expect(parsed.showSignatures).toBe(true);
+    expect(parsed.showSignatures).toBe(false);
     expect(parsed.targetPages).toBeNull();
     expect(parsed.logoPath).toBeNull();
     expect(parsed.schoolLogo).toBeNull();

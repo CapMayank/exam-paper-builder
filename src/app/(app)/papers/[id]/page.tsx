@@ -935,7 +935,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={paper.showSignatures !== false}
+                    checked={paper.showSignatures === true}
                     onChange={(e) => patch({ showSignatures: e.target.checked })}
                     className="rounded text-indigo-600"
                   />

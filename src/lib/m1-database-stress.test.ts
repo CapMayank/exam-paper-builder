@@ -320,7 +320,7 @@ describe("Milestone 1 Empirical Stress Test: Prisma & Database Integrity", () =>
       expect(parsed.numberingStyle).toBe("CONTINUOUS");
       expect(parsed.marksStyle).toBe("INLINE");
       expect(parsed.showCandidateDetails).toBe(true);
-      expect(parsed.showSignatures).toBe(true);
+      expect(parsed.showSignatures).toBe(false);
       expect(parsed.examDate).toBe("");
       expect(parsed.paperSet).toBe("");
       expect(parsed.subjectCode).toBe("");
@@ -351,7 +351,7 @@ describe("Milestone 1 Empirical Stress Test: Prisma & Database Integrity", () =>
         expect(retrieved.numberingStyle).toBe("CONTINUOUS");
         expect(retrieved.marksStyle).toBe("INLINE");
         expect(retrieved.showCandidateDetails).toBe(true);
-        expect(retrieved.showSignatures).toBe(true);
+        expect(retrieved.showSignatures).toBe(false);
         expect(retrieved.examDate).toBe("");
         expect(retrieved.paperSet).toBe("");
         expect(retrieved.subjectCode).toBe("");

@@ -28,6 +28,7 @@ function SingleQuestionBody({
   renderMode = "FULL",
   subpartIndex,
   isContinuation,
+  isA5,
 }: {
   q: QuestionDto;
   number?: number;
@@ -38,8 +39,15 @@ function SingleQuestionBody({
   renderMode?: QuestionRenderMode;
   subpartIndex?: number;
   isContinuation?: boolean;
+  isA5?: boolean;
 }) {
   const displayLabel = numberLabel ?? (number !== undefined ? `${number}.` : undefined);
+  const optFontSize = isA5 ? "8pt" : "10pt";
+  const marksFontSize = isA5 ? "8pt" : "9.5pt";
+  const tableFontSize = isA5 ? "8pt" : "9.5pt";
+  const metaFontSize = isA5 ? "7.5pt" : "9pt";
+  const subpartMarginLeft = isA5 ? "5mm" : "7mm";
+  const lineHeight = isA5 ? 1.3 : 1.45;
 
   if (renderMode === "SUBPART_ONLY") {
     const sp = q.subparts && subpartIndex !== undefined ? q.subparts[subpartIndex] : null;
@@ -50,19 +58,19 @@ function SingleQuestionBody({
         : `Q. ${displayLabel}`
       : "Question";
     return (
-      <div style={{ marginLeft: "7mm" }}>
+      <div style={{ marginLeft: subpartMarginLeft }}>
         {isContinuation && (
           <div
             style={{
               display: "flex",
               alignItems: "center",
               gap: "2mm",
-              fontSize: "8.5pt",
+              fontSize: isA5 ? "7.5pt" : "8.5pt",
               fontWeight: 700,
               color: "#475569",
               padding: "0.5mm 0 1.5mm 0",
               borderBottom: "1px dashed #cbd5e1",
-              marginBottom: "2mm",
+              marginBottom: "1.5mm",
             }}
           >
             <span>{contLabel} (Continued / क्रमशः...)</span>
@@ -77,17 +85,17 @@ function SingleQuestionBody({
             borderLeft: "2px solid #e2e8f0",
           }}
         >
-          <span style={{ fontWeight: 700, minWidth: "7mm", color: "#334155" }}>
+          <span style={{ fontWeight: 700, minWidth: isA5 ? "5.5mm" : "7mm", color: "#334155" }}>
             {sp.label || `(${(subpartIndex ?? 0) + 1})`}
           </span>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight: 1.45 }}>
+            <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight }}>
               <MathText text={sp.text} />
             </div>
             {sp.options && sp.options.length > 0 && (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5mm 4mm", marginTop: "1.5mm" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: isA5 ? "1mm 3mm" : "1.5mm 4mm", marginTop: "1.5mm" }}>
                 {sp.options.map((opt, optIdx) => (
-                  <div key={optIdx} style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", fontSize: "10pt" }}>
+                  <div key={optIdx} className="opt-text" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", fontSize: optFontSize }}>
                     <span style={{ fontWeight: 600 }}>({LETTERS[optIdx].toLowerCase()})</span>{" "}
                     <MathText text={opt} />
                   </div>
@@ -95,7 +103,7 @@ function SingleQuestionBody({
               </div>
             )}
             {showAnswer && sp.answer && (
-              <div style={{ marginTop: "1mm", fontSize: "0.85em", color: "#166534" }}>
+              <div style={{ marginTop: "1mm", fontSize: isA5 ? "7.5pt" : "0.85em", color: "#166534" }}>
                 <span style={{ fontWeight: 600 }}>Answer:</span> <MathText text={sp.answer} />
               </div>
             )}
@@ -105,7 +113,7 @@ function SingleQuestionBody({
               style={{
                 whiteSpace: "nowrap",
                 fontWeight: 700,
-                fontSize: "9pt",
+                fontSize: marksFontSize,
                 paddingLeft: "2.5mm",
                 color: "#475569",
               }}
@@ -159,10 +167,10 @@ function SingleQuestionBody({
           </div>
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight: 1.45 }}>
+          <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight }}>
             <MathText text={q.text} />
             {marks !== undefined && marksStyle === "INLINE" && (
-              <span style={{ fontWeight: 700, fontSize: "9pt", marginLeft: "2mm", whiteSpace: "nowrap", color: "#334155" }}>
+              <span style={{ fontWeight: 700, fontSize: marksFontSize, marginLeft: "2mm", whiteSpace: "nowrap", color: "#334155" }}>
                 [{marks} {marks === 1 ? "Mark" : "Marks"}]
               </span>
             )}
@@ -172,13 +180,13 @@ function SingleQuestionBody({
             <img
               src={imageUrl(q.imagePath)}
               alt=""
-              style={{ display: "block", marginTop: "2mm", maxWidth: "100%", maxHeight: "70mm", objectFit: "contain" }}
+              style={{ display: "block", marginTop: "2mm", maxWidth: "100%", maxHeight: isA5 ? "50mm" : "70mm", objectFit: "contain" }}
             />
           )}
           {isMcq && q.options.length > 0 && (
-            <div style={{ display: "grid", gridTemplateColumns, gap: "1.5mm 4mm", marginTop: "2mm" }}>
+            <div style={{ display: "grid", gridTemplateColumns, gap: isA5 ? "1mm 3mm" : "1.5mm 4mm", marginTop: "2mm" }}>
               {q.options.map((o, i) => (
-                <div key={i} style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", fontSize: "10pt" }}>
+                <div key={i} className="opt-text" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", fontSize: optFontSize }}>
                   <span style={{ fontWeight: 600 }}>({LETTERS[i]?.toLowerCase() ?? i + 1})</span> <MathText text={o} />
                 </div>
               ))}
@@ -189,8 +197,8 @@ function SingleQuestionBody({
               style={{
                 width: "100%",
                 borderCollapse: "collapse",
-                marginTop: "2.5mm",
-                fontSize: "9.5pt",
+                marginTop: "2mm",
+                fontSize: tableFontSize,
                 border: "1px solid #cbd5e1",
               }}
             >
@@ -199,7 +207,7 @@ function SingleQuestionBody({
                   <th
                     style={{
                       textAlign: "left",
-                      padding: "1.2mm 2.5mm",
+                      padding: isA5 ? "0.8mm 2mm" : "1.2mm 2.5mm",
                       borderRight: "1px solid #cbd5e1",
                       width: "50%",
                       fontWeight: 700,
@@ -207,7 +215,7 @@ function SingleQuestionBody({
                   >
                     {hasHindi ? "स्तम्भ 'अ' (Column A)" : "Column A"}
                   </th>
-                  <th style={{ textAlign: "left", padding: "1.2mm 2.5mm", width: "50%", fontWeight: 700 }}>
+                  <th style={{ textAlign: "left", padding: isA5 ? "0.8mm 2mm" : "1.2mm 2.5mm", width: "50%", fontWeight: 700 }}>
                     {hasHindi ? "स्तम्भ 'ब' (Column B)" : "Column B"}
                   </th>
                 </tr>
@@ -215,13 +223,13 @@ function SingleQuestionBody({
               <tbody>
                 {matchPairs.map((pair, idx) => (
                   <tr key={idx} style={{ borderBottom: idx < matchPairs.length - 1 ? "1px solid #e2e8f0" : "none" }}>
-                    <td style={{ padding: "1.2mm 2.5mm", borderRight: "1px solid #cbd5e1", verticalAlign: "top" }}>
+                    <td style={{ padding: isA5 ? "0.8mm 2mm" : "1.2mm 2.5mm", borderRight: "1px solid #cbd5e1", verticalAlign: "top" }}>
                       <span style={{ fontWeight: 600, marginRight: "1.5mm" }}>
                         {ROMAN_LOWER[idx] ?? `(${idx + 1})`}
                       </span>
                       <MathText text={pair.left} />
                     </td>
-                    <td style={{ padding: "1.2mm 2.5mm", verticalAlign: "top" }}>
+                    <td style={{ padding: isA5 ? "0.8mm 2mm" : "1.2mm 2.5mm", verticalAlign: "top" }}>
                       <span style={{ fontWeight: 600, marginRight: "1.5mm" }}>
                         ({LETTERS[idx]?.toLowerCase() ?? idx + 1})
                       </span>
@@ -233,12 +241,12 @@ function SingleQuestionBody({
             </table>
           )}
           {q.type === "TRUE_FALSE" && (
-            <div style={{ marginTop: "1.5mm", fontStyle: "italic", fontSize: "9pt" }}>
+            <div style={{ marginTop: "1.5mm", fontStyle: "italic", fontSize: metaFontSize }}>
               {hasHindi ? "(सही / गलत — True / False)" : "(True / False)"}
             </div>
           )}
           {renderMode !== "STEM_ONLY" && q.subparts && q.subparts.length > 0 && (
-            <div style={{ marginTop: "2.5mm", display: "flex", flexDirection: "column", gap: "2.5mm" }}>
+            <div style={{ marginTop: "2mm", display: "flex", flexDirection: "column", gap: isA5 ? "1.5mm" : "2.5mm" }}>
               {q.subparts.map((sp, idx) => (
                 <div
                   key={idx}
@@ -250,17 +258,17 @@ function SingleQuestionBody({
                     borderLeft: "2px solid #e2e8f0",
                   }}
                 >
-                  <span style={{ fontWeight: 700, minWidth: "7mm", color: "#334155" }}>
+                  <span style={{ fontWeight: 700, minWidth: isA5 ? "5.5mm" : "7mm", color: "#334155" }}>
                     {sp.label || `(${idx + 1})`}
                   </span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight: 1.45 }}>
+                    <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight }}>
                       <MathText text={sp.text} />
                     </div>
                     {sp.options && sp.options.length > 0 && (
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5mm 4mm", marginTop: "1.5mm" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: isA5 ? "1mm 3mm" : "1.5mm 4mm", marginTop: "1.5mm" }}>
                         {sp.options.map((opt, optIdx) => (
-                          <div key={optIdx} style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", fontSize: "10pt" }}>
+                          <div key={optIdx} className="opt-text" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", fontSize: optFontSize }}>
                             <span style={{ fontWeight: 600 }}>({LETTERS[optIdx].toLowerCase()})</span>{" "}
                             <MathText text={opt} />
                           </div>
@@ -268,7 +276,7 @@ function SingleQuestionBody({
                       </div>
                     )}
                     {showAnswer && sp.answer && (
-                      <div style={{ marginTop: "1mm", fontSize: "0.85em", color: "#166534" }}>
+                      <div style={{ marginTop: "1mm", fontSize: isA5 ? "7.5pt" : "0.85em", color: "#166534" }}>
                         <span style={{ fontWeight: 600 }}>Answer:</span> <MathText text={sp.answer} />
                       </div>
                     )}
@@ -278,7 +286,7 @@ function SingleQuestionBody({
                       style={{
                         whiteSpace: "nowrap",
                         fontWeight: 700,
-                        fontSize: "9pt",
+                        fontSize: marksFontSize,
                         paddingLeft: "2.5mm",
                         color: "#475569",
                       }}
@@ -292,13 +300,13 @@ function SingleQuestionBody({
           )}
         </div>
         {marks !== undefined && marksStyle === "RIGHT_COLUMN" && (
-          <div style={{ whiteSpace: "nowrap", fontWeight: 700, fontSize: "9.5pt", paddingLeft: "3mm" }}>
+          <div style={{ whiteSpace: "nowrap", fontWeight: 700, fontSize: marksFontSize, paddingLeft: "3mm" }}>
             [{marks}]
           </div>
         )}
       </div>
       {renderMode !== "STEM_ONLY" && showAnswer && q.answer && (
-        <div style={{ marginTop: "1.5mm", marginLeft: displayLabel !== undefined ? "9.5mm" : 0, fontSize: "0.85em", color: "#166534" }}>
+        <div style={{ marginTop: "1.5mm", marginLeft: displayLabel !== undefined ? (isA5 ? "7.5mm" : "9.5mm") : 0, fontSize: isA5 ? "7.5pt" : "0.85em", color: "#166534" }}>
           <span style={{ fontWeight: 600 }}>Answer:</span>{" "}
           {isMcq && normalizedMcq ? (
             <span>
@@ -329,6 +337,7 @@ export function QuestionView({
   renderMode = "FULL",
   subpartIndex,
   isContinuation,
+  isA5,
 }: {
   q: QuestionDto;
   orQuestion?: QuestionDto | null;
@@ -341,6 +350,7 @@ export function QuestionView({
   renderMode?: QuestionRenderMode;
   subpartIndex?: number;
   isContinuation?: boolean;
+  isA5?: boolean;
 }) {
   if (renderMode === "SUBPART_ONLY") {
     return (
@@ -355,6 +365,7 @@ export function QuestionView({
           renderMode="SUBPART_ONLY"
           subpartIndex={subpartIndex}
           isContinuation={isContinuation}
+          isA5={isA5}
         />
       </div>
     );
@@ -380,6 +391,7 @@ export function QuestionView({
         marksStyle={marksStyle}
         showAnswer={showAnswer}
         renderMode={renderMode}
+        isA5={isA5}
       />
 
       {orQuestion && (
@@ -389,14 +401,14 @@ export function QuestionView({
               textAlign: "center",
               margin: "2.5mm 0",
               fontWeight: 700,
-              fontSize: "9pt",
+              fontSize: isA5 ? "8pt" : "9pt",
               letterSpacing: "0.08em",
               color: "#333",
             }}
           >
             — OR / अथवा —
           </div>
-          <SingleQuestionBody q={orQuestion} showAnswer={showAnswer} marksStyle={marksStyle} />
+          <SingleQuestionBody q={orQuestion} showAnswer={showAnswer} marksStyle={marksStyle} isA5={isA5} />
         </div>
       )}
 

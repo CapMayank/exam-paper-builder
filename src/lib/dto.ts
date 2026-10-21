@@ -282,7 +282,7 @@ export function toPaperDto(p: {
     numberingStyle,
     marksStyle,
     showCandidateDetails: p.showCandidateDetails ?? true,
-    showSignatures: p.showSignatures ?? true,
+    showSignatures: p.showSignatures ?? false,
   };
 }
 

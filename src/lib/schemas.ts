@@ -215,7 +215,7 @@ export const paperCreateSchema = z.object({
   numberingStyle: z.enum(NUMBERING_STYLES).default(DEFAULT_NUMBERING_STYLE),
   marksStyle: z.enum(MARKS_STYLES).default(DEFAULT_MARKS_STYLE),
   showCandidateDetails: z.boolean().default(true),
-  showSignatures: z.boolean().default(true),
+  showSignatures: z.boolean().default(false),
 });
 
 export const paperUpdateSchema = z

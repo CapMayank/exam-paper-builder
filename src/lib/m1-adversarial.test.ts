@@ -235,7 +235,7 @@ describe("Adversarial Challenge: paperCreateSchema & paperUpdateSchema Customiza
     expect(parsed.schoolLogo).toBeNull();
     expect(parsed.logoPath).toBeNull();
     expect(parsed.showCandidateDetails).toBe(true);
-    expect(parsed.showSignatures).toBe(true);
+    expect(parsed.showSignatures).toBe(false);
     expect(parsed.examDate).toBe("");
     expect(parsed.paperSet).toBe("");
     expect(parsed.subjectCode).toBe("");
@@ -568,7 +568,7 @@ describe("Adversarial Challenge: toPaperDto & toBlueprintDto Defaults & Fallback
     expect(dto.numberingStyle).toBe("CONTINUOUS");
     expect(dto.marksStyle).toBe("INLINE");
     expect(dto.showCandidateDetails).toBe(true);
-    expect(dto.showSignatures).toBe(true);
+    expect(dto.showSignatures).toBe(false);
   });
 
   it("toPaperDto synchronizes schoolLogo and logoPath when one is provided", () => {

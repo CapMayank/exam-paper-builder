@@ -30,8 +30,9 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
   const [view, setView] = useState<"reading" | "sheets">("sheets");
   const [zoom, setZoom] = useState<number | null>(null);
   const [info, setInfo] = useState<SheetsInfo | null>(null);
-  const [compact, setCompact] = useState(false);
-  const [includeRoughWork, setIncludeRoughWork] = useState(true);
+  const [compact, setCompact] = useState(true);
+  const [includeRoughWork, setIncludeRoughWork] = useState(false);
+  const [showSignatures, setShowSignatures] = useState<boolean>(false);
   const [showGuide, setShowGuide] = useState(false);
 
   useEffect(() => {
@@ -167,6 +168,21 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
               </button>
             </div>
 
+            {/* Invigilator Sign Box Toggle */}
+            <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-100 p-0.5 text-xs font-semibold">
+              <button
+                onClick={() => setShowSignatures(!showSignatures)}
+                className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 transition ${
+                  showSignatures
+                    ? "bg-white text-indigo-700 shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+                title="Toggle Invigilator Signature Box on or off"
+              >
+                <span>Invigilator Sign: {showSignatures ? "ON" : "OFF"}</span>
+              </button>
+            </div>
+
             {/* Quick Zoom Presets */}
             <div className="hidden lg:flex items-center gap-1 border-l border-slate-200 pl-2">
               <button
@@ -244,6 +260,7 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
           zoom={effectiveZoom}
           compact={compact}
           includeRoughWork={includeRoughWork}
+          showSignatures={showSignatures}
           onInfo={onInfo}
         />
       </div>
