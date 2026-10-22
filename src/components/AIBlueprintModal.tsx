@@ -20,7 +20,8 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ErrorBanner, Field, Modal, Spinner, useToast } from "@/components/ui";
-import { ACADEMIC_SESSIONS, DEFAULT_ACADEMIC_SESSION, EXAM_TYPES, EXAM_TYPE_LABEL, QUESTION_TYPES, QUESTION_TYPE_LABEL, type ExamType } from "@/lib/constants";
+import { ACADEMIC_SESSIONS, DEFAULT_ACADEMIC_SESSION, EXAM_TYPES, EXAM_TYPE_LABEL, QUESTION_TYPES, QUESTION_TYPE_LABEL, type ExamType, type QuestionType } from "@/lib/constants";
+import { normalizeQuestionType } from "@/lib/paperImport";
 import { api } from "@/lib/client";
 import type { Book, Blueprint } from "@/lib/types";
 
@@ -199,13 +200,24 @@ export function AIBlueprintModal({
       setDurationMin(Number(res.data.durationMin) || 180);
       setSubjectCode(res.data.subjectCode || "");
       setSections(
-        (res.data.sections || []).map((s) => ({
-          title: s.title || "Section",
-          instructions: s.instructions || "",
-          type: s.type || "MCQ",
-          count: Math.max(1, Number(s.count) || 1),
-          marksEach: Math.max(1, Number(s.marksEach) || 1),
-        })),
+        (res.data.sections || []).map((s) => {
+          let t = (s.type || "MCQ").trim().toUpperCase().replace(/[\s-]+/g, "_");
+          if (t === "ONE_WORD" || t === "ONEWORD" || t === "VSA" || t === "ONE_LINE") {
+            t = "VERY_SHORT";
+          } else if (!QUESTION_TYPES.includes(t as QuestionType)) {
+            t = normalizeQuestionType(t) as QuestionType;
+            if (!QUESTION_TYPES.includes(t as QuestionType)) {
+              t = "MCQ";
+            }
+          }
+          return {
+            title: s.title || "Section",
+            instructions: s.instructions || "",
+            type: t,
+            count: Math.max(1, Number(s.count) || 1),
+            marksEach: Math.max(1, Number(s.marksEach) || 1),
+          };
+        }),
       );
 
       // Map chapters
@@ -269,13 +281,24 @@ export function AIBlueprintModal({
         examType,
         durationMin: Number(durationMin) || 180,
         subjectCode: subjectCode.trim(),
-        sections: sections.map((s) => ({
-          title: s.title.trim(),
-          instructions: s.instructions.trim(),
-          type: s.type,
-          count: Number(s.count) || 1,
-          marksEach: Number(s.marksEach) || 1,
-        })),
+        sections: sections.map((s) => {
+          let t = (s.type || "MCQ").trim().toUpperCase().replace(/[\s-]+/g, "_");
+          if (t === "ONE_WORD" || t === "ONEWORD" || t === "VSA" || t === "ONE_LINE") {
+            t = "VERY_SHORT";
+          } else if (!QUESTION_TYPES.includes(t as QuestionType)) {
+            t = normalizeQuestionType(t) as QuestionType;
+            if (!QUESTION_TYPES.includes(t as QuestionType)) {
+              t = "MCQ";
+            }
+          }
+          return {
+            title: s.title.trim(),
+            instructions: s.instructions.trim(),
+            type: t,
+            count: Number(s.count) || 1,
+            marksEach: Number(s.marksEach) || 1,
+          };
+        }),
         chapters: chapters
           .filter((c) => c.marks > 0)
           .map((c) => ({

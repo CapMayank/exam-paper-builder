@@ -1,5 +1,6 @@
 import "server-only";
-import { isKindergartenType } from "./constants";
+import { isKindergartenType, QUESTION_TYPES } from "./constants";
+import { normalizeQuestionType } from "./paperImport";
 import { ensureLanguageNonChapterUnits } from "./syllabusImport";
 
 export interface GeminiCallResult<T> {
@@ -2093,19 +2094,19 @@ CRITICAL REQUIREMENTS:
 4. "durationMin": Examination time in minutes (e.g. 180 for 3:00 Hours, 150 for 2:30 Hours). Default to 180 if unspecified.
 5. "subjectCode": Official subject code if stated (e.g. "051"), otherwise empty string "".
 6. "sections": Array of question paper sections.
-   - For MP Board / State Board Objective Questions (e.g. Q1 to Q5 carrying 32 objective marks):
+   - For MP Board / State Board Objective Questions (e.g. Q1 to Q5 carrying 28 to 32 objective marks):
      Break down by question type:
      - Multiple Choice Questions (e.g., count: 6, marksEach: 1, type: "MCQ")
      - Fill in the Blanks (e.g., count: 6, marksEach: 1, type: "FILL_BLANK")
      - True / False (e.g., count: 6, marksEach: 1, type: "TRUE_FALSE")
-     - Match the Columns (e.g., count: 7, marksEach: 1, type: "MATCH_COLUMN")
-     - One Word / Sentence (e.g., count: 7, marksEach: 1, type: "ONE_WORD")
+     - Match the Columns (e.g., count: 5, marksEach: 1, type: "MATCH_COLUMN")
+     - One Word / One Sentence Answer (e.g., count: 5, marksEach: 1, type: "VERY_SHORT")
    - For Subjective Sections:
      - Very Short Answer (अति लघु उत्तरीय, 2 marks, ~30 words): type: "VERY_SHORT", marksEach: 2
      - Short Answer (लघु उत्तरीय, 3 marks, ~75 words): type: "SHORT", marksEach: 3
      - Long Answer / Analytical (दीर्घ उत्तरीय, 4 marks, ~120 words): type: "LONG", marksEach: 4
      - Case Study / Passage Extracts: type: "CASE_STUDY" or "UNSEEN_PASSAGE"
-   - Question Types must be chosen strictly from: "MCQ", "FILL_BLANK", "TRUE_FALSE", "MATCH_COLUMN", "ONE_WORD", "VERY_SHORT", "SHORT", "LONG", "CASE_STUDY", "UNSEEN_PASSAGE", "GRAMMAR", "WRITING_SKILL".
+   - Question Types must be chosen strictly from: "MCQ", "ASSERTION_REASON", "TRUE_FALSE", "FILL_BLANK", "MATCH_COLUMN", "VERY_SHORT", "SHORT", "LONG", "CASE_STUDY", "UNSEEN_PASSAGE", "REFERENCE_CONTEXT", "WRITING_SKILL", "GRAMMAR", "DRAW", "MAP_WORK".
 7. "chapters": Array of { "chapterId": string, "marks": number }.
    - Distribute the examination marks across the provided chapter IDs.
    - CRITICAL INVARIANT: The sum of marks in "chapters" MUST EXACTLY EQUAL the sum of (count * marksEach) across all "sections".
@@ -2172,7 +2173,7 @@ ${input.rawText || "Please inspect the attached blueprint document/image and ext
           { title: "Section A – Objective: Fill in Blanks", instructions: "Fill in the correct blanks", type: "FILL_BLANK", count: 6, marksEach: 1 },
           { title: "Section A – Objective: True / False", instructions: "State whether true or false", type: "TRUE_FALSE", count: 6, marksEach: 1 },
           { title: "Section A – Objective: Match Column", instructions: "Match Column A with Column B", type: "MATCH_COLUMN", count: 7, marksEach: 1 },
-          { title: "Section A – Objective: One Word Answer", instructions: "Answer in one sentence", type: "ONE_WORD", count: 7, marksEach: 1 },
+          { title: "Section A – Objective: One Word Answer", instructions: "Answer in one sentence", type: "VERY_SHORT", count: 7, marksEach: 1 },
           { title: "Section B – Very Short Answer", instructions: "Answer in about 30 words (2 marks each)", type: "VERY_SHORT", count: 10, marksEach: 2 },
           { title: "Section C – Short Answer", instructions: "Answer in about 75 words (3 marks each)", type: "SHORT", count: 4, marksEach: 3 },
           { title: "Section D – Long Answer", instructions: "Answer in about 120 words (4 marks each)", type: "LONG", count: 4, marksEach: 4 },
@@ -2218,8 +2219,27 @@ ${input.rawText || "Please inspect the attached blueprint document/image and ext
     mockFallback,
   });
 
-  // Post-process to ensure mathematical balance between sections and chapters
+  // Post-process to ensure mathematical balance between sections and chapters and strict type validity
   if (result.success && result.data && Array.isArray(result.data.sections)) {
+    // Sanitize and normalize all question types to valid system enum values
+    result.data.sections = result.data.sections.map((s) => {
+      let t = (s.type || "MCQ").trim().toUpperCase().replace(/[\s-]+/g, "_");
+      if (t === "ONE_WORD" || t === "ONEWORD" || t === "VSA" || t === "ONE_LINE") {
+        t = "VERY_SHORT";
+      } else if (!QUESTION_TYPES.includes(t as any)) {
+        t = normalizeQuestionType(t);
+        if (!QUESTION_TYPES.includes(t as any)) {
+          t = "MCQ";
+        }
+      }
+      return {
+        ...s,
+        type: t,
+        count: Math.max(1, Number(s.count) || 1),
+        marksEach: Math.max(1, Number(s.marksEach) || 1),
+      };
+    });
+
     const totalSecMarks = result.data.sections.reduce(
       (sum, s) => sum + (Number(s.count) || 1) * (Number(s.marksEach) || 1),
       0,

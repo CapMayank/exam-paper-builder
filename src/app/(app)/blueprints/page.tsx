@@ -291,14 +291,13 @@ export default function BlueprintsPage() {
         description={`Exam blueprints define marks, section formats, and chapter allocations for each subject in Session ${activeSession}.`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setAiBlueprintOpen(true)}
+            <Link
+              href="/blueprints/new?import=true&tab=ai"
               className="btn btn-ghost border border-indigo-200 bg-indigo-50/80 text-indigo-900 hover:bg-indigo-100 text-xs py-1.5 font-bold flex items-center gap-1.5"
-              title="Parse MP Board circular, syllabus image, PDF, or text into a blueprint using Gemini Vision"
+              title="Parse MP Board circular, syllabus image, PDF, or text into a blueprint using Gemini AI"
             >
               <Sparkles size={15} className="text-indigo-600" /> AI Blueprint Creator
-            </button>
+            </Link>
             <button
               type="button"
               onClick={() => setRolloverOpen(true)}

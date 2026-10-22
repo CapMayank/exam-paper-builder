@@ -68,6 +68,7 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importModalTab, setImportModalTab] = useState<"import" | "ai" | "examples">("import");
   const [jsonModalOpen, setJsonModalOpen] = useState(false);
 
   const [selectedClassFilter, setSelectedClassFilter] = useState("");
@@ -75,9 +76,12 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
 
   useEffect(() => {
     if (sp.import === "true" || sp.import === "1") {
+      if (sp.tab === "ai") {
+        setImportModalTab("ai");
+      }
       setImportModalOpen(true);
     }
-  }, [sp.import]);
+  }, [sp.import, sp.tab]);
 
   useEffect(() => {
     (async () => {
@@ -453,11 +457,25 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
           </button>
           <button
             type="button"
-            onClick={() => setImportModalOpen(true)}
-            className="btn btn-ghost border border-indigo-200 bg-indigo-50/70 text-indigo-900 hover:bg-indigo-100 flex items-center gap-1.5 text-xs font-semibold shadow-2xs"
+            onClick={() => {
+              setImportModalTab("ai");
+              setImportModalOpen(true);
+            }}
+            className="btn btn-ghost border border-indigo-200 bg-indigo-50/80 text-indigo-900 hover:bg-indigo-100 flex items-center gap-1.5 text-xs font-semibold shadow-2xs"
+            title="Parse blueprint circular, syllabus image, PDF, or text using Gemini AI"
+          >
+            <Sparkles size={14} className="text-indigo-600" /> AI Blueprint Creator
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setImportModalTab("import");
+              setImportModalOpen(true);
+            }}
+            className="btn btn-ghost border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 text-xs font-semibold shadow-2xs"
             title="Import blueprint specification from JSON or CSV"
           >
-            <Upload size={14} className="text-indigo-600" /> Import blueprint
+            <Upload size={14} className="text-slate-600" /> Import blueprint
           </button>
         </div>
       </div>
@@ -467,16 +485,31 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
           <div className="flex items-center gap-2">
             <Sparkles size={16} className="text-amber-600 shrink-0" />
             <span>
-              <strong>Have a syllabus or exam specification ready?</strong> Upload your JSON or CSV file to auto-configure sections, marks, and chapter weightages instantly.
+              <strong>Have an official syllabus circular or blueprint file ready?</strong> Use AI extraction or import JSON/CSV to configure sections and chapter marks instantly.
             </span>
           </div>
-          <button
-            type="button"
-            onClick={() => setImportModalOpen(true)}
-            className="btn btn-sm btn-ghost bg-slate-50 border border-slate-200 text-slate-900 hover:bg-slate-100 text-xs font-semibold shrink-0 flex items-center gap-1.5"
-          >
-            <Upload size={13} /> Import file
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                setImportModalTab("ai");
+                setImportModalOpen(true);
+              }}
+              className="btn btn-sm btn-ghost bg-indigo-50 border border-indigo-200 text-indigo-900 hover:bg-indigo-100 text-xs font-semibold flex items-center gap-1.5"
+            >
+              <Sparkles size={13} className="text-indigo-600" /> Extract with AI
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setImportModalTab("import");
+                setImportModalOpen(true);
+              }}
+              className="btn btn-sm btn-ghost bg-slate-50 border border-slate-200 text-slate-900 hover:bg-slate-100 text-xs font-semibold flex items-center gap-1.5"
+            >
+              <Upload size={13} /> Import file
+            </button>
+          </div>
         </div>
       )}
       
@@ -921,6 +954,7 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
 
       <BlueprintImportModal
         isOpen={importModalOpen}
+        initialTab={importModalTab}
         onClose={() => setImportModalOpen(false)}
         onApply={handleImportedBlueprint}
         book={book}

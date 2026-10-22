@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { QUESTION_TYPES } from "./constants";
 import {
   auditPaperWithGemini,
   generateQuestionsWithGemini,
@@ -440,6 +441,42 @@ describe("Gemini AI Integration Suite", () => {
       const totalSec = res.data.sections.reduce((sum, s) => sum + s.count * s.marksEach, 0);
       const totalCh = res.data.chapters.reduce((sum, c) => sum + c.marks, 0);
       expect(totalCh).toBe(totalSec);
+    });
+
+    it("safely normalizes MP Board objective question types including one-word questions into valid system types", async () => {
+      const mockChapters = [
+        { id: "ch_1", number: 1, title: "Sexual Reproduction in Flowering Plants" },
+        { id: "ch_2", number: 2, title: "Human Reproduction" },
+        { id: "ch_3", number: 3, title: "Reproductive Health" },
+      ];
+
+      const res = await parseBlueprintWithGemini({
+        rawText: `
+          Board of Secondary Education, Madhya Pradesh, Bhopal
+          Higher Secondary Examination Session 2026–27
+          Marks Scheme
+          Class: 12, Subject: Biology, Maximum Marks: 70
+          Q1: Multiple Choice Questions – 06
+          Q2: Fill in the blanks – 06
+          Q3: True / False – 06
+          Q4: Match the following – 05
+          Q5: One-word answer – 05
+          Question Nos. 6 to 12: Total 07 questions, each carrying 2 marks
+        `,
+        className: "Class 12",
+        subject: "Biology",
+        academicSession: "2026–27",
+        bookChapters: mockChapters,
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.data.sections.length).toBeGreaterThanOrEqual(1);
+
+      // Verify every section has a valid QuestionType from QUESTION_TYPES enum
+      for (const s of res.data.sections) {
+        expect(QUESTION_TYPES).toContain(s.type);
+        expect(s.type).not.toBe("ONE_WORD");
+      }
     });
   });
 });
