@@ -88,6 +88,11 @@ export function cleanLatexToUnicode(str: string): string {
   return str
     .replace(/\$\$([\s\S]+?)\$\$/g, "$1")
     .replace(/\$([^\$\n]+?)\$/g, "$1")
+    .replace(/\\text\{([^}]+)\}/g, "$1")
+    .replace(/\\mathrm\{([^}]+)\}/g, "$1")
+    .replace(/\\textit\{([^}]+)\}/g, "$1")
+    .replace(/\\textbf\{([^}]+)\}/g, "$1")
+    .replace(/\\operatorname\{([^}]+)\}/g, "$1")
     .replace(/\\int\b/g, "∫")
     .replace(/\\sqrt\{([^}]+)\}/g, "√($1)")
     .replace(/\\sqrt\b/g, "√")
@@ -157,6 +162,7 @@ export function isEntirelyMath(str: string): boolean {
     trimmed.includes("⁻¹") ||
     trimmed.includes("²") ||
     trimmed.includes("³") ||
+    /\\(frac|sqrt|alpha|beta|gamma|theta|lambda|pm|times|div|le|ge|ne|int|sum|prod)\b/.test(trimmed) ||
     /f'?\(x\)/.test(trimmed) ||
     /dy\/dx/.test(trimmed) ||
     /\b(sin|cos|tan|sec|log)\b/.test(trimmed) ||
@@ -170,8 +176,16 @@ export function isEntirelyMath(str: string): boolean {
  * Scans a plain text fragment for inline natural math (e.g. ∫ e^x [f(x)+f'(x)] dx, e^(-x), √x, etc.)
  * and converts detected math fragments to KaTeX-rendered segments.
  */
-function parseInlineMathFragments(plainText: string): MathSegment[] {
-  if (!plainText) return [];
+function parseInlineMathFragments(rawText: string): MathSegment[] {
+  if (!rawText) return [];
+
+  // Clean raw LaTeX formatting commands that were output outside math mode
+  const plainText = rawText
+    .replace(/\\text\{([^}]+)\}/g, "$1")
+    .replace(/\\mathrm\{([^}]+)\}/g, "$1")
+    .replace(/\\textit\{([^}]+)\}/g, "$1")
+    .replace(/\\textbf\{([^}]+)\}/g, "$1")
+    .replace(/\\operatorname\{([^}]+)\}/g, "$1");
 
   // If the entire text chunk is a standalone math expression, render as one math formula
   if (isEntirelyMath(plainText)) {

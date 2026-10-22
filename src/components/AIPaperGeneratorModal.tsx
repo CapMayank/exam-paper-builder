@@ -30,6 +30,7 @@ import type { Doc, GridSettings, SceneFile } from "@/components/figure-studio/ty
 import { api, imageUrl, uploadImage } from "@/lib/client";
 import {
   cleanMatchItem,
+  cleanOptionText,
   getMatchColumnInstruction,
   parseMatchColumnPairs,
   QUESTION_TYPE_LABEL,
@@ -774,7 +775,7 @@ export function AIPaperGeneratorModal({
                                   <span className="font-bold text-slate-400 font-mono text-[10px]">
                                     ({String.fromCharCode(65 + optIdx)})
                                   </span>
-                                  <MathText text={opt} />
+                                  <MathText text={cleanOptionText(opt)} />
                                 </div>
                               ))}
                             </div>

@@ -20,6 +20,7 @@ import { recordAudit } from "@/lib/audit";
 import { formatMathTextRuns, formatOptionPairRuns } from "@/lib/docxMath";
 import {
   cleanMatchItem,
+  cleanOptionText,
   DEFAULT_SCHOOL_NAME,
   EXAM_TYPE_LABEL,
   formatQuestionNumber,
@@ -323,8 +324,8 @@ export const GET = route(async (_req, params, user) => {
           if (Array.isArray(opts) && opts.length > 0) {
             const letters = ["A", "B", "C", "D", "E", "F"];
             for (let i = 0; i < opts.length; i += 2) {
-              const leftOpt = `(${letters[i]}) ${opts[i]}`;
-              const rightOpt = i + 1 < opts.length ? `(${letters[i + 1]}) ${opts[i + 1]}` : "";
+              const leftOpt = `(${letters[i]}) ${cleanOptionText(opts[i])}`;
+              const rightOpt = i + 1 < opts.length ? `(${letters[i + 1]}) ${cleanOptionText(opts[i + 1])}` : "";
               paragraphs.push(
                 new Paragraph({
                   indent: { left: 720 }, // 0.5 inch indent

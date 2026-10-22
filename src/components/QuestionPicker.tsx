@@ -8,7 +8,7 @@ import { QuestionView } from "@/components/QuestionView";
 import { ErrorBanner, Modal, Spinner } from "@/components/ui";
 import { whyCannotAdd, type BlueprintDef } from "@/lib/blueprint";
 import { api } from "@/lib/client";
-import { DIFFICULTIES, isKindergartenType, QUESTION_TYPE_LABEL } from "@/lib/constants";
+import { cleanOptionText, DIFFICULTIES, isKindergartenType, QUESTION_TYPE_LABEL } from "@/lib/constants";
 import { type Book, type PaperData, type QuestionDto, type Section, subpartsTotalMarks } from "@/lib/types";
 import { MathText } from "./MathText";
 import type { GeneratedQuestionItem } from "@/lib/gemini";
@@ -749,7 +749,7 @@ export function QuestionPicker({
                               {letter}
                             </span>
                             <div className="min-w-0 flex-1">
-                              <MathText text={opt} />
+                              <MathText text={cleanOptionText(opt)} />
                             </div>
                             {isCorrect && (
                               <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wide">

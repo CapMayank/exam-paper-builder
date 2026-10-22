@@ -1,5 +1,5 @@
 import "server-only";
-import { isKindergartenType, QUESTION_TYPES } from "./constants";
+import { cleanOptionText, isKindergartenType, isMcqLikeType, QUESTION_TYPES } from "./constants";
 import {
   findEligibleDiagrams,
   isSectionVisuallyEligible,
@@ -498,11 +498,21 @@ A student took three test tubes A, B, and C containing clean iron nails. In tube
     ];
   };
 
-  return callGeminiApi<GeneratedQuestionItem[]>(userPrompt, systemPrompt, {
+  const callResult = await callGeminiApi<GeneratedQuestionItem[]>(userPrompt, systemPrompt, {
     json: true,
     apiKey,
     mockFallback: fallbackQuestions,
   });
+
+  if (callResult.success && Array.isArray(callResult.data)) {
+    callResult.data = callResult.data.map((item) => ({
+      ...item,
+      options: Array.isArray(item.options) ? item.options.map((o) => cleanOptionText(String(o).trim())) : [],
+      answer: cleanOptionText(item.answer || ""),
+    }));
+  }
+
+  return callResult;
 }
 
 /* ------------------------------------------------------------------ */
@@ -964,16 +974,22 @@ JSON Array Output Schema:
 
     const qType = normalizeQuestionType(rawQ.type || normalizedType);
     const qText = typeof rawQ.text === "string" && rawQ.text.trim() ? rawQ.text.trim() : `Question regarding ${slot.chapterTitle}`;
-    const qOptions = Array.isArray(rawQ.options) ? rawQ.options.map((o: unknown) => String(o).trim()) : [];
+    const qOptions = Array.isArray(rawQ.options) ? rawQ.options.map((o: unknown) => cleanOptionText(String(o).trim())) : [];
     const qSubparts = Array.isArray(rawQ.subparts)
       ? rawQ.subparts.map((sp: any, spIdx: number) => ({
           label: String(sp.label || `(${spIdx + 1})`),
           text: String(sp.text || ""),
           marks: Number(sp.marks) || 1,
-          answer: sp.answer ? String(sp.answer) : undefined,
+          options: Array.isArray(sp.options) ? sp.options.map((o: unknown) => cleanOptionText(String(o).trim())) : undefined,
+          answer: sp.answer ? (isMcqLikeType(qType) ? cleanOptionText(String(sp.answer)) : String(sp.answer)) : undefined,
         }))
       : [];
-    const qAnswer = typeof rawQ.answer === "string" ? rawQ.answer : "Refer to standard model answer.";
+    const qAnswer =
+      typeof rawQ.answer === "string"
+        ? isMcqLikeType(qType)
+          ? cleanOptionText(rawQ.answer)
+          : rawQ.answer
+        : "Refer to standard model answer.";
     const qDiff = ["EASY", "MEDIUM", "HARD"].includes(rawQ.difficulty) ? rawQ.difficulty : "MEDIUM";
     const figurePrompt = typeof rawQ.figurePrompt === "string" && rawQ.figurePrompt.trim() ? rawQ.figurePrompt.trim() : undefined;
 

@@ -6,6 +6,7 @@ import { use, useEffect, useState } from "react";
 import { MathText } from "@/components/MathText";
 import { api, imageUrl } from "@/lib/client";
 import {
+  cleanOptionText,
   DEFAULT_SCHOOL_LOGO,
   DEFAULT_SCHOOL_NAME,
   EXAM_TYPE_LABEL,
@@ -231,7 +232,7 @@ export default function SolutionsPage({ params }: PageProps<"/papers/[id]/soluti
                       <span
                         className="text-slate-600 font-medium text-[11px]"
                         title={item.question.subparts
-                          .map((sp) => `${sp.label}: ${sp.answer || "—"}`)
+                          .map((sp) => `${sp.label}: ${cleanOptionText(sp.answer) || "—"}`)
                           .join(" | ")}
                       >
                         {item.question.subparts
@@ -248,7 +249,7 @@ export default function SolutionsPage({ params }: PageProps<"/papers/[id]/soluti
                       className="rounded border border-indigo-100 bg-white p-1.5 shadow-xs flex items-center justify-between"
                     >
                       <span className="font-bold text-slate-800 shrink-0">Q{item.number}:</span>
-                      <span className="font-semibold text-emerald-800 truncate mx-1" title={item.question.answer}>
+                      <span className="font-semibold text-emerald-800 truncate mx-1" title={cleanOptionText(item.question.answer)}>
                         {displayAns}
                       </span>
                       <span className="text-[10px] text-slate-500 font-medium shrink-0">[{item.marks}M]</span>
@@ -393,7 +394,7 @@ function QuestionSolutionItem({
                       return (
                         <span>
                           {resolved.letter && <b>({resolved.letter.toLowerCase()})</b>}{" "}
-                          <MathText text={resolved.optionText || sp.answer} />
+                          <MathText text={cleanOptionText(resolved.optionText || sp.answer)} />
                         </span>
                       );
                     })()
@@ -439,7 +440,7 @@ function QuestionSolutionItem({
                   return (
                     <span>
                       {resolved.letter && <b>({resolved.letter.toLowerCase()})</b>}{" "}
-                      <MathText text={resolved.optionText || q.answer} />
+                      <MathText text={cleanOptionText(resolved.optionText || q.answer)} />
                     </span>
                   );
                 })()

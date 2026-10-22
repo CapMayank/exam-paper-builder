@@ -94,6 +94,27 @@ export function cleanMatchItem(text: string): string {
     .trim();
 }
 
+/**
+ * Strips redundant leading choice labels ((a), (A), a., 1.) and unescaped LaTeX formatting macros
+ * from multiple choice and objective question options.
+ */
+export function cleanOptionText(text?: string | null): string {
+  if (!text) return "";
+  let s = text
+    .replace(/^[\s\u200B]*(\([A-Za-z0-9ivxIVX\u0900-\u097F]+\)|[A-Za-z0-9ivxIVX\u0900-\u097F]+[.)\]:-])\s*/, "")
+    .trim();
+  // Strip raw unescaped LaTeX formatting macros that leaked outside $...$
+  if (!s.startsWith("$") && !s.includes("$$")) {
+    s = s
+      .replace(/\\text\{([^}]+)\}/g, "$1")
+      .replace(/\\mathrm\{([^}]+)\}/g, "$1")
+      .replace(/\\textit\{([^}]+)\}/g, "$1")
+      .replace(/\\textbf\{([^}]+)\}/g, "$1")
+      .replace(/\\operatorname\{([^}]+)\}/g, "$1");
+  }
+  return s;
+}
+
 export function extractColumnIItems(text?: string | null): string[] {
   if (!text) return [];
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
@@ -266,7 +287,7 @@ export function normalizeMcqAnswer(
     if (idx >= 0) {
       return {
         letter: upper,
-        optionText: options[idx],
+        optionText: options[idx] ? cleanOptionText(options[idx]) : undefined,
         display: `(${upper})`,
       };
     }
@@ -275,19 +296,36 @@ export function normalizeMcqAnswer(
       const letter = MCQ_LETTERS[num - 1];
       return {
         letter,
-        optionText: options[num - 1],
+        optionText: options[num - 1] ? cleanOptionText(options[num - 1]) : undefined,
         display: `(${letter})`,
       };
     }
   }
 
+  // Check if answer starts with a choice prefix like "(b) \text{cry}1\text{Ab}" or "(b) cry1Ab" or "b) cry1Ab"
+  const prefixMatch =
+    trimmed.match(/^[\s\u200B]*\(([a-zA-Z0-9])\)\s*(.*)$/) ||
+    trimmed.match(/^[\s\u200B]*([a-zA-Z0-9])[.)\]:-]\s+(.*)$/);
+  if (prefixMatch) {
+    const candidateLetter = prefixMatch[1].toUpperCase();
+    const idx = MCQ_LETTERS.indexOf(candidateLetter);
+    if (idx >= 0) {
+      return {
+        letter: candidateLetter,
+        optionText: options[idx] ? cleanOptionText(options[idx]) : cleanOptionText(prefixMatch[2]),
+        display: `(${candidateLetter})`,
+      };
+    }
+  }
+
   // Match against option text
-  const matchIdx = options.findIndex((o) => o.trim().toLowerCase() === trimmed.toLowerCase());
+  const cleanTrimmed = cleanOptionText(trimmed).toLowerCase();
+  const matchIdx = options.findIndex((o) => cleanOptionText(o).trim().toLowerCase() === cleanTrimmed);
   if (matchIdx >= 0 && matchIdx < MCQ_LETTERS.length) {
     const letter = MCQ_LETTERS[matchIdx];
     return {
       letter,
-      optionText: options[matchIdx],
+      optionText: cleanOptionText(options[matchIdx]),
       display: `(${letter})`,
     };
   }

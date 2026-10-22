@@ -1,6 +1,7 @@
 import { imageUrl } from "@/lib/client";
 import {
   cleanMatchItem,
+  cleanOptionText,
   getMatchColumnInstruction,
   isKindergartenType,
   isMcqLikeType,
@@ -100,7 +101,7 @@ function SingleQuestionBody({
                 {sp.options.map((opt, optIdx) => (
                   <div key={optIdx} className="opt-text" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", fontSize: optFontSize }}>
                     <span style={{ fontWeight: 600 }}>({LETTERS[optIdx].toLowerCase()})</span>{" "}
-                    <MathText text={opt} />
+                    <MathText text={cleanOptionText(opt)} />
                   </div>
                 ))}
               </div>
@@ -191,7 +192,7 @@ function SingleQuestionBody({
             <div style={{ display: "grid", gridTemplateColumns, gap: isA5 ? "1mm 3mm" : "1.5mm 4mm", marginTop: "2mm" }}>
               {q.options.map((o, i) => (
                 <div key={i} className="opt-text" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", fontSize: optFontSize }}>
-                  <span style={{ fontWeight: 600 }}>({LETTERS[i]?.toLowerCase() ?? i + 1})</span> <MathText text={o} />
+                  <span style={{ fontWeight: 600 }}>({LETTERS[i]?.toLowerCase() ?? i + 1})</span> <MathText text={cleanOptionText(o)} />
                 </div>
               ))}
             </div>
@@ -274,7 +275,7 @@ function SingleQuestionBody({
                         {sp.options.map((opt, optIdx) => (
                           <div key={optIdx} className="opt-text" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", fontSize: optFontSize }}>
                             <span style={{ fontWeight: 600 }}>({LETTERS[optIdx].toLowerCase()})</span>{" "}
-                            <MathText text={opt} />
+                            <MathText text={cleanOptionText(opt)} />
                           </div>
                         ))}
                       </div>

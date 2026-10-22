@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { Modal, Spinner, useToast } from "@/components/ui";
+import { cleanOptionText } from "@/lib/constants";
 import { api } from "@/lib/client";
 import { MathText } from "./MathText";
 import type { Book, Chapter } from "@/lib/types";
@@ -565,7 +566,7 @@ export function AIQuestionGeneratorModal({
                       >
                         <span className="font-bold text-slate-400">({letter})</span>
                         <div className="flex-1">
-                          <MathText text={opt} />
+                          <MathText text={cleanOptionText(opt)} />
                         </div>
                         {isAnswer && <CheckCircle2 size={14} className="text-emerald-600 mt-0.5" />}
                       </div>
