@@ -1,6 +1,11 @@
 import "server-only";
 import { isKindergartenType, QUESTION_TYPES } from "./constants";
-import { findEligibleDiagrams, saveDiagramToUploads } from "./diagram-search";
+import {
+  findEligibleDiagrams,
+  isSectionVisuallyEligible,
+  isSubjectChapterVisual,
+  saveDiagramToUploads,
+} from "./diagram-search";
 import { normalizeQuestionType } from "./paperImport";
 import { ensureLanguageNonChapterUnits } from "./syllabusImport";
 
@@ -551,6 +556,15 @@ export async function generatePaperSectionWithGemini(
 
   const normalizedType = normalizeQuestionType(sectionType);
 
+  // Check section and chapter visual eligibility
+  const sectionEligible = isSectionVisuallyEligible(normalizedType, subject);
+  const visualSlotIndices = slots
+    .map((s, idx) => (isSubjectChapterVisual(subject, s.chapterTitle, normalizedType) ? idx : -1))
+    .filter((idx) => idx !== -1);
+  const effectiveGenerateDiagrams = Boolean(
+    generateDiagrams && sectionEligible && visualSlotIndices.length > 0
+  );
+
   const systemPrompt = `You are an elite, senior board examiner, question paper setter, and curriculum specialist (CBSE, ICSE, and Indian State Boards).
 Your objective is to generate rigorous, authentic, high-standard examination questions for a specific section of a formal board examination paper.
 
@@ -598,13 +612,23 @@ STRICT CURRICULUM & BOARD STANDARDS:
       : difficulty
   }
 ${teacherFocus ? `- Teacher Specific Instructions / Focus: ${teacherFocus}` : ""}
-- Diagram Generation: ${generateDiagrams ? "Enabled (at most ONE question in the section may have a diagram; only if the question text explicitly references it)" : "Disabled"}
+- Diagram Generation: ${
+    effectiveGenerateDiagrams
+      ? "Enabled (strictly follow board standards: at most ONE question in the section may have a diagram; only if the question concept cannot be answered without visual input)"
+      : "Disabled (this section is non-visual or contains no visual syllabus topics)"
+  }
 
-CRITICAL DIAGRAM INSTRUCTIONS:
-- At most ONE question in the entire section should have a diagram.
-- ONLY set 'figurePrompt' if the question text explicitly references the figure (e.g. "In the given diagram...", "Refer to the figure below...").
-- For all other questions, 'figurePrompt' MUST BE null.
-- The diagram must specifically depict the exact subject of the question (e.g. flower for flower question, human reproductive system for human reproduction).
+${
+  effectiveGenerateDiagrams
+    ? `CRITICAL DIAGRAM INSTRUCTIONS:
+- Board examinations have very few diagrams (at most ONE in this entire section).
+- ONLY provide 'figurePrompt' if the question concept CANNOT be answered without visual input (e.g. geometric figure with lettered vertices, circuit with specific meter readings, anatomical callouts to identify, or visual stimulus in English).
+- NEVER attach a diagram to a standard question that can be answered from text alone.
+- If a question does not strictly require a diagram, 'figurePrompt' MUST BE null.
+- The diagram must specifically depict the exact subject of the question (e.g. flower for flower question, human reproductive system for human reproduction).`
+    : `DIAGRAM INSTRUCTIONS:
+- No diagrams should be included in this section. 'figurePrompt' MUST BE null for all questions.`
+}
 
 Assigned Chapter Targets for each question slot:
 ${slotsDescription}
@@ -679,14 +703,29 @@ JSON Array Output Schema:
         answer = "Complete case study evaluation based on subparts.";
       }
 
-      // If diagram generation is requested, apply strict subject & question-linking discipline:
-      // At most 1 question in the section gets a diagram, and the question text MUST explicitly reference it.
-      if (generateDiagrams && idx === 0) {
+      // If diagram generation is requested, apply strict board exam discipline:
+      // At most 1 question in the section gets a diagram, and ONLY if chapter is genuinely visual.
+      const isSlotVisual =
+        effectiveGenerateDiagrams &&
+        visualSlotIndices.length > 0 &&
+        idx === visualSlotIndices[0];
+
+      if (isSlotVisual) {
+        const isLang =
+          subject.toLowerCase().includes("english") ||
+          subject.toLowerCase().includes("hindi") ||
+          subject.toLowerCase().includes("sanskrit") ||
+          subject.toLowerCase().includes("language") ||
+          normalizedType === "WRITING_SKILL";
         const isBio = subject.toLowerCase().includes("bio");
         const isPhys = subject.toLowerCase().includes("phys") || subject.toLowerCase().includes("sci");
         const isMath = subject.toLowerCase().includes("math");
 
-        if (isBio) {
+        if (isLang) {
+          text = `Look at the visual stimulus given below regarding environmental conservation and write a coherent paragraph/article in 100-120 words. Highlight key measures to reduce pollution and conserve natural resources.`;
+          answer = `Model Answer / Marking Scheme:\n1. Title & Format [1 mark]\n2. Content & Integration of Visual Input [2 marks]\n3. Organization & Expression [1 mark]\n4. Accuracy & Grammar [1 mark]`;
+          figurePrompt = `Visual stimulus infographic showing environmental conservation with tree plantation, water drop, and recycling badge`;
+        } else if (isBio) {
           const chLower = slot.chapterTitle.toLowerCase();
           if (chLower.includes("flower") || chLower.includes("flowering") || chLower.includes("sexual reproduction in plant")) {
             text = `In the given diagram showing the longitudinal section (L.S.) of a flower, identify labeled parts (A) and (B) and choose the correct option:`;
@@ -698,7 +737,7 @@ JSON Array Output Schema:
             ];
             answer = "(A) Stigma, (B) Anther";
             figurePrompt = `Longitudinal section of a flower with labeled leader lines pointing to parts (A) Stigma and (B) Anther`;
-          } else if (chLower.includes("human reproduction") || chLower.includes("reproductive health")) {
+          } else if (chLower.includes("human reproduction") || chLower.includes("reproductive system")) {
             text = `In the given schematic diagram of the human female reproductive system, identify labeled parts (A) and (B):`;
             options = [
               "(A) Ovary, (B) Oviduct (Fallopian Tube)",
@@ -822,13 +861,19 @@ JSON Array Output Schema:
       textLower.includes("marked as") ||
       textLower.includes("refer to") ||
       textLower.includes("study the") ||
-      textLower.includes("observe the");
+      textLower.includes("observe the") ||
+      textLower.includes("visual stimulus") ||
+      textLower.includes("visual input");
+
+    const slotIsVisual = isSubjectChapterVisual(subject, slot.chapterTitle, normalizedType);
 
     // Board examination discipline: At most ONE diagram per section,
+    // ONLY if the slot's chapter is visually eligible,
     // and ONLY if the question text explicitly references the figure!
     const allowDiagram = Boolean(
-      generateDiagrams &&
+      effectiveGenerateDiagrams &&
       figurePrompt &&
+      slotIsVisual &&
       explicitlyNeedsDiagram &&
       sectionDiagramCount === 0
     );

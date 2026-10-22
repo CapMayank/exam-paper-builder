@@ -573,5 +573,71 @@ describe("Gemini AI Integration Suite", () => {
       expect(q.answer).toContain("Model Answer");
       expect(q.figureDoc).toBeUndefined();
     });
+
+    it("strictly refuses to generate diagrams for non-visual section types (e.g. Fill-in-the-blanks)", async () => {
+      const res = await generatePaperSectionWithGemini({
+        className: "Class 12",
+        subject: "Biology",
+        sectionTitle: "Fill in the Blanks",
+        sectionType: "FILL_BLANK",
+        marksEach: 1,
+        language: "en",
+        difficulty: "BALANCED",
+        generateDiagrams: true, // Even if requested!
+        slots: [
+          { slotIndex: 0, chapterId: "c1", chapterNumber: 1, chapterTitle: "Sexual Reproduction in Flowering Plants", marks: 1 },
+        ],
+      });
+
+      expect(res.success).toBe(true);
+      const q = res.data[0];
+      expect(q.figurePrompt).toBeUndefined();
+      expect(q.imagePath).toBeUndefined();
+      expect(q.figureDoc).toBeUndefined();
+    });
+
+    it("strictly refuses to generate diagrams for non-visual chapters (e.g. Microbes in Human Welfare)", async () => {
+      const res = await generatePaperSectionWithGemini({
+        className: "Class 12",
+        subject: "Biology",
+        sectionTitle: "Short Answer Questions",
+        sectionType: "SHORT",
+        marksEach: 3,
+        language: "en",
+        difficulty: "BALANCED",
+        generateDiagrams: true, // Requested, but chapter is non-visual
+        slots: [
+          { slotIndex: 0, chapterId: "c8", chapterNumber: 8, chapterTitle: "Microbes in Human Welfare", marks: 3 },
+        ],
+      });
+
+      expect(res.success).toBe(true);
+      const q = res.data[0];
+      expect(q.figurePrompt).toBeUndefined();
+      expect(q.imagePath).toBeUndefined();
+      expect(q.figureDoc).toBeUndefined();
+    });
+
+    it("generates visual stimulus line art for English picture composition / writing skills", async () => {
+      const res = await generatePaperSectionWithGemini({
+        className: "Class 10",
+        subject: "English",
+        sectionTitle: "Section B: Creative Writing Skills",
+        sectionType: "WRITING_SKILL",
+        marksEach: 5,
+        language: "en",
+        difficulty: "BALANCED",
+        generateDiagrams: true,
+        slots: [
+          { slotIndex: 0, chapterId: "w1", chapterNumber: 1, chapterTitle: "Picture Composition & Article Writing", marks: 5 },
+        ],
+      });
+
+      expect(res.success).toBe(true);
+      const q = res.data[0];
+      expect(q.figurePrompt).toBeDefined();
+      expect(q.imagePath || q.figureDoc).toBeDefined();
+      expect(q.text.toLowerCase()).toContain("visual stimulus");
+    });
   });
 });

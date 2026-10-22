@@ -512,3 +512,5 @@ export async function saveDiagramToUploads(
 
   throw new Error("Invalid input: either svgContent, rawBuffer, or downloadUrl must be provided");
 }
+
+export * from "./diagram-rules";

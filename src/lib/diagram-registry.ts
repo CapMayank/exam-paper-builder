@@ -7,7 +7,7 @@
 export interface CuratedDiagram {
   id: string;
   title: string;
-  subject: "Biology" | "Physics" | "Chemistry" | "Mathematics";
+  subject: "Biology" | "Physics" | "Chemistry" | "Mathematics" | "English" | "Social Science";
   classLevel: string; // e.g. "Class 10", "Class 12"
   chapterKeywords: string[];
   tags: string[];
@@ -651,6 +651,62 @@ export const CURATED_DIAGRAMS: CuratedDiagram[] = [
   <text x="575" y="225" font-family="sans-serif" font-size="10" fill="#0284c7">Transferred</text>
 
   <text x="320" y="375" font-family="sans-serif" font-size="11" text-anchor="middle" fill="#64748b">90% of energy is lost as metabolic heat at each successive trophic level</text>
+</svg>`,
+  },
+
+  // -------------------------------------------------------------------------
+  // 11. ENGLISH / LANGUAGES: Visual Stimulus for Creative Writing & Article
+  // -------------------------------------------------------------------------
+  {
+    id: "eng_visual_stimulus_environment",
+    title: "Visual Stimulus: Save Trees, Conserve Water, Stop Plastic Pollution",
+    subject: "English",
+    classLevel: "Class 9 / Class 10 / Class 12",
+    chapterKeywords: ["writing skills", "picture composition", "visual stimulus", "article writing", "paragraph writing", "composition", "poster", "report writing"],
+    tags: ["environment", "save trees", "save water", "pollution", "poster", "visual input", "green planet"],
+    description: "Standard NCERT/CBSE visual stimulus infographic showing tree plantation, water conservation, and recycling badges for creative paragraph/article writing.",
+    source: "CBSE Official",
+    license: "Public Domain",
+    hasUnlabelledCallouts: false,
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" width="640" height="400">
+  <rect width="640" height="400" fill="#ffffff" stroke="#0f172a" stroke-width="2"/>
+  <!-- Top Banner -->
+  <rect x="20" y="20" width="600" height="45" fill="#f8fafc" stroke="#0f172a" stroke-width="2" rx="6"/>
+  <text x="320" y="50" font-family="sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#0f172a" letter-spacing="1">
+    PROTECT OUR PLANET · CONSERVE RESOURCES
+  </text>
+
+  <!-- Panel 1: Save Trees / Plantation (Left) -->
+  <rect x="35" y="85" width="175" height="235" fill="#f0fdf4" stroke="#16a34a" stroke-width="2" rx="8"/>
+  <path d="M 122 240 L 122 280 L 112 280 L 112 240 Z" fill="#78350f" stroke="#0f172a" stroke-width="1.5"/>
+  <path d="M 117 140 C 70 140 60 210 95 235 C 100 240 135 240 140 235 C 175 210 165 140 117 140 Z" fill="#22c55e" stroke="#15803d" stroke-width="2"/>
+  <circle cx="117" cy="180" r="14" fill="#16a34a" opacity="0.3"/>
+  <text x="117" y="270" font-family="sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="#14532d">PLANT TREES</text>
+  <text x="117" y="295" font-family="sans-serif" font-size="11" text-anchor="middle" fill="#166534">Stop Deforestation</text>
+
+  <!-- Panel 2: Save Water (Center) -->
+  <rect x="232" y="85" width="175" height="235" fill="#f0f9ff" stroke="#0284c7" stroke-width="2" rx="8"/>
+  <path d="M 320 145 C 320 145 285 190 285 215 C 285 235 300 250 320 250 C 340 250 355 235 355 215 C 355 190 320 145 320 145 Z" fill="#38bdf8" stroke="#0284c7" stroke-width="2"/>
+  <ellipse cx="310" cy="225" rx="5" ry="10" fill="#ffffff" opacity="0.6"/>
+  <text x="320" y="270" font-family="sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="#0369a1">CONSERVE WATER</text>
+  <text x="320" y="295" font-family="sans-serif" font-size="11" text-anchor="middle" fill="#0284c7">Every Drop Counts</text>
+
+  <!-- Panel 3: Reduce Waste / Plastic (Right) -->
+  <rect x="430" y="85" width="175" height="235" fill="#fefce8" stroke="#ca8a04" stroke-width="2" rx="8"/>
+  <g transform="translate(517, 195) scale(0.9)">
+    <path d="M -25 -20 L 0 -45 L 25 -20 L 10 -20 L 10 10 L -10 10 L -10 -20 Z" fill="#eab308" stroke="#854d0e" stroke-width="1.5" transform="rotate(0)"/>
+    <path d="M -25 -20 L 0 -45 L 25 -20 L 10 -20 L 10 10 L -10 10 L -10 -20 Z" fill="#eab308" stroke="#854d0e" stroke-width="1.5" transform="rotate(120)"/>
+    <path d="M -25 -20 L 0 -45 L 25 -20 L 10 -20 L 10 10 L -10 10 L -10 -20 Z" fill="#eab308" stroke="#854d0e" stroke-width="1.5" transform="rotate(240)"/>
+    <circle cx="0" cy="0" r="12" fill="#ffffff" stroke="#854d0e" stroke-width="1.5"/>
+  </g>
+  <text x="517" y="270" font-family="sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="#854d0e">NO TO PLASTIC</text>
+  <text x="517" y="295" font-family="sans-serif" font-size="11" text-anchor="middle" fill="#a16207">Reduce · Reuse · Recycle</text>
+
+  <!-- Bottom Visual Prompt Banner -->
+  <rect x="35" y="335" width="570" height="45" fill="#f8fafc" stroke="#334155" stroke-width="1.5" stroke-dasharray="4,4" rx="4"/>
+  <text x="320" y="362" font-family="sans-serif" font-size="12" font-weight="600" text-anchor="middle" fill="#1e293b">
+    Prompt: Taking cues from the visual input above, write a paragraph/article on "Our Environmental Responsibility".
+  </text>
 </svg>`,
   },
 ];
