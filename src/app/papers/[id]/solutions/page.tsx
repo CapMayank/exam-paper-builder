@@ -10,9 +10,11 @@ import {
   DEFAULT_SCHOOL_NAME,
   EXAM_TYPE_LABEL,
   normalizeMcqAnswer,
+  parseMatchColumnPairs,
   QUESTION_TYPE_LABEL,
   resolvePaperExamType,
 } from "@/lib/constants";
+import { subpartsTotalMarks } from "@/lib/types";
 import type { PaperData, QuestionDto } from "@/lib/types";
 
 function getMarksRubric(marks: number, type: string) {
@@ -59,10 +61,22 @@ export default function SolutionsPage({ params }: PageProps<"/papers/[id]/soluti
     const items = paper.items.filter((i) => i.sectionId === s.id);
     for (const it of items) {
       numCount++;
+      const isMatch = s.type === "MATCH_COLUMN" || it.question.type === "MATCH_COLUMN";
+      const matchPairCount = isMatch
+        ? (parseMatchColumnPairs(it.question.options, it.question.text).length || s.count)
+        : 0;
+      const subpartsMarks = subpartsTotalMarks(it.question.subparts);
+      const totalQuestionMarks =
+        matchPairCount > 0
+          ? matchPairCount * s.marksEach
+          : subpartsMarks > 0
+          ? subpartsMarks
+          : s.marksEach;
+
       allNumberedItems.push({
         number: numCount,
         sectionTitle: s.title,
-        marks: s.marksEach,
+        marks: totalQuestionMarks,
         type: s.type,
         question: it.question,
         orQuestion: it.orQuestion,
@@ -260,14 +274,15 @@ export default function SolutionsPage({ params }: PageProps<"/papers/[id]/soluti
 
                 <div className="space-y-4">
                   {items.map((it, idx) => {
-                    const itemNumber =
-                      allNumberedItems.find((x) => x.question.id === it.question.id)?.number ?? idx + 1;
+                    const numberedItem = allNumberedItems.find((x) => x.question.id === it.question.id);
+                    const itemNumber = numberedItem?.number ?? idx + 1;
+                    const itemMarks = numberedItem?.marks ?? s.marksEach;
                     return (
                       <div key={it.id} className="rounded border border-slate-200 p-3.5 bg-slate-50/50 print:bg-transparent">
                         {/* Primary Question Solution */}
                         <QuestionSolutionItem
                           number={itemNumber}
-                          marks={s.marksEach}
+                          marks={itemMarks}
                           type={s.type}
                           q={it.question}
                         />
@@ -281,7 +296,7 @@ export default function SolutionsPage({ params }: PageProps<"/papers/[id]/soluti
                             <QuestionSolutionItem
                               number={itemNumber}
                               isOrOption
-                              marks={s.marksEach}
+                              marks={itemMarks}
                               type={s.type}
                               q={it.orQuestion}
                             />

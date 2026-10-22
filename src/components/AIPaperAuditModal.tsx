@@ -42,9 +42,20 @@ export function AIPaperAuditModal({
   const [applyingAll, setApplyingAll] = useState<boolean>(false);
 
   async function handleApplyFix(iss: PaperAuditReport["issues"][0], index: number) {
-    if (!iss.questionId) return;
+    if (!iss.questionId && !iss.canReconcileBlueprint) return;
     setApplyingIndex(index);
     try {
+      if (iss.canReconcileBlueprint) {
+        const res = await api<{ success: boolean; reassignmentsCount: number; summary: string }>(
+          `/api/papers/${paperId}/reconcile-blueprint`,
+          { method: "POST" }
+        );
+        setAppliedFixes((prev) => new Set(prev).add(index));
+        toast.success(res.summary || "Blueprint chapter quotas synchronized successfully!");
+        onQuestionUpdated?.();
+        return;
+      }
+
       const payload: Record<string, unknown> = {};
       if (iss.fixedText) payload.text = iss.fixedText;
       if (iss.fixedOptions && iss.fixedOptions.length > 0) payload.options = iss.fixedOptions;
@@ -70,7 +81,9 @@ export function AIPaperAuditModal({
       .map((iss, index) => ({ iss, index }))
       .filter(
         ({ iss, index }) =>
-          iss.questionId && (iss.fixedText || (iss.fixedOptions && iss.fixedOptions.length > 0)) && !appliedFixes.has(index)
+          ((iss.questionId && (iss.fixedText || (iss.fixedOptions && iss.fixedOptions.length > 0))) ||
+            iss.canReconcileBlueprint) &&
+          !appliedFixes.has(index)
       );
 
     if (applicable.length === 0) return;
@@ -78,8 +91,19 @@ export function AIPaperAuditModal({
     setApplyingAll(true);
     let successCount = 0;
     try {
+      let blueprintReconciled = false;
       for (const { iss, index } of applicable) {
         try {
+          if (iss.canReconcileBlueprint) {
+            if (!blueprintReconciled) {
+              await api(`/api/papers/${paperId}/reconcile-blueprint`, { method: "POST" });
+              blueprintReconciled = true;
+            }
+            setAppliedFixes((prev) => new Set(prev).add(index));
+            successCount++;
+            continue;
+          }
+
           const payload: Record<string, unknown> = {};
           if (iss.fixedText) payload.text = iss.fixedText;
           if (iss.fixedOptions && iss.fixedOptions.length > 0) payload.options = iss.fixedOptions;
@@ -347,8 +371,9 @@ export function AIPaperAuditModal({
 
                 {report.issues.some(
                   (iss, idx) =>
-                    iss.questionId &&
-                    (iss.fixedText || (iss.fixedOptions && iss.fixedOptions.length > 0)) &&
+                    ((iss.questionId &&
+                      (iss.fixedText || (iss.fixedOptions && iss.fixedOptions.length > 0))) ||
+                      iss.canReconcileBlueprint) &&
                     !appliedFixes.has(idx)
                 ) && (
                   <button
@@ -376,9 +401,11 @@ export function AIPaperAuditModal({
               ) : (
                 <div className="space-y-3">
                   {report.issues.map((iss, i) => {
-                    const hasFixPayload =
-                      Boolean(iss.questionId) &&
-                      Boolean(iss.fixedText || (iss.fixedOptions && iss.fixedOptions.length > 0));
+                    const hasFixPayload = Boolean(
+                      iss.canReconcileBlueprint ||
+                        (iss.questionId &&
+                          (iss.fixedText || (iss.fixedOptions && iss.fixedOptions.length > 0))),
+                    );
                     const isApplied = appliedFixes.has(i);
 
                     return (
@@ -393,7 +420,7 @@ export function AIPaperAuditModal({
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <span className="font-bold text-slate-900">
-                              Q{iss.questionNumber} ({iss.sectionTitle})
+                              {iss.questionNumber > 0 ? `Q${iss.questionNumber} (${iss.sectionTitle})` : iss.sectionTitle}
                             </span>
                             <span
                               className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
@@ -453,7 +480,7 @@ export function AIPaperAuditModal({
                             {isApplied ? (
                               <div className="inline-flex items-center gap-1.5 text-xs text-emerald-700 font-bold bg-emerald-100/70 px-2.5 py-1 rounded-lg">
                                 <CheckCircle2 size={14} className="text-emerald-600" />
-                                Fix Applied to Paper
+                                {iss.canReconcileBlueprint ? "Blueprint Synchronized" : "Fix Applied to Paper"}
                               </div>
                             ) : (
                               <button
@@ -470,7 +497,7 @@ export function AIPaperAuditModal({
                                 ) : (
                                   <>
                                     <Sparkles size={13} />
-                                    Apply This Fix
+                                    {iss.canReconcileBlueprint ? "Rebalance Quotas" : "Apply This Fix"}
                                   </>
                                 )}
                               </button>

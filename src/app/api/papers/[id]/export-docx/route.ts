@@ -263,7 +263,21 @@ export const GET = route(async (_req, params, user) => {
           matchCount = parseMatchColumnPairs(opts, q.text).length;
         } catch {}
       }
-      const qTotalMarks = matchCount > 0 ? matchCount * section.marksEach : section.marksEach;
+      let subpartsMarks = 0;
+      if (q.subpartsJson) {
+        try {
+          const sps = JSON.parse(q.subpartsJson);
+          if (Array.isArray(sps)) {
+            subpartsMarks = sps.reduce((sum: number, sp: any) => sum + (Number(sp?.marks) || 0), 0);
+          }
+        } catch {}
+      }
+      const qTotalMarks =
+        matchCount > 0
+          ? matchCount * section.marksEach
+          : subpartsMarks > 0
+          ? subpartsMarks
+          : section.marksEach;
       const qText = isMatch ? getMatchColumnInstruction(q.text) : q.text;
 
       paragraphs.push(

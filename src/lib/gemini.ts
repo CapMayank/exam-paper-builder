@@ -1257,11 +1257,12 @@ export interface PaperAuditReport {
     questionNumber: number;
     sectionTitle: string;
     severity: "HIGH" | "MEDIUM" | "LOW";
-    type: "FLAWED_MCQ" | "AMBIGUITY" | "CALCULATION_MISMATCH" | "SYLLABUS_OUTLIER" | "DIFFICULTY_IMBALANCE";
+    type: "FLAWED_MCQ" | "AMBIGUITY" | "CALCULATION_MISMATCH" | "SYLLABUS_OUTLIER" | "DIFFICULTY_IMBALANCE" | "BLUEPRINT_MISMATCH";
     description: string;
     suggestedFix: string;
     fixedText?: string;
     fixedOptions?: string[];
+    canReconcileBlueprint?: boolean;
   }>;
   overallVerdict: string;
 }

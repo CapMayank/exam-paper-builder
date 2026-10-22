@@ -1,6 +1,8 @@
 import { body, HttpError, route } from "@/lib/api";
+import { parseMatchColumnPairs } from "@/lib/constants";
 import { auditPaperWithGemini } from "@/lib/gemini";
-import { prisma } from "@/lib/prisma";
+import { loadPaperView } from "@/lib/papers";
+import { subpartsTotalMarks } from "@/lib/types";
 import { z } from "zod";
 
 const auditSchema = z.object({
@@ -31,52 +33,38 @@ export const POST = route(async (req) => {
   const data = await body(req, auditSchema);
 
   if (data.paperId) {
-    const paper = await prisma.paper.findUnique({
-      where: { id: data.paperId },
-      include: {
-        blueprint: {
-          include: {
-            book: true,
-            sections: { orderBy: { position: "asc" } },
-          },
-        },
-        items: {
-          include: {
-            question: true,
-            section: true,
-          },
-          orderBy: { position: "asc" },
-        },
-      },
-    });
-
+    const paper = await loadPaperView(data.paperId);
     if (!paper) {
       throw new HttpError(404, "Paper not found");
     }
 
-    const totalMarks = paper.blueprint.sections.reduce(
-      (sum: number, s: { count: number; marksEach: number }) => sum + s.count * s.marksEach,
-      0,
-    );
+    const totalMarks = paper.progress.totalMarks;
 
-    const questions = paper.items.map((pq, idx: number) => {
-      let parsedOptions: string[] = [];
-      try {
-        parsedOptions = JSON.parse(pq.question.optionsJson || "[]");
-      } catch {
-        parsedOptions = [];
-      }
+    const questions = paper.items.map((it, idx: number) => {
+      const sec = paper.blueprint.sections.find((s) => s.id === it.sectionId);
+      const marksEach = sec?.marksEach ?? 1;
+      const isMatch = it.question.type === "MATCH_COLUMN" || sec?.type === "MATCH_COLUMN";
+      const matchPairCount = isMatch
+        ? (parseMatchColumnPairs(it.question.options, it.question.text).length || sec?.count || 1)
+        : 0;
+      const subpartsMarks = subpartsTotalMarks(it.question.subparts);
+      const actualMarks =
+        isMatch && matchPairCount > 0
+          ? matchPairCount * marksEach
+          : subpartsMarks > 0
+          ? subpartsMarks
+          : marksEach;
 
       return {
-        id: pq.question.id,
+        id: it.question.id,
         number: idx + 1,
-        sectionTitle: pq.section.title,
-        type: pq.question.type,
-        text: pq.question.text,
-        options: parsedOptions,
-        answer: pq.question.answer,
-        marks: pq.section.marksEach,
-        difficulty: pq.question.difficulty,
+        sectionTitle: sec?.title || "Section",
+        type: it.question.type,
+        text: it.question.text,
+        options: it.question.options || [],
+        answer: it.question.answer,
+        marks: actualMarks,
+        difficulty: it.question.difficulty,
       };
     });
 
@@ -88,6 +76,27 @@ export const POST = route(async (req) => {
       questions,
       apiKey: customKey,
     });
+
+    if (result.success && result.data && paper.implications && paper.implications.length > 0) {
+      const quotaIssues = paper.implications
+        .filter((imp) => imp.code === "CHAPTER_EXCESS" || imp.code === "CHAPTER_DEFICIT")
+        .map((imp) => ({
+          questionNumber: 0,
+          sectionTitle: "Blueprint Weightage",
+          type: "BLUEPRINT_MISMATCH" as const,
+          severity: (imp.severity === "error" ? "HIGH" : "MEDIUM") as "HIGH" | "MEDIUM",
+          description: imp.message,
+          suggestedFix: "Rebalance question chapter assignments to align with official blueprint quotas.",
+          canReconcileBlueprint: true,
+        }));
+
+      if (quotaIssues.length > 0) {
+        result.data.issues = [...quotaIssues, ...result.data.issues];
+        if (result.data.cognitiveBalance.rating === "EXCELLENT") {
+          result.data.cognitiveBalance.rating = "BALANCED";
+        }
+      }
+    }
 
     return result;
   }

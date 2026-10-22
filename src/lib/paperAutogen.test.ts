@@ -137,4 +137,34 @@ describe("planPaperSlotAssignments", () => {
     expect(plan.totalQuestionsNeeded).toBe(0);
     expect(plan.sections[0].slots.length).toBe(0);
   });
+
+  it("assigns all slots of a MATCH_COLUMN section to the same chapter so weightage is perfectly balanced", () => {
+    const emptyPaper: PaperAutogenInput = {
+      id: "paper_match",
+      title: "MP Board Class 12 Biology Mock",
+      blueprint: mockBlueprint,
+      items: [],
+    };
+
+    const plan = planPaperSlotAssignments(emptyPaper);
+    const matchSec = plan.sections.find((s) => s.sectionId === "s4")!;
+    expect(matchSec).toBeDefined();
+    expect(matchSec.slots.length).toBe(5);
+
+    // All slots in MATCH_COLUMN must share the exact same chapterId
+    const firstChapId = matchSec.slots[0].chapterId;
+    expect(firstChapId).toBeDefined();
+    for (const slot of matchSec.slots) {
+      expect(slot.chapterId).toBe(firstChapId);
+    }
+
+    // That chapter's plannedMarks must include all 5 marks from MATCH_COLUMN
+    const assignedChapQuota = plan.chapterQuotas.find((c) => c.chapterId === firstChapId)!;
+    expect(assignedChapQuota.plannedMarks).toBeGreaterThanOrEqual(5);
+
+    // Every chapter quota target must equal plannedMarks
+    for (const cq of plan.chapterQuotas) {
+      expect(cq.plannedMarks).toBe(cq.targetMarks);
+    }
+  });
 });

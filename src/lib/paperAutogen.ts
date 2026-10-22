@@ -134,45 +134,75 @@ export function planPaperSlotAssignments(paper: PaperAutogenInput): PaperAutogen
     (a, b) => a.chapterNumber - b.chapterNumber,
   );
 
-  // 3. Build empty slots for each section
-  type PendingSlot = {
-    sectionId: string;
-    slotIndex: number;
-    marksEach: number;
-    globalOrder: number;
-  };
+  // 3. Build planning units for each section
+  type PlanningUnit =
+    | {
+        kind: "SINGLE_SLOT";
+        sectionId: string;
+        slotIndex: number;
+        marksEach: number;
+        totalMarks: number;
+        globalOrder: number;
+      }
+    | {
+        kind: "MATCH_GROUP";
+        sectionId: string;
+        slotCount: number;
+        marksEach: number;
+        totalMarks: number;
+        globalOrder: number;
+      };
 
-  const pendingSlots: PendingSlot[] = [];
+  const planningUnits: PlanningUnit[] = [];
   let globalOrderCounter = 0;
 
   for (const sec of blueprint.sections) {
     const placed = placedCountBySection.get(sec.id) ?? 0;
     const needed = Math.max(0, sec.count - placed);
-    for (let i = 0; i < needed; i++) {
-      pendingSlots.push({
+    if (needed === 0) continue;
+
+    // MATCH_COLUMN is generated and saved as a single combined question carrying all pairs.
+    // Group all its pairs into one planning block so that its entire mark quota
+    // (needed * marksEach) is assigned to a single chapter with sufficient weightage,
+    // preventing mark fragmentation across chapters.
+    if (sec.type === "MATCH_COLUMN") {
+      planningUnits.push({
+        kind: "MATCH_GROUP",
         sectionId: sec.id,
-        slotIndex: placed + i,
+        slotCount: needed,
         marksEach: sec.marksEach,
+        totalMarks: needed * sec.marksEach,
         globalOrder: globalOrderCounter++,
       });
+    } else {
+      for (let i = 0; i < needed; i++) {
+        planningUnits.push({
+          kind: "SINGLE_SLOT",
+          sectionId: sec.id,
+          slotIndex: placed + i,
+          marksEach: sec.marksEach,
+          totalMarks: sec.marksEach,
+          globalOrder: globalOrderCounter++,
+        });
+      }
     }
   }
 
-  // 4. Sort pending slots descending by marksEach to fill large marks first
-  const sortedSlots = [...pendingSlots].sort((a, b) => {
-    if (b.marksEach !== a.marksEach) return b.marksEach - a.marksEach;
+  // 4. Sort planning units descending by totalMarks to fill large mark allocations first
+  const sortedUnits = [...planningUnits].sort((a, b) => {
+    if (b.totalMarks !== a.totalMarks) return b.totalMarks - a.totalMarks;
     return a.globalOrder - b.globalOrder;
   });
 
-  // 5. Greedily assign slots to chapters
-  const slotAssignments = new Map<PendingSlot, ChapterState>();
+  // 5. Greedily assign planning units to chapters
+  const unitAssignments = new Map<PlanningUnit, ChapterState>();
 
-  for (const slot of sortedSlots) {
+  for (const unit of sortedUnits) {
     if (allChapters.length === 0) break;
 
     // Find chapters that have enough quota remaining
     const eligible = allChapters
-      .filter((c) => c.remainingQuota >= slot.marksEach)
+      .filter((c) => c.remainingQuota >= unit.totalMarks)
       .sort((a, b) => b.remainingQuota - a.remainingQuota || a.chapterNumber - b.chapterNumber);
 
     let chosen: ChapterState;
@@ -186,9 +216,9 @@ export function planPaperSlotAssignments(paper: PaperAutogenInput): PaperAutogen
       chosen = sortedByRem[0];
     }
 
-    chosen.remainingQuota -= slot.marksEach;
-    chosen.plannedMarks += slot.marksEach;
-    slotAssignments.set(slot, chosen);
+    chosen.remainingQuota -= unit.totalMarks;
+    chosen.plannedMarks += unit.totalMarks;
+    unitAssignments.set(unit, chosen);
   }
 
   // 6. Assemble section plans
@@ -196,19 +226,41 @@ export function planPaperSlotAssignments(paper: PaperAutogenInput): PaperAutogen
     const placed = placedCountBySection.get(sec.id) ?? 0;
     const needed = Math.max(0, sec.count - placed);
 
-    const sectionSlots = pendingSlots
-      .filter((s) => s.sectionId === sec.id)
-      .sort((a, b) => a.slotIndex - b.slotIndex)
-      .map((s) => {
-        const assignedChap = slotAssignments.get(s)!;
-        return {
-          slotIndex: s.slotIndex,
+    let sectionSlots: PaperAutogenSlot[] = [];
+
+    if (sec.type === "MATCH_COLUMN") {
+      const matchUnit = planningUnits.find(
+        (u): u is Extract<PlanningUnit, { kind: "MATCH_GROUP" }> =>
+          u.kind === "MATCH_GROUP" && u.sectionId === sec.id,
+      );
+      if (matchUnit && unitAssignments.has(matchUnit)) {
+        const assignedChap = unitAssignments.get(matchUnit)!;
+        sectionSlots = Array.from({ length: matchUnit.slotCount }, (_, idx) => ({
+          slotIndex: placed + idx,
           chapterId: assignedChap.chapterId,
           chapterNumber: assignedChap.chapterNumber,
           chapterTitle: assignedChap.chapterTitle,
-          marks: s.marksEach,
-        };
-      });
+          marks: sec.marksEach,
+        }));
+      }
+    } else {
+      const singleUnits = planningUnits.filter(
+        (u): u is Extract<PlanningUnit, { kind: "SINGLE_SLOT" }> =>
+          u.kind === "SINGLE_SLOT" && u.sectionId === sec.id,
+      );
+      sectionSlots = singleUnits
+        .sort((a, b) => a.slotIndex - b.slotIndex)
+        .map((s) => {
+          const assignedChap = unitAssignments.get(s)!;
+          return {
+            slotIndex: s.slotIndex,
+            chapterId: assignedChap.chapterId,
+            chapterNumber: assignedChap.chapterNumber,
+            chapterTitle: assignedChap.chapterTitle,
+            marks: s.marksEach,
+          };
+        });
+    }
 
     return {
       sectionId: sec.id,

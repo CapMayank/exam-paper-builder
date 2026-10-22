@@ -668,9 +668,28 @@ export function AIPaperGeneratorModal({
                               </span>
                             </div>
                             <div className="flex items-center gap-1.5">
-                              <span className="font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded-full text-[10px]">
-                                {plan?.sections.find((s) => s.sectionTitle === q.sectionTitle)?.marksEach || 1} Mark{(plan?.sections.find((s) => s.sectionTitle === q.sectionTitle)?.marksEach || 1) > 1 ? "s" : ""}
-                              </span>
+                              {(() => {
+                                const secMarksEach =
+                                  plan?.sections.find((s) => s.sectionTitle === q.sectionTitle)?.marksEach || 1;
+                                const isMatch = q.type === "MATCH_COLUMN";
+                                const matchPairs =
+                                  isMatch && q.options ? parseMatchColumnPairs(q.options, q.text) : [];
+                                const subpartsTotal =
+                                  q.subparts && q.subparts.length > 0
+                                    ? q.subparts.reduce((sum, sp) => sum + (Number(sp.marks) || 0), 0)
+                                    : 0;
+                                const totalM =
+                                  matchPairs.length > 0
+                                    ? matchPairs.length * secMarksEach
+                                    : subpartsTotal > 0
+                                    ? subpartsTotal
+                                    : secMarksEach;
+                                return (
+                                  <span className="font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded-full text-[10px]">
+                                    {totalM} Mark{totalM > 1 ? "s" : ""}
+                                  </span>
+                                );
+                              })()}
                               <span
                                 className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
                                   q.difficulty === "HARD"

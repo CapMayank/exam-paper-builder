@@ -101,6 +101,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   const [error, setError] = useState<string | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [autofilling, setAutofilling] = useState(false);
+  const [reconciling, setReconciling] = useState(false);
   const [duplicatingSet, setDuplicatingSet] = useState(false);
   const [duplicateForm, setDuplicateForm] = useState({
     targetSet: "SET B",
@@ -176,6 +177,27 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
       setError((e as Error).message);
     } finally {
       setAutofilling(false);
+    }
+  }
+
+  async function handleReconcileBlueprint() {
+    setError(null);
+    setInfoMessage(null);
+    setReconciling(true);
+    try {
+      const res = await api<{
+        success: boolean;
+        reassignmentsCount: number;
+        isBalanced: boolean;
+        summary: string;
+        paper: PaperData;
+      }>(`/api/papers/${id}/reconcile-blueprint`, { method: "POST" });
+      if (res.paper) adopt(res.paper);
+      setInfoMessage(res.summary);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setReconciling(false);
     }
   }
 
@@ -1034,20 +1056,38 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  {canEditPaper &&
-                    paper.implications.some(
-                      (i) => i.code === "SECTION_UNDERFILLED" || i.code === "CHAPTER_DEFICIT",
-                    ) && (
-                      <button
-                        type="button"
-                        className="btn btn-xs !bg-indigo-600 !text-white hover:!bg-indigo-700 shadow-2xs font-semibold"
-                        disabled={autofilling}
-                        onClick={handleAutofill}
-                      >
-                        <Sparkles size={12} />
-                        <span>Auto-Fill Missing Slots</span>
-                      </button>
-                    )}
+                  {canEditPaper && (
+                    <>
+                      {paper.implications.some(
+                        (i) => i.code === "CHAPTER_EXCESS" || i.code === "CHAPTER_DEFICIT",
+                      ) && (
+                        <button
+                          type="button"
+                          className="btn btn-xs !bg-amber-600 !text-white hover:!bg-amber-700 shadow-2xs font-semibold"
+                          disabled={reconciling}
+                          onClick={handleReconcileBlueprint}
+                          title="Automatically realign question chapter allocations to match blueprint chapter quotas"
+                        >
+                          <Sparkles size={12} className={reconciling ? "animate-spin" : ""} />
+                          <span>{reconciling ? "Rebalancing..." : "Auto-Rebalance Chapter Quotas"}</span>
+                        </button>
+                      )}
+                      {paper.implications.some(
+                        (i) => i.code === "SECTION_UNDERFILLED" || i.code === "CHAPTER_DEFICIT",
+                      ) && (
+                        <button
+                          type="button"
+                          className="btn btn-xs !bg-indigo-600 !text-white hover:!bg-indigo-700 shadow-2xs font-semibold"
+                          disabled={autofilling}
+                          onClick={handleAutofill}
+                          title="Automatically fill empty question slots from existing question bank"
+                        >
+                          <Sparkles size={12} className={autofilling ? "animate-spin" : ""} />
+                          <span>{autofilling ? "Auto-Filling..." : "Auto-Fill Missing Slots"}</span>
+                        </button>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
               <p className="text-xs text-amber-900 leading-relaxed">
