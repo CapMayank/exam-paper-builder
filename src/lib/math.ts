@@ -96,22 +96,60 @@ export function cleanLatexToUnicode(str: string): string {
     .replace(/\\int\b/g, "∫")
     .replace(/\\sqrt\{([^}]+)\}/g, "√($1)")
     .replace(/\\sqrt\b/g, "√")
-    .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, "($1)/($2)")
+    .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, (_match, num, den) => {
+      const cleanNum = /^[a-zA-Z0-9]+$/.test(num.trim()) ? num.trim() : `(${num.trim()})`;
+      const cleanDen = /^[a-zA-Z0-9]+$/.test(den.trim()) ? den.trim() : `(${den.trim()})`;
+      return `${cleanNum}/${cleanDen}`;
+    })
     .replace(/\\times\b/g, "×")
+    .replace(/\\div\b/g, "÷")
     .replace(/\\pm\b/g, "±")
-    .replace(/\\le\b/g, "≤")
-    .replace(/\\ge\b/g, "≥")
-    .replace(/\\ne\b/g, "≠")
+    .replace(/\\mp\b/g, "∓")
+    .replace(/\\(?:leq?|le)\b/g, "≤")
+    .replace(/\\(?:geq?|ge)\b/g, "≥")
+    .replace(/\\(?:neq?|ne)\b/g, "≠")
+    .replace(/\\approx\b/g, "≈")
+    .replace(/\\equiv\b/g, "≡")
     .replace(/\\infty\b/g, "∞")
+    .replace(/\\(?:rightarrow|to)\b/g, "→")
+    .replace(/\\leftarrow\b/g, "←")
+    .replace(/\\leftrightarrow\b/g, "↔")
+    .replace(/\\Rightarrow\b/g, "⇒")
+    .replace(/\\Leftarrow\b/g, "⇐")
+    .replace(/\\Leftrightarrow\b/g, "⇔")
+    .replace(/\\Delta\b/g, "Δ")
+    .replace(/\\delta\b/g, "δ")
     .replace(/\\pi\b/g, "π")
     .replace(/\\theta\b/g, "θ")
     .replace(/\\alpha\b/g, "α")
     .replace(/\\beta\b/g, "β")
     .replace(/\\gamma\b/g, "γ")
     .replace(/\\lambda\b/g, "λ")
+    .replace(/\\mu\b/g, "μ")
+    .replace(/\\sigma\b/g, "σ")
+    .replace(/\\Sigma\b/g, "Σ")
+    .replace(/\\omega\b/g, "ω")
+    .replace(/\\Omega\b/g, "Ω")
+    .replace(/\\phi\b/g, "φ")
+    .replace(/\\Phi\b/g, "Φ")
     .replace(/\\in\b/g, "∈")
+    .replace(/\\notin\b/g, "∉")
+    .replace(/\\subset\b/g, "⊂")
+    .replace(/\\subseteq\b/g, "⊆")
+    .replace(/\\supset\b/g, "⊃")
+    .replace(/\\supseteq\b/g, "⊇")
     .replace(/\\cap\b/g, "∩")
     .replace(/\\cup\b/g, "∪")
+    .replace(/\\emptyset\b/g, "∅")
+    .replace(/\\therefore\b/g, "∴")
+    .replace(/\\because\b/g, "∵")
+    .replace(/\\angle\b/g, "∠")
+    .replace(/\\parallel\b/g, "∥")
+    .replace(/\\perp\b/g, "⊥")
+    .replace(/\\triangle\b/g, "△")
+    .replace(/\\(?:dots|ldots|cdots)\b/g, "…")
+    .replace(/\\degree\b/g, "°")
+    .replace(/\^\\circ\b/g, "°")
     .replace(/\\cdot\b/g, "·")
     .replace(/\\,/g, " ")
     .replace(/\\;/g, " ")
@@ -162,7 +200,7 @@ export function isEntirelyMath(str: string): boolean {
     trimmed.includes("⁻¹") ||
     trimmed.includes("²") ||
     trimmed.includes("³") ||
-    /\\(frac|sqrt|alpha|beta|gamma|theta|lambda|pm|times|div|le|ge|ne|int|sum|prod)\b/.test(trimmed) ||
+    /\\(frac|sqrt|alpha|beta|gamma|theta|lambda|pm|times|div|le|ge|ne|leq|geq|neq|rightarrow|to|Delta|int|sum|prod)\b/.test(trimmed) ||
     /f'?\(x\)/.test(trimmed) ||
     /dy\/dx/.test(trimmed) ||
     /\b(sin|cos|tan|sec|log)\b/.test(trimmed) ||

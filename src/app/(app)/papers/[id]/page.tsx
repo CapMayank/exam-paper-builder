@@ -1321,12 +1321,14 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                         const matchCount = isMatchQ
                           ? (parseMatchColumnPairs(it.question.options, it.question.text).length || s.count)
                           : 0;
-                        const questionTotalMarks =
-                          matchCount > 0
-                            ? matchCount * s.marksEach
-                            : it.question.subparts && it.question.subparts.length > 0
-                            ? it.question.subparts.reduce((sum, sp) => sum + (sp.marks || 1), 0)
-                            : s.marksEach;
+                        const subpartsMarks = it.question.subparts && it.question.subparts.length > 0
+                          ? it.question.subparts.reduce((sum, sp) => sum + (sp.marks || 1), 0)
+                          : 0;
+                        const questionTotalMarks = isMatchQ
+                          ? (s.count === 1 ? s.marksEach : Math.min(matchCount * s.marksEach, s.count * s.marksEach))
+                          : subpartsMarks > 0
+                          ? subpartsMarks
+                          : s.marksEach;
 
                         return (
                           <li

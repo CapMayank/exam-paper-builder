@@ -377,12 +377,12 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
       const matchPairCount = isMatch
         ? (parseMatchColumnPairs(it.question.options, it.question.text).length || s.count)
         : 0;
-      const totalQuestionMarks =
-        matchPairCount > 0
-          ? matchPairCount * s.marksEach
-          : subparts && subparts.length > 0
-          ? subparts.reduce((sum, sp) => sum + (sp.marks || 1), 0)
-          : s.marksEach;
+      const subpartsMarks = subparts && subparts.length > 0 ? subparts.reduce((sum, sp) => sum + (sp.marks || 1), 0) : 0;
+      const totalQuestionMarks = isMatch
+        ? (s.count === 1 ? s.marksEach : Math.min(matchPairCount * s.marksEach, s.count * s.marksEach))
+        : subpartsMarks > 0
+        ? subpartsMarks
+        : s.marksEach;
 
       if (canDecompose) {
         // Long passage stems (> 200 chars) are substantial content and do not need to be forced

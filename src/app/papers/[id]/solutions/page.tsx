@@ -67,12 +67,11 @@ export default function SolutionsPage({ params }: PageProps<"/papers/[id]/soluti
         ? (parseMatchColumnPairs(it.question.options, it.question.text).length || s.count)
         : 0;
       const subpartsMarks = subpartsTotalMarks(it.question.subparts);
-      const totalQuestionMarks =
-        matchPairCount > 0
-          ? matchPairCount * s.marksEach
-          : subpartsMarks > 0
-          ? subpartsMarks
-          : s.marksEach;
+      const totalQuestionMarks = isMatch
+        ? (s.count === 1 ? s.marksEach : Math.min(matchPairCount * s.marksEach, s.count * s.marksEach))
+        : subpartsMarks > 0
+        ? subpartsMarks
+        : s.marksEach;
 
       allNumberedItems.push({
         number: numCount,

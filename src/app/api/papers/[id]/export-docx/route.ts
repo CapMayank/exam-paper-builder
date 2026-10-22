@@ -273,12 +273,11 @@ export const GET = route(async (_req, params, user) => {
           }
         } catch {}
       }
-      const qTotalMarks =
-        matchCount > 0
-          ? matchCount * section.marksEach
-          : subpartsMarks > 0
-          ? subpartsMarks
-          : section.marksEach;
+      const qTotalMarks = isMatch
+        ? (section.count === 1 ? section.marksEach : Math.min(matchCount * section.marksEach, section.count * section.marksEach))
+        : subpartsMarks > 0
+        ? subpartsMarks
+        : section.marksEach;
       const qText = isMatch ? getMatchColumnInstruction(q.text) : q.text;
 
       paragraphs.push(

@@ -48,12 +48,11 @@ export const POST = route(async (req) => {
         ? (parseMatchColumnPairs(it.question.options, it.question.text).length || sec?.count || 1)
         : 0;
       const subpartsMarks = subpartsTotalMarks(it.question.subparts);
-      const actualMarks =
-        isMatch && matchPairCount > 0
-          ? matchPairCount * marksEach
-          : subpartsMarks > 0
-          ? subpartsMarks
-          : marksEach;
+      const actualMarks = isMatch
+        ? (sec?.count === 1 ? marksEach : Math.min(matchPairCount * marksEach, (sec?.count || 1) * marksEach))
+        : subpartsMarks > 0
+        ? subpartsMarks
+        : marksEach;
 
       return {
         id: it.question.id,
