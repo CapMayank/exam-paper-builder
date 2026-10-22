@@ -59,16 +59,28 @@ export async function callGeminiApi<T>(
     };
   }
 
-  // Model priority: configured model or gemini-flash-lite-latest, with automatic fallback
-  const candidateModels = Array.from(
-    new Set([
-      opts.model || process.env.GEMINI_MODEL || "gemini-flash-lite-latest",
-      "gemini-flash-lite-latest",
-      "gemini-3.5-flash",
-      "gemini-3-flash-preview",
-      "gemini-flash-latest",
-    ]),
-  );
+  // Model priority: configured model or gemini-2.5-pro / gemini-2.5-flash, with automatic fallback
+  const chosenModel = opts.model || process.env.GEMINI_MODEL;
+  const isPro = Boolean(chosenModel?.includes("pro"));
+  const fallbackList = isPro
+    ? [
+        chosenModel!,
+        "gemini-2.5-pro",
+        "gemini-1.5-pro",
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
+        "gemini-flash-lite-latest",
+      ]
+    : [
+        chosenModel || "gemini-2.5-flash",
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
+        "gemini-flash-lite-latest",
+        "gemini-flash-latest",
+      ];
+  const candidateModels = Array.from(new Set(fallbackList.filter(Boolean)));
 
   const parts = typeof prompt === "string" ? [{ text: prompt }] : prompt;
 
@@ -464,6 +476,305 @@ A student took three test tubes A, B, and C containing clean iron nails. In tube
     apiKey,
     mockFallback: fallbackQuestions,
   });
+}
+
+/* ------------------------------------------------------------------ */
+/* 1b. Complete Paper Section Question Generator                     */
+/* ------------------------------------------------------------------ */
+
+export interface GeneratePaperSectionSlot {
+  slotIndex: number;
+  chapterId: string;
+  chapterNumber: number;
+  chapterTitle: string;
+  marks: number;
+  topicFocus?: string;
+}
+
+export interface GeneratePaperSectionInput {
+  className: string;
+  subject: string;
+  sectionTitle: string;
+  sectionType: string;
+  marksEach: number;
+  language: "en" | "hi" | "bilingual";
+  difficulty: "BALANCED" | "EASY" | "MEDIUM" | "HARD";
+  model?: string;
+  teacherFocus?: string;
+  generateDiagrams?: boolean;
+  slots: GeneratePaperSectionSlot[];
+  apiKey?: string | null;
+}
+
+export interface GeneratedPaperQuestion {
+  slotIndex: number;
+  chapterId: string;
+  chapterNumber: number;
+  chapterTitle: string;
+  type: string;
+  text: string;
+  options: string[];
+  subparts: Array<{ label: string; text: string; marks: number; answer?: string }>;
+  answer: string;
+  difficulty: "EASY" | "MEDIUM" | "HARD";
+  cognitiveLevel?: string;
+  explanation?: string;
+  figurePrompt?: string;
+  figureDoc?: {
+    summary: string;
+    canvasWidth: number;
+    canvasHeight: number;
+    objects: unknown[];
+  };
+}
+
+export async function generatePaperSectionWithGemini(
+  params: GeneratePaperSectionInput,
+): Promise<GeminiCallResult<GeneratedPaperQuestion[]>> {
+  const {
+    className,
+    subject,
+    sectionTitle,
+    sectionType,
+    marksEach,
+    language,
+    difficulty,
+    model,
+    teacherFocus,
+    generateDiagrams,
+    slots,
+    apiKey,
+  } = params;
+
+  const normalizedType = normalizeQuestionType(sectionType);
+
+  const systemPrompt = `You are an elite, senior board examiner, question paper setter, and curriculum specialist (CBSE, ICSE, and Indian State Boards).
+Your objective is to generate rigorous, authentic, high-standard examination questions for a specific section of a formal board examination paper.
+
+STRICT CURRICULUM & BOARD STANDARDS:
+1. All questions must align directly with NCERT / prescribed national curriculum standards and syllabus topics.
+2. Maintain precise technical terminology, standard units, and unambiguous phrasing.
+3. For Multiple Choice Questions (MCQ): Provide exactly 4 options. Distractors MUST be plausible based on typical misconceptions; never include trivial throwaways.
+4. For Assertion-Reason (ASSERTION_REASON): Provide Assertion (A) and Reason (R), and use standard 4 CBSE options:
+   (a) Both A and R are true and R is the correct explanation of A
+   (b) Both A and R are true but R is not the correct explanation of A
+   (c) A is true but R is false
+   (d) A is false but R is true
+5. For Match the Columns (MATCH_COLUMN): Clearly state Column I and Column II items, with correct pairing in answer.
+6. For Case Study (CASE_STUDY): Provide a concise real-world scenario/passage, followed by labeled subparts ((i), (ii), etc.) whose marks sum up exactly to ${marksEach}.
+7. For subjective questions (VERY_SHORT, SHORT, LONG): Provide a detailed step-wise model answer and marking scheme breakdown.
+8. LaTeX Math: Enclose all mathematical expressions, chemical equations, symbols, and formulas in standard LaTeX $...$ delimiters.
+9. Vector Diagram Prompt (Figure Studio): If diagram generation is enabled and a question naturally involves a visual diagram (such as ray optics, electric circuit, organ/tissue structure, Punnett square, geometric shape, or chart), provide a concise description in "figurePrompt". If no diagram is needed, leave "figurePrompt" as null.
+10. Return ONLY a valid JSON array of question objects. No markdown wrapping or conversational commentary.`;
+
+  const slotsDescription = slots
+    .map(
+      (s, idx) =>
+        `Question ${idx + 1} (Slot ${s.slotIndex}): Chapter ${s.chapterNumber} - "${s.chapterTitle}" (${s.marks} marks)${
+          s.topicFocus ? ` [Topic Focus: ${s.topicFocus}]` : ""
+        }`,
+    )
+    .join("\n");
+
+  const userPrompt = `Generate ${slots.length} distinct, high-standard question(s) for the following exam section:
+- Class: ${className}
+- Subject: ${subject}
+- Section Title: ${sectionTitle}
+- Section Question Type: ${normalizedType}
+- Marks Per Question: ${marksEach}
+- Language: ${
+    language === "bilingual"
+      ? "Bilingual (English with Hindi translation in parentheses)"
+      : language === "hi"
+      ? "Hindi (Devanagari script)"
+      : "English"
+  }
+- Difficulty Policy: ${
+    difficulty === "BALANCED"
+      ? "Balanced mix: ~30% Easy, ~50% Medium, ~20% Hard"
+      : difficulty
+  }
+${teacherFocus ? `- Teacher Specific Instructions / Focus: ${teacherFocus}` : ""}
+- Diagram Generation: ${generateDiagrams ? "Enabled (provide 'figurePrompt' for questions needing diagrams)" : "Disabled"}
+
+Assigned Chapter Targets for each question slot:
+${slotsDescription}
+
+JSON Array Output Schema:
+[
+  {
+    "slotIndex": 0,
+    "chapterNumber": 1,
+    "chapterTitle": "Chapter Name",
+    "type": "${normalizedType}",
+    "text": "Question text...",
+    "options": ["A", "B", "C", "D"], // exactly 4 for MCQ/ASSERTION_REASON, empty [] for subjective
+    "subparts": [
+      { "label": "(i)", "text": "Subpart question", "marks": 1, "answer": "Model answer" }
+    ], // for CASE_STUDY, empty [] for others
+    "answer": "Detailed model answer and marking scheme breakdown",
+    "difficulty": "EASY" | "MEDIUM" | "HARD",
+    "cognitiveLevel": "REMEMBERING" | "UNDERSTANDING" | "APPLYING" | "ANALYZING" | "EVALUATING",
+    "explanation": "Brief explanation or concept rationale",
+    "figurePrompt": "Concise description of diagram to draw" // or null
+  }
+]`;
+
+  const fallbackQuestions = (): GeneratedPaperQuestion[] => {
+    return slots.map((slot, idx) => {
+      const isMcq = normalizedType === "MCQ";
+      const isAssertionReason = normalizedType === "ASSERTION_REASON";
+      const isTrueFalse = normalizedType === "TRUE_FALSE";
+      const isMatch = normalizedType === "MATCH_COLUMN";
+      const isCaseStudy = normalizedType === "CASE_STUDY";
+
+      let text = `Examine the fundamental principles of ${slot.chapterTitle}. Describe the core mechanisms and their biological/scientific significance in standard board curriculum context.`;
+      let options: string[] = [];
+      let subparts: Array<{ label: string; text: string; marks: number; answer?: string }> = [];
+      let answer = `Model Answer:\n1. Definition and core principles [${Math.max(1, Math.floor(slot.marks / 2))} marks]\n2. Application and critical observations [${Math.ceil(slot.marks / 2)} marks]`;
+      let figurePrompt: string | undefined = undefined;
+
+      if (isMcq) {
+        text = `Which of the following statements is correct regarding the core process in ${slot.chapterTitle}?`;
+        options = [
+          `It operates under regulated physiological pathways in optimal conditions`,
+          `It proceeds without any energy investment or enzymatic involvement`,
+          `It only occurs in non-living abiotic systems`,
+          `It inhibits all associated cellular metabolism`,
+        ];
+        answer = "Option A";
+      } else if (isAssertionReason) {
+        text = `Assertion (A): Process X in ${slot.chapterTitle} requires specific regulatory conditions.\nReason (R): Regulatory mechanisms maintain homeostatic equilibrium during cellular activity.`;
+        options = [
+          "(a) Both A and R are true and R is the correct explanation of A",
+          "(b) Both A and R are true but R is not the correct explanation of A",
+          "(c) A is true but R is false",
+          "(d) A is false but R is true",
+        ];
+        answer = "(a) Both A and R are true and R is the correct explanation of A";
+      } else if (isTrueFalse) {
+        text = `In ${slot.chapterTitle}, the primary mechanism proceeds unidirectionally under standard physiological conditions.`;
+        options = ["True", "False"];
+        answer = "True";
+      } else if (isMatch) {
+        text = `Match the items in Column I with their corresponding features in Column II:\nColumn I:\n(A) Primary factor\n(B) Secondary regulator\nColumn II:\n(1) Metabolic activation\n(2) Structural stability`;
+        options = ["A-1, B-2", "A-2, B-1"];
+        answer = "A-1, B-2";
+      } else if (isCaseStudy) {
+        text = `Read the following excerpt and answer the questions:\nIn a laboratory study of ${slot.chapterTitle}, researchers observed the response of biological specimens to varying external stimuli over a 72-hour period.`;
+        subparts = [
+          { label: "(i)", text: "Identify the primary independent variable in this experiment.", marks: 1, answer: "External stimuli concentration." },
+          { label: "(ii)", text: "State two key observations recorded during the study.", marks: 1, answer: "Rate variation and phenotypic stability." },
+          { label: "(iii)", text: "Explain the biochemical rationale for the observed response.", marks: Math.max(1, slot.marks - 2), answer: "Enzymatic kinetics and molecular equilibrium." },
+        ];
+        answer = "Complete case study evaluation based on subparts.";
+      }
+
+      // If diagram generation is requested and it's the first question, provide a diagram prompt
+      if (generateDiagrams && idx === 0) {
+        figurePrompt = `Circuit diagram or schematic process diagram showing components and regulatory loop for ${slot.chapterTitle}`;
+      }
+
+      return {
+        slotIndex: slot.slotIndex,
+        chapterId: slot.chapterId,
+        chapterNumber: slot.chapterNumber,
+        chapterTitle: slot.chapterTitle,
+        type: normalizedType,
+        text,
+        options,
+        subparts,
+        answer,
+        difficulty: idx % 3 === 0 ? "EASY" : idx % 3 === 1 ? "MEDIUM" : "HARD",
+        cognitiveLevel: "APPLYING",
+        explanation: `Curriculum standard question for Chapter ${slot.chapterNumber}: ${slot.chapterTitle}`,
+        figurePrompt,
+      };
+    });
+  };
+
+  const callResult = await callGeminiApi<GeneratedPaperQuestion[]>(userPrompt, systemPrompt, {
+    json: true,
+    apiKey,
+    model: model || "gemini-2.5-pro",
+    mockFallback: fallbackQuestions,
+  });
+
+  if (!callResult.success || !Array.isArray(callResult.data)) {
+    return {
+      success: false,
+      isMock: callResult.isMock,
+      error: callResult.error || "Failed to generate valid question array from AI model.",
+      data: [],
+    };
+  }
+
+  // Normalize questions and guarantee correct slot and chapter mapping
+  const normalizedQuestions: GeneratedPaperQuestion[] = [];
+
+  for (let i = 0; i < slots.length; i++) {
+    const slot = slots[i];
+    const rawQ = callResult.data[i] || {};
+
+    const qType = normalizeQuestionType(rawQ.type || normalizedType);
+    const qText = typeof rawQ.text === "string" && rawQ.text.trim() ? rawQ.text.trim() : `Question regarding ${slot.chapterTitle}`;
+    const qOptions = Array.isArray(rawQ.options) ? rawQ.options.map((o: unknown) => String(o).trim()) : [];
+    const qSubparts = Array.isArray(rawQ.subparts)
+      ? rawQ.subparts.map((sp: any, spIdx: number) => ({
+          label: String(sp.label || `(${spIdx + 1})`),
+          text: String(sp.text || ""),
+          marks: Number(sp.marks) || 1,
+          answer: sp.answer ? String(sp.answer) : undefined,
+        }))
+      : [];
+    const qAnswer = typeof rawQ.answer === "string" ? rawQ.answer : "Refer to standard model answer.";
+    const qDiff = ["EASY", "MEDIUM", "HARD"].includes(rawQ.difficulty) ? rawQ.difficulty : "MEDIUM";
+    const figurePrompt = typeof rawQ.figurePrompt === "string" && rawQ.figurePrompt.trim() ? rawQ.figurePrompt.trim() : undefined;
+
+    const questionItem: GeneratedPaperQuestion = {
+      slotIndex: slot.slotIndex,
+      chapterId: slot.chapterId,
+      chapterNumber: slot.chapterNumber,
+      chapterTitle: slot.chapterTitle,
+      type: qType,
+      text: qText,
+      options: qOptions,
+      subparts: qSubparts,
+      answer: qAnswer,
+      difficulty: qDiff as "EASY" | "MEDIUM" | "HARD",
+      cognitiveLevel: rawQ.cognitiveLevel || "APPLYING",
+      explanation: rawQ.explanation,
+      figurePrompt,
+    };
+
+    // If figurePrompt is present and diagrams are enabled, generate vector scene objects
+    if (generateDiagrams && figurePrompt) {
+      try {
+        const figRes = await promptToFigureSceneWithGemini({
+          prompt: figurePrompt,
+          apiKey,
+        });
+        if (figRes.success && figRes.data) {
+          questionItem.figureDoc = {
+            summary: figRes.data.summary,
+            canvasWidth: figRes.data.canvasWidth || 640,
+            canvasHeight: figRes.data.canvasHeight || 360,
+            objects: normalizeFigureObjects(figRes.data.objects, figRes.data.canvasWidth, figRes.data.canvasHeight),
+          };
+        }
+      } catch (figErr) {
+        console.warn("Figure generation error for question:", figErr);
+      }
+    }
+
+    normalizedQuestions.push(questionItem);
+  }
+
+  return {
+    success: true,
+    isMock: callResult.isMock,
+    data: normalizedQuestions,
+  };
 }
 
 /* ------------------------------------------------------------------ */

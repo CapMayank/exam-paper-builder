@@ -27,6 +27,7 @@ import {
 import Link from "next/link";
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import { AIPaperAuditModal } from "@/components/AIPaperAuditModal";
+import { AIPaperGeneratorModal } from "@/components/AIPaperGeneratorModal";
 import { PaperImportModal } from "@/components/PaperImportModal";
 import { QuestionForm } from "@/components/QuestionForm";
 import { QuestionPicker } from "@/components/QuestionPicker";
@@ -103,6 +104,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   const [multiSetModalOpen, setMultiSetModalOpen] = useState(false);
   const [createdPaperLinks, setCreatedPaperLinks] = useState<Array<{ id: string; title: string; setCode: string }>>([]);
   const [aiAuditOpen, setAiAuditOpen] = useState(false);
+  const [aiGeneratorOpen, setAiGeneratorOpen] = useState(false);
   const [paperImportOpen, setPaperImportOpen] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [toolsMenuOpen, setToolsMenuOpen] = useState(false);
@@ -125,6 +127,15 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const sp = new URLSearchParams(window.location.search);
+      if (sp.get("aiGenerate") === "true") {
+        setAiGeneratorOpen(true);
+      }
+    }
   }, []);
 
   const adopt = useCallback((p: PaperData) => {
@@ -506,15 +517,27 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                 )
               ) : (
                 canEditPaper ? (
-                  <button
-                    className="btn bg-indigo-600 hover:bg-indigo-700 text-white text-xs shadow-xs font-semibold flex items-center gap-1.5"
-                    disabled={autofilling}
-                    onClick={handleAutofill}
-                    title="Automatically fill all remaining question slots using blueprint rules"
-                  >
-                    <Sparkles size={14} className={autofilling ? "animate-spin" : ""} />
-                    <span>{autofilling ? "Auto-filling…" : "Smart Auto-Fill"}</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="btn bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white text-xs shadow-xs font-semibold flex items-center gap-1.5"
+                      onClick={() => setAiGeneratorOpen(true)}
+                      title="Generate complete question paper using AI strictly matching blueprint quotas"
+                    >
+                      <Sparkles size={14} />
+                      <span>Generate with AI</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs shadow-2xs font-semibold flex items-center gap-1.5"
+                      disabled={autofilling}
+                      onClick={handleAutofill}
+                      title="Automatically fill all remaining question slots from existing Question Bank"
+                    >
+                      <RefreshCw size={13} className={autofilling ? "animate-spin" : ""} />
+                      <span>{autofilling ? "Auto-filling…" : "Bank Auto-Fill"}</span>
+                    </button>
+                  </div>
                 ) : (
                   <span className="badge border border-slate-200 bg-slate-50 text-slate-600 font-medium text-xs py-1.5 px-2.5">
                     Draft (View Only)
@@ -1073,14 +1096,25 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                     </p>
                   </div>
                   <div className="grid gap-2.5 sm:grid-cols-3 text-xs pt-1">
-                    <div className="rounded-lg bg-slate-50 p-3 border border-slate-200/80 space-y-1">
-                      <div className="font-semibold text-slate-900 flex items-center gap-1.5">
-                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-200 text-[11px] font-bold text-slate-800">1</span>
-                        <span>Auto-Fill or Pick</span>
+                    <div className="rounded-lg bg-slate-50 p-3 border border-slate-200/80 space-y-1.5">
+                      <div className="font-semibold text-slate-900 flex items-center justify-between gap-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[11px] font-bold text-white">1</span>
+                          <span>Generate or Pick</span>
+                        </div>
                       </div>
                       <p className="text-[11px] text-slate-600 leading-normal">
-                        Click <strong>Smart Auto-Fill</strong> in the top toolbar to automatically draft all question slots, or click any slot below.
+                        Generate complete paper using AI according to blueprint quotas, or pick from bank.
                       </p>
+                      {canEditPaper && (
+                        <button
+                          type="button"
+                          onClick={() => setAiGeneratorOpen(true)}
+                          className="btn bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] py-1 px-2.5 rounded-md font-bold inline-flex items-center gap-1 shadow-2xs mt-1"
+                        >
+                          <Sparkles size={11} /> Generate with AI
+                        </button>
+                      )}
                     </div>
                     <div className="rounded-lg bg-slate-50 p-3 border border-slate-200/80 space-y-1">
                       <div className="font-semibold text-slate-900 flex items-center gap-1.5">
@@ -1611,6 +1645,20 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
           paperTitle={details.title || paper.title}
           onClose={() => setAiAuditOpen(false)}
           onQuestionUpdated={reloadPaper}
+        />
+      )}
+
+      {/* AI Complete Question Paper Generator */}
+      {aiGeneratorOpen && paper && (
+        <AIPaperGeneratorModal
+          paperId={id}
+          paperTitle={details.title || paper.title}
+          open={aiGeneratorOpen}
+          onClose={() => setAiGeneratorOpen(false)}
+          onPaperUpdated={(updatedPaper) => {
+            setPaper(updatedPaper);
+            reloadPaper();
+          }}
         />
       )}
 

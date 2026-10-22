@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { QUESTION_TYPES } from "./constants";
 import {
   auditPaperWithGemini,
+  generatePaperSectionWithGemini,
   generateQuestionsWithGemini,
   improveQuestionWithGemini,
   isGeminiConfigured,
@@ -477,6 +478,71 @@ describe("Gemini AI Integration Suite", () => {
         expect(QUESTION_TYPES).toContain(s.type);
         expect(s.type).not.toBe("ONE_WORD");
       }
+    });
+  });
+
+  describe("generatePaperSectionWithGemini (Section-by-Section Exam Generation)", () => {
+    it("generates questions matching target chapter slots with vector diagram scene", async () => {
+      const res = await generatePaperSectionWithGemini({
+        className: "Class 12",
+        subject: "Biology",
+        sectionTitle: "Section A: Multiple Choice Questions",
+        sectionType: "MCQ",
+        marksEach: 1,
+        language: "en",
+        difficulty: "BALANCED",
+        generateDiagrams: true,
+        slots: [
+          { slotIndex: 0, chapterId: "c1", chapterNumber: 1, chapterTitle: "Sexual Reproduction in Flowering Plants", marks: 1 },
+          { slotIndex: 1, chapterId: "c2", chapterNumber: 2, chapterTitle: "Human Reproduction", marks: 1 },
+        ],
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.data.length).toBe(2);
+
+      const q1 = res.data[0];
+      expect(q1.slotIndex).toBe(0);
+      expect(q1.chapterId).toBe("c1");
+      expect(q1.chapterNumber).toBe(1);
+      expect(q1.type).toBe("MCQ");
+      expect(q1.options.length).toBe(4);
+      expect(q1.answer).toBeTruthy();
+
+      // First question had diagram generation enabled
+      expect(q1.figurePrompt).toBeDefined();
+      expect(q1.figureDoc).toBeDefined();
+      expect(q1.figureDoc?.objects).toBeInstanceOf(Array);
+
+      const q2 = res.data[1];
+      expect(q2.slotIndex).toBe(1);
+      expect(q2.chapterId).toBe("c2");
+      expect(q2.chapterNumber).toBe(2);
+      expect(q2.type).toBe("MCQ");
+    });
+
+    it("generates subjective questions with step marking schemes", async () => {
+      const res = await generatePaperSectionWithGemini({
+        className: "Class 12",
+        subject: "Biology",
+        sectionTitle: "Long Answer Questions",
+        sectionType: "LONG",
+        marksEach: 4,
+        language: "en",
+        difficulty: "HARD",
+        generateDiagrams: false,
+        slots: [
+          { slotIndex: 0, chapterId: "c7", chapterNumber: 7, chapterTitle: "Human Health and Disease", marks: 4 },
+        ],
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.data.length).toBe(1);
+      const q = res.data[0];
+      expect(q.type).toBe("LONG");
+      expect(q.text).toBeTruthy();
+      expect(q.answer).toContain("Model Answer");
+      expect(q.figureDoc).toBeUndefined();
     });
   });
 });

@@ -86,6 +86,7 @@ export default function BlueprintsPage() {
 
   // Quick Paper Build Modal
   const [buildPaperBp, setBuildPaperBp] = useState<Blueprint | null>(null);
+  const [autoGenerateWithAI, setAutoGenerateWithAI] = useState(false);
   const [paperForm, setPaperForm] = useState({
     title: "",
     examType: "ANNUAL" as ExamType,
@@ -242,8 +243,9 @@ export default function BlueprintsPage() {
     }
   }
 
-  function openBuildPaperModal(bp: Blueprint) {
+  function openBuildPaperModal(bp: Blueprint, autoAi = false) {
     setBuildPaperBp(bp);
+    setAutoGenerateWithAI(autoAi);
     setPaperForm({
       title: `${bp.book.className} ${bp.book.subject} — ${EXAM_TYPE_LABEL[bp.examType as ExamType] || "Annual"} Exam`,
       examType: (bp.examType as ExamType) || "ANNUAL",
@@ -277,7 +279,7 @@ export default function BlueprintsPage() {
       });
       setBuildPaperBp(null);
       toast.success(`Created draft paper "${created.title}"`);
-      router.push(`/papers/${created.id}`);
+      router.push(autoGenerateWithAI ? `/papers/${created.id}?aiGenerate=true` : `/papers/${created.id}`);
     } catch (err) {
       setError((err as Error).message);
       setBuildingPaper(false);
@@ -783,13 +785,23 @@ export default function BlueprintsPage() {
                       Generate customized question paper sets (Set A, B, C) matching this blueprint structure.
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => openBuildPaperModal(selected)}
-                    className="btn btn-primary text-xs py-2 px-4 inline-flex items-center gap-1.5"
-                  >
-                    <FileText size={14} /> Build Exam Paper Now
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openBuildPaperModal(selected, true)}
+                      className="btn bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white text-xs py-2 px-3 inline-flex items-center gap-1.5 font-bold shadow-xs"
+                      title="Create paper and auto-generate questions with AI"
+                    >
+                      <Sparkles size={14} /> Generate with AI
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openBuildPaperModal(selected, false)}
+                      className="btn btn-primary text-xs py-2 px-3.5 inline-flex items-center gap-1.5"
+                    >
+                      <FileText size={14} /> Build Paper
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -893,6 +905,26 @@ export default function BlueprintsPage() {
                   onChange={(e) => setPaperForm({ ...paperForm, examDate: e.target.value })}
                 />
               </Field>
+            </div>
+
+            <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3">
+              <label className="flex items-start gap-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="rounded text-indigo-600 focus:ring-indigo-500 mt-0.5"
+                  checked={autoGenerateWithAI}
+                  onChange={(e) => setAutoGenerateWithAI(e.target.checked)}
+                />
+                <div className="text-xs">
+                  <span className="font-bold text-indigo-950 flex items-center gap-1.5">
+                    <Sparkles size={13} className="text-indigo-600" />
+                    Auto-generate all questions with AI after creating
+                  </span>
+                  <p className="text-[11px] text-indigo-700 mt-0.5">
+                    Synthesizes board-standard questions and Figure Studio diagrams strictly balanced to blueprint chapter marks.
+                  </p>
+                </div>
+              </label>
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
