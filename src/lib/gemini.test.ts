@@ -639,5 +639,36 @@ describe("Gemini AI Integration Suite", () => {
       expect(q.imagePath || q.figureDoc).toBeDefined();
       expect(q.text.toLowerCase()).toContain("visual stimulus");
     });
+
+    it("generates exactly 1 combined MATCH_COLUMN question covering all assigned slots", async () => {
+      const res = await generatePaperSectionWithGemini({
+        className: "Class 12",
+        subject: "Biology",
+        sectionTitle: "Section A: Match the Columns",
+        sectionType: "MATCH_COLUMN",
+        marksEach: 1,
+        language: "en",
+        difficulty: "BALANCED",
+        slots: [
+          { slotIndex: 0, chapterId: "c1", chapterNumber: 1, chapterTitle: "Sexual Reproduction in Flowering Plants", marks: 1 },
+          { slotIndex: 1, chapterId: "c2", chapterNumber: 2, chapterTitle: "Human Reproduction", marks: 1 },
+          { slotIndex: 2, chapterId: "c3", chapterNumber: 3, chapterTitle: "Reproductive Health", marks: 1 },
+          { slotIndex: 3, chapterId: "c4", chapterNumber: 4, chapterTitle: "Principles of Inheritance and Variation", marks: 1 },
+          { slotIndex: 4, chapterId: "c5", chapterNumber: 5, chapterTitle: "Molecular Basis of Inheritance", marks: 1 },
+        ],
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.data.length).toBe(1);
+
+      const q = res.data[0];
+      expect(q.type).toBe("MATCH_COLUMN");
+      expect(q.options.length).toBe(5);
+      expect(q.subparts.length).toBe(0);
+      expect(q.text).toContain("Column I");
+      expect(q.text).toContain("(A)");
+      expect(q.text).toContain("(E)");
+      expect(q.answer).toContain("(A)-");
+    });
   });
 });

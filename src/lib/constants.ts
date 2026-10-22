@@ -87,33 +87,114 @@ export interface MatchColumnPair {
   right: string;
 }
 
+export function cleanMatchItem(text: string): string {
+  if (!text) return "";
+  return text
+    .replace(/^[\s\u200B]*(\([A-Za-z0-9ivxIVX\u0900-\u097F]+\)|[A-Za-z0-9ivxIVX\u0900-\u097F]+[.)\]:-])\s*/, "")
+    .trim();
+}
+
+export function extractColumnIItems(text?: string | null): string[] {
+  if (!text) return [];
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const items: string[] = [];
+  let inColumnI = false;
+
+  for (const line of lines) {
+    const lower = line.toLowerCase();
+    if (lower.includes("column i") || lower.includes("column a") || lower.includes("स्तम्भ 'अ'") || lower.includes("स्तम्भ 1")) {
+      inColumnI = true;
+      continue;
+    }
+    if (lower.includes("column ii") || lower.includes("column b") || lower.includes("स्तम्भ 'ब'") || lower.includes("स्तम्भ 2")) {
+      inColumnI = false;
+      continue;
+    }
+    const isItemLine = /^(\([A-Za-z0-9ivxIVX\u0900-\u097F]+\)|[A-Za-z0-9ivxIVX\u0900-\u097F]+[.)\]:-])\s+/.test(line);
+    if (isItemLine || inColumnI) {
+      items.push(cleanMatchItem(line));
+    }
+  }
+  return items;
+}
+
+export function getMatchColumnInstruction(text?: string | null): string {
+  if (!text) return "Match the items in Column I with Column II:";
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  if (lines.length === 0) return "Match the items in Column I with Column II:";
+
+  const instructionLines: string[] = [];
+  for (const line of lines) {
+    const lower = line.toLowerCase();
+    if (
+      lower.startsWith("column i") ||
+      lower.startsWith("column a") ||
+      lower.includes("स्तम्भ 'अ'") ||
+      /^(\([A-Za-z0-9ivxIVX\u0900-\u097F]+\)|[A-Za-z0-9ivxIVX\u0900-\u097F]+[.)\]:-])\s+/.test(line)
+    ) {
+      break;
+    }
+    instructionLines.push(line);
+  }
+  const result = instructionLines.join(" ").trim();
+  return result || lines[0];
+}
+
 export function serializeMatchColumnPair(left: string, right: string): string {
   return `${left.trim()} ||| ${right.trim()}`;
 }
 
-export function parseMatchColumnPairs(options: string[] = []): MatchColumnPair[] {
-  return options.map((opt) => {
-    if (opt.includes("|||")) {
-      const [left, ...rest] = opt.split("|||");
-      return { left: left.trim(), right: rest.join("|||").trim() };
+export function parseMatchColumnPairs(options: string[] = [], questionText?: string | null): MatchColumnPair[] {
+  if (!options || options.length === 0) return [];
+
+  const hasDelimiters = options.some(
+    (opt) =>
+      opt.includes("|||") ||
+      opt.includes("::") ||
+      opt.includes("→") ||
+      opt.includes("->") ||
+      opt.includes(" - ")
+  );
+
+  if (hasDelimiters) {
+    return options.map((opt) => {
+      let left = opt;
+      let right = "";
+      if (opt.includes("|||")) {
+        const [l, ...rest] = opt.split("|||");
+        left = l;
+        right = rest.join("|||");
+      } else if (opt.includes("::")) {
+        const [l, ...rest] = opt.split("::");
+        left = l;
+        right = rest.join("::");
+      } else if (opt.includes("→")) {
+        const [l, ...rest] = opt.split("→");
+        left = l;
+        right = rest.join("→");
+      } else if (opt.includes("->")) {
+        const [l, ...rest] = opt.split("->");
+        left = l;
+        right = rest.join("->");
+      } else if (opt.includes(" - ")) {
+        const [l, ...rest] = opt.split(" - ");
+        left = l;
+        right = rest.join(" - ");
+      }
+      return { left: cleanMatchItem(left), right: cleanMatchItem(right) };
+    });
+  }
+
+  const columnIItems = questionText ? extractColumnIItems(questionText) : [];
+
+  return options.map((opt, idx) => {
+    if (columnIItems.length > 0) {
+      return {
+        left: columnIItems[idx] ?? `Item ${idx + 1}`,
+        right: cleanMatchItem(opt),
+      };
     }
-    if (opt.includes("::")) {
-      const [left, ...rest] = opt.split("::");
-      return { left: left.trim(), right: rest.join("::").trim() };
-    }
-    if (opt.includes("→")) {
-      const [left, ...rest] = opt.split("→");
-      return { left: left.trim(), right: rest.join("→").trim() };
-    }
-    if (opt.includes("->")) {
-      const [left, ...rest] = opt.split("->");
-      return { left: left.trim(), right: rest.join("->").trim() };
-    }
-    if (opt.includes(" - ")) {
-      const [left, ...rest] = opt.split(" - ");
-      return { left: left.trim(), right: rest.join(" - ").trim() };
-    }
-    return { left: opt.trim(), right: "" };
+    return { left: cleanMatchItem(opt), right: "" };
   });
 }
 

@@ -457,6 +457,27 @@ A student took three test tubes A, B, and C containing clean iron nails. In tube
       ];
     }
 
+    if (type === "MATCH_COLUMN") {
+      return [
+        {
+          type: "MATCH_COLUMN",
+          text: `Match the items in Column I with their corresponding features in Column II:\nColumn I:\n(A) Primary factor\n(B) Secondary regulator\n(C) Catalytic center\n(D) Feedback inhibitor`,
+          options: [
+            "Metabolic activation pathway",
+            "Structural stability and conformation",
+            "Substrate binding site",
+            "Allosteric control regulation",
+          ],
+          subparts: [],
+          answer: "(A)-(i), (B)-(ii), (C)-(iii), (D)-(iv)",
+          marks: marks || 4,
+          difficulty: (difficulty as any) || "MEDIUM",
+          cognitiveLevel: (cognitiveLevel as any) || "UNDERSTANDING",
+          explanation: "Curriculum standard match the column exercise.",
+        },
+      ];
+    }
+
     // Default Short/Long
     return [
       {
@@ -577,7 +598,7 @@ STRICT CURRICULUM & BOARD STANDARDS:
    (b) Both A and R are true but R is not the correct explanation of A
    (c) A is true but R is false
    (d) A is false but R is true
-5. For Match the Columns (MATCH_COLUMN): Clearly state Column I and Column II items, with correct pairing in answer.
+5. For Match the Columns (MATCH_COLUMN): Generate EXACTLY 1 combined question containing all matching pairs across the section slots. Clearly list Column I items in 'text' and Column II items in 'options', with correct pairings in 'answer'.
 6. For Case Study (CASE_STUDY): Provide a concise real-world scenario/passage, followed by labeled subparts ((i), (ii), etc.) whose marks sum up exactly to ${marksEach}.
 7. For subjective questions (VERY_SHORT, SHORT, LONG): Provide a detailed step-wise model answer and marking scheme breakdown.
 8. LaTeX Math: Enclose all mathematical expressions, chemical equations, symbols, and formulas in standard LaTeX $...$ delimiters.
@@ -593,7 +614,48 @@ STRICT CURRICULUM & BOARD STANDARDS:
     )
     .join("\n");
 
-  const userPrompt = `Generate ${slots.length} distinct, high-standard question(s) for the following exam section:
+  const isMatchSection = normalizedType === "MATCH_COLUMN";
+
+  const userPrompt = isMatchSection
+    ? `Generate EXACTLY 1 combined Match the Columns question containing all ${slots.length} matching pairs for the following exam section:
+- Class: ${className}
+- Subject: ${subject}
+- Section Title: ${sectionTitle}
+- Section Question Type: MATCH_COLUMN
+- Total Marks: ${slots.length * marksEach} (${slots.length} pairs × ${marksEach} mark each)
+- Language: ${
+    language === "bilingual"
+      ? "Bilingual (English with Hindi translation in parentheses)"
+      : language === "hi"
+      ? "Hindi (Devanagari script)"
+      : "English"
+  }
+- Instructions:
+  1. Return a JSON array containing EXACTLY ONE question object.
+  2. The 'text' field must contain the instruction prompt followed by the list of ${slots.length} Column I items labeled (A), (B), (C), etc., derived from the assigned chapters.
+  3. The 'options' array must contain the corresponding ${slots.length} Column II matching items/definitions.
+  4. The 'answer' field must specify all correct pairings (e.g. '(A)-(ii), (B)-(i), (C)-(iv), (D)-(iii)').
+
+Assigned Chapter Targets for each matching pair:
+${slotsDescription}
+
+JSON Array Output Schema:
+[
+  {
+    "slotIndex": 0,
+    "chapterNumber": ${slots[0]?.chapterNumber ?? 1},
+    "chapterTitle": "${slots[0]?.chapterTitle ?? "Syllabus Topics"}",
+    "type": "MATCH_COLUMN",
+    "text": "Match the items in Column I with Column II:\\nColumn I:\\n(A) ...\\n(B) ...",
+    "options": ["Item 1", "Item 2"],
+    "subparts": [],
+    "answer": "(A)-(ii), (B)-(i)",
+    "difficulty": "MEDIUM",
+    "cognitiveLevel": "UNDERSTANDING",
+    "explanation": "Rationale for pairings"
+  }
+]`
+    : `Generate ${slots.length} distinct, high-standard question(s) for the following exam section:
 - Class: ${className}
 - Subject: ${subject}
 - Section Title: ${sectionTitle}
@@ -654,6 +716,31 @@ JSON Array Output Schema:
 ]`;
 
   const fallbackQuestions = (): GeneratedPaperQuestion[] => {
+    if (normalizedType === "MATCH_COLUMN") {
+      const letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
+      const romans = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
+      const col1Lines = slots.map((s, idx) => `(${letters[idx] ?? idx + 1}) Concept of ${s.chapterTitle}`);
+      const col2Items = slots.map((s) => `Key mechanism and definition of ${s.chapterTitle}`);
+      const answerPairs = slots.map((_, idx) => `(${letters[idx] ?? idx + 1})-${romans[idx] ?? `(${idx + 1})`}`).join(", ");
+
+      return [
+        {
+          slotIndex: slots[0]?.slotIndex ?? 0,
+          chapterId: slots[0]?.chapterId ?? "",
+          chapterNumber: slots[0]?.chapterNumber ?? 1,
+          chapterTitle: slots[0]?.chapterTitle ?? "Syllabus Topics",
+          type: "MATCH_COLUMN",
+          text: `Match the items in Column I with their corresponding concepts in Column II:\nColumn I:\n${col1Lines.join("\n")}`,
+          options: col2Items,
+          subparts: [],
+          answer: answerPairs,
+          difficulty: "MEDIUM",
+          cognitiveLevel: "UNDERSTANDING",
+          explanation: "Standard curriculum matching exercise across syllabus topics.",
+        },
+      ];
+    }
+
     return slots.map((slot, idx) => {
       const isMcq = normalizedType === "MCQ";
       const isAssertionReason = normalizedType === "ASSERTION_REASON";
@@ -808,6 +895,62 @@ JSON Array Output Schema:
       isMock: callResult.isMock,
       error: callResult.error || "Failed to generate valid question array from AI model.",
       data: [],
+    };
+  }
+
+  // Handle Match the Columns: Guarantee exactly ONE question containing all pairs across the section slots
+  if (normalizedType === "MATCH_COLUMN") {
+    const primaryQ = callResult.data[0] || {};
+    let qText = typeof primaryQ.text === "string" && primaryQ.text.trim() ? primaryQ.text.trim() : "";
+    let qOptions = Array.isArray(primaryQ.options) ? primaryQ.options.map((o: unknown) => String(o).trim()) : [];
+    let qAnswer = typeof primaryQ.answer === "string" ? primaryQ.answer : "";
+
+    // If the model returned multiple questions (1 per slot) instead of 1 combined question, collapse them
+    if (callResult.data.length > 1) {
+      const letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
+      const romans = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
+      const col1Items: string[] = [];
+      const col2Items: string[] = [];
+      const answers: string[] = [];
+
+      callResult.data.forEach((item, idx) => {
+        const itemText = typeof item.text === "string" ? item.text.replace(/^Match.*?:\s*/i, "").trim() : `Item ${idx + 1}`;
+        const itemOpt = Array.isArray(item.options) && item.options.length > 0 ? String(item.options[0]).trim() : (item.answer || `Feature ${idx + 1}`);
+        col1Items.push(`(${letters[idx] ?? idx + 1}) ${itemText}`);
+        col2Items.push(itemOpt);
+        answers.push(`(${letters[idx] ?? idx + 1})-${romans[idx] ?? `(${idx + 1})`}`);
+      });
+
+      qText = `Match the items in Column I with Column II:\nColumn I:\n${col1Items.join("\n")}`;
+      qOptions = col2Items;
+      qAnswer = answers.join(", ");
+    } else if (!qText || qOptions.length === 0) {
+      const fb = fallbackQuestions()[0];
+      qText = fb.text;
+      qOptions = fb.options;
+      qAnswer = fb.answer;
+    }
+
+    const firstSlot = slots[0];
+    const singleMatchQ: GeneratedPaperQuestion = {
+      slotIndex: firstSlot.slotIndex,
+      chapterId: firstSlot.chapterId,
+      chapterNumber: firstSlot.chapterNumber,
+      chapterTitle: firstSlot.chapterTitle,
+      type: "MATCH_COLUMN",
+      text: qText,
+      options: qOptions,
+      subparts: [],
+      answer: qAnswer,
+      difficulty: ["EASY", "MEDIUM", "HARD"].includes(primaryQ.difficulty) ? primaryQ.difficulty : "MEDIUM",
+      cognitiveLevel: primaryQ.cognitiveLevel || "UNDERSTANDING",
+      explanation: primaryQ.explanation || "Curriculum matching exercise across syllabus topics.",
+    };
+
+    return {
+      success: true,
+      isMock: callResult.isMock,
+      data: [singleMatchQ],
     };
   }
 

@@ -1,5 +1,7 @@
 import { imageUrl } from "@/lib/client";
 import {
+  cleanMatchItem,
+  getMatchColumnInstruction,
   isKindergartenType,
   isMcqLikeType,
   normalizeMcqAnswer,
@@ -13,8 +15,9 @@ import {
 import type { QuestionDto } from "@/lib/types";
 import { MathText } from "@/components/MathText";
 
-const LETTERS = "ABCDEF";
-const ROMAN_LOWER = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)"];
+const LETTERS = "ABCDEFGHIJ";
+const LETTERS_LIST = ["(A)", "(B)", "(C)", "(D)", "(E)", "(F)", "(G)", "(H)", "(I)", "(J)"];
+const ROMAN_LOWER = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
 
 export type QuestionRenderMode = "FULL" | "STEM_ONLY" | "SUBPART_ONLY";
 
@@ -155,7 +158,8 @@ function SingleQuestionBody({
       : "1fr 1fr";
 
   const normalizedMcq = isMcq ? normalizeMcqAnswer(q.answer, q.options) : null;
-  const matchPairs = q.type === "MATCH_COLUMN" ? parseMatchColumnPairs(q.options) : [];
+  const matchPairs = q.type === "MATCH_COLUMN" ? parseMatchColumnPairs(q.options, q.text) : [];
+  const stemText = q.type === "MATCH_COLUMN" && matchPairs.length > 0 ? getMatchColumnInstruction(q.text) : q.text;
   const hasHindi = /[\u0900-\u097F]/.test(q.text) || q.options.some((o) => /[\u0900-\u097F]/.test(o));
 
   return (
@@ -168,7 +172,7 @@ function SingleQuestionBody({
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight }}>
-            <MathText text={q.text} />
+            <MathText text={stemText} />
             {marks !== undefined && marksStyle === "INLINE" && (
               <span style={{ fontWeight: 700, fontSize: marksFontSize, marginLeft: "2mm", whiteSpace: "nowrap", color: "#334155" }}>
                 [{marks} {marks === 1 ? "Mark" : "Marks"}]
@@ -225,15 +229,15 @@ function SingleQuestionBody({
                   <tr key={idx} style={{ borderBottom: idx < matchPairs.length - 1 ? "1px solid #e2e8f0" : "none" }}>
                     <td style={{ padding: isA5 ? "0.8mm 2mm" : "1.2mm 2.5mm", borderRight: "1px solid #cbd5e1", verticalAlign: "top" }}>
                       <span style={{ fontWeight: 600, marginRight: "1.5mm" }}>
-                        {ROMAN_LOWER[idx] ?? `(${idx + 1})`}
+                        {LETTERS_LIST[idx] ?? `(${String.fromCharCode(65 + idx)})`}
                       </span>
-                      <MathText text={pair.left} />
+                      <MathText text={cleanMatchItem(pair.left)} />
                     </td>
                     <td style={{ padding: isA5 ? "0.8mm 2mm" : "1.2mm 2.5mm", verticalAlign: "top" }}>
                       <span style={{ fontWeight: 600, marginRight: "1.5mm" }}>
-                        ({LETTERS[idx]?.toLowerCase() ?? idx + 1})
+                        {ROMAN_LOWER[idx] ?? `(${idx + 1})`}
                       </span>
-                      <MathText text={pair.right} />
+                      <MathText text={cleanMatchItem(pair.right)} />
                     </td>
                   </tr>
                 ))}

@@ -28,7 +28,13 @@ import { renderDocToBlob } from "@/components/figure-studio/render";
 import { embedSceneInPng } from "@/components/figure-studio/pngMeta";
 import type { Doc, GridSettings, SceneFile } from "@/components/figure-studio/types";
 import { api, imageUrl, uploadImage } from "@/lib/client";
-import { QUESTION_TYPE_LABEL, type QuestionType } from "@/lib/constants";
+import {
+  cleanMatchItem,
+  getMatchColumnInstruction,
+  parseMatchColumnPairs,
+  QUESTION_TYPE_LABEL,
+  type QuestionType,
+} from "@/lib/constants";
 import { getMaxPaperDiagramBudget, isSectionVisuallyEligible } from "@/lib/diagram-rules";
 import type { GeneratedPaperQuestion } from "@/lib/gemini";
 import type { PaperAutogenPlan } from "@/lib/paperAutogen";
@@ -681,7 +687,13 @@ export function AIPaperGeneratorModal({
 
                           {/* Question Text */}
                           <div className="text-xs text-slate-900 font-medium leading-relaxed">
-                            <MathText text={q.text} />
+                            <MathText
+                              text={
+                                q.type === "MATCH_COLUMN"
+                                  ? getMatchColumnInstruction(q.text)
+                                  : q.text
+                              }
+                            />
                           </div>
 
                           {/* Render Diagram Thumbnail if present */}
@@ -699,8 +711,41 @@ export function AIPaperGeneratorModal({
                             </div>
                           )}
 
+                          {/* Options if MATCH_COLUMN */}
+                          {q.type === "MATCH_COLUMN" && q.options && q.options.length > 0 && (() => {
+                            const pairs = parseMatchColumnPairs(q.options, q.text);
+                            const letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
+                            const roman = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
+                            return (
+                              <div className="mt-1.5 overflow-hidden rounded border border-slate-200 text-xs">
+                                <div className="grid grid-cols-2 bg-slate-100/80 px-2.5 py-1 font-semibold text-slate-600 border-b border-slate-200 text-[11px]">
+                                  <span>Column A (स्तम्भ &apos;अ&apos;)</span>
+                                  <span>Column B (स्तम्भ &apos;ब&apos;)</span>
+                                </div>
+                                <div className="divide-y divide-slate-100 bg-white">
+                                  {pairs.map((p, pIdx) => (
+                                    <div key={pIdx} className="grid grid-cols-2 px-2.5 py-1 text-[11px] text-slate-700">
+                                      <div className="flex items-start gap-1 pr-1">
+                                        <span className="font-bold text-slate-400 font-mono text-[10px]">
+                                          ({letters[pIdx] ?? pIdx + 1})
+                                        </span>
+                                        <MathText text={cleanMatchItem(p.left)} />
+                                      </div>
+                                      <div className="flex items-start gap-1 pl-1 border-l border-slate-100">
+                                        <span className="font-bold text-slate-400 font-mono text-[10px]">
+                                          {roman[pIdx] ?? `(${pIdx + 1})`}
+                                        </span>
+                                        <MathText text={cleanMatchItem(p.right)} />
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })()}
+
                           {/* Options if MCQ / True False */}
-                          {q.options && q.options.length > 0 && (
+                          {q.type !== "MATCH_COLUMN" && q.options && q.options.length > 0 && (
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1 text-xs">
                               {q.options.map((opt, optIdx) => (
                                 <div

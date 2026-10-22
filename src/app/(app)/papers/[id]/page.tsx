@@ -52,6 +52,7 @@ import {
   MARKS_STYLE_LABEL,
   NUMBERING_STYLES,
   NUMBERING_STYLE_LABEL,
+  parseMatchColumnPairs,
   PRINT_DENSITIES,
   PRINT_DENSITY_LABEL,
   QUESTION_TYPE_LABEL,
@@ -1151,6 +1152,10 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
             const items = paper.items.filter((i) => i.sectionId === s.id);
             const st = progress.sections.find((x) => x.id === s.id)!;
             const effectiveUnits = items.reduce((sum, it) => {
+              if (it.question.type === "MATCH_COLUMN" || s.type === "MATCH_COLUMN") {
+                const pairs = parseMatchColumnPairs(it.question.options, it.question.text);
+                return sum + (pairs.length > 0 ? pairs.length : s.count);
+              }
               const subLen = it.question.subparts?.length || 0;
               return sum + (subLen > 1 && s.count >= subLen ? subLen : 1);
             }, 0);
@@ -1186,7 +1191,11 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                         }`}
                       >
                         {items.length === 1 && effectiveUnits > 1
-                          ? `1 question (${effectiveUnits} sub-parts)`
+                          ? s.type === "MATCH_COLUMN"
+                            ? `1 question (${effectiveUnits} matching pairs)`
+                            : `1 question (${effectiveUnits} sub-parts)`
+                          : s.type === "MATCH_COLUMN" && items.length === 0
+                          ? `0/1 question (${s.count} pairs)`
                           : `${effectiveUnits}/${s.count} questions`}{" "}
                         {isOverfilled ? `(${effectiveUnits - s.count} excess!)` : ""}
                       </span>
@@ -1268,8 +1277,14 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                         const isTypeMismatch = it.question.type !== s.type && !isSubjectiveCompat && !isObjectiveCompat;
                         const isExcess = idx >= s.count || effectiveUnits > s.count;
 
+                        const isMatchQ = it.question.type === "MATCH_COLUMN" || s.type === "MATCH_COLUMN";
+                        const matchCount = isMatchQ
+                          ? (parseMatchColumnPairs(it.question.options, it.question.text).length || s.count)
+                          : 0;
                         const questionTotalMarks =
-                          it.question.subparts && it.question.subparts.length > 0
+                          matchCount > 0
+                            ? matchCount * s.marksEach
+                            : it.question.subparts && it.question.subparts.length > 0
                             ? it.question.subparts.reduce((sum, sp) => sum + (sp.marks || 1), 0)
                             : s.marksEach;
 
@@ -1538,7 +1553,9 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                       })}
 
                       {/* Interactive Empty Slot Targets */}
-                      {Array.from({ length: emptySlots }).map((_, i) => {
+                      {Array.from({
+                        length: s.type === "MATCH_COLUMN" ? (items.length === 0 ? 1 : 0) : emptySlots,
+                      }).map((_, i) => {
                         const slotNum = effectiveUnits + i + 1;
                         return (
                           <li key={`empty-${i}`}>
@@ -1553,16 +1570,29 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                   className="text-slate-400 group-hover:text-indigo-600 transition group-hover:scale-110"
                                 />
                                 <span>
-                                  Slot {slotNum} of {s.count} &mdash;{" "}
-                                  <strong className="font-semibold">
-                                    Click to select question ({s.marksEach}m{" "}
-                                    {QUESTION_TYPE_LABEL[s.type as keyof typeof QUESTION_TYPE_LABEL]})
-                                  </strong>
+                                  {s.type === "MATCH_COLUMN" ? (
+                                    <>
+                                      Match the Columns Question &mdash;{" "}
+                                      <strong className="font-semibold">
+                                        Click to select question ({s.count * s.marksEach}m · {s.count} pairs)
+                                      </strong>
+                                    </>
+                                  ) : (
+                                    <>
+                                      Slot {slotNum} of {s.count} &mdash;{" "}
+                                      <strong className="font-semibold">
+                                        Click to select question ({s.marksEach}m{" "}
+                                        {QUESTION_TYPE_LABEL[s.type as keyof typeof QUESTION_TYPE_LABEL]})
+                                      </strong>
+                                    </>
+                                  )}
                                 </span>
                               </button>
                             ) : (
                               <div className="rounded-xl border border-dashed border-slate-200 p-3 text-xs text-slate-400 text-center">
-                                Empty slot {slotNum} of {s.count}
+                                {s.type === "MATCH_COLUMN"
+                                  ? `Empty match the columns question (${s.count * s.marksEach}m)`
+                                  : `Empty slot ${slotNum} of ${s.count}`}
                               </div>
                             )}
                           </li>

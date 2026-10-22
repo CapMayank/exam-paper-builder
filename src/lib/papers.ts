@@ -1,6 +1,6 @@
 import "server-only";
 import { HttpError, type SessionUser } from "./api";
-import { resolvePaperExamType } from "./constants";
+import { parseMatchColumnPairs, resolvePaperExamType } from "./constants";
 import { toQuestionDto } from "./dto";
 import { diagnosePaperImplications, paperStatus } from "./blueprint";
 import { blueprintInclude } from "./blueprints";
@@ -121,13 +121,25 @@ export async function loadPaperView(id: string) {
       chapters: blueprint.chapters.map((c) => ({ chapterId: c.chapterId, marks: c.marks })),
     },
     items.map((i) => {
+      const isMatch = i.question.type === "MATCH_COLUMN";
+      let matchCount = 0;
+      if (isMatch) {
+        let opts: string[] = [];
+        try {
+          const p = JSON.parse(i.question.optionsJson || "[]");
+          opts = Array.isArray(p) ? p : [];
+        } catch {}
+        matchCount = parseMatchColumnPairs(opts, i.question.text).length;
+      }
       const subparts = parseSubparts(i.question.subpartsJson);
       const submarks = subpartsTotalMarks(subparts);
+      const effectiveMarks = isMatch && matchCount > 0 ? matchCount : (submarks > 0 ? submarks : undefined);
+      const effectiveUnits = isMatch && matchCount > 0 ? matchCount : (subparts.length > 0 ? subparts.length : undefined);
       return {
         sectionId: i.sectionId,
         chapterId: i.question.chapterId,
-        marks: submarks > 0 ? submarks : undefined,
-        subpartsCount: subparts.length > 0 ? subparts.length : undefined,
+        marks: effectiveMarks,
+        subpartsCount: effectiveUnits,
       };
     }),
   );
@@ -141,16 +153,28 @@ export async function loadPaperView(id: string) {
       })),
     },
     items.map((i) => {
+      const isMatch = i.question.type === "MATCH_COLUMN";
+      let matchCount = 0;
+      if (isMatch) {
+        let opts: string[] = [];
+        try {
+          const p = JSON.parse(i.question.optionsJson || "[]");
+          opts = Array.isArray(p) ? p : [];
+        } catch {}
+        matchCount = parseMatchColumnPairs(opts, i.question.text).length;
+      }
       const subparts = parseSubparts(i.question.subpartsJson);
       const submarks = subpartsTotalMarks(subparts);
+      const effectiveMarks = isMatch && matchCount > 0 ? matchCount : (submarks > 0 ? submarks : undefined);
+      const effectiveUnits = isMatch && matchCount > 0 ? matchCount : (subparts.length > 0 ? subparts.length : undefined);
       return {
         id: i.id,
         sectionId: i.sectionId,
         chapterId: i.question.chapterId,
         type: i.question.type,
         text: i.question.text,
-        marks: submarks > 0 ? submarks : undefined,
-        subpartsCount: subparts.length > 0 ? subparts.length : undefined,
+        marks: effectiveMarks,
+        subpartsCount: effectiveUnits,
       };
     }),
   );

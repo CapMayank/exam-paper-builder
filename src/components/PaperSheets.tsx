@@ -9,6 +9,7 @@ import {
   EXAM_TYPE_LABEL,
   isBookletLayout,
   isPrePrimaryClass,
+  parseMatchColumnPairs,
   QUESTION_TYPE_LABEL,
   resolvePaperExamType,
 } from "@/lib/constants";
@@ -351,7 +352,9 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
           >
             <span>{QUESTION_TYPE_LABEL[s.type as keyof typeof QUESTION_TYPE_LABEL] || s.type}</span>
             <span>
-              {s.count} question(s) × {s.marksEach} mark(s) = {s.count * s.marksEach}m
+              {s.type === "MATCH_COLUMN"
+                ? `1 question (${s.count} pairs) × ${s.marksEach}m = ${s.count * s.marksEach}m`
+                : `${s.count} question(s) × ${s.marksEach} mark(s) = ${s.count * s.marksEach}m`}
             </span>
           </div>
         ),
@@ -370,8 +373,14 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
 
       const subparts = it.question.subparts;
       const canDecompose = !isPrePrimary && !it.orQuestion && subparts && subparts.length > 1;
+      const isMatch = s.type === "MATCH_COLUMN" || it.question.type === "MATCH_COLUMN";
+      const matchPairCount = isMatch
+        ? (parseMatchColumnPairs(it.question.options, it.question.text).length || s.count)
+        : 0;
       const totalQuestionMarks =
-        subparts && subparts.length > 0
+        matchPairCount > 0
+          ? matchPairCount * s.marksEach
+          : subparts && subparts.length > 0
           ? subparts.reduce((sum, sp) => sum + (sp.marks || 1), 0)
           : s.marksEach;
 

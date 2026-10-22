@@ -87,11 +87,21 @@ export function planPaperSlotAssignments(paper: PaperAutogenInput): PaperAutogen
   const marksBySection = new Map<string, number>(blueprint.sections.map((s) => [s.id, s.marksEach]));
   const placedCountBySection = new Map<string, number>();
 
+  const sectionById = new Map(blueprint.sections.map((s) => [s.id, s]));
+
   for (const item of items) {
+    const sec = sectionById.get(item.sectionId);
+    const isMatch = sec?.type === "MATCH_COLUMN" || (item.question as any).type === "MATCH_COLUMN";
     const sectionMarks = marksBySection.get(item.sectionId) ?? 0;
     const chapId = item.question.chapterId;
-    placedMarksByChapter.set(chapId, (placedMarksByChapter.get(chapId) ?? 0) + sectionMarks);
-    placedCountBySection.set(item.sectionId, (placedCountBySection.get(item.sectionId) ?? 0) + 1);
+    if (isMatch) {
+      const units = sec?.count ?? 1;
+      placedMarksByChapter.set(chapId, (placedMarksByChapter.get(chapId) ?? 0) + sectionMarks * units);
+      placedCountBySection.set(item.sectionId, (placedCountBySection.get(item.sectionId) ?? 0) + units);
+    } else {
+      placedMarksByChapter.set(chapId, (placedMarksByChapter.get(chapId) ?? 0) + sectionMarks);
+      placedCountBySection.set(item.sectionId, (placedCountBySection.get(item.sectionId) ?? 0) + 1);
+    }
   }
 
   // 2. Track remaining quotas per chapter

@@ -19,9 +19,11 @@ import { HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { formatMathTextRuns, formatOptionPairRuns } from "@/lib/docxMath";
 import {
+  cleanMatchItem,
   DEFAULT_SCHOOL_NAME,
   EXAM_TYPE_LABEL,
   formatQuestionNumber,
+  getMatchColumnInstruction,
   isMcqLikeType,
   parseMatchColumnPairs,
   resolvePaperExamType,
@@ -253,13 +255,24 @@ export const GET = route(async (_req, params, user) => {
       const qLabel = formatQuestionNumber(qNum, paper.numberingStyle);
 
       // Question line
+      const isMatch = q.type === "MATCH_COLUMN";
+      let matchCount = 0;
+      if (isMatch && q.optionsJson) {
+        try {
+          const opts = JSON.parse(q.optionsJson);
+          matchCount = parseMatchColumnPairs(opts, q.text).length;
+        } catch {}
+      }
+      const qTotalMarks = matchCount > 0 ? matchCount * section.marksEach : section.marksEach;
+      const qText = isMatch ? getMatchColumnInstruction(q.text) : q.text;
+
       paragraphs.push(
         new Paragraph({
           spacing: { before: 100, after: 60 },
           children: [
             new TextRun({ text: `${qLabel}  `, bold: true, font: "Times New Roman" }),
-            ...formatMathTextRuns(q.text, { font: "Times New Roman" }),
-            new TextRun({ text: `  [${section.marksEach} Mark${section.marksEach > 1 ? "s" : ""}]`, bold: true, font: "Times New Roman" }),
+            ...formatMathTextRuns(qText, { font: "Times New Roman" }),
+            new TextRun({ text: `  [${qTotalMarks} Mark${qTotalMarks > 1 ? "s" : ""}]`, bold: true, font: "Times New Roman" }),
           ],
         }),
       );
@@ -316,10 +329,10 @@ export const GET = route(async (_req, params, user) => {
       if (q.type === "MATCH_COLUMN" && q.optionsJson) {
         try {
           const opts: string[] = JSON.parse(q.optionsJson);
-          const pairs = parseMatchColumnPairs(opts);
+          const pairs = parseMatchColumnPairs(opts, q.text);
           if (pairs.length > 0) {
-            const letters = ["a", "b", "c", "d", "e", "f"];
-            const roman = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)"];
+            const letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
+            const roman = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
             paragraphs.push(
               new Table({
                 width: { size: 92, type: WidthType.PERCENTAGE },
@@ -353,8 +366,8 @@ export const GET = route(async (_req, params, user) => {
                             children: [
                               new Paragraph({
                                 children: [
-                                  new TextRun({ text: `${roman[idx] ?? `(${idx + 1})`} `, bold: true, font: "Times New Roman" }),
-                                  ...formatMathTextRuns(pair.left, { font: "Times New Roman" }),
+                                  new TextRun({ text: `(${letters[idx] ?? idx + 1}) `, bold: true, font: "Times New Roman" }),
+                                  ...formatMathTextRuns(cleanMatchItem(pair.left), { font: "Times New Roman" }),
                                 ],
                               }),
                             ],
@@ -364,8 +377,8 @@ export const GET = route(async (_req, params, user) => {
                             children: [
                               new Paragraph({
                                 children: [
-                                  new TextRun({ text: `(${letters[idx] ?? idx + 1}) `, bold: true, font: "Times New Roman" }),
-                                  ...formatMathTextRuns(pair.right, { font: "Times New Roman" }),
+                                  new TextRun({ text: `${roman[idx] ?? `(${idx + 1})`} `, bold: true, font: "Times New Roman" }),
+                                  ...formatMathTextRuns(cleanMatchItem(pair.right), { font: "Times New Roman" }),
                                 ],
                               }),
                             ],
