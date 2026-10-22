@@ -670,9 +670,54 @@ JSON Array Output Schema:
         answer = "Complete case study evaluation based on subparts.";
       }
 
-      // If diagram generation is requested and it's the first question, provide a diagram prompt
+      // If diagram generation is requested, apply strict subject & question-linking discipline:
+      // At most 1 question in the section gets a diagram, and the question text MUST explicitly reference it.
       if (generateDiagrams && idx === 0) {
-        figurePrompt = `Circuit diagram or schematic process diagram showing components and regulatory loop for ${slot.chapterTitle}`;
+        const isBio = subject.toLowerCase().includes("bio");
+        const isPhys = subject.toLowerCase().includes("phys") || subject.toLowerCase().includes("sci");
+        const isMath = subject.toLowerCase().includes("math");
+
+        if (isBio) {
+          if (isMcq) {
+            text = `In the given diagram of a plant cell, identify labeled parts (A) and (B) and choose the correct option representing their names:`;
+            options = [
+              "(A) Cell wall, (B) Central vacuole",
+              "(A) Cell membrane, (B) Mitochondria",
+              "(A) Chloroplast, (B) Ribosome",
+              "(A) Nucleus, (B) Endoplasmic reticulum",
+            ];
+            answer = "(A) Cell wall, (B) Central vacuole";
+            figurePrompt = `Plant cell diagram with labeled leader lines pointing to parts (A) cell wall and (B) central vacuole`;
+          } else if (
+            slot.chapterTitle.toLowerCase().includes("inherit") ||
+            slot.chapterTitle.toLowerCase().includes("gene") ||
+            slot.chapterTitle.toLowerCase().includes("reproduct")
+          ) {
+            text = `Study the given Punnett square representing a monohybrid cross. Determine the genotypic ratio of the F2 generation and calculate the percentage of heterozygous tall offspring.`;
+            answer = `Model Answer:\n1. Genotypic ratio is 1 TT : 2 Tt : 1 tt [1 mark]\n2. Phenotypic ratio is 3 Tall : 1 Dwarf [1 mark]\n3. Percentage of heterozygous tall (Tt) offspring = 50% [${Math.max(1, slot.marks - 2)} marks]`;
+            figurePrompt = `Punnett square for monohybrid cross showing parental gametes T, t and F2 offspring TT, Tt, Tt, tt with genotypic and phenotypic ratios`;
+          } else if (
+            slot.chapterTitle.toLowerCase().includes("eco") ||
+            slot.chapterTitle.toLowerCase().includes("populat") ||
+            slot.chapterTitle.toLowerCase().includes("biodivers")
+          ) {
+            text = `Refer to the ecological trophic pyramid shown below. Identify the trophic level having maximum available energy and explain Lindeman's 10% energy transfer rule.`;
+            answer = `Model Answer:\n1. Primary producers have maximum available energy (10,000 J) [1 mark]\n2. According to Lindeman's 10% rule, only 10% of energy is transferred to the next trophic level while 90% is lost as metabolic heat [${Math.max(1, slot.marks - 1)} marks]`;
+            figurePrompt = `Ecological trophic pyramid of energy with 4 levels: primary producers (10,000 J), primary consumers (1,000 J), secondary consumers (100 J), and tertiary consumers (10 J)`;
+          } else {
+            text = `In the given diagram of a plant cell structure, identify labeled parts (A), (B), (C), and (D). State the main biological role of parts (A) and (B).`;
+            answer = `Model Answer:\n1. Identification: (A) Cell wall, (B) Central vacuole, (C) Chloroplast, (D) Nucleus [${Math.max(1, Math.floor(slot.marks / 2))} marks]\n2. Function: (A) provides structural support and protection; (B) maintains cell turgidity and stores nutrients [${Math.ceil(slot.marks / 2)} marks]`;
+            figurePrompt = `Diagram of plant cell structure with labeled leader lines pointing to parts (A), (B), (C), and (D)`;
+          }
+        } else if (isPhys) {
+          text = `In the circuit diagram shown below, calculate the total equivalent resistance of the combination and the current reading on ammeter (A).`;
+          answer = `Model Answer:\n1. Equivalent resistance calculation: $R_{eq} = R_1 + R_2$ [${Math.max(1, Math.floor(slot.marks / 2))} marks]\n2. Current reading: $I = V / R_{eq}$ [${Math.ceil(slot.marks / 2)} marks]`;
+          figurePrompt = `Circuit diagram with voltmeter across resistor R, ammeter in series, rheostat, switch and battery`;
+        } else if (isMath) {
+          text = `In the given right triangle ABC, right-angled at B with $AB = 6\\text{ cm}$ and $BC = 8\\text{ cm}$, determine the value of $\\sin A$ and $\\cos C$.`;
+          answer = `Model Answer:\n1. Hypotenuse $AC = \\sqrt{6^2 + 8^2} = 10\\text{ cm}$ [1 mark]\n2. $\\sin A = 8/10 = 4/5$ [1 mark]\n3. $\\cos C = 8/10 = 4/5$ [${Math.max(1, slot.marks - 2)} marks]`;
+          figurePrompt = `Right triangle ABC with right angle at B, AB = 6 cm, BC = 8 cm, AC = 10 cm`;
+        }
       }
 
       return {
@@ -752,6 +797,7 @@ JSON Array Output Schema:
       try {
         const figRes = await promptToFigureSceneWithGemini({
           prompt: figurePrompt,
+          subject,
           apiKey,
         });
         if (figRes.success && figRes.data) {
@@ -1190,9 +1236,12 @@ export function normalizeFigureObjects(
           .toLowerCase()
           .trim();
 
-        // Map circuit and science synonyms to valid STAMP_REGISTRY keys
-        if (rawStamp.includes("ohm") || rawStamp === "resistor" || rawStamp === "resistance") rawStamp = "resistor";
-        else if (rawStamp.includes("batt") || rawStamp.includes("cell") || rawStamp === "dc_cell") rawStamp = "battery";
+        // Map circuit, biology, and science synonyms to valid STAMP_REGISTRY keys
+        if (rawStamp === "plant_cell" || rawStamp.includes("plant_cell") || (rawStamp.includes("plant") && rawStamp.includes("cell"))) rawStamp = "plant_cell";
+        else if (rawStamp === "animal_cell" || rawStamp.includes("animal_cell") || (rawStamp.includes("animal") && rawStamp.includes("cell"))) rawStamp = "animal_cell";
+        else if (rawStamp === "neuron" || rawStamp.includes("neuron") || rawStamp.includes("nerve")) rawStamp = "neuron";
+        else if (rawStamp.includes("ohm") || rawStamp === "resistor" || rawStamp === "resistance") rawStamp = "resistor";
+        else if (rawStamp.includes("batt") || rawStamp === "dc_cell" || rawStamp === "cell" || rawStamp === "electric_cell") rawStamp = "battery";
         else if (rawStamp.includes("volt") || rawStamp === "v") rawStamp = "voltmeter";
         else if (rawStamp.includes("ammet") || rawStamp === "a") rawStamp = "ammeter";
         else if (rawStamp.includes("rheo") || rawStamp.includes("variable")) rawStamp = "rheostat";
@@ -1359,11 +1408,12 @@ export function normalizeFigureObjects(
 
 export async function promptToFigureSceneWithGemini(params: {
   prompt: string;
+  subject?: string;
   canvasWidth?: number;
   canvasHeight?: number;
   apiKey?: string | null;
 }): Promise<GeminiCallResult<FigureStudioPromptResult>> {
-  const { prompt, canvasWidth = 640, canvasHeight = 360, apiKey } = params;
+  const { prompt, subject, canvasWidth = 640, canvasHeight = 360, apiKey } = params;
 
   const systemPrompt = `You are a professional physics, mathematics, and science diagram engine for an interactive vector studio.
 Translate the user's natural language request into a valid JSON array of 2D canvas vector scene objects.
@@ -1371,11 +1421,11 @@ Canvas coordinates: (0,0) is top-left, x increases right, y increases down. Canv
 
 CRITICAL OBJECT SCHEMA RULES:
 1. Stamp (Physical components & symbols):
-   { "type": "stamp", "stamp": "resistor"|"battery"|"ammeter"|"voltmeter"|"rheostat"|"switch_closed"|"switch_open"|"bulb"|"galvanometer", "x": x, "y": y, "w": w, "h": h, "rot": 0, "style": { "stroke": "#0f172a", "width": 2 } }
+   { "type": "stamp", "stamp": "resistor"|"battery"|"ammeter"|"voltmeter"|"rheostat"|"switch_closed"|"switch_open"|"bulb"|"galvanometer"|"plant_cell"|"animal_cell"|"neuron", "x": x, "y": y, "w": w, "h": h, "rot": 0, "style": { "stroke": "#0f172a", "width": 2 } }
    * NEVER wrap in a "box" property. Use top-level x, y, w, h, rot.
    * NEVER use "stampId". Use "stamp".
 
-2. Line (Wires, dimensions, rays):
+2. Line (Wires, dimensions, rays, leader lines):
    { "type": "line", "kind": "line"|"polyline"|"dimension", "pts": [{"x": x1, "y": y1}, {"x": x2, "y": y2}], "start": "none"|"filled", "end": "none"|"filled", "label": "label text", "labelOffset": 20, "labelSize": 13, "style": { "stroke": "#0f172a", "width": 2 } }
 
 3. Point (Vertices, nodes):
@@ -1387,11 +1437,11 @@ CRITICAL OBJECT SCHEMA RULES:
 5. Text (Labels, headings, value annotations):
    { "type": "text", "text": "Label", "x": x, "y": y, "w": 90, "h": 22, "rot": 0, "size": 12, "bold": false, "align": "center", "bg": "white", "style": { "stroke": "#0f172a", "width": 2 } }
 
-CRITICAL ANTI-OVERLAP & CIRCUIT RULES:
-- FOR CIRCUITS (Ohm's Law, Series, Parallel): ALWAYS output actual component stamps ("resistor", "voltmeter", "ammeter", "rheostat", "battery", "switch_closed"). Do NOT draw a circuit with only lines!
-- Connect components with rectangular wire lines ending exactly at the component terminals.
-- Place text labels (e.g. "R", "V", "A", "Rh", "K", "+/-") in clear space at least 15-20px away from components and wires. Set "bg": "white" on text objects.
-- FOR GEOMETRY: Point labels (A, B, C) MUST be placed on the EXTERIOR of the shape using lx/ly. Line dimension labels must use labelOffset pointing away from the interior so they never collide with angle arcs or vertex letters.`;
+CRITICAL ANTI-OVERLAP & DISCIPLINE RULES:
+- FOR BIOLOGY: NEVER output circuit components ("resistor", "battery", "ammeter", "voltmeter"). Use biology stamps ("plant_cell", "animal_cell", "neuron"), Punnett square grids (rects with gametes and genotypes), or trophic pyramids. Leader lines pointing to parts ((A), (B), (C), (D)) must have callout text placed outside the boundary with zero overlap!
+- FOR CIRCUITS (Physics only): ALWAYS output actual component stamps ("resistor", "voltmeter", "ammeter", "rheostat", "battery", "switch_closed"). Do NOT draw a circuit with only lines! Connect components with rectangular wire lines ending exactly at the component terminals.
+- Place text labels in clear space at least 15-20px away from shapes. Set "bg": "white" on text objects.
+- FOR GEOMETRY: Point labels (A, B, C) MUST be placed on the EXTERIOR of the shape using lx/ly.`;
 
   const userPrompt = `Generate the 2D vector drawing scene for:
 "${prompt}"
@@ -1409,17 +1459,572 @@ Return a JSON object strictly matching:
     const cx = canvasWidth / 2;
     const cy = canvasHeight / 2;
     const lower = prompt.toLowerCase();
+    const isBio = Boolean(subject?.toLowerCase().includes("bio"));
 
-    // 1. Ohm's Law Circuit (CBSE Class 10 standard verification circuit)
+    // 0a. Biology: Punnett Square / Genetic Cross
     if (
-      lower.includes("ohm") ||
-      (lower.includes("circuit") &&
-        (lower.includes("resistor") ||
-          lower.includes("law") ||
-          lower.includes("voltage") ||
-          lower.includes("current") ||
-          lower.includes("v = ir") ||
-          lower.includes("resistance")))
+      lower.includes("punnett") ||
+      lower.includes("cross") ||
+      lower.includes("genotype") ||
+      lower.includes("phenotype") ||
+      lower.includes("allele") ||
+      lower.includes("mendel") ||
+      lower.includes("monohybrid") ||
+      lower.includes("dihybrid") ||
+      lower.includes("f1") ||
+      lower.includes("f2")
+    ) {
+      const startX = cx - 90;
+      const startY = cy - 65;
+      const cellSize = 80;
+
+      return {
+        prompt,
+        summary: "Punnett square diagram for Mendelian monohybrid cross with parent gametes and offspring genotypes.",
+        canvasWidth,
+        canvasHeight,
+        objects: [
+          {
+            id: `txt_${Date.now()}_title`,
+            type: "text",
+            text: "Punnett Square: Monohybrid Cross (T × t)",
+            x: cx - 140,
+            y: startY - 45,
+            w: 280,
+            h: 22,
+            rot: 0,
+            size: 13,
+            bold: true,
+            align: "center",
+            bg: "white",
+            style: { stroke: "#1e293b", width: 1, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+          {
+            id: `txt_${Date.now()}_lbl_female`,
+            type: "text",
+            text: "Gametes →",
+            x: startX - 85,
+            y: startY - 26,
+            w: 80,
+            h: 20,
+            rot: 0,
+            size: 11,
+            bold: true,
+            align: "right",
+            bg: "transparent",
+            style: { stroke: "#64748b", width: 1, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+          {
+            id: `txt_${Date.now()}_g_top1`,
+            type: "text",
+            text: "T",
+            x: startX + 25,
+            y: startY - 26,
+            w: 30,
+            h: 22,
+            rot: 0,
+            size: 14,
+            bold: true,
+            align: "center",
+            bg: "#e0e7ff",
+            style: { stroke: "#4338ca", width: 1.5, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+          {
+            id: `txt_${Date.now()}_g_top2`,
+            type: "text",
+            text: "t",
+            x: startX + cellSize + 25,
+            y: startY - 26,
+            w: 30,
+            h: 22,
+            rot: 0,
+            size: 14,
+            bold: true,
+            align: "center",
+            bg: "#e0e7ff",
+            style: { stroke: "#4338ca", width: 1.5, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+          {
+            id: `txt_${Date.now()}_g_left1`,
+            type: "text",
+            text: "T",
+            x: startX - 35,
+            y: startY + 25,
+            w: 30,
+            h: 22,
+            rot: 0,
+            size: 14,
+            bold: true,
+            align: "center",
+            bg: "#e0e7ff",
+            style: { stroke: "#4338ca", width: 1.5, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+          {
+            id: `txt_${Date.now()}_g_left2`,
+            type: "text",
+            text: "t",
+            x: startX - 35,
+            y: startY + cellSize + 25,
+            w: 30,
+            h: 22,
+            rot: 0,
+            size: 14,
+            bold: true,
+            align: "center",
+            bg: "#e0e7ff",
+            style: { stroke: "#4338ca", width: 1.5, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+          {
+            id: `shp_${Date.now()}_c00`,
+            type: "shape",
+            kind: "rect",
+            x: startX,
+            y: startY,
+            w: cellSize,
+            h: cellSize,
+            rot: 0,
+            style: { stroke: "#334155", width: 2, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+          {
+            id: `txt_${Date.now()}_v00`,
+            type: "text",
+            text: "TT\n(Tall)",
+            x: startX + 10,
+            y: startY + 20,
+            w: cellSize - 20,
+            h: 36,
+            rot: 0,
+            size: 12,
+            bold: true,
+            align: "center",
+            bg: "transparent",
+            style: { stroke: "#0f172a", width: 1, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+          {
+            id: `shp_${Date.now()}_c01`,
+            type: "shape",
+            kind: "rect",
+            x: startX + cellSize,
+            y: startY,
+            w: cellSize,
+            h: cellSize,
+            rot: 0,
+            style: { stroke: "#334155", width: 2, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+          {
+            id: `txt_${Date.now()}_v01`,
+            type: "text",
+            text: "Tt\n(Tall)",
+            x: startX + cellSize + 10,
+            y: startY + 20,
+            w: cellSize - 20,
+            h: 36,
+            rot: 0,
+            size: 12,
+            bold: true,
+            align: "center",
+            bg: "transparent",
+            style: { stroke: "#0f172a", width: 1, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+          {
+            id: `shp_${Date.now()}_c10`,
+            type: "shape",
+            kind: "rect",
+            x: startX,
+            y: startY + cellSize,
+            w: cellSize,
+            h: cellSize,
+            rot: 0,
+            style: { stroke: "#334155", width: 2, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+          {
+            id: `txt_${Date.now()}_v10`,
+            type: "text",
+            text: "Tt\n(Tall)",
+            x: startX + 10,
+            y: startY + cellSize + 20,
+            w: cellSize - 20,
+            h: 36,
+            rot: 0,
+            size: 12,
+            bold: true,
+            align: "center",
+            bg: "transparent",
+            style: { stroke: "#0f172a", width: 1, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+          {
+            id: `shp_${Date.now()}_c11`,
+            type: "shape",
+            kind: "rect",
+            x: startX + cellSize,
+            y: startY + cellSize,
+            w: cellSize,
+            h: cellSize,
+            rot: 0,
+            style: { stroke: "#334155", width: 2, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+          {
+            id: `txt_${Date.now()}_v11`,
+            type: "text",
+            text: "tt\n(Dwarf)",
+            x: startX + cellSize + 10,
+            y: startY + cellSize + 20,
+            w: cellSize - 20,
+            h: 36,
+            rot: 0,
+            size: 12,
+            bold: true,
+            align: "center",
+            bg: "transparent",
+            style: { stroke: "#0f172a", width: 1, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+          {
+            id: `txt_${Date.now()}_ratio`,
+            type: "text",
+            text: "Genotypic Ratio: 1 TT : 2 Tt : 1 tt | Phenotypic Ratio: 3 Tall : 1 Dwarf",
+            x: cx - 210,
+            y: startY + cellSize * 2 + 18,
+            w: 420,
+            h: 22,
+            rot: 0,
+            size: 11,
+            bold: false,
+            align: "center",
+            bg: "white",
+            style: { stroke: "#0f172a", width: 1, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+        ],
+      };
+    }
+
+    // 0b. Biology: Ecological Trophic Pyramid
+    if (
+      lower.includes("pyramid") ||
+      lower.includes("trophic") ||
+      lower.includes("biomass") ||
+      lower.includes("producer") ||
+      lower.includes("ecosystem") ||
+      lower.includes("energy transfer")
+    ) {
+      const topY = 60;
+      const tierH = 44;
+      return {
+        prompt,
+        summary: "Ecological trophic pyramid of energy with 4 trophic levels and 10% law annotation.",
+        canvasWidth,
+        canvasHeight,
+        objects: [
+          {
+            id: `txt_${Date.now()}_title`,
+            type: "text",
+            text: "Trophic Pyramid of Energy (10% Energy Transfer)",
+            x: cx - 180,
+            y: topY - 35,
+            w: 360,
+            h: 22,
+            rot: 0,
+            size: 13,
+            bold: true,
+            align: "center",
+            bg: "white",
+            style: { stroke: "#0f172a", width: 1, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+          {
+            id: `shp_${Date.now()}_t4`,
+            type: "shape",
+            kind: "rect",
+            x: cx - 80,
+            y: topY,
+            w: 160,
+            h: tierH,
+            rot: 0,
+            style: { stroke: "#047857", width: 2, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+          {
+            id: `txt_${Date.now()}_lbl_t4`,
+            type: "text",
+            text: "Tertiary Consumers (10 J)",
+            x: cx - 75,
+            y: topY + 12,
+            w: 150,
+            h: 20,
+            rot: 0,
+            size: 11,
+            bold: true,
+            align: "center",
+            bg: "white",
+            style: { stroke: "#047857", width: 1, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+          {
+            id: `shp_${Date.now()}_t3`,
+            type: "shape",
+            kind: "rect",
+            x: cx - 130,
+            y: topY + tierH,
+            w: 260,
+            h: tierH,
+            rot: 0,
+            style: { stroke: "#059669", width: 2, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+          {
+            id: `txt_${Date.now()}_lbl_t3`,
+            type: "text",
+            text: "Secondary Consumers (100 J)",
+            x: cx - 110,
+            y: topY + tierH + 12,
+            w: 220,
+            h: 20,
+            rot: 0,
+            size: 11,
+            bold: true,
+            align: "center",
+            bg: "white",
+            style: { stroke: "#059669", width: 1, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+          {
+            id: `shp_${Date.now()}_t2`,
+            type: "shape",
+            kind: "rect",
+            x: cx - 180,
+            y: topY + tierH * 2,
+            w: 360,
+            h: tierH,
+            rot: 0,
+            style: { stroke: "#10b981", width: 2, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+          {
+            id: `txt_${Date.now()}_lbl_t2`,
+            type: "text",
+            text: "Primary Consumers - Herbivores (1,000 J)",
+            x: cx - 140,
+            y: topY + tierH * 2 + 12,
+            w: 280,
+            h: 20,
+            rot: 0,
+            size: 11,
+            bold: true,
+            align: "center",
+            bg: "white",
+            style: { stroke: "#10b981", width: 1, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+          {
+            id: `shp_${Date.now()}_t1`,
+            type: "shape",
+            kind: "rect",
+            x: cx - 230,
+            y: topY + tierH * 3,
+            w: 460,
+            h: tierH,
+            rot: 0,
+            style: { stroke: "#047857", width: 2.5, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+          {
+            id: `txt_${Date.now()}_lbl_t1`,
+            type: "text",
+            text: "Primary Producers - Plants / Phytoplankton (10,000 J)",
+            x: cx - 180,
+            y: topY + tierH * 3 + 12,
+            w: 360,
+            h: 20,
+            rot: 0,
+            size: 11,
+            bold: true,
+            align: "center",
+            bg: "white",
+            style: { stroke: "#047857", width: 1, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+          {
+            id: `arr_${Date.now()}_up`,
+            type: "line",
+            kind: "line",
+            pts: [{ x: cx + 245, y: topY + tierH * 3.5 }, { x: cx + 245, y: topY + 10 }],
+            start: "none",
+            end: "filled",
+            label: "10% Law",
+            labelOffset: 20,
+            labelSize: 11,
+            style: { stroke: "#0284c7", width: 2, dash: "dashed", fill: null, hatch: "none", opacity: 1 },
+          },
+        ],
+      };
+    }
+
+    // 0c. Biology: Plant/Animal Cell with Clean Callout Leader Lines
+    if (
+      isBio ||
+      lower.includes("cell") ||
+      lower.includes("plant") ||
+      lower.includes("animal") ||
+      lower.includes("organelle") ||
+      lower.includes("vacuole") ||
+      lower.includes("chloroplast") ||
+      lower.includes("neuron")
+    ) {
+      const cellW = 230;
+      const cellH = 160;
+      const cellX = cx - cellW / 2;
+      const cellY = cy - cellH / 2 + 10;
+
+      return {
+        prompt,
+        summary: "Diagram of plant cell structure with labeled leader lines pointing to parts (A), (B), (C), and (D).",
+        canvasWidth,
+        canvasHeight,
+        objects: [
+          {
+            id: `txt_${Date.now()}_title`,
+            type: "text",
+            text: "Diagram: Plant Cell Structure",
+            x: cx - 120,
+            y: 18,
+            w: 240,
+            h: 22,
+            rot: 0,
+            size: 13,
+            bold: true,
+            align: "center",
+            bg: "white",
+            style: { stroke: "#0f172a", width: 1, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+          {
+            id: `st_${Date.now()}_cell`,
+            type: "stamp",
+            stamp: "plant_cell",
+            x: cellX,
+            y: cellY,
+            w: cellW,
+            h: cellH,
+            rot: 0,
+            style: { stroke: "#15803d", width: 2, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+          // Callout (A) - Cell Wall
+          {
+            id: `line_${Date.now()}_a`,
+            type: "line",
+            kind: "line",
+            pts: [{ x: cellX + 12, y: cellY + 12 }, { x: cellX - 45, y: cellY - 10 }],
+            start: "filled",
+            end: "none",
+            label: "",
+            labelOffset: 0,
+            labelSize: 12,
+            style: { stroke: "#15803d", width: 1.5, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+          {
+            id: `txt_${Date.now()}_lbl_a`,
+            type: "text",
+            text: "Part (A)",
+            x: cellX - 95,
+            y: cellY - 22,
+            w: 60,
+            h: 22,
+            rot: 0,
+            size: 12,
+            bold: true,
+            align: "center",
+            bg: "#f0fdf4",
+            style: { stroke: "#15803d", width: 1.5, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+          // Callout (B) - Central Vacuole
+          {
+            id: `line_${Date.now()}_b`,
+            type: "line",
+            kind: "line",
+            pts: [{ x: cellX + cellW * 0.45, y: cellY + cellH * 0.45 }, { x: cellX + cellW + 35, y: cellY + 25 }],
+            start: "filled",
+            end: "none",
+            label: "",
+            labelOffset: 0,
+            labelSize: 12,
+            style: { stroke: "#15803d", width: 1.5, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+          {
+            id: `txt_${Date.now()}_lbl_b`,
+            type: "text",
+            text: "Part (B)",
+            x: cellX + cellW + 35,
+            y: cellY + 14,
+            w: 60,
+            h: 22,
+            rot: 0,
+            size: 12,
+            bold: true,
+            align: "center",
+            bg: "#f0fdf4",
+            style: { stroke: "#15803d", width: 1.5, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+          // Callout (C) - Chloroplast
+          {
+            id: `line_${Date.now()}_c`,
+            type: "line",
+            kind: "line",
+            pts: [{ x: cellX + cellW * 0.82, y: cellY + cellH * 0.72 }, { x: cellX + cellW + 35, y: cellY + cellH - 10 }],
+            start: "filled",
+            end: "none",
+            label: "",
+            labelOffset: 0,
+            labelSize: 12,
+            style: { stroke: "#15803d", width: 1.5, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+          {
+            id: `txt_${Date.now()}_lbl_c`,
+            type: "text",
+            text: "Part (C)",
+            x: cellX + cellW + 35,
+            y: cellY + cellH - 22,
+            w: 60,
+            h: 22,
+            rot: 0,
+            size: 12,
+            bold: true,
+            align: "center",
+            bg: "#f0fdf4",
+            style: { stroke: "#15803d", width: 1.5, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+          // Callout (D) - Nucleus
+          {
+            id: `line_${Date.now()}_d`,
+            type: "line",
+            kind: "line",
+            pts: [{ x: cellX + cellW * 0.18, y: cellY + cellH * 0.45 }, { x: cellX - 45, y: cellY + cellH * 0.55 }],
+            start: "filled",
+            end: "none",
+            label: "",
+            labelOffset: 0,
+            labelSize: 12,
+            style: { stroke: "#15803d", width: 1.5, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+          {
+            id: `txt_${Date.now()}_lbl_d`,
+            type: "text",
+            text: "Part (D)",
+            x: cellX - 95,
+            y: cellY + cellH * 0.55 - 11,
+            w: 60,
+            h: 22,
+            rot: 0,
+            size: 12,
+            bold: true,
+            align: "center",
+            bg: "#f0fdf4",
+            style: { stroke: "#15803d", width: 1.5, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+          },
+        ],
+      };
+    }
+
+    // 1. Ohm's Law Circuit (Physics only: strictly disabled for Biology)
+    if (
+      !isBio && (
+        lower.includes("ohm") ||
+        (lower.includes("circuit") &&
+          (lower.includes("resistor") ||
+            lower.includes("law") ||
+            lower.includes("voltage") ||
+            lower.includes("current") ||
+            lower.includes("v = ir") ||
+            lower.includes("resistance")))
+      )
     ) {
       return {
         prompt,
@@ -2210,11 +2815,25 @@ Return a JSON object strictly matching:
   }
 
   // Normalize all objects and de-conflict labels automatically
-  const normalizedObjs = normalizeFigureObjects(
+  const isBio = Boolean(subject?.toLowerCase().includes("bio"));
+  let normalizedObjs = normalizeFigureObjects(
     rawResult.data.objects,
     canvasWidth,
     canvasHeight,
   );
+
+  // Guardrail: If subject is Biology, reject any physics components (circuits, batteries, resistors)
+  if (isBio) {
+    const hasPhysicsStamp = normalizedObjs.some((o: any) =>
+      o?.type === "stamp" &&
+      ["resistor", "battery", "ammeter", "voltmeter", "rheostat", "switch_closed", "switch_open", "bulb", "galvanometer"].includes(o?.stamp)
+    );
+    if (hasPhysicsStamp) {
+      console.warn("Detected physics component in Biology diagram. Replacing with validated Biology archetype.");
+      const fallback = mockFallback();
+      normalizedObjs = normalizeFigureObjects(fallback.objects, canvasWidth, canvasHeight);
+    }
+  }
 
   return {
     ...rawResult,

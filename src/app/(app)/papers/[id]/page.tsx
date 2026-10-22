@@ -1382,6 +1382,27 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                     </>
                                   )}
 
+                                  {it.question.imagePath && (
+                                    <button
+                                      className="btn btn-sm border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 shadow-2xs font-medium"
+                                      title="Remove diagram from this question"
+                                      onClick={() =>
+                                        call(
+                                          async () => {
+                                            await api(`/api/questions/${it.question.id}`, {
+                                              method: "PATCH",
+                                              json: { imagePath: null },
+                                            });
+                                            return api<PaperData>(`/api/papers/${id}`);
+                                          },
+                                          adopt,
+                                        )
+                                      }
+                                    >
+                                      <X size={12} className="text-amber-600" /> Remove Diagram
+                                    </button>
+                                  )}
+
                                   <button
                                     className="btn btn-sm border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-2xs font-medium"
                                     title="Edit question text or options"

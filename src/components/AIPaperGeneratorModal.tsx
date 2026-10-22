@@ -61,6 +61,7 @@ export function AIPaperGeneratorModal({
   const [modelTier, setModelTier] = useState<string>("gemini-2.5-pro");
   const [generateDiagrams, setGenerateDiagrams] = useState<boolean>(true);
   const [teacherFocus, setTeacherFocus] = useState<string>("");
+  const [generationMode, setGenerationMode] = useState<"fill" | "fresh">("fresh");
 
   // Running generation state
   const [status, setStatus] = useState<"config" | "generating" | "done" | "stopped">("config");
@@ -119,15 +120,35 @@ export function AIPaperGeneratorModal({
   // Section-by-section generator runner
   const handleStartGeneration = async () => {
     if (!plan) return;
-    const pendingSections = plan.sections.filter((s) => s.slots.length > 0);
-    if (pendingSections.length === 0) {
-      toast.info("This paper already has all question slots filled.");
-      return;
-    }
-
     setStatus("generating");
     setError(null);
     abortRef.current = false;
+    let currentPlan = plan;
+
+    const hasPlaced = currentPlan.sections.some((s) => s.alreadyPlacedCount > 0);
+    if (generationMode === "fresh" && hasPlaced) {
+      setCurrentActivity("Clearing previous draft questions for fresh generation...");
+      try {
+        await api(`/api/papers/${paperId}/clear-questions`, { method: "POST" });
+        const freshPlanRes = await api<{ success: boolean; plan: PaperAutogenPlan }>(
+          `/api/papers/${paperId}/ai-plan`,
+        );
+        currentPlan = freshPlanRes.plan;
+        setPlan(freshPlanRes.plan);
+      } catch (clearErr: any) {
+        setError(clearErr?.message || "Failed to clear existing questions.");
+        setStatus("config");
+        return;
+      }
+    }
+
+    const pendingSections = currentPlan.sections.filter((s) => s.slots.length > 0);
+    if (pendingSections.length === 0) {
+      toast.info("This paper already has all question slots filled.");
+      setStatus("config");
+      return;
+    }
+
     let accumulatedQuestions: (GeneratedPaperQuestion & { imagePath?: string; sectionTitle: string })[] = [];
     let updatedPaperRef: PaperData | null = null;
 
@@ -317,12 +338,35 @@ export function AIPaperGeneratorModal({
               <p className="text-sm">Unable to load blueprint plan.</p>
             </div>
           ) : totalSlotsToGenerate === 0 ? (
-            <div className="py-12 text-center text-slate-600">
-              <CheckCircle2 size={40} className="mx-auto text-emerald-500 mb-2" />
-              <h3 className="text-sm font-bold text-slate-800">Paper is 100% Complete</h3>
-              <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-                All sections and question slots in this blueprint are already filled. If you want to regenerate questions, remove or clear existing questions first.
+            <div className="py-12 text-center text-slate-600 space-y-3">
+              <CheckCircle2 size={40} className="mx-auto text-emerald-500 mb-1" />
+              <h3 className="text-sm font-bold text-slate-800">All Question Slots are Currently Filled</h3>
+              <p className="text-xs text-slate-500 max-w-md mx-auto">
+                This paper already has questions in every section slot. If you want to replace them with fresh board-standard AI questions and diagrams, you can clear and regenerate.
               </p>
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setLoadingPlan(true);
+                    try {
+                      await api(`/api/papers/${paperId}/clear-questions`, { method: "POST" });
+                      const freshPlanRes = await api<{ success: boolean; plan: PaperAutogenPlan }>(
+                        `/api/papers/${paperId}/ai-plan`,
+                      );
+                      setPlan(freshPlanRes.plan);
+                      setGenerationMode("fresh");
+                    } catch (err: any) {
+                      setError(err?.message || "Failed to clear questions");
+                    } finally {
+                      setLoadingPlan(false);
+                    }
+                  }}
+                  className="btn bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white text-xs py-2 px-4 inline-flex items-center gap-1.5 font-bold shadow-xs"
+                >
+                  <RotateCcw size={14} /> Clear Existing Questions &amp; Start Fresh Generation
+                </button>
+              </div>
             </div>
           ) : status === "config" ? (
             /* Step 1: Pre-Generation Configuration Form */
@@ -346,6 +390,61 @@ export function AIPaperGeneratorModal({
                   Zero Quality Loss · Section-by-Section AI Synthesis
                 </div>
               </div>
+
+              {/* Existing Questions Option (if any placed) */}
+              {plan.sections.some((s) => s.alreadyPlacedCount > 0) && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-2">
+                  <span className="text-xs font-semibold text-slate-800 block">Existing Paper Questions Handling</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    <label
+                      className={`p-2.5 rounded-lg border cursor-pointer transition ${
+                        generationMode === "fresh"
+                          ? "border-indigo-600 bg-indigo-50/80 ring-1 ring-indigo-500"
+                          : "border-slate-200 bg-white hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="flex items-start gap-2">
+                        <input
+                          type="radio"
+                          name="genMode"
+                          className="mt-0.5 text-indigo-600"
+                          checked={generationMode === "fresh"}
+                          onChange={() => setGenerationMode("fresh")}
+                        />
+                        <div>
+                          <span className="font-bold text-slate-900 block">Clear &amp; Generate Fresh Paper</span>
+                          <span className="text-[11px] text-slate-500 block mt-0.5">
+                            Wipes previous draft questions and generates a balanced new paper from scratch.
+                          </span>
+                        </div>
+                      </div>
+                    </label>
+                    <label
+                      className={`p-2.5 rounded-lg border cursor-pointer transition ${
+                        generationMode === "fill"
+                          ? "border-indigo-600 bg-indigo-50/80 ring-1 ring-indigo-500"
+                          : "border-slate-200 bg-white hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="flex items-start gap-2">
+                        <input
+                          type="radio"
+                          name="genMode"
+                          className="mt-0.5 text-indigo-600"
+                          checked={generationMode === "fill"}
+                          onChange={() => setGenerationMode("fill")}
+                        />
+                        <div>
+                          <span className="font-bold text-slate-900 block">Keep Existing &amp; Fill Deficits</span>
+                          <span className="text-[11px] text-slate-500 block mt-0.5">
+                            Retains current questions and generates only for remaining empty slots.
+                          </span>
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              )}
 
               {/* Controls Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">

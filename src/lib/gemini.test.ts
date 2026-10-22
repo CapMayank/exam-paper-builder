@@ -514,11 +514,39 @@ describe("Gemini AI Integration Suite", () => {
       expect(q1.figureDoc).toBeDefined();
       expect(q1.figureDoc?.objects).toBeInstanceOf(Array);
 
+      // Verify Biology diagram does NOT contain any physics circuit components
+      const hasPhysicsComponent = (q1.figureDoc?.objects as any[]).some(
+        (o) => o?.type === "stamp" && ["resistor", "battery", "ammeter", "voltmeter"].includes(o?.stamp),
+      );
+      expect(hasPhysicsComponent).toBe(false);
+      expect(q1.text).toContain("diagram");
+
       const q2 = res.data[1];
       expect(q2.slotIndex).toBe(1);
       expect(q2.chapterId).toBe("c2");
       expect(q2.chapterNumber).toBe(2);
       expect(q2.type).toBe("MCQ");
+      // Other MCQs do not get unnecessary diagrams
+      expect(q2.figureDoc).toBeUndefined();
+    });
+
+    it("generates structured Biology Punnett square and Trophic pyramid archetypes without circuit fallback", async () => {
+      const punnett = await promptToFigureSceneWithGemini({
+        prompt: "Punnett square for monohybrid cross TT x tt",
+        subject: "Biology",
+      });
+      expect(punnett.success).toBe(true);
+      expect(punnett.data.objects.length).toBeGreaterThan(5);
+      const hasPunnettText = punnett.data.objects.some((o: any) => o?.type === "text" && o?.text?.includes("Punnett"));
+      expect(hasPunnettText).toBe(true);
+
+      const pyramid = await promptToFigureSceneWithGemini({
+        prompt: "Ecological trophic pyramid of energy",
+        subject: "Biology",
+      });
+      expect(pyramid.success).toBe(true);
+      const hasProducers = pyramid.data.objects.some((o: any) => o?.type === "text" && o?.text?.includes("Producers"));
+      expect(hasProducers).toBe(true);
     });
 
     it("generates subjective questions with step marking schemes", async () => {
