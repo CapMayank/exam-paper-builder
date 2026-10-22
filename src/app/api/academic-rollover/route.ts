@@ -142,6 +142,7 @@ export const POST = route(
             academicSession: targetSession,
             className: srcBp.book.className,
             subject: srcBp.book.subject,
+            title: srcBp.book.title,
           },
           include: { chapters: true },
         });

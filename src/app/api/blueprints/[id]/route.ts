@@ -31,6 +31,13 @@ export const PUT = route(async (req, { id }, user) => {
   });
   if (!existing) throw new HttpError(404, "Blueprint not found");
 
+  if (existing.papers.some((p) => p.status === "FINAL") && user.role !== "ADMIN") {
+    throw new HttpError(
+      403,
+      "Cannot modify a blueprint linked to finalised exam papers. Only an Administrator can make changes.",
+    );
+  }
+
   await assertBlueprintValid(input);
 
   const existingSectionIds = new Set(existing.sections.map((s) => s.id));
@@ -157,7 +164,9 @@ export const PUT = route(async (req, { id }, user) => {
   }
 
   return updatedBp;
-});
+  },
+  { roles: ["ADMIN", "HOD"] },
+);
 
 export const DELETE = route(
   async (_req, { id }) => {

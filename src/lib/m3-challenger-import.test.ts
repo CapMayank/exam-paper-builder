@@ -503,6 +503,15 @@ describe("Challenger M3.1 Suite 7: MCQ Options & Answer Normalization", () => {
     expect(normalizeAnswer("nitrogen", options, "MCQ")).toBe("C");
     expect(normalizeAnswer("CARBON DIOXIDE", options, "MCQ")).toBe("A");
   });
+
+  it("preserves options for MATCH_COLUMN and ASSERTION_REASON types during import", () => {
+    const chapters = [{ id: "ch_1", number: 1, title: "General" }];
+    const csv = `type,marks,text,answer,chapterNumber,options\nMATCH_COLUMN,3,"Match Items",,1,"A=1|B=2|C=3"\nASSERTION_REASON,1,"Assertion text",A,1,"Both true|Both false"`;
+    const rep = parseQuestionCsv(csv, { bookId: "b1", chapters });
+    expect(rep.validCount).toBe(2);
+    expect(rep.items[0].options).toEqual(["A=1", "B=2", "C=3"]);
+    expect(rep.items[1].options).toEqual(["Both true", "Both false"]);
+  });
 });
 
 describe("Challenger M3.1 Suite 8: Export Round-Trip Fidelity & Zero Data Loss", () => {

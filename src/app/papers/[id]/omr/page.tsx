@@ -4,7 +4,7 @@ import { ArrowLeft, Printer } from "lucide-react";
 import Link from "next/link";
 import { use, useEffect, useMemo, useState } from "react";
 import { api, imageUrl } from "@/lib/client";
-import { DEFAULT_SCHOOL_LOGO, DEFAULT_SCHOOL_NAME, EXAM_TYPE_LABEL, resolvePaperExamType } from "@/lib/constants";
+import { DEFAULT_SCHOOL_LOGO, DEFAULT_SCHOOL_NAME, EXAM_TYPE_LABEL, isMcqLikeType, resolvePaperExamType } from "@/lib/constants";
 import type { PaperData } from "@/lib/types";
 
 export default function OmrSheetPage({ params }: PageProps<"/papers/[id]/omr">) {
@@ -31,7 +31,7 @@ export default function OmrSheetPage({ params }: PageProps<"/papers/[id]/omr">) 
   // Count total MCQs in the paper
   const paperMcqCount = useMemo(() => {
     if (!paper) return 20;
-    const mcqSections = paper.blueprint.sections.filter((s) => s.type === "MCQ");
+    const mcqSections = paper.blueprint.sections.filter((s) => isMcqLikeType(s.type));
     const count = mcqSections.reduce((sum, s) => sum + s.count, 0);
     return count > 0 ? count : 20;
   }, [paper]);

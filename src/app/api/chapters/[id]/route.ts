@@ -17,7 +17,11 @@ export const DELETE = route(
   async (_req, { id }) => {
     const inBlueprints = await prisma.blueprintChapter.count({ where: { chapterId: id } });
     if (inBlueprints > 0) throw new HttpError(409, "This chapter is used in a blueprint.");
-    const inPapers = await prisma.paperQuestion.count({ where: { question: { chapterId: id } } });
+    const [primaryUses, orUses] = await Promise.all([
+      prisma.paperQuestion.count({ where: { question: { chapterId: id } } }),
+      prisma.paperQuestion.count({ where: { orQuestion: { chapterId: id } } }),
+    ]);
+    const inPapers = primaryUses + orUses;
     if (inPapers > 0) throw new HttpError(409, "Questions from this chapter are used in papers.");
     await prisma.chapter.delete({ where: { id } }); // also removes its bank questions (cascade)
   },

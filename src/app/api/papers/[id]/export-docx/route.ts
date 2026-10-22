@@ -436,6 +436,30 @@ export const GET = route(async (_req, params, user) => {
       // Alternate (OR) Choice question
       if (item.orQuestion) {
         const orQ = item.orQuestion;
+        const isOrMatch = orQ.type === "MATCH_COLUMN";
+        let orMatchCount = 0;
+        if (isOrMatch && orQ.optionsJson) {
+          try {
+            const opts = JSON.parse(orQ.optionsJson);
+            orMatchCount = parseMatchColumnPairs(opts, orQ.text).length;
+          } catch {}
+        }
+        let orSubpartsMarks = 0;
+        if (orQ.subpartsJson) {
+          try {
+            const sps = JSON.parse(orQ.subpartsJson);
+            if (Array.isArray(sps)) {
+              orSubpartsMarks = sps.reduce((sum: number, sp: any) => sum + (Number(sp?.marks) || 0), 0);
+            }
+          } catch {}
+        }
+        const orTotalMarks = isOrMatch
+          ? (section.count === 1 ? section.marksEach : Math.min(orMatchCount * section.marksEach, section.count * section.marksEach))
+          : orSubpartsMarks > 0
+          ? orSubpartsMarks
+          : section.marksEach;
+        const orQText = isOrMatch ? getMatchColumnInstruction(orQ.text) : orQ.text;
+
         paragraphs.push(
           new Paragraph({
             alignment: AlignmentType.CENTER,
@@ -447,26 +471,146 @@ export const GET = route(async (_req, params, user) => {
           new Paragraph({
             spacing: { after: 60 },
             children: [
-              new TextRun({ text: `Q.${qNum} (OR)  `, bold: true, font: "Times New Roman" }),
-              ...formatMathTextRuns(orQ.text, { font: "Times New Roman" }),
-              new TextRun({ text: `  [${section.marksEach} Mark${section.marksEach > 1 ? "s" : ""}]`, bold: true, font: "Times New Roman" }),
+              new TextRun({ text: `${formatQuestionNumber(qNum, paper.numberingStyle)} (OR)  `, bold: true, font: "Times New Roman" }),
+              ...formatMathTextRuns(orQText, { font: "Times New Roman" }),
+              new TextRun({ text: `  [${orTotalMarks} Mark${orTotalMarks > 1 ? "s" : ""}]`, bold: true, font: "Times New Roman" }),
             ],
           }),
         );
 
-        if (orQ.type === "MCQ" && orQ.optionsJson) {
+        // Embedded diagram image for OR question if present
+        if (orQ.imagePath) {
+          try {
+            const imgBuf = fs.readFileSync(path.join(UPLOAD_DIR, orQ.imagePath));
+            const ext = path.extname(orQ.imagePath).toLowerCase().replace(".", "");
+            if (["png", "jpg", "jpeg"].includes(ext)) {
+              paragraphs.push(
+                new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  spacing: { before: 80, after: 100 },
+                  children: [
+                    new ImageRun({
+                      data: imgBuf,
+                      transformation: { width: 340, height: 210 },
+                      type: ext === "jpg" ? "jpeg" : (ext as any),
+                    }),
+                  ],
+                }),
+              );
+            }
+          } catch {
+            // ignore missing image files
+          }
+        }
+
+        // MCQ / Assertion-Reason options for OR question
+        if (isMcqLikeType(orQ.type) && orQ.optionsJson) {
           try {
             const opts: string[] = JSON.parse(orQ.optionsJson);
             if (Array.isArray(opts) && opts.length > 0) {
               const letters = ["A", "B", "C", "D", "E", "F"];
               for (let i = 0; i < opts.length; i += 2) {
-                const leftOpt = `(${letters[i]}) ${opts[i]}`;
-                const rightOpt = i + 1 < opts.length ? `(${letters[i + 1]}) ${opts[i + 1]}` : "";
+                const leftOpt = `(${letters[i]}) ${cleanOptionText(opts[i])}`;
+                const rightOpt = i + 1 < opts.length ? `(${letters[i + 1]}) ${cleanOptionText(opts[i + 1])}` : "";
                 paragraphs.push(
                   new Paragraph({
                     indent: { left: 720 },
                     spacing: { after: 40 },
                     children: formatOptionPairRuns(leftOpt, rightOpt, { font: "Times New Roman" }),
+                  }),
+                );
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
+
+        // Match the Column Table for OR question
+        if (orQ.type === "MATCH_COLUMN" && orQ.optionsJson) {
+          try {
+            const opts: string[] = JSON.parse(orQ.optionsJson);
+            const pairs = parseMatchColumnPairs(opts, orQ.text);
+            if (pairs.length > 0) {
+              const letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
+              const roman = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
+              paragraphs.push(
+                new Table({
+                  width: { size: 92, type: WidthType.PERCENTAGE },
+                  rows: [
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          width: { size: 50, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [new TextRun({ text: "Column A (स्तम्भ 'अ')", bold: true, font: "Times New Roman" })],
+                            }),
+                          ],
+                        }),
+                        new TableCell({
+                          width: { size: 50, type: WidthType.PERCENTAGE },
+                          children: [
+                            new Paragraph({
+                              children: [new TextRun({ text: "Column B (स्तम्भ 'ब')", bold: true, font: "Times New Roman" })],
+                            }),
+                          ],
+                        }),
+                      ],
+                    }),
+                    ...pairs.map(
+                      (pair, idx) =>
+                        new TableRow({
+                          children: [
+                            new TableCell({
+                              width: { size: 50, type: WidthType.PERCENTAGE },
+                              children: [
+                                new Paragraph({
+                                  children: [
+                                    new TextRun({ text: `(${letters[idx] ?? idx + 1}) `, bold: true, font: "Times New Roman" }),
+                                    ...formatMathTextRuns(cleanMatchItem(pair.left), { font: "Times New Roman" }),
+                                  ],
+                                }),
+                              ],
+                            }),
+                            new TableCell({
+                              width: { size: 50, type: WidthType.PERCENTAGE },
+                              children: [
+                                new Paragraph({
+                                  children: [
+                                    new TextRun({ text: `${roman[idx] ?? `(${idx + 1})`} `, bold: true, font: "Times New Roman" }),
+                                    ...formatMathTextRuns(cleanMatchItem(pair.right), { font: "Times New Roman" }),
+                                  ],
+                                }),
+                              ],
+                            }),
+                          ],
+                        }),
+                    ),
+                  ],
+                }),
+              );
+            }
+          } catch {
+            // ignore
+          }
+        }
+
+        // Subparts for case study / passage for OR question
+        if (orQ.subpartsJson) {
+          try {
+            const subparts = JSON.parse(orQ.subpartsJson);
+            if (Array.isArray(subparts) && subparts.length > 0) {
+              for (const sp of subparts) {
+                paragraphs.push(
+                  new Paragraph({
+                    indent: { left: 720 },
+                    spacing: { after: 40 },
+                    children: [
+                      new TextRun({ text: `${sp.label || "(i)"} `, bold: true, font: "Times New Roman" }),
+                      ...formatMathTextRuns(sp.text || "", { font: "Times New Roman" }),
+                      new TextRun({ text: ` [${sp.marks} Mark${sp.marks > 1 ? "s" : ""}]`, bold: true, font: "Times New Roman" }),
+                    ],
                   }),
                 );
               }

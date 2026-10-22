@@ -85,11 +85,21 @@ export const POST = route(async (req, _params, user) => {
 
     if (!keepOriginals) {
       for (const b of orderedBooks) {
-        // Only delete if not used in papers
-        const paperCount = await tx.paperQuestion.count({
-          where: { question: { bookId: b.id } },
-        });
-        if (paperCount === 0) {
+        // Only delete if not used in papers or blueprints
+        const [paperCount, blueprintCount] = await Promise.all([
+          tx.paperQuestion.count({
+            where: {
+              OR: [
+                { question: { bookId: b.id } },
+                { orQuestion: { bookId: b.id } },
+              ],
+            },
+          }),
+          tx.blueprint.count({
+            where: { bookId: b.id },
+          }),
+        ]);
+        if (paperCount === 0 && blueprintCount === 0) {
           await tx.book.delete({ where: { id: b.id } });
         }
       }
@@ -119,4 +129,6 @@ export const POST = route(async (req, _params, user) => {
     book: fullBook,
     message: `Combined ${orderedBooks.length} textbooks into "${compositeTitle}" with ${result.totalChapters} chapters and ${result.copiedQuestions} questions!`,
   };
-});
+  },
+  { roles: ["ADMIN", "HOD"] },
+);

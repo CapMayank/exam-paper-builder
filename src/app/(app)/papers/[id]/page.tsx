@@ -256,8 +256,9 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   const patch = (json: Record<string, unknown>) => {
     const isFin = paper?.status === "FINAL";
     const isAdm = currentUser?.role === "ADMIN";
+    const isHod = currentUser?.role === "HOD";
     const isOwn = Boolean(currentUser?.id && paper?.createdById && currentUser.id === paper.createdById);
-    const canEdit = !isFin && (isAdm || isOwn);
+    const canEdit = !isFin && (isAdm || isHod || isOwn);
     if (!canEdit && !(isFin && isAdm && json.status === "DRAFT")) {
       setError("Forbidden: You do not have permission to modify this paper.");
       return;
@@ -281,8 +282,9 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   const { blueprint, progress } = paper;
   const final = paper.status === "FINAL";
   const isAdmin = currentUser?.role === "ADMIN";
+  const isHod = currentUser?.role === "HOD";
   const isOwner = Boolean(currentUser?.id && paper.createdById && currentUser.id === paper.createdById);
-  const canEditPaper = !final && (isAdmin || isOwner);
+  const canEditPaper = !final && (isAdmin || isHod || isOwner);
   const resolvedExamType = resolvePaperExamType(paper);
   const pickerSection = blueprint.sections.find((s) => s.id === pickerSectionId) ?? null;
 

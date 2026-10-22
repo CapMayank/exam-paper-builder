@@ -57,7 +57,17 @@ export const GET = route(async (req) => {
   if (type) where.type = type;
   if (difficulty) where.difficulty = difficulty;
   if (q) where.text = { contains: q };
-  if (excludePaperId) where.paperQuestions = { none: { paperId: excludePaperId } };
+  if (excludePaperId) {
+    const excludeFilters: Prisma.QuestionWhereInput[] = [
+      { paperQuestions: { none: { paperId: excludePaperId } } },
+      { orPaperQuestions: { none: { paperId: excludePaperId } } },
+    ];
+    if (where.AND) {
+      where.AND = Array.isArray(where.AND) ? [...where.AND, ...excludeFilters] : [where.AND, ...excludeFilters];
+    } else {
+      where.AND = excludeFilters;
+    }
+  }
 
   const rows = await prisma.question.findMany({
     where,

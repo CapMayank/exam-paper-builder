@@ -15,7 +15,7 @@ export const POST = route(
   const sources = await prisma.blueprint.findMany({
     where: { id: { in: sourceBlueprintIds } },
     include: {
-      chapters: true,
+      chapters: { include: { chapter: true } },
       sections: true,
       book: true,
     },
@@ -40,6 +40,13 @@ export const POST = route(
     }
 
     const targetBookId = targetBookIdMap?.[src.bookId] || src.bookId;
+    const targetBook =
+      targetBookId !== src.bookId
+        ? await prisma.book.findUnique({
+            where: { id: targetBookId },
+            include: { chapters: true },
+          })
+        : null;
 
     const created = await prisma.blueprint.create({
       data: {
@@ -50,10 +57,19 @@ export const POST = route(
         durationMin: src.durationMin,
         subjectCode: src.subjectCode,
         chapters: {
-          create: src.chapters.map((c) => ({
-            chapterId: c.chapterId,
-            marks: c.marks,
-          })),
+          create: src.chapters.map((c) => {
+            const mappedId = targetBook
+              ? targetBook.chapters.find(
+                  (tc) =>
+                    tc.number === c.chapter.number ||
+                    tc.title.trim().toLowerCase() === c.chapter.title.trim().toLowerCase(),
+                )?.id ?? c.chapterId
+              : c.chapterId;
+            return {
+              chapterId: mappedId,
+              marks: c.marks,
+            };
+          }),
         },
         sections: {
           create: src.sections.map((s) => ({

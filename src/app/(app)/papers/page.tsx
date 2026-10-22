@@ -399,7 +399,8 @@ export default function PapersPage() {
           {filteredPapers.map((p) => {
             const isOwner = currentUser?.id && p.createdById ? p.createdById === currentUser.id : false;
             const isAdmin = currentUser?.role === "ADMIN";
-            const canDelete = currentUser ? (isAdmin || (isOwner && p.status !== "FINAL")) : false;
+            const isHod = currentUser?.role === "HOD";
+            const canDelete = currentUser ? (isAdmin || isHod || (isOwner && p.status !== "FINAL")) : false;
             return (
               <PaperRow
                 key={p.id}

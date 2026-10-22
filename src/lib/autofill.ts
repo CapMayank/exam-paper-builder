@@ -21,6 +21,23 @@ type Slot = {
   order: number;
 };
 
+function getItemUnits(item: PlacedItem, secCount: number): number {
+  if (item.subpartsCount && item.subpartsCount > 1 && secCount >= item.subpartsCount) {
+    return item.subpartsCount;
+  }
+  return 1;
+}
+
+function getItemMarks(item: PlacedItem, secMarksEach: number): number {
+  if (item.marks && item.marks > 0) {
+    return item.marks;
+  }
+  if (item.subpartsCount && item.subpartsCount > 1) {
+    return item.subpartsCount * secMarksEach;
+  }
+  return secMarksEach;
+}
+
 /**
  * Pure auto-fill solver:
  * Takes a blueprint, currently placed items, and candidate questions from the question bank.
@@ -35,7 +52,7 @@ export function autoFillPaper(
   currentItems: (PlacedItem & { questionId: string })[],
   candidatePool: CandidateQuestion[],
 ): AutoFillResult {
-  const marksBySection = new Map(bp.sections.map((s) => [s.id, s.marksEach]));
+  const sectionById = new Map(bp.sections.map((s) => [s.id, s]));
   const usedQuestionIds = new Set(currentItems.map((i) => i.questionId));
 
   // Compute remaining quota for each chapter
@@ -44,7 +61,8 @@ export function autoFillPaper(
     chapterRemaining.set(c.chapterId, c.marks);
   }
   for (const item of currentItems) {
-    const marks = marksBySection.get(item.sectionId) ?? 0;
+    const sec = sectionById.get(item.sectionId);
+    const marks = getItemMarks(item, sec?.marksEach ?? 0);
     const cur = chapterRemaining.get(item.chapterId) ?? 0;
     chapterRemaining.set(item.chapterId, Math.max(0, cur - marks));
   }
@@ -52,7 +70,9 @@ export function autoFillPaper(
   // Count placed items per section
   const placedCount = new Map<string, number>();
   for (const item of currentItems) {
-    placedCount.set(item.sectionId, (placedCount.get(item.sectionId) ?? 0) + 1);
+    const sec = sectionById.get(item.sectionId);
+    const units = getItemUnits(item, sec?.count ?? 0);
+    placedCount.set(item.sectionId, (placedCount.get(item.sectionId) ?? 0) + units);
   }
 
   // Build list of empty slots
@@ -149,7 +169,8 @@ export function autoFillPaper(
       chapterRemaining.set(c.chapterId, c.marks);
     }
     for (const item of currentItems) {
-      const marks = marksBySection.get(item.sectionId) ?? 0;
+      const sec = sectionById.get(item.sectionId);
+      const marks = getItemMarks(item, sec?.marksEach ?? 0);
       const cur = chapterRemaining.get(item.chapterId) ?? 0;
       chapterRemaining.set(item.chapterId, Math.max(0, cur - marks));
     }

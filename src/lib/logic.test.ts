@@ -219,6 +219,19 @@ describe("autoFillPaper", () => {
     expect(res.added.length).toBe(0);
     expect(res.unfilled).toEqual([]);
   });
+
+  it("respects subpartsCount and custom item marks when calculating existing placement and quotas", () => {
+    // Section A needs 2 items (marksEach: 1). An existing item with subpartsCount: 2 fills 2 units.
+    // If it has marks: 1, c1 has 2 marks remaining, allowing 1 item in Section B (2 marks).
+    const customExisting = [
+      { sectionId: "A", chapterId: "c1", questionId: "q1", subpartsCount: 2, marks: 1 },
+    ];
+    const res = autoFillPaper(bp, customExisting, pool);
+    // Section A should have 0 needed slots remaining (since 2 units filled)
+    expect(res.added.some((a) => a.sectionId === "A")).toBe(false);
+    // Section B still needs 2 items of SHORT (marksEach: 2), which can be filled by c1 (2 marks) and c2 (2 marks)
+    expect(res.added.filter((a) => a.sectionId === "B").length).toBe(2);
+  });
 });
 
 describe("parseMathSegments", () => {

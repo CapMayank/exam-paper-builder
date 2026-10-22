@@ -1,6 +1,6 @@
 import { body, HttpError, route, type SessionUser } from "@/lib/api";
 import { whyCannotAdd } from "@/lib/blueprint";
-import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
+import { assertCanModifyPaper, assertCanModifyQuestion, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { editPaperItemSchema, moveItemSchema, replaceItemSchema } from "@/lib/schemas";
 import { parseSubparts, subpartsTotalMarks } from "@/lib/types";
@@ -166,6 +166,9 @@ export const PUT = route(async (req, { id, itemId }, user) => {
   const { options, subparts, ...rest } = qInput;
 
   if (mode === "UPDATE_MASTER") {
+    // Assert user has permission to modify this question in the bank
+    assertCanModifyQuestion(user, item.question);
+
     // If updating master in bank, verify it's not locked by a finalised paper
     const inFinalPapers = await prisma.paperQuestion.count({
       where: { questionId: item.questionId, paper: { status: "FINAL", id: { not: id } } },

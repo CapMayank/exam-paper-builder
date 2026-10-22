@@ -25,8 +25,8 @@ export const POST = route(
       );
     }
 
-    if (process.env.SCHOOL_CODE && input.schoolCode) {
-      if (!codeMatches(input.schoolCode)) {
+    if (process.env.SCHOOL_CODE) {
+      if (!input.schoolCode || !codeMatches(input.schoolCode)) {
         throw new HttpError(403, "Wrong school code");
       }
     }

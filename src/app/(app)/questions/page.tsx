@@ -556,7 +556,8 @@ export default function QuestionsPage() {
                 {(() => {
                   const isOwner = Boolean(currentUser?.id && q.createdById && q.createdById === currentUser.id);
                   const isAdmin = currentUser?.role === "ADMIN";
-                  const canEditOrDelete = isAdmin || isOwner;
+                  const isHod = currentUser?.role === "HOD";
+                  const canEditOrDelete = isAdmin || isHod || isOwner;
                   if (!canEditOrDelete) return null;
                   return (
                     <div className="flex items-center gap-1.5 ml-auto">

@@ -10,6 +10,7 @@ import {
   DEFAULT_SCHOOL_LOGO,
   DEFAULT_SCHOOL_NAME,
   EXAM_TYPE_LABEL,
+  isMcqLikeType,
   normalizeMcqAnswer,
   parseMatchColumnPairs,
   QUESTION_TYPE_LABEL,
@@ -19,7 +20,7 @@ import { subpartsTotalMarks } from "@/lib/types";
 import type { PaperData, QuestionDto } from "@/lib/types";
 
 function getMarksRubric(marks: number, type: string) {
-  if (type === "MCQ") return ["1 mark: Correct option selected"];
+  if (isMcqLikeType(type)) return ["1 mark: Correct option selected"];
   if (type === "TRUE_FALSE") return ["1 mark: Correct identification of True/False"];
   if (type === "FILL_BLANK") return ["1 mark: Correct word/term filled in"];
   if (marks === 1) return ["1 mark: Complete and accurate answer"];
@@ -211,7 +212,7 @@ export default function SolutionsPage({ params }: PageProps<"/papers/[id]/soluti
               <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-2 text-xs">
                 {allNumberedItems.map((item) => {
                   let displayAns: React.ReactNode;
-                  if (item.question.type === "MCQ") {
+                  if (isMcqLikeType(item.question.type)) {
                     const resolvedMcq = normalizeMcqAnswer(item.question.answer, item.question.options);
                     displayAns = `(${resolvedMcq.letter || item.question.answer.toUpperCase() || "—"})`;
                   } else if (item.question.type === "TRUE_FALSE") {

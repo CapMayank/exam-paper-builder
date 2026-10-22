@@ -133,8 +133,16 @@ export async function loadPaperView(id: string) {
       }
       const subparts = parseSubparts(i.question.subpartsJson);
       const submarks = subpartsTotalMarks(subparts);
-      const effectiveMarks = isMatch && matchCount > 0 ? matchCount : (submarks > 0 ? submarks : undefined);
-      const effectiveUnits = isMatch && matchCount > 0 ? matchCount : (subparts.length > 0 ? subparts.length : undefined);
+      const sec = blueprint.sections.find((s) => s.id === i.sectionId);
+      const secMarksEach = sec?.marksEach ?? 1;
+      const secCount = sec?.count ?? 1;
+      const matchMarks = isMatch
+        ? (secCount === 1 ? secMarksEach : Math.min((matchCount || secCount) * secMarksEach, secCount * secMarksEach))
+        : 0;
+      const effectiveMarks = isMatch ? matchMarks : (submarks > 0 ? submarks : undefined);
+      const effectiveUnits = isMatch
+        ? (secCount === 1 ? 1 : (matchCount > 0 ? Math.min(matchCount, secCount) : undefined))
+        : (subparts.length > 0 ? subparts.length : undefined);
       return {
         sectionId: i.sectionId,
         chapterId: i.question.chapterId,
@@ -165,8 +173,16 @@ export async function loadPaperView(id: string) {
       }
       const subparts = parseSubparts(i.question.subpartsJson);
       const submarks = subpartsTotalMarks(subparts);
-      const effectiveMarks = isMatch && matchCount > 0 ? matchCount : (submarks > 0 ? submarks : undefined);
-      const effectiveUnits = isMatch && matchCount > 0 ? matchCount : (subparts.length > 0 ? subparts.length : undefined);
+      const sec = blueprint.sections.find((s) => s.id === i.sectionId);
+      const secMarksEach = sec?.marksEach ?? 1;
+      const secCount = sec?.count ?? 1;
+      const matchMarks = isMatch
+        ? (secCount === 1 ? secMarksEach : Math.min((matchCount || secCount) * secMarksEach, secCount * secMarksEach))
+        : 0;
+      const effectiveMarks = isMatch ? matchMarks : (submarks > 0 ? submarks : undefined);
+      const effectiveUnits = isMatch
+        ? (secCount === 1 ? 1 : (matchCount > 0 ? Math.min(matchCount, secCount) : undefined))
+        : (subparts.length > 0 ? subparts.length : undefined);
       return {
         id: i.id,
         sectionId: i.sectionId,

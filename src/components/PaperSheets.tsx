@@ -362,9 +362,10 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
     }
 
     for (const it of paper.items.filter((item) => item.sectionId === s.id)) {
+      const currentN = n;
       const numberLabel = formatQuestionNumber(
         paper.numberingStyle || "CONTINUOUS",
-        n,
+        currentN,
         sectionLetter,
         sectionRelativeCounter
       );
@@ -396,7 +397,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
             <div style={{ paddingBottom: isA5 ? "1.5mm" : "2.5mm" }}>
               <QuestionView
                 q={it.question}
-                number={n}
+                number={currentN}
                 numberLabel={numberLabel}
                 marks={totalQuestionMarks}
                 marksStyle={paper.marksStyle || "RIGHT_COLUMN"}
@@ -419,7 +420,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
               <div style={{ paddingBottom: isLastSubpart ? questionBottomPadding : isA5 ? "1.5mm" : "2.5mm" }}>
                 <QuestionView
                   q={it.question}
-                  number={n}
+                  number={currentN}
                   numberLabel={numberLabel}
                   marks={s.marksEach}
                   marksStyle={paper.marksStyle || "RIGHT_COLUMN"}
@@ -443,7 +444,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
               <QuestionView
                 q={it.question}
                 orQuestion={it.orQuestion}
-                number={n}
+                number={currentN}
                 numberLabel={numberLabel}
                 marks={totalQuestionMarks}
                 marksStyle={paper.marksStyle || "RIGHT_COLUMN"}

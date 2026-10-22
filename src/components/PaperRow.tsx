@@ -41,7 +41,8 @@ export function PaperRow({
   const examType = resolvePaperExamType(p);
   const isOwner = currentUser?.id && p.createdById ? p.createdById === currentUser.id : false;
   const isAdmin = currentUser?.role === "ADMIN";
-  const canDelete = currentUser ? (isAdmin || (isOwner && p.status !== "FINAL")) : (p.status !== "FINAL");
+  const isHod = currentUser?.role === "HOD";
+  const canDelete = currentUser ? (isAdmin || isHod || (isOwner && p.status !== "FINAL")) : (p.status !== "FINAL");
   return (
     <li className="group grid gap-x-4 gap-y-2 px-4 py-3.5 transition-colors hover:bg-slate-50 sm:grid-cols-[minmax(0,1fr)_11rem_auto] sm:items-center">
       <div className="min-w-0">

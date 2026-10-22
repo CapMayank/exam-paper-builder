@@ -1,5 +1,7 @@
 import {
   DIFFICULTIES,
+  isKindergartenType,
+  isMcqLikeType,
   QUESTION_TYPES,
   type Difficulty,
   type QuestionType,
@@ -629,10 +631,15 @@ export function validateQuestionRow(
     }
   }
 
-  // 5. MCQ Options validation
-  const mcqOptions = type === "MCQ" ? extractOptions(raw) : [];
+  // 5. Options validation
+  const extractedOpts = extractOptions(raw);
+  const optionsList =
+    type === "MCQ" || isMcqLikeType(type) || type === "MATCH_COLUMN" || isKindergartenType(type) || extractedOpts.length > 0
+      ? extractedOpts
+      : [];
+
   if (type === "MCQ") {
-    if (mcqOptions.length < 2) {
+    if (optionsList.length < 2) {
       return {
         error: {
           rowNumber,
@@ -642,7 +649,7 @@ export function validateQuestionRow(
         },
       };
     }
-    if (mcqOptions.length > 6) {
+    if (optionsList.length > 6) {
       return {
         error: {
           rowNumber,
@@ -702,7 +709,7 @@ export function validateQuestionRow(
   const chapterId = chRes.chapterId;
 
   // 8. Answer
-  const answer = normalizeAnswer(raw.answer, mcqOptions, type);
+  const answer = normalizeAnswer(raw.answer, optionsList, type);
 
   // 9. Space MM and Show Grid
   let spaceMm = 0;
@@ -756,7 +763,7 @@ export function validateQuestionRow(
       chapterId,
       type,
       text: rawText,
-      options: mcqOptions,
+      options: optionsList,
       subparts,
       answer,
       difficulty,
