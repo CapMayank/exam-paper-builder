@@ -10,13 +10,14 @@ const EXT_BY_TYPE: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/webp": "webp",
   "image/gif": "gif",
+  "image/svg+xml": "svg",
 };
 
 export const POST = route(async (req) => {
   const file = (await req.formData()).get("file");
   if (!(file instanceof File)) throw new HttpError(400, "No file uploaded");
   const ext = EXT_BY_TYPE[file.type];
-  if (!ext) throw new HttpError(400, "Only PNG, JPEG, WebP or GIF images are allowed");
+  if (!ext) throw new HttpError(400, "Only PNG, JPEG, WebP, GIF or SVG images are allowed");
   if (file.size > MAX_BYTES) throw new HttpError(400, "Image must be 3 MB or smaller");
   const name = `${randomUUID()}.${ext}`;
   await mkdir(UPLOAD_DIR, { recursive: true });

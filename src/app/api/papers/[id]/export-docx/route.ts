@@ -27,6 +27,7 @@ import {
   resolvePaperExamType,
 } from "@/lib/constants";
 import { prisma } from "@/lib/prisma";
+import { UPLOAD_DIR } from "@/lib/uploads";
 
 export const GET = route(async (_req, params, user) => {
   const paperId = params.id;
@@ -262,6 +263,31 @@ export const GET = route(async (_req, params, user) => {
           ],
         }),
       );
+
+      // Embedded diagram image if present
+      if (q.imagePath) {
+        try {
+          const imgBuf = fs.readFileSync(path.join(UPLOAD_DIR, q.imagePath));
+          const ext = path.extname(q.imagePath).toLowerCase().replace(".", "");
+          if (["png", "jpg", "jpeg"].includes(ext)) {
+            paragraphs.push(
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { before: 80, after: 100 },
+                children: [
+                  new ImageRun({
+                    data: imgBuf,
+                    transformation: { width: 340, height: 210 },
+                    type: ext === "jpg" ? "jpeg" : (ext as any),
+                  }),
+                ],
+              }),
+            );
+          }
+        } catch {
+          // ignore missing image files
+        }
+      }
 
       // MCQ / Assertion-Reason options
       if (isMcqLikeType(q.type) && q.optionsJson) {

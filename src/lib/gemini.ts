@@ -1,5 +1,6 @@
 import "server-only";
 import { isKindergartenType, QUESTION_TYPES } from "./constants";
+import { findEligibleDiagrams, saveDiagramToUploads } from "./diagram-search";
 import { normalizeQuestionType } from "./paperImport";
 import { ensureLanguageNonChapterUnits } from "./syllabusImport";
 
@@ -520,6 +521,8 @@ export interface GeneratedPaperQuestion {
   cognitiveLevel?: string;
   explanation?: string;
   figurePrompt?: string;
+  imagePath?: string;
+  diagramSource?: string;
   figureDoc?: {
     summary: string;
     canvasWidth: number;
@@ -792,21 +795,49 @@ JSON Array Output Schema:
       figurePrompt,
     };
 
-    // If figurePrompt is present and diagrams are enabled, generate vector scene objects
+    // If figurePrompt is present and diagrams are enabled:
+    // First, check whether an eligible diagram is available in the curated library or online.
+    // If an eligible curriculum figure is found, attach it directly without synthesizing complex vector shapes.
+    // If no eligible online diagram is found, fallback to Figure Studio custom vector generation.
     if (generateDiagrams && figurePrompt) {
       try {
-        const figRes = await promptToFigureSceneWithGemini({
-          prompt: figurePrompt,
+        const eligibleCandidates = await findEligibleDiagrams({
+          query: figurePrompt,
           subject,
-          apiKey,
+          chapter: slot.chapterTitle,
+          questionText: questionItem.text,
         });
-        if (figRes.success && figRes.data) {
-          questionItem.figureDoc = {
-            summary: figRes.data.summary,
-            canvasWidth: figRes.data.canvasWidth || 640,
-            canvasHeight: figRes.data.canvasHeight || 360,
-            objects: normalizeFigureObjects(figRes.data.objects, figRes.data.canvasWidth, figRes.data.canvasHeight),
-          };
+
+        const bestMatch = eligibleCandidates.find((c) => c.eligibility.eligible && c.eligibility.score >= 70);
+
+        if (bestMatch) {
+          try {
+            const savedName = await saveDiagramToUploads({
+              svgContent: bestMatch.svgContent,
+              downloadUrl: bestMatch.downloadUrl,
+            });
+            questionItem.imagePath = savedName;
+            questionItem.diagramSource = bestMatch.source;
+          } catch (saveErr) {
+            console.warn("Failed to save eligible online diagram to uploads:", saveErr);
+          }
+        }
+
+        // If no eligible online diagram was found or saving failed, synthesize in Figure Studio
+        if (!questionItem.imagePath) {
+          const figRes = await promptToFigureSceneWithGemini({
+            prompt: figurePrompt,
+            subject,
+            apiKey,
+          });
+          if (figRes.success && figRes.data) {
+            questionItem.figureDoc = {
+              summary: figRes.data.summary,
+              canvasWidth: figRes.data.canvasWidth || 640,
+              canvasHeight: figRes.data.canvasHeight || 360,
+              objects: normalizeFigureObjects(figRes.data.objects, figRes.data.canvasWidth, figRes.data.canvasHeight),
+            };
+          }
         }
       } catch (figErr) {
         console.warn("Figure generation error for question:", figErr);

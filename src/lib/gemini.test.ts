@@ -509,16 +509,17 @@ describe("Gemini AI Integration Suite", () => {
       expect(q1.options.length).toBe(4);
       expect(q1.answer).toBeTruthy();
 
-      // First question had diagram generation enabled
+      // First question had diagram generation enabled (either online/curated imagePath or Figure Studio figureDoc)
       expect(q1.figurePrompt).toBeDefined();
-      expect(q1.figureDoc).toBeDefined();
-      expect(q1.figureDoc?.objects).toBeInstanceOf(Array);
+      expect(q1.imagePath || q1.figureDoc).toBeDefined();
 
-      // Verify Biology diagram does NOT contain any physics circuit components
-      const hasPhysicsComponent = (q1.figureDoc?.objects as any[]).some(
-        (o) => o?.type === "stamp" && ["resistor", "battery", "ammeter", "voltmeter"].includes(o?.stamp),
-      );
-      expect(hasPhysicsComponent).toBe(false);
+      if (q1.figureDoc) {
+        // Verify Biology diagram does NOT contain any physics circuit components
+        const hasPhysicsComponent = (q1.figureDoc?.objects as any[]).some(
+          (o) => o?.type === "stamp" && ["resistor", "battery", "ammeter", "voltmeter"].includes(o?.stamp),
+        );
+        expect(hasPhysicsComponent).toBe(false);
+      }
       expect(q1.text).toContain("diagram");
 
       const q2 = res.data[1];

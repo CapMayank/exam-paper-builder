@@ -9,11 +9,12 @@ const TYPE_BY_EXT: Record<string, string> = {
   jpeg: "image/jpeg",
   webp: "image/webp",
   gif: "image/gif",
+  svg: "image/svg+xml",
 };
 
 export const GET = route(async (_req, { name }) => {
   // Strict whitelist of the exact names we generate: blocks any path traversal.
-  const m = /^[a-f0-9-]{36}\.(png|jpg|jpeg|webp|gif)$/.exec(name);
+  const m = /^[a-f0-9-]{36}\.(png|jpg|jpeg|webp|gif|svg)$/.exec(name);
   if (!m) throw new HttpError(404, "Not found");
   try {
     const data = await readFile(path.join(/*turbopackIgnore: true*/ UPLOAD_DIR, name));

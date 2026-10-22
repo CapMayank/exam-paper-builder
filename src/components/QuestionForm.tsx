@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUp, ImagePlus, PencilRuler, Plus, Shuffle, Sparkles, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ImagePlus, PencilRuler, Plus, Printer, RefreshCw, Shuffle, Sparkles, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { api, imageUrl, uploadImage } from "@/lib/client";
 import {
@@ -26,6 +26,7 @@ import {
 import { type Book, type QuestionDto, type SubPart, subpartsTotalMarks } from "@/lib/types";
 import { MathText } from "./MathText";
 import { MathToolbar } from "./MathToolbar";
+import { DiagramSearchModal } from "./DiagramSearchModal";
 import { FigureStudio } from "./figure-studio";
 import { AIQuestionImproverModal } from "./AIQuestionImproverModal";
 import { ErrorBanner, Field } from "./ui";
@@ -185,6 +186,7 @@ export function QuestionForm({
   const [spaceMm, setSpaceMm] = useState(initial?.spaceMm ?? DEFAULT_SPACE[resolvedInitialType] ?? 0);
   const [showGrid, setShowGrid] = useState(initial?.showGrid ?? false);
   const [sketching, setSketching] = useState(false);
+  const [diagramSearchOpen, setDiagramSearchOpen] = useState(false);
   const [aiImproverOpen, setAiImproverOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1214,6 +1216,13 @@ export function QuestionForm({
               </button>
               <button
                 type="button"
+                className="btn btn-sm border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                onClick={() => setDiagramSearchOpen(true)}
+              >
+                <RefreshCw size={14} className="text-slate-500" /> Swap Diagram
+              </button>
+              <button
+                type="button"
                 className="btn btn-sm btn-danger"
                 onClick={() => setImagePath(null)}
               >
@@ -1222,7 +1231,14 @@ export function QuestionForm({
             </div>
           </div>
         ) : (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="btn btn-sm bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100 font-semibold"
+              onClick={() => setDiagramSearchOpen(true)}
+            >
+              <Printer size={14} /> Search Diagram Library
+            </button>
             <label className="btn btn-sm cursor-pointer">
               <ImagePlus size={14} /> Upload image
               <input
@@ -1238,7 +1254,7 @@ export function QuestionForm({
             </label>
             <button
               type="button"
-              className="btn btn-sm bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
+              className="btn btn-sm border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
               onClick={() => setSketching(true)}
             >
               <PencilRuler size={14} /> Draw in Figure Studio
@@ -1316,6 +1332,23 @@ export function QuestionForm({
           onDone={async (png) => {
             setSketching(false);
             await attach(png);
+          }}
+        />
+      )}
+
+      {diagramSearchOpen && (
+        <DiagramSearchModal
+          isOpen={true}
+          subject={book?.subject || ""}
+          chapterTitle={chapters.find((c) => c.id === chapterId)?.title || ""}
+          questionText={text}
+          onClose={() => setDiagramSearchOpen(false)}
+          onSelectDiagram={({ imagePath }) => {
+            setImagePath(imagePath);
+          }}
+          onOpenInStudio={() => {
+            setDiagramSearchOpen(false);
+            setSketching(true);
           }}
         />
       )}

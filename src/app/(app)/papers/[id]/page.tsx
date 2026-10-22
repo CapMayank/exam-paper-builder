@@ -11,9 +11,11 @@ import {
   CopyPlus,
   FileDown,
   Grid3X3,
+  ImagePlus,
   KeyRound,
   Lock,
   Pencil,
+  PencilRuler,
   Plus,
   Printer,
   RefreshCw,
@@ -28,6 +30,8 @@ import Link from "next/link";
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import { AIPaperAuditModal } from "@/components/AIPaperAuditModal";
 import { AIPaperGeneratorModal } from "@/components/AIPaperGeneratorModal";
+import { DiagramSearchModal } from "@/components/DiagramSearchModal";
+import { FigureStudio } from "@/components/figure-studio";
 import { PaperImportModal } from "@/components/PaperImportModal";
 import { QuestionForm } from "@/components/QuestionForm";
 import { QuestionPicker } from "@/components/QuestionPicker";
@@ -81,6 +85,9 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   const [editingItem, setEditingItem] = useState<{ item: PaperItem; section: Section } | null>(null);
   const [replacingItem, setReplacingItem] = useState<{ item: PaperItem; section: Section } | null>(null);
   const [alternateItem, setAlternateItem] = useState<{ item: PaperItem; section: Section } | null>(null);
+  const [diagramModalItem, setDiagramModalItem] = useState<{ item: PaperItem; section: Section } | null>(null);
+  const [studioItem, setStudioItem] = useState<{ item: PaperItem; section: Section; initialUrl: string | null } | null>(null);
+  const [bwPreviewIds, setBwPreviewIds] = useState<Record<string, boolean>>({});
   const [details, setDetails] = useState({
     title: "",
     schoolName: "",
@@ -1291,7 +1298,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                             )}
 
                             {/* Question Content View */}
-                            <div className="paper-font text-sm leading-relaxed">
+                            <div className={`paper-font text-sm leading-relaxed transition ${bwPreviewIds[it.question.id] ? "grayscale contrast-150" : ""}`}>
                               <QuestionView
                                 q={it.question}
                                 orQuestion={it.orQuestion}
@@ -1382,24 +1389,75 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                     </>
                                   )}
 
-                                  {it.question.imagePath && (
+                                  {it.question.imagePath ? (
+                                    <div className="flex flex-wrap items-center gap-1 rounded-md border border-slate-200/90 bg-slate-50/80 p-0.5">
+                                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
+                                        <Printer size={11} className="text-slate-400" />
+                                        Diagram
+                                      </span>
+                                      <button
+                                        className="btn btn-xs border-slate-200 bg-white text-slate-700 hover:bg-slate-100 shadow-2xs font-medium"
+                                        title="Swap diagram with another from educational library"
+                                        onClick={() => setDiagramModalItem({ item: it, section: s })}
+                                      >
+                                        <RefreshCw size={11} className="text-slate-500" /> Swap
+                                      </button>
+                                      <button
+                                        className="btn btn-xs border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 shadow-2xs font-medium"
+                                        title="Edit or mask labels in Figure Studio"
+                                        onClick={() =>
+                                          setStudioItem({
+                                            item: it,
+                                            section: s,
+                                            initialUrl: it.question.imagePath ? imageUrl(it.question.imagePath) : null,
+                                          })
+                                        }
+                                      >
+                                        <PencilRuler size={11} className="text-indigo-600" /> Studio
+                                      </button>
+                                      <button
+                                        className={`btn btn-xs font-medium ${
+                                          bwPreviewIds[it.question.id]
+                                            ? "bg-slate-800 text-white border-slate-700 shadow-2xs"
+                                            : "border-slate-200 bg-white text-slate-700 hover:bg-slate-100 shadow-2xs"
+                                        }`}
+                                        title="Preview how this figure looks on B&W photocopier"
+                                        onClick={() =>
+                                          setBwPreviewIds((prev) => ({
+                                            ...prev,
+                                            [it.question.id]: !prev[it.question.id],
+                                          }))
+                                        }
+                                      >
+                                        <Printer size={11} />
+                                        {bwPreviewIds[it.question.id] ? "B&W On" : "B&W Test"}
+                                      </button>
+                                      <button
+                                        className="btn btn-xs border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 shadow-2xs font-medium"
+                                        title="Remove diagram from this question"
+                                        onClick={() =>
+                                          call(
+                                            async () => {
+                                              await api(`/api/questions/${it.question.id}`, {
+                                                method: "PATCH",
+                                                json: { imagePath: null },
+                                              });
+                                              return api<PaperData>(`/api/papers/${id}`);
+                                            },
+                                            adopt,
+                                          )
+                                        }
+                                      >
+                                        <X size={11} className="text-amber-600" /> Remove
+                                      </button>
+                                    </div>
+                                  ) : (
                                     <button
-                                      className="btn btn-sm border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 shadow-2xs font-medium"
-                                      title="Remove diagram from this question"
-                                      onClick={() =>
-                                        call(
-                                          async () => {
-                                            await api(`/api/questions/${it.question.id}`, {
-                                              method: "PATCH",
-                                              json: { imagePath: null },
-                                            });
-                                            return api<PaperData>(`/api/papers/${id}`);
-                                          },
-                                          adopt,
-                                        )
-                                      }
+                                      className="btn btn-sm border-slate-200 bg-white text-slate-600 hover:text-indigo-700 hover:border-indigo-200 hover:bg-indigo-50/50 shadow-2xs font-medium"
+                                      title="Add educational diagram or vector figure to this question"
+                                      onClick={() => setDiagramModalItem({ item: it, section: s })}
                                     >
-                                      <X size={12} className="text-amber-600" /> Remove Diagram
+                                      <ImagePlus size={12} className="text-slate-400" /> + Diagram
                                     </button>
                                   )}
 
@@ -1691,6 +1749,58 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
           currentPaper={paper}
           blueprints={[paper.blueprint]}
           onPaperUpdated={reloadPaper}
+        />
+      )}
+
+      {/* Educational Diagram Search & Picker Modal */}
+      {diagramModalItem && paper && (
+        <DiagramSearchModal
+          isOpen={true}
+          subject={paper.blueprint?.book?.subject || paper.blueprint?.name || ""}
+          chapterTitle={diagramModalItem.item.question.chapter?.title || ""}
+          questionText={diagramModalItem.item.question.text}
+          onClose={() => setDiagramModalItem(null)}
+          onSelectDiagram={async ({ imagePath }) => {
+            const currentItem = diagramModalItem;
+            setDiagramModalItem(null);
+            await api(`/api/questions/${currentItem.item.question.id}`, {
+              method: "PATCH",
+              json: { imagePath },
+            });
+            await reloadPaper();
+          }}
+          onOpenInStudio={(imgUrl) => {
+            const currentItem = diagramModalItem;
+            setDiagramModalItem(null);
+            setStudioItem({
+              item: currentItem.item,
+              section: currentItem.section,
+              initialUrl: imgUrl || null,
+            });
+          }}
+        />
+      )}
+
+      {/* Figure Studio for Custom Editing or Masking */}
+      {studioItem && (
+        <FigureStudio
+          initialImageUrl={studioItem.initialUrl}
+          onCancel={() => setStudioItem(null)}
+          onDone={async (png) => {
+            const currentItem = studioItem;
+            setStudioItem(null);
+            const fd = new FormData();
+            fd.append("file", png, "diagram.png");
+            const res = await api<{ name: string }>("/api/uploads", {
+              method: "POST",
+              body: fd,
+            });
+            await api(`/api/questions/${currentItem.item.question.id}`, {
+              method: "PATCH",
+              json: { imagePath: res.name },
+            });
+            await reloadPaper();
+          }}
         />
       )}
     </div>
