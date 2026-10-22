@@ -36,6 +36,73 @@ export interface QuestionContextForDiagram {
   isIdentificationQuestion?: boolean;
 }
 
+const DIAGRAM_STOP_WORDS = new Set([
+  "biology",
+  "physics",
+  "chemistry",
+  "science",
+  "mathematics",
+  "math",
+  "class",
+  "question",
+  "questions",
+  "diagram",
+  "diagrams",
+  "figure",
+  "figures",
+  "given",
+  "identify",
+  "identifying",
+  "identification",
+  "part",
+  "parts",
+  "show",
+  "shows",
+  "showing",
+  "shown",
+  "with",
+  "from",
+  "what",
+  "which",
+  "each",
+  "both",
+  "have",
+  "been",
+  "that",
+  "this",
+  "standard",
+  "below",
+  "above",
+  "following",
+  "draw",
+  "drawing",
+  "answer",
+  "statement",
+  "correct",
+  "regarding",
+  "about",
+  "study",
+  "refer",
+  "mark",
+  "marks",
+  "marked",
+  "label",
+  "labels",
+  "labeled",
+  "labelled",
+  "name",
+  "named",
+  "choose",
+  "select",
+  "write",
+  "state",
+  "explain",
+  "describe",
+  "reproduction",
+  "reproductive",
+  "reproduce",
+]);
+
 /**
  * Evaluates whether a diagram is eligible for a school examination paper.
  * Rigorously checks for:
@@ -48,6 +115,7 @@ export function verifyDiagramEligibility(
     title: string;
     subject?: string;
     tags?: string[];
+    chapterKeywords?: string[];
     hasUnlabelledCallouts?: boolean;
     spoilerParts?: string[];
     mime?: string;
@@ -94,13 +162,42 @@ export function verifyDiagramEligibility(
   }
 
   // Check relevance to subject & chapter
-  if (qTitle && diagTitle) {
-    const qTokens = qTitle.split(/\s+/).filter((w) => w.length > 3);
-    const hasOverlap = qTokens.some((t) => diagTitle.includes(t) || (diagram.tags || []).some((tag) => tag.toLowerCase().includes(t)));
-    if (!hasOverlap && !isCurated) {
-      score = Math.max(30, score - 30);
+  const qTokens = `${qTitle} ${qText}`
+    .toLowerCase()
+    .replace(/[^\w\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 3 && !DIAGRAM_STOP_WORDS.has(w));
+
+  const diagTokens = diagTitle
+    .replace(/[^\w\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 2 && !DIAGRAM_STOP_WORDS.has(w));
+
+  const itemKeywords = [
+    ...(diagram.tags || []).map((t) => t.toLowerCase()),
+    ...(diagram.chapterKeywords || []).map((t) => t.toLowerCase()),
+    ...(diagram.spoilerParts || []).map((s) => s.toLowerCase()),
+  ];
+
+  if (qTokens.length > 0) {
+    const hasConceptOverlap = qTokens.some((t) => {
+      // 1. Direct substring match in diagram title or keyword tags
+      if (diagTitle.includes(t) || itemKeywords.some((tag) => tag.includes(t) || t.includes(tag))) {
+        return true;
+      }
+      // 2. Stem match with diagram title tokens (e.g. flower <-> flowering)
+      return diagTokens.some((dt) => {
+        if (dt.length >= 4 && t.length >= 4) {
+          return t.startsWith(dt) || dt.startsWith(t) || t.includes(dt) || dt.includes(t);
+        }
+        return false;
+      });
+    });
+
+    if (!hasConceptOverlap) {
+      score = 20;
       status = "OFF_TOPIC";
-      reason = "Diagram title has low direct match with current chapter.";
+      reason = "Diagram topic does not match the question or chapter concept.";
     }
   }
 
@@ -108,7 +205,9 @@ export function verifyDiagramEligibility(
   if (diagram.mime && !diagram.mime.includes("svg") && !diagram.mime.includes("png")) {
     printContrast = "LOW";
     score = Math.max(25, score - 30);
-    status = "LOW_CONTRAST";
+    if (status !== "NEEDS_MASKING" && status !== "OFF_TOPIC") {
+      status = "LOW_CONTRAST";
+    }
     reason = "Format may contain photographic halftone noise unsuitable for black & white school exam printing.";
   }
 
@@ -136,13 +235,15 @@ export function searchCuratedDiagrams(params: {
   requireUnlabelled?: boolean;
 }): DiagramCandidate[] {
   const { query = "", subject = "", chapter = "", questionText = "", requireUnlabelled } = params;
-  const rawTerms = `${query} ${subject} ${chapter} ${questionText}`.toLowerCase();
+
+  // Build clean search tokens from query, chapter and question text (excluding generic subject words)
+  const rawTerms = `${query} ${chapter} ${questionText}`.toLowerCase();
   const searchTokens = rawTerms
     .replace(/[^\w\s]/g, " ")
     .split(/\s+/)
-    .filter((w) => w.length > 2);
+    .filter((w) => w.length > 2 && !DIAGRAM_STOP_WORDS.has(w));
 
-  const candidates: DiagramCandidate[] = [];
+  const candidates: (DiagramCandidate & { _matchScore: number })[] = [];
 
   for (const item of CURATED_DIAGRAMS) {
     // Subject filter
@@ -151,20 +252,42 @@ export function searchCuratedDiagrams(params: {
       if (!item.subject.toLowerCase().includes(subKey)) continue;
     }
 
-    // Match scoring
+    // Match scoring based on specific concept tokens
     let matchScore = 0;
-    const itemText = `${item.title} ${item.chapterKeywords.join(" ")} ${item.tags.join(" ")} ${item.description}`.toLowerCase();
+    const itemKeywordText = `${item.title} ${item.chapterKeywords.join(" ")} ${item.tags.join(" ")}`.toLowerCase();
 
-    for (const token of searchTokens) {
-      if (itemText.includes(token)) {
-        matchScore += token.length > 4 ? 3 : 1;
+    if (searchTokens.length === 0) {
+      // If user provided no query or context (e.g. browsing the library modal), show all subject diagrams
+      matchScore = 1;
+    } else {
+      for (const token of searchTokens) {
+        if (itemKeywordText.includes(token)) {
+          let boost = token.length > 4 ? 4 : 2;
+          if (item.chapterKeywords.some((k) => k.toLowerCase() === token || k.toLowerCase().includes(token))) {
+            boost += 6;
+          }
+          if (item.tags.some((t) => t.toLowerCase() === token || t.toLowerCase().includes(token))) {
+            boost += 4;
+          }
+          if (item.title.toLowerCase().includes(token)) {
+            boost += 5;
+          }
+          matchScore += boost;
+        }
+      }
+
+      // Check full chapter / query phrase matches
+      const cleanChapter = chapter.toLowerCase().trim();
+      if (cleanChapter && item.chapterKeywords.some((k) => cleanChapter.includes(k.toLowerCase()) || k.toLowerCase().includes(cleanChapter))) {
+        matchScore += 25;
+      }
+      const cleanQuery = query.toLowerCase().trim();
+      if (cleanQuery && item.tags.some((t) => cleanQuery.includes(t.toLowerCase()) || t.toLowerCase().includes(cleanQuery))) {
+        matchScore += 15;
       }
     }
 
-    if (searchTokens.length === 0) {
-      matchScore = 1; // Return all if no search terms provided
-    }
-
+    // Only include if there is genuine concept match
     if (matchScore > 0) {
       if (requireUnlabelled && !item.hasUnlabelledCallouts) {
         continue;
@@ -175,6 +298,7 @@ export function searchCuratedDiagrams(params: {
           title: item.title,
           subject: item.subject,
           tags: item.tags,
+          chapterKeywords: item.chapterKeywords,
           hasUnlabelledCallouts: item.hasUnlabelledCallouts,
           spoilerParts: item.spoilerParts,
           isCurated: true,
@@ -196,12 +320,23 @@ export function searchCuratedDiagrams(params: {
         hasUnlabelledCallouts: item.hasUnlabelledCallouts,
         spoilerParts: item.spoilerParts,
         eligibility,
+        _matchScore: matchScore,
       });
     }
   }
 
-  // Sort by highest match & eligibility score
-  return candidates.sort((a, b) => b.eligibility.score - a.eligibility.score);
+  // Sort: Eligible first, then highest matchScore, then highest eligibility score
+  return candidates
+    .sort((a, b) => {
+      if (a.eligibility.eligible !== b.eligibility.eligible) {
+        return a.eligibility.eligible ? -1 : 1;
+      }
+      if (b._matchScore !== a._matchScore) {
+        return b._matchScore - a._matchScore;
+      }
+      return b.eligibility.score - a.eligibility.score;
+    })
+    .map(({ _matchScore, ...rest }) => rest);
 }
 
 /**

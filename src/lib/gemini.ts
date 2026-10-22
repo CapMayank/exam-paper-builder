@@ -598,7 +598,13 @@ STRICT CURRICULUM & BOARD STANDARDS:
       : difficulty
   }
 ${teacherFocus ? `- Teacher Specific Instructions / Focus: ${teacherFocus}` : ""}
-- Diagram Generation: ${generateDiagrams ? "Enabled (provide 'figurePrompt' for questions needing diagrams)" : "Disabled"}
+- Diagram Generation: ${generateDiagrams ? "Enabled (at most ONE question in the section may have a diagram; only if the question text explicitly references it)" : "Disabled"}
+
+CRITICAL DIAGRAM INSTRUCTIONS:
+- At most ONE question in the entire section should have a diagram.
+- ONLY set 'figurePrompt' if the question text explicitly references the figure (e.g. "In the given diagram...", "Refer to the figure below...").
+- For all other questions, 'figurePrompt' MUST BE null.
+- The diagram must specifically depict the exact subject of the question (e.g. flower for flower question, human reproductive system for human reproduction).
 
 Assigned Chapter Targets for each question slot:
 ${slotsDescription}
@@ -681,8 +687,37 @@ JSON Array Output Schema:
         const isMath = subject.toLowerCase().includes("math");
 
         if (isBio) {
-          if (isMcq) {
-            text = `In the given diagram of a plant cell, identify labeled parts (A) and (B) and choose the correct option representing their names:`;
+          const chLower = slot.chapterTitle.toLowerCase();
+          if (chLower.includes("flower") || chLower.includes("flowering") || chLower.includes("sexual reproduction in plant")) {
+            text = `In the given diagram showing the longitudinal section (L.S.) of a flower, identify labeled parts (A) and (B) and choose the correct option:`;
+            options = [
+              "(A) Stigma, (B) Anther",
+              "(A) Ovary, (B) Petal",
+              "(A) Sepal, (B) Filament",
+              "(A) Style, (B) Stamen",
+            ];
+            answer = "(A) Stigma, (B) Anther";
+            figurePrompt = `Longitudinal section of a flower with labeled leader lines pointing to parts (A) Stigma and (B) Anther`;
+          } else if (chLower.includes("human reproduction") || chLower.includes("reproductive health")) {
+            text = `In the given schematic diagram of the human female reproductive system, identify labeled parts (A) and (B):`;
+            options = [
+              "(A) Ovary, (B) Oviduct (Fallopian Tube)",
+              "(A) Uterus, (B) Cervix",
+              "(A) Vagina, (B) Ovary",
+              "(A) Endometrium, (B) Fimbriae",
+            ];
+            answer = "(A) Ovary, (B) Oviduct (Fallopian Tube)";
+            figurePrompt = `Human female reproductive system diagram with leader lines pointing to parts (A) Ovary and (B) Oviduct`;
+          } else if (chLower.includes("inherit") || chLower.includes("gene") || chLower.includes("mendel")) {
+            text = `Study the given Punnett square representing a monohybrid cross. Determine the genotypic ratio of the F2 generation and calculate the percentage of heterozygous tall offspring.`;
+            answer = `Model Answer:\n1. Genotypic ratio is 1 TT : 2 Tt : 1 tt [1 mark]\n2. Phenotypic ratio is 3 Tall : 1 Dwarf [1 mark]\n3. Percentage of heterozygous tall (Tt) offspring = 50% [${Math.max(1, slot.marks - 2)} marks]`;
+            figurePrompt = `Punnett square for monohybrid cross showing parental gametes T, t and F2 offspring TT, Tt, Tt, tt with genotypic and phenotypic ratios`;
+          } else if (chLower.includes("eco") || chLower.includes("populat") || chLower.includes("biodivers")) {
+            text = `Refer to the ecological trophic pyramid shown below. Identify the trophic level having maximum available energy and explain Lindeman's 10% energy transfer rule.`;
+            answer = `Model Answer:\n1. Primary producers have maximum available energy (10,000 J) [1 mark]\n2. According to Lindeman's 10% rule, only 10% of energy is transferred to the next trophic level while 90% is lost as metabolic heat [${Math.max(1, slot.marks - 1)} marks]`;
+            figurePrompt = `Ecological trophic pyramid of energy with 4 levels: primary producers (10,000 J), primary consumers (1,000 J), secondary consumers (100 J), and tertiary consumers (10 J)`;
+          } else {
+            text = `In the given diagram of a plant cell structure, identify labeled parts (A) and (B):`;
             options = [
               "(A) Cell wall, (B) Central vacuole",
               "(A) Cell membrane, (B) Mitochondria",
@@ -690,27 +725,7 @@ JSON Array Output Schema:
               "(A) Nucleus, (B) Endoplasmic reticulum",
             ];
             answer = "(A) Cell wall, (B) Central vacuole";
-            figurePrompt = `Plant cell diagram with labeled leader lines pointing to parts (A) cell wall and (B) central vacuole`;
-          } else if (
-            slot.chapterTitle.toLowerCase().includes("inherit") ||
-            slot.chapterTitle.toLowerCase().includes("gene") ||
-            slot.chapterTitle.toLowerCase().includes("reproduct")
-          ) {
-            text = `Study the given Punnett square representing a monohybrid cross. Determine the genotypic ratio of the F2 generation and calculate the percentage of heterozygous tall offspring.`;
-            answer = `Model Answer:\n1. Genotypic ratio is 1 TT : 2 Tt : 1 tt [1 mark]\n2. Phenotypic ratio is 3 Tall : 1 Dwarf [1 mark]\n3. Percentage of heterozygous tall (Tt) offspring = 50% [${Math.max(1, slot.marks - 2)} marks]`;
-            figurePrompt = `Punnett square for monohybrid cross showing parental gametes T, t and F2 offspring TT, Tt, Tt, tt with genotypic and phenotypic ratios`;
-          } else if (
-            slot.chapterTitle.toLowerCase().includes("eco") ||
-            slot.chapterTitle.toLowerCase().includes("populat") ||
-            slot.chapterTitle.toLowerCase().includes("biodivers")
-          ) {
-            text = `Refer to the ecological trophic pyramid shown below. Identify the trophic level having maximum available energy and explain Lindeman's 10% energy transfer rule.`;
-            answer = `Model Answer:\n1. Primary producers have maximum available energy (10,000 J) [1 mark]\n2. According to Lindeman's 10% rule, only 10% of energy is transferred to the next trophic level while 90% is lost as metabolic heat [${Math.max(1, slot.marks - 1)} marks]`;
-            figurePrompt = `Ecological trophic pyramid of energy with 4 levels: primary producers (10,000 J), primary consumers (1,000 J), secondary consumers (100 J), and tertiary consumers (10 J)`;
-          } else {
-            text = `In the given diagram of a plant cell structure, identify labeled parts (A), (B), (C), and (D). State the main biological role of parts (A) and (B).`;
-            answer = `Model Answer:\n1. Identification: (A) Cell wall, (B) Central vacuole, (C) Chloroplast, (D) Nucleus [${Math.max(1, Math.floor(slot.marks / 2))} marks]\n2. Function: (A) provides structural support and protection; (B) maintains cell turgidity and stores nutrients [${Math.ceil(slot.marks / 2)} marks]`;
-            figurePrompt = `Diagram of plant cell structure with labeled leader lines pointing to parts (A), (B), (C), and (D)`;
+            figurePrompt = `Diagram of plant cell structure with labeled leader lines pointing to parts (A) cell wall and (B) central vacuole`;
           }
         } else if (isPhys) {
           text = `In the circuit diagram shown below, calculate the total equivalent resistance of the combination and the current reading on ammeter (A).`;
@@ -759,6 +774,7 @@ JSON Array Output Schema:
 
   // Normalize questions and guarantee correct slot and chapter mapping
   const normalizedQuestions: GeneratedPaperQuestion[] = [];
+  let sectionDiagramCount = 0;
 
   for (let i = 0; i < slots.length; i++) {
     const slot = slots[i];
@@ -795,11 +811,33 @@ JSON Array Output Schema:
       figurePrompt,
     };
 
-    // If figurePrompt is present and diagrams are enabled:
-    // First, check whether an eligible diagram is available in the curated library or online.
-    // If an eligible curriculum figure is found, attach it directly without synthesizing complex vector shapes.
-    // If no eligible online diagram is found, fallback to Figure Studio custom vector generation.
-    if (generateDiagrams && figurePrompt) {
+    // Check whether the question text explicitly references a diagram/figure
+    const textLower = qText.toLowerCase();
+    const explicitlyNeedsDiagram =
+      textLower.includes("diagram") ||
+      textLower.includes("figure") ||
+      textLower.includes("shown below") ||
+      textLower.includes("given below") ||
+      textLower.includes("labeled part") ||
+      textLower.includes("marked as") ||
+      textLower.includes("refer to") ||
+      textLower.includes("study the") ||
+      textLower.includes("observe the");
+
+    // Board examination discipline: At most ONE diagram per section,
+    // and ONLY if the question text explicitly references the figure!
+    const allowDiagram = Boolean(
+      generateDiagrams &&
+      figurePrompt &&
+      explicitlyNeedsDiagram &&
+      sectionDiagramCount === 0
+    );
+
+    if (!allowDiagram || !figurePrompt) {
+      questionItem.figurePrompt = undefined;
+      questionItem.imagePath = undefined;
+      questionItem.figureDoc = undefined;
+    } else {
       try {
         const eligibleCandidates = await findEligibleDiagrams({
           query: figurePrompt,
@@ -808,7 +846,10 @@ JSON Array Output Schema:
           questionText: questionItem.text,
         });
 
-        const bestMatch = eligibleCandidates.find((c) => c.eligibility.eligible && c.eligibility.score >= 70);
+        // Strict threshold: Must be eligible, not off-topic, and score >= 75
+        const bestMatch = eligibleCandidates.find(
+          (c) => c.eligibility.eligible && c.eligibility.status !== "OFF_TOPIC" && c.eligibility.score >= 75
+        );
 
         if (bestMatch) {
           try {
@@ -818,6 +859,7 @@ JSON Array Output Schema:
             });
             questionItem.imagePath = savedName;
             questionItem.diagramSource = bestMatch.source;
+            sectionDiagramCount++;
           } catch (saveErr) {
             console.warn("Failed to save eligible online diagram to uploads:", saveErr);
           }
@@ -837,6 +879,7 @@ JSON Array Output Schema:
               canvasHeight: figRes.data.canvasHeight || 360,
               objects: normalizeFigureObjects(figRes.data.objects, figRes.data.canvasWidth, figRes.data.canvasHeight),
             };
+            sectionDiagramCount++;
           }
         }
       } catch (figErr) {

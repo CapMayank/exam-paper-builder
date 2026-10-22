@@ -37,6 +37,43 @@ describe("Curated Educational Diagram & Eligibility Verification Suite", () => {
       expect(results[0].hasUnlabelledCallouts).toBe(true);
     });
 
+    it("finds plant cell diagram for cell structure questions", () => {
+      const results = searchCuratedDiagrams({
+        subject: "Biology",
+        chapter: "The Fundamental Unit of Life",
+        query: "plant cell structure vacuole chloroplast",
+      });
+
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0].id).toBe("bio_plant_cell_callouts");
+      expect(results[0].title).toContain("Plant Cell");
+      expect(results[0].hasUnlabelledCallouts).toBe(true);
+    });
+
+    it("finds female reproductive system diagram for human reproduction", () => {
+      const results = searchCuratedDiagrams({
+        subject: "Biology",
+        chapter: "Human Reproduction",
+        query: "female reproductive system ovary oviduct uterus",
+      });
+
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0].id).toBe("bio_human_female_reproductive");
+      expect(results[0].hasUnlabelledCallouts).toBe(true);
+    });
+
+    it("strictly rejects off-topic diagrams (e.g. flower diagram for human reproduction)", () => {
+      const results = searchCuratedDiagrams({
+        subject: "Biology",
+        chapter: "Human Reproduction",
+        query: "explain spermatogenesis in human testes",
+      });
+
+      // Flower diagram should NOT be returned as an eligible match for human reproduction
+      const hasFlower = results.some((r) => r.id === "bio_flower_ls_callouts" && r.eligibility.eligible);
+      expect(hasFlower).toBe(false);
+    });
+
     it("finds glass prism refraction diagram for physics optics", () => {
       const results = searchCuratedDiagrams({
         subject: "Physics",

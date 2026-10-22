@@ -28,7 +28,7 @@ export const CURATED_DIAGRAMS: CuratedDiagram[] = [
     title: "Longitudinal Section (L.S.) of a Flower with Parts (A), (B), (C), (D)",
     subject: "Biology",
     classLevel: "Class 10 / Class 12",
-    chapterKeywords: ["flower", "reproduction", "flowering plants", "angiosperm", "pistil", "stamen"],
+    chapterKeywords: ["flower", "flowering plants", "sexual reproduction in flowering plants", "sexual reproduction in plants", "angiosperm", "pistil", "stamen"],
     tags: ["flower", "petal", "sepal", "stigma", "style", "ovary", "anther", "filament", "carpel"],
     description: "Standard NCERT diagram of a flower cross-section with leader lines pointing to parts (A) Stigma/Carpel, (B) Anther/Stamen, (C) Petal/Corolla, and (D) Ovary.",
     source: "NCERT Curated",
@@ -404,6 +404,253 @@ export const CURATED_DIAGRAMS: CuratedDiagram[] = [
   <text x="520" y="74" font-family="sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="#0f172a">Gas (B)</text>
 
   <text x="320" y="392" font-family="sans-serif" font-size="12" font-weight="600" text-anchor="middle" fill="#334155">Fig: Electrolysis of Water (NCERT)</text>
+</svg>`,
+  },
+
+  // -------------------------------------------------------------------------
+  // 7. BIOLOGY: Plant Cell Structure with Parts (A), (B), (C), (D)
+  // -------------------------------------------------------------------------
+  {
+    id: "bio_plant_cell_callouts",
+    title: "Structure of a Plant Cell with Labeled Parts (A), (B), (C), (D)",
+    subject: "Biology",
+    classLevel: "Class 10 / Class 11 / Class 12",
+    chapterKeywords: ["plant cell", "cell structure", "cell wall", "vacuole", "chloroplast", "nucleus", "organelle", "fundamental unit", "fundamental unit of life", "cell the unit of life"],
+    tags: ["plant cell", "cell wall", "central vacuole", "chloroplast", "nucleus"],
+    description: "Standard NCERT diagram of a plant cell with callouts pointing to (A) Cell Wall, (B) Central Vacuole, (C) Chloroplast, and (D) Nucleus.",
+    source: "NCERT Curated",
+    license: "Public Domain",
+    hasUnlabelledCallouts: true,
+    spoilerParts: ["Cell Wall", "Central Vacuole", "Chloroplast", "Nucleus"],
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" width="640" height="400">
+  <rect width="640" height="400" fill="#ffffff"/>
+  <!-- Cell Outer Wall (Hexagonal / Rounded Rectangular) -->
+  <rect x="200" y="90" width="240" height="210" rx="28" fill="#f0fdf4" stroke="#15803d" stroke-width="3.5"/>
+  <!-- Middle Lamella / Cell Membrane Inner Boundary -->
+  <rect x="210" y="100" width="220" height="190" rx="20" fill="#ffffff" stroke="#16a34a" stroke-width="1.8"/>
+
+  <!-- Large Central Vacuole (B) -->
+  <path d="M 270 140 Q 370 130 380 190 Q 390 260 300 250 Q 250 240 270 140 Z" fill="#f8fafc" stroke="#0284c7" stroke-width="2"/>
+  <text x="325" y="200" font-family="sans-serif" font-size="11" font-weight="600" fill="#0284c7" text-anchor="middle">Vacuole</text>
+
+  <!-- Nucleus (D) -->
+  <circle cx="250" cy="150" r="22" fill="#f1f5f9" stroke="#0f172a" stroke-width="2"/>
+  <circle cx="250" cy="150" r="8" fill="#0f172a"/>
+
+  <!-- Chloroplasts (C) -->
+  <ellipse cx="370" cy="130" rx="16" ry="10" fill="#dcfce7" stroke="#15803d" stroke-width="1.5"/>
+  <line x1="360" y1="130" x2="380" y2="130" stroke="#15803d" stroke-width="1.5"/>
+  <ellipse cx="360" cy="265" rx="16" ry="10" fill="#dcfce7" stroke="#15803d" stroke-width="1.5"/>
+  <ellipse cx="240" cy="245" rx="16" ry="10" fill="#dcfce7" stroke="#15803d" stroke-width="1.5"/>
+
+  <!-- Mitochondria -->
+  <ellipse cx="395" cy="210" rx="14" ry="8" fill="#fef2f2" stroke="#dc2626" stroke-width="1.2"/>
+
+  <!-- Leader Lines & Callouts -->
+  <!-- Callout (A) -> Outer Cell Wall -->
+  <line x1="200" y1="110" x2="110" y2="90" stroke="#0f172a" stroke-width="1.5"/>
+  <circle cx="200" cy="110" r="3" fill="#0f172a"/>
+  <rect x="45" y="75" width="60" height="28" rx="4" fill="#f8fafc" stroke="#0f172a" stroke-width="1.5"/>
+  <text x="75" y="94" font-family="sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="#0f172a">(A)</text>
+
+  <!-- Callout (B) -> Central Vacuole -->
+  <line x1="330" y1="180" x2="520" y2="140" stroke="#0f172a" stroke-width="1.5"/>
+  <circle cx="330" cy="180" r="3" fill="#0f172a"/>
+  <rect x="525" y="125" width="60" height="28" rx="4" fill="#f8fafc" stroke="#0f172a" stroke-width="1.5"/>
+  <text x="555" y="144" font-family="sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="#0f172a">(B)</text>
+
+  <!-- Callout (C) -> Chloroplast -->
+  <line x1="375" y1="130" x2="520" y2="70" stroke="#0f172a" stroke-width="1.5"/>
+  <circle cx="375" cy="130" r="3" fill="#0f172a"/>
+  <rect x="525" y="55" width="60" height="28" rx="4" fill="#f8fafc" stroke="#0f172a" stroke-width="1.5"/>
+  <text x="555" y="74" font-family="sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="#0f172a">(C)</text>
+
+  <!-- Callout (D) -> Nucleus -->
+  <line x1="250" y1="150" x2="110" y2="200" stroke="#0f172a" stroke-width="1.5"/>
+  <circle cx="250" cy="150" r="3" fill="#0f172a"/>
+  <rect x="45" y="185" width="60" height="28" rx="4" fill="#f8fafc" stroke="#0f172a" stroke-width="1.5"/>
+  <text x="75" y="204" font-family="sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="#0f172a">(D)</text>
+
+  <text x="320" y="380" font-family="sans-serif" font-size="12" font-weight="600" text-anchor="middle" fill="#334155">Fig: Schematic structure of a Plant Cell</text>
+</svg>`,
+  },
+
+  // -------------------------------------------------------------------------
+  // 8. BIOLOGY: Human Female Reproductive System
+  // -------------------------------------------------------------------------
+  {
+    id: "bio_human_female_reproductive",
+    title: "Human Female Reproductive System with Labeled Parts (A), (B), (C), (D)",
+    subject: "Biology",
+    classLevel: "Class 10 / Class 12",
+    chapterKeywords: ["human reproduction", "reproductive health", "human reproductive system", "female reproductive system", "uterus", "ovary", "fallopian", "fertilisation", "gamete"],
+    tags: ["ovary", "fallopian tube", "oviduct", "uterus", "cervix", "female reproductive system"],
+    description: "Standard NCERT diagram of the female reproductive system with callouts pointing to (A) Ovary, (B) Oviduct (Fallopian Tube), (C) Uterus, and (D) Cervix/Vagina.",
+    source: "NCERT Curated",
+    license: "Public Domain",
+    hasUnlabelledCallouts: true,
+    spoilerParts: ["Ovary", "Fallopian Tube", "Uterus", "Cervix"],
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" width="640" height="400">
+  <rect width="640" height="400" fill="#ffffff"/>
+  <!-- Uterus (Inverted Pear Shape) -->
+  <path d="M 280 150 C 260 160 250 200 270 240 L 290 280 L 350 280 L 370 240 C 390 200 380 160 360 150 C 340 140 300 140 280 150 Z" fill="#fff1f2" stroke="#e11d48" stroke-width="2.5"/>
+  <!-- Endometrial Cavity -->
+  <path d="M 295 165 C 285 175 280 200 295 230 L 310 250 L 330 250 L 345 230 C 360 200 355 175 345 165 C 330 155 310 155 295 165 Z" fill="#ffffff" stroke="#e11d48" stroke-width="1.5"/>
+  
+  <!-- Left Fallopian Tube (Oviduct) -->
+  <path d="M 280 150 C 240 130 190 140 160 170 C 150 180 160 200 170 200 C 180 200 185 190 195 180 C 220 160 260 160 280 165" fill="none" stroke="#e11d48" stroke-width="2.5"/>
+  <!-- Left Fimbriae -->
+  <path d="M 160 170 Q 150 185 155 195 Q 165 200 175 195" fill="none" stroke="#e11d48" stroke-width="2"/>
+  <!-- Left Ovary -->
+  <ellipse cx="180" cy="220" rx="18" ry="25" fill="#fecdd3" stroke="#e11d48" stroke-width="2"/>
+
+  <!-- Right Fallopian Tube (Oviduct) -->
+  <path d="M 360 150 C 400 130 450 140 480 170 C 490 180 480 200 470 200 C 460 200 455 190 445 180 C 420 160 380 160 360 165" fill="none" stroke="#e11d48" stroke-width="2.5"/>
+  <!-- Right Fimbriae -->
+  <path d="M 480 170 Q 490 185 485 195 Q 475 200 465 195" fill="none" stroke="#e11d48" stroke-width="2"/>
+  <!-- Right Ovary -->
+  <ellipse cx="460" cy="220" rx="18" ry="25" fill="#fecdd3" stroke="#e11d48" stroke-width="2"/>
+
+  <!-- Cervix & Vagina Canal -->
+  <rect x="295" y="280" width="50" height="40" fill="#ffffff" stroke="#e11d48" stroke-width="2"/>
+  <line x1="320" y1="280" x2="320" y2="320" stroke="#e11d48" stroke-width="1.5" stroke-dasharray="3,3"/>
+
+  <!-- Leader Lines & Callouts -->
+  <!-- Callout (A) -> Ovary (Left) -->
+  <line x1="180" y1="220" x2="80" y2="240" stroke="#0f172a" stroke-width="1.5"/>
+  <circle cx="180" cy="220" r="3" fill="#0f172a"/>
+  <rect x="20" y="225" width="55" height="28" rx="4" fill="#f8fafc" stroke="#0f172a" stroke-width="1.5"/>
+  <text x="47" y="244" font-family="sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="#0f172a">(A)</text>
+
+  <!-- Callout (B) -> Oviduct / Fallopian Tube -->
+  <line x1="440" y1="150" x2="540" y2="120" stroke="#0f172a" stroke-width="1.5"/>
+  <circle cx="440" cy="150" r="3" fill="#0f172a"/>
+  <rect x="545" y="105" width="55" height="28" rx="4" fill="#f8fafc" stroke="#0f172a" stroke-width="1.5"/>
+  <text x="572" y="124" font-family="sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="#0f172a">(B)</text>
+
+  <!-- Callout (C) -> Uterus -->
+  <line x1="320" y1="190" x2="420" y2="80" stroke="#0f172a" stroke-width="1.5"/>
+  <circle cx="320" cy="190" r="3" fill="#0f172a"/>
+  <rect x="425" y="65" width="55" height="28" rx="4" fill="#f8fafc" stroke="#0f172a" stroke-width="1.5"/>
+  <text x="452" y="84" font-family="sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="#0f172a">(C)</text>
+
+  <!-- Callout (D) -> Cervix -->
+  <line x1="320" y1="300" x2="440" y2="330" stroke="#0f172a" stroke-width="1.5"/>
+  <circle cx="320" cy="300" r="3" fill="#0f172a"/>
+  <rect x="445" y="315" width="55" height="28" rx="4" fill="#f8fafc" stroke="#0f172a" stroke-width="1.5"/>
+  <text x="472" y="334" font-family="sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="#0f172a">(D)</text>
+
+  <text x="320" y="380" font-family="sans-serif" font-size="12" font-weight="600" text-anchor="middle" fill="#334155">Fig: Human Female Reproductive System (NCERT)</text>
+</svg>`,
+  },
+
+  // -------------------------------------------------------------------------
+  // 9. BIOLOGY: Monohybrid Cross (Punnett Square)
+  // -------------------------------------------------------------------------
+  {
+    id: "bio_monohybrid_cross_punnett",
+    title: "Punnett Square for Mendelian Monohybrid Cross (TT x tt)",
+    subject: "Biology",
+    classLevel: "Class 10 / Class 12",
+    chapterKeywords: ["principles of inheritance", "inheritance", "variation", "genetics", "mendel", "punnett", "monohybrid", "genotypic", "phenotypic", "cross"],
+    tags: ["punnett square", "monohybrid cross", "genotypic ratio", "phenotypic ratio", "mendel", "alleles"],
+    description: "Standard NCERT Punnett square diagram showing parental gametes T, t and F2 offspring TT, Tt, Tt, tt with 3:1 phenotypic and 1:2:1 genotypic ratios.",
+    source: "NCERT Curated",
+    license: "Public Domain",
+    hasUnlabelledCallouts: false,
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" width="640" height="400">
+  <rect width="640" height="400" fill="#ffffff"/>
+  <!-- Title -->
+  <text x="320" y="45" font-family="sans-serif" font-size="15" font-weight="bold" text-anchor="middle" fill="#0f172a">Punnett Square: F2 Generation of Monohybrid Cross</text>
+  
+  <!-- Parental Details -->
+  <text x="320" y="80" font-family="sans-serif" font-size="13" text-anchor="middle" fill="#475569">Parents: Tall (Tt) × Tall (Tt)  |  Gametes: T, t and T, t</text>
+
+  <!-- Gamete Headers -->
+  <!-- Top Gametes -->
+  <rect x="250" y="110" width="70" height="30" fill="#e0e7ff" stroke="#4338ca" stroke-width="1.5" rx="4"/>
+  <text x="285" y="130" font-family="serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#4338ca">T</text>
+
+  <rect x="330" y="110" width="70" height="30" fill="#e0e7ff" stroke="#4338ca" stroke-width="1.5" rx="4"/>
+  <text x="365" y="130" font-family="serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#4338ca">t</text>
+
+  <!-- Left Gametes -->
+  <rect x="170" y="150" width="70" height="30" fill="#e0e7ff" stroke="#4338ca" stroke-width="1.5" rx="4"/>
+  <text x="205" y="170" font-family="serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#4338ca">T</text>
+
+  <rect x="170" y="230" width="70" height="30" fill="#e0e7ff" stroke="#4338ca" stroke-width="1.5" rx="4"/>
+  <text x="205" y="250" font-family="serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#4338ca">t</text>
+
+  <!-- Punnett Grid 2x2 -->
+  <!-- Cell 1: TT -->
+  <rect x="250" y="150" width="70" height="70" fill="#f8fafc" stroke="#334155" stroke-width="2"/>
+  <text x="285" y="180" font-family="serif" font-size="17" font-weight="bold" text-anchor="middle" fill="#0f172a">TT</text>
+  <text x="285" y="202" font-family="sans-serif" font-size="11" text-anchor="middle" fill="#15803d">Tall (Pure)</text>
+
+  <!-- Cell 2: Tt -->
+  <rect x="330" y="150" width="70" height="70" fill="#f8fafc" stroke="#334155" stroke-width="2"/>
+  <text x="365" y="180" font-family="serif" font-size="17" font-weight="bold" text-anchor="middle" fill="#0f172a">Tt</text>
+  <text x="365" y="202" font-family="sans-serif" font-size="11" text-anchor="middle" fill="#15803d">Tall (Hybrid)</text>
+
+  <!-- Cell 3: Tt -->
+  <rect x="250" y="230" width="70" height="70" fill="#f8fafc" stroke="#334155" stroke-width="2"/>
+  <text x="285" y="260" font-family="serif" font-size="17" font-weight="bold" text-anchor="middle" fill="#0f172a">Tt</text>
+  <text x="285" y="282" font-family="sans-serif" font-size="11" text-anchor="middle" fill="#15803d">Tall (Hybrid)</text>
+
+  <!-- Cell 4: tt -->
+  <rect x="330" y="230" width="70" height="70" fill="#f8fafc" stroke="#334155" stroke-width="2"/>
+  <text x="365" y="260" font-family="serif" font-size="17" font-weight="bold" text-anchor="middle" fill="#0f172a">tt</text>
+  <text x="365" y="282" font-family="sans-serif" font-size="11" text-anchor="middle" fill="#b91c1c">Dwarf (Pure)</text>
+
+  <!-- Ratio Summary Box -->
+  <rect x="110" y="325" width="420" height="40" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="320" y="348" font-family="sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="#0f172a">
+    Phenotypic Ratio: 3 Tall : 1 Dwarf  |  Genotypic Ratio: 1 TT : 2 Tt : 1 tt
+  </text>
+</svg>`,
+  },
+
+  // -------------------------------------------------------------------------
+  // 10. BIOLOGY: Ecological Trophic Energy Pyramid
+  // -------------------------------------------------------------------------
+  {
+    id: "bio_ecological_trophic_pyramid",
+    title: "Trophic Pyramid of Energy (Lindeman's 10% Law)",
+    subject: "Biology",
+    classLevel: "Class 10 / Class 12",
+    chapterKeywords: ["ecosystem", "ecology", "pyramid", "trophic", "energy flow", "producers", "consumers", "10% law", "lindeman"],
+    tags: ["trophic pyramid", "energy transfer", "ecosystem", "primary producers", "10% law"],
+    description: "Standard NCERT pyramid of energy showing 4 trophic levels: primary producers (10,000 J), primary consumers (1,000 J), secondary consumers (100 J), tertiary consumers (10 J).",
+    source: "NCERT Curated",
+    license: "Public Domain",
+    hasUnlabelledCallouts: false,
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" width="640" height="400">
+  <rect width="640" height="400" fill="#ffffff"/>
+  <text x="320" y="40" font-family="sans-serif" font-size="15" font-weight="bold" text-anchor="middle" fill="#0f172a">Trophic Pyramid of Energy (Lindeman's 10% Law)</text>
+
+  <!-- Tier 4 (Top): Tertiary Consumers (10 J) -->
+  <polygon points="260,80 380,80 410,130 230,130" fill="#fef2f2" stroke="#dc2626" stroke-width="2"/>
+  <text x="320" y="105" font-family="sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#991b1b">Tertiary Consumers (Top Carnivores) — 10 J</text>
+
+  <!-- Tier 3: Secondary Consumers (100 J) -->
+  <polygon points="230,130 410,130 450,190 190,190" fill="#fff7ed" stroke="#ea580c" stroke-width="2"/>
+  <text x="320" y="165" font-family="sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#c2410c">Secondary Consumers (Carnivores) — 100 J</text>
+
+  <!-- Tier 2: Primary Consumers (1,000 J) -->
+  <polygon points="190,190 450,190 490,260 150,260" fill="#fefce8" stroke="#ca8a04" stroke-width="2"/>
+  <text x="320" y="230" font-family="sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#854d0e">Primary Consumers (Herbivores) — 1,000 J</text>
+
+  <!-- Tier 1 (Base): Primary Producers (10,000 J) -->
+  <polygon points="150,260 490,260 530,340 110,340" fill="#f0fdf4" stroke="#16a34a" stroke-width="2.5"/>
+  <text x="320" y="305" font-family="sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="#15803d">Primary Producers (Phytoplankton / Green Plants) — 10,000 J</text>
+
+  <!-- 10% Transfer Arrow on Right -->
+  <line x1="560" y1="330" x2="560" y2="90" stroke="#0284c7" stroke-width="2.5"/>
+  <polygon points="560,80 553,95 567,95" fill="#0284c7"/>
+  <text x="575" y="210" font-family="sans-serif" font-size="11" font-weight="bold" fill="#0284c7">Only 10%</text>
+  <text x="575" y="225" font-family="sans-serif" font-size="10" fill="#0284c7">Transferred</text>
+
+  <text x="320" y="375" font-family="sans-serif" font-size="11" text-anchor="middle" fill="#64748b">90% of energy is lost as metabolic heat at each successive trophic level</text>
 </svg>`,
   },
 ];
