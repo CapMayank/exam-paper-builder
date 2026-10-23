@@ -92,6 +92,7 @@ export type PaperItem = {
   id: string;
   sectionId: string;
   position: number;
+  pageBreakBefore?: boolean;
   question: QuestionDto;
   orQuestion?: QuestionDto | null;
 };
@@ -181,6 +182,8 @@ export type PaperData = {
   marksStyle: MarksStyle;
   showCandidateDetails: boolean;
   showSignatures: boolean;
+  securityWatermark?: boolean;
+  watermarkText?: string;
   createdAt?: string;
   updatedAt?: string;
   snapshots?: PaperSnapshot[];

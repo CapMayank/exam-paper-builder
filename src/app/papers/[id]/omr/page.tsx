@@ -1,10 +1,11 @@
 "use client";
 
-import { ArrowLeft, Printer } from "lucide-react";
+import { ArrowLeft, FileText, Printer } from "lucide-react";
 import Link from "next/link";
 import { use, useEffect, useMemo, useState } from "react";
 import { api, imageUrl } from "@/lib/client";
 import { DEFAULT_SCHOOL_LOGO, DEFAULT_SCHOOL_NAME, EXAM_TYPE_LABEL, isMcqLikeType, resolvePaperExamType } from "@/lib/constants";
+import { formatQuestionNumber } from "@/lib/layout";
 import type { PaperData } from "@/lib/types";
 
 export default function OmrSheetPage({ params }: PageProps<"/papers/[id]/omr">) {
@@ -28,37 +29,144 @@ export default function OmrSheetPage({ params }: PageProps<"/papers/[id]/omr">) 
     );
   }, [id]);
 
-  // Count total MCQs in the paper
-  const paperMcqCount = useMemo(() => {
-    if (!paper) return 20;
-    const mcqSections = paper.blueprint.sections.filter((s) => isMcqLikeType(s.type));
-    const count = mcqSections.reduce((sum, s) => sum + s.count, 0);
-    return count > 0 ? count : 20;
+  // Extract objective (MCQ-like) items with their real paper question numbering
+  const objectiveItems = useMemo(() => {
+    if (!paper) return [];
+    const itemsList: {
+      globalIndex: number;
+      label: string;
+      itemId?: string;
+      sectionTitle: string;
+      type: string;
+    }[] = [];
+
+    let numCount = 0;
+    let sectionGroupCounter = 0;
+    let sectionRelativeCounter = 0;
+
+    for (let i = 0; i < paper.blueprint.sections.length; i++) {
+      const s = paper.blueprint.sections[i];
+      const prev = i > 0 ? paper.blueprint.sections[i - 1] : null;
+      const isSameAsPrev = Boolean(prev && prev.title.trim().toLowerCase() === s.title.trim().toLowerCase());
+      if (!isSameAsPrev) {
+        if (i > 0) sectionGroupCounter++;
+        sectionRelativeCounter = 0;
+      }
+      const match = s.title.match(/section\s+([a-z0-9]+)/i);
+      const sectionLetter = match ? match[1].toUpperCase() : String.fromCharCode(65 + sectionGroupCounter);
+
+      const items = paper.items.filter((item) => item.sectionId === s.id);
+
+      if (items.length > 0) {
+        for (const it of items) {
+          numCount++;
+          sectionRelativeCounter++;
+          const mainLabel = formatQuestionNumber(
+            paper.numberingStyle || "CONTINUOUS",
+            numCount - 1,
+            sectionLetter,
+            sectionRelativeCounter - 1
+          );
+
+          // Check for subparts with MCQ options (e.g. Case Study with objective subparts)
+          let subparts: any[] = [];
+          if (it.question.subparts && Array.isArray(it.question.subparts)) {
+            subparts = it.question.subparts;
+          } else if (it.question.subpartsJson) {
+            try {
+              subparts = JSON.parse(it.question.subpartsJson);
+            } catch {}
+          }
+
+          const mcqSubparts = subparts.filter((sp) => Array.isArray(sp.options) && sp.options.length > 0);
+
+          if (mcqSubparts.length > 0) {
+            mcqSubparts.forEach((sp, spIdx) => {
+              itemsList.push({
+                globalIndex: numCount,
+                label: `${mainLabel}(${sp.label || spIdx + 1})`,
+                itemId: `${it.id}-sp-${spIdx}`,
+                sectionTitle: s.title,
+                type: "MCQ",
+              });
+            });
+          } else if (isMcqLikeType(it.question.type) || isMcqLikeType(s.type)) {
+            itemsList.push({
+              globalIndex: numCount,
+              label: mainLabel,
+              itemId: it.id,
+              sectionTitle: s.title,
+              type: it.question.type || s.type,
+            });
+          }
+        }
+      } else {
+        // Fallback to blueprint question count slots if paper is still being drafted
+        for (let slot = 0; slot < s.count; slot++) {
+          numCount++;
+          sectionRelativeCounter++;
+          if (isMcqLikeType(s.type)) {
+            itemsList.push({
+              globalIndex: numCount,
+              label: formatQuestionNumber(
+                paper.numberingStyle || "CONTINUOUS",
+                numCount - 1,
+                sectionLetter,
+                sectionRelativeCounter - 1
+              ),
+              sectionTitle: s.title,
+              type: s.type,
+              itemId: `slot-${s.id}-${slot}`,
+            });
+          }
+        }
+      }
+    }
+    return itemsList;
   }, [paper]);
 
-  const totalQuestions = overrideCount ?? paperMcqCount;
+  const itemsToRender = useMemo(() => {
+    if (overrideCount !== null) {
+      return Array.from({ length: overrideCount }, (_, i) => ({
+        globalIndex: i + 1,
+        label: String(i + 1),
+        itemId: `override-${i + 1}`,
+        sectionTitle: "",
+        type: "MCQ",
+      }));
+    }
+    return objectiveItems;
+  }, [overrideCount, objectiveItems]);
 
-  if (error) return <p className="p-8 text-red-700">{error}</p>;
-  if (!paper) {
+  const totalQuestions = itemsToRender.length;
+  const questionsPerColumn = totalQuestions > 0 ? Math.ceil(totalQuestions / 4) : 0;
+  const columns = useMemo(() => {
+    if (totalQuestions === 0) return [];
+    const cols: (typeof itemsToRender)[] = [];
+    for (let c = 0; c < 4; c++) {
+      const start = c * questionsPerColumn;
+      const end = Math.min((c + 1) * questionsPerColumn, totalQuestions);
+      const slice = itemsToRender.slice(start, end);
+      if (slice.length > 0) cols.push(slice);
+    }
+    return cols;
+  }, [itemsToRender, totalQuestions, questionsPerColumn]);
+
+  if (error) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-100">
-        <div className="flex items-center gap-2.5 text-sm font-semibold text-slate-600">
-          <div className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent" />
-          Generating Optical Mark Recognition (OMR) Sheet…
-        </div>
+      <div className="p-8 text-center text-red-600">
+        <p className="font-bold">Error loading paper</p>
+        <p className="text-sm">{error}</p>
       </div>
     );
   }
 
-  // Split questions into 4 neat columns of up to 25 rows each
-  const questionsPerColumn = Math.ceil(totalQuestions / 4);
-  const columns: number[][] = [];
-  for (let c = 0; c < 4; c++) {
-    const col: number[] = [];
-    const start = c * questionsPerColumn + 1;
-    const end = Math.min((c + 1) * questionsPerColumn, totalQuestions);
-    for (let q = start; q <= end; q++) col.push(q);
-    if (col.length > 0) columns.push(col);
+  if (!paper) {
+    return (
+      <div className="p-8 text-center text-slate-500">
+        <p>Loading OMR Sheet…</p>
+      </div>
+    );
   }
 
   const rollBoxIndices = Array.from({ length: rollDigits }, (_, i) => i);
@@ -85,9 +193,15 @@ export default function OmrSheetPage({ params }: PageProps<"/papers/[id]/omr">) 
           <span className="font-display font-semibold text-slate-800">
             Sarvodaya H.S. School · OMR Answer Sheet
           </span>
-          <span className="badge badge-indigo">
-            {totalQuestions} Questions
-          </span>
+          {totalQuestions > 0 ? (
+            <span className="badge badge-indigo">
+              {totalQuestions} Questions
+            </span>
+          ) : (
+            <span className="badge badge-amber">
+              No Objective Questions
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-3">
@@ -115,7 +229,7 @@ export default function OmrSheetPage({ params }: PageProps<"/papers/[id]/omr">) 
               }
               className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 shadow-sm"
             >
-              <option value="auto">Auto ({paperMcqCount} from paper)</option>
+              <option value="auto">Auto ({objectiveItems.length} from paper)</option>
               <option value="20">20 Questions</option>
               <option value="30">30 Questions</option>
               <option value="40">40 Questions</option>
@@ -128,8 +242,10 @@ export default function OmrSheetPage({ params }: PageProps<"/papers/[id]/omr">) 
 
           <button
             type="button"
+            disabled={totalQuestions === 0}
             onClick={() => window.print()}
-            className="btn btn-primary btn-sm flex items-center gap-1.5 shadow"
+            className="btn btn-primary btn-sm flex items-center gap-1.5 shadow disabled:opacity-50 disabled:cursor-not-allowed"
+            title={totalQuestions === 0 ? "Select a question count to enable printing" : "Print OMR Sheet"}
           >
             <Printer size={15} /> Print OMR Sheet
           </button>
@@ -300,38 +416,74 @@ export default function OmrSheetPage({ params }: PageProps<"/papers/[id]/omr">) 
             </div>
           </div>
 
-          {/* OMR Question Response Grid (4 Columns) */}
-          <div className="mb-4 border-2 border-slate-900 p-2">
-            <div className="grid grid-cols-4 divide-x-2 divide-slate-900">
-              {columns.map((col, colIdx) => (
-                <div key={colIdx} className="px-2">
-                  <div className="mb-1 flex justify-between border-b border-slate-900 pb-1 text-[10px] font-black uppercase text-slate-900">
-                    <span>Q.No</span>
-                    <span>Response</span>
-                  </div>
-                  <div className="space-y-1">
-                    {col.map((qNum) => (
-                      <div key={qNum} className="flex items-center justify-between text-xs">
-                        <span className="w-6 font-bold text-slate-900 text-[11px] tabular-nums">
-                          {qNum}.
-                        </span>
-                        <div className="flex gap-1.5">
-                          {["A", "B", "C", "D"].map((opt) => (
-                            <span
-                              key={opt}
-                              className="flex h-4 w-4 items-center justify-center rounded-full border border-slate-900 bg-white text-[9px] font-bold text-slate-800"
-                            >
-                              {opt}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
+          {/* OMR Question Response Grid (4 Columns) or Informational Notice */}
+          {totalQuestions === 0 ? (
+            <div className="mb-4 border-2 border-dashed border-slate-300 p-8 text-center bg-slate-50/80 rounded">
+              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-slate-200 text-slate-600 mb-2">
+                <FileText size={20} />
+              </div>
+              <h3 className="font-bold text-slate-800 text-xs uppercase tracking-wider">
+                No Objective / MCQ Questions Found
+              </h3>
+              <p className="mt-1 text-[11px] text-slate-600 max-w-sm mx-auto leading-relaxed">
+                This examination paper contains descriptive or subjective questions only. An OMR sheet is not applicable unless objective questions are added.
+              </p>
+              <div className="mt-3 flex justify-center gap-2 print:hidden">
+                <button
+                  type="button"
+                  onClick={() => setOverrideCount(20)}
+                  className="btn btn-sm btn-ghost border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-semibold"
+                >
+                  Generate Standard 20-Question Sheet
+                </button>
+                <Link
+                  href={`/papers/${id}`}
+                  className="btn btn-sm btn-ghost border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 text-xs font-medium"
+                >
+                  Back to Workbench
+                </Link>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="mb-4 border-2 border-slate-900 p-2">
+              <div className="grid grid-cols-4 divide-x-2 divide-slate-900">
+                {columns.map((col, colIdx) => (
+                  <div key={colIdx} className="px-2">
+                    <div className="mb-1 flex justify-between border-b border-slate-900 pb-1 text-[10px] font-black uppercase text-slate-900">
+                      <span>Q.No</span>
+                      <span>Response</span>
+                    </div>
+                    <div className="space-y-1">
+                      {col.map((qItem) => {
+                        const rawLabel = String(qItem.label || qItem.globalIndex);
+                        const display = rawLabel.endsWith(".") ? rawLabel : `${rawLabel}.`;
+                        return (
+                          <div key={qItem.itemId || `${qItem.globalIndex}-${qItem.label}`} className="flex items-center justify-between text-xs">
+                            <span
+                              className="w-12 font-bold text-slate-900 text-[10px] tabular-nums truncate pr-1"
+                              title={rawLabel}
+                            >
+                              {display}
+                            </span>
+                            <div className="flex gap-1.5">
+                              {["A", "B", "C", "D"].map((opt) => (
+                                <span
+                                  key={opt}
+                                  className="flex h-4 w-4 items-center justify-center rounded-full border border-slate-900 bg-white text-[9px] font-bold text-slate-800"
+                                >
+                                  {opt}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Footer Signature Blocks */}
           <div className="grid grid-cols-3 gap-4 border border-slate-900 p-2.5 text-center text-xs">

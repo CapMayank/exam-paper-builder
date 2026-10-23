@@ -1,10 +1,11 @@
 import { body, route } from "@/lib/api";
+import { recordAudit } from "@/lib/audit";
 import { ensureClassAndSubject, normalizeAcademicSession } from "@/lib/classes";
 import { prisma } from "@/lib/prisma";
 import { unifiedRolloverSchema } from "@/lib/schemas";
 
 export const POST = route(
-  async (req) => {
+  async (req, _params, user) => {
   const data = await body(req, unifiedRolloverSchema);
   const sourceSession = normalizeAcademicSession(data.sourceSession);
   const targetSession = normalizeAcademicSession(data.targetSession);
@@ -209,6 +210,17 @@ export const POST = route(
       }
     }
   }
+
+  await recordAudit(user, "ACADEMIC_ROLLOVER", "ACADEMIC_SESSION", targetSession, {
+    action: "SESSION_ROLLOVER",
+    sourceSession,
+    targetSession,
+    classesCloned,
+    subjectsCloned,
+    booksCloned,
+    chaptersCloned,
+    blueprintsCloned,
+  });
 
   return {
     ok: true,

@@ -8,7 +8,9 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronUp,
+  Columns2,
   CopyPlus,
+  ExternalLink,
   FileDown,
   Grid3X3,
   ImagePlus,
@@ -19,6 +21,7 @@ import {
   Plus,
   Printer,
   RefreshCw,
+  Scissors,
   SlidersHorizontal,
   Sparkles,
   Trash2,
@@ -27,17 +30,20 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { use, useCallback, useEffect, useRef, useState } from "react";
+import { use, useCallback, useEffect, useRef, useState, Fragment } from "react";
 import { AIPaperAuditModal } from "@/components/AIPaperAuditModal";
 import { AIPaperGeneratorModal } from "@/components/AIPaperGeneratorModal";
 import { DiagramSearchModal } from "@/components/DiagramSearchModal";
 import { FigureStudio } from "@/components/figure-studio";
 import { PaperImportModal } from "@/components/PaperImportModal";
+import { PaperPreflightModal } from "@/components/PaperPreflightModal";
+import { PaperSheets } from "@/components/PaperSheets";
+import { SectionAiModal } from "@/components/SectionAiModal";
 import { QuestionForm } from "@/components/QuestionForm";
 import { QuestionPicker } from "@/components/QuestionPicker";
 import { isExhaustedUsage, QuestionFreshnessAlert, QuestionUsagePills } from "@/components/QuestionUsageHistory";
 import { QuestionView } from "@/components/QuestionView";
-import { ErrorBanner, Field, Modal } from "@/components/ui";
+import { ErrorBanner, Field, Modal, useConfirm, useToast } from "@/components/ui";
 import { api, imageUrl } from "@/lib/client";
 import {
   ACADEMIC_SESSIONS,
@@ -62,7 +68,7 @@ import {
 } from "@/lib/constants";
 import { formatQuestionNumber } from "@/lib/layout";
 import { nextSetIdentifier } from "@/lib/multiset";
-import type { Book, PaperData, PaperItem, Section } from "@/lib/types";
+import type { Book, PaperData, PaperItem, Section, MarksStyle, NumberingStyle, PrintDensity } from "@/lib/types";
 
 function Bar({ used, target }: { used: number; target: number }) {
   const pct = target === 0 ? 0 : Math.min(100, (used / target) * 100);
@@ -80,6 +86,8 @@ function Bar({ used, target }: { used: number; target: number }) {
 
 export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) {
   const { id } = use(params);
+  const confirm = useConfirm();
+  const toast = useToast();
   const [paper, setPaper] = useState<PaperData | null>(null);
   const [books, setBooks] = useState<Book[]>([]);
   const [pickerSectionId, setPickerSectionId] = useState<string | null>(null);
@@ -97,7 +105,24 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
     paperSet: "",
     subjectCode: "",
     generalInstructions: "",
+    printDensity: "STANDARD" as PrintDensity,
+    showCandidateDetails: true,
+    showSignatures: false,
+    securityWatermark: false,
+    watermarkText: "",
   });
+  const [splitPreview, setSplitPreview] = useState(false);
+  const [previewZoom, setPreviewZoom] = useState(0.55);
+  const [quickSwapItemId, setQuickSwapItemId] = useState<string | null>(null);
+  const [siblingQuestions, setSiblingQuestions] = useState<Array<{ id: string; text: string; difficulty: string }>>([]);
+  const [siblingLoading, setSiblingLoading] = useState(false);
+  const [swappingBusy, setSwappingBusy] = useState(false);
+  const [sectionAutofilling, setSectionAutofilling] = useState<string | null>(null);
+  const [sectionAiModalSection, setSectionAiModalSection] = useState<Section | null>(null);
+  const [preflightOpen, setPreflightOpen] = useState(false);
+  const [autosaveStatus, setAutosaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isFirstRender = useRef(true);
   const [error, setError] = useState<string | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [autofilling, setAutofilling] = useState(false);
@@ -157,8 +182,122 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
       paperSet: p.paperSet ?? "",
       subjectCode: p.subjectCode ?? "",
       generalInstructions: p.generalInstructions ?? "",
+      printDensity: (p.printDensity as PrintDensity) ?? "STANDARD",
+      showCandidateDetails: p.showCandidateDetails !== false,
+      showSignatures: p.showSignatures === true,
+      securityWatermark: p.securityWatermark === true,
+      watermarkText: p.watermarkText ?? "",
     });
   }, []);
+
+  // Autosave effect for details
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    if (!paper || paper.status === "FINAL") return;
+
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = setTimeout(async () => {
+      setAutosaveStatus("saving");
+      try {
+        await api<PaperData>(`/api/papers/${id}`, {
+          method: "PATCH",
+          json: {
+            title: details.title,
+            schoolName: details.schoolName,
+            academicSession: details.academicSession,
+            examDate: details.examDate,
+            paperSet: details.paperSet,
+            subjectCode: details.subjectCode,
+            generalInstructions: details.generalInstructions,
+            printDensity: details.printDensity,
+            showCandidateDetails: details.showCandidateDetails,
+            showSignatures: details.showSignatures,
+            securityWatermark: details.securityWatermark,
+            watermarkText: details.watermarkText,
+          },
+        });
+        setAutosaveStatus("saved");
+        setTimeout(() => setAutosaveStatus("idle"), 2500);
+      } catch {
+        setAutosaveStatus("error");
+      }
+    }, 1200);
+
+    return () => {
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    };
+  }, [id, details, paper?.status]);
+
+  async function handleTogglePageBreak(itemId: string, pageBreakBefore: boolean) {
+    try {
+      const updated = await api<PaperData>(`/api/papers/${id}/questions/${itemId}`, {
+        method: "PATCH",
+        json: { pageBreakBefore },
+      });
+      adopt(updated);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
+  async function handleOpenQuickSwap(itemId: string) {
+    setQuickSwapItemId(itemId);
+    setSiblingLoading(true);
+    setSiblingQuestions([]);
+    try {
+      const data = await api<{ siblings: Array<{ id: string; text: string; difficulty: string }> }>(
+        `/api/papers/${id}/questions/${itemId}/siblings`
+      );
+      setSiblingQuestions(data.siblings || []);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSiblingLoading(false);
+    }
+  }
+
+  async function handleExecuteQuickSwap(itemId: string, replacementQuestionId: string) {
+    setSwappingBusy(true);
+    setError(null);
+    try {
+      const updated = await api<PaperData>(`/api/papers/${id}/questions/${itemId}`, {
+        method: "PUT",
+        json: { mode: "replace", question: { id: replacementQuestionId } },
+      });
+      adopt(updated);
+      setQuickSwapItemId(null);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSwappingBusy(false);
+    }
+  }
+
+  async function handleSectionAutofill(sectionId: string) {
+    setError(null);
+    setInfoMessage(null);
+    setSectionAutofilling(sectionId);
+    try {
+      const res = await api<{
+        success: boolean;
+        addedCount: number;
+        message: string;
+        paper: PaperData;
+      }>(`/api/papers/${id}/autofill`, {
+        method: "POST",
+        json: { targetSectionId: sectionId },
+      });
+      if (res.paper) adopt(res.paper);
+      setInfoMessage(res.message);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSectionAutofilling(null);
+    }
+  }
 
   async function handleAutofill() {
     setError(null);
@@ -337,6 +476,37 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
             >
               {final ? "Finalized" : "Draft"}
             </span>
+
+            {canEditPaper && !final && (
+              <span
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium transition-colors"
+                title={
+                  autosaveStatus === "saving"
+                    ? "Saving changes..."
+                    : autosaveStatus === "saved"
+                    ? "All changes saved"
+                    : autosaveStatus === "error"
+                    ? "Failed to save changes"
+                    : "Autosave active"
+                }
+              >
+                {autosaveStatus === "saving" && (
+                  <span className="text-amber-600 flex items-center gap-1 font-sans">
+                    <RefreshCw size={11} className="animate-spin" /> Saving…
+                  </span>
+                )}
+                {autosaveStatus === "saved" && (
+                  <span className="text-emerald-700 flex items-center gap-1 font-sans font-semibold">
+                    <CheckCircle2 size={11} /> Saved
+                  </span>
+                )}
+                {autosaveStatus === "error" && (
+                  <span className="text-rose-600 flex items-center gap-1 font-sans font-semibold">
+                    ✕ Save failed
+                  </span>
+                )}
+              </span>
+            )}
           </div>
 
           {/* Action Toolbar: Consolidated Progressive Disclosure */}
@@ -511,6 +681,21 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
               )}
             </div>
 
+            {/* Live Sheet Preview Toggle */}
+            <button
+              type="button"
+              onClick={() => setSplitPreview((v) => !v)}
+              className={`btn text-xs font-semibold flex items-center gap-1.5 transition ${
+                splitPreview
+                  ? "border-indigo-400 bg-indigo-600 text-white hover:bg-indigo-700 shadow-2xs"
+                  : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50 shadow-2xs"
+              }`}
+              title="Toggle live side-by-side print sheet preview"
+            >
+              <Columns2 size={14} className={splitPreview ? "text-indigo-200" : "text-slate-500"} />
+              <span>{splitPreview ? "Hide Live Sheet" : "Live Sheet Preview"}</span>
+            </button>
+
             {/* 3. Primary Contextual CTA */}
             <div className="border-l border-slate-200 pl-2">
               {final ? (
@@ -536,7 +721,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                 canEditPaper ? (
                   <button
                     className="btn bg-emerald-600 hover:bg-emerald-700 text-white text-xs shadow-xs font-semibold flex items-center gap-1.5"
-                    onClick={() => patch({ status: "FINAL" })}
+                    onClick={() => setPreflightOpen(true)}
                     title="Lock and finalize paper"
                   >
                     <Lock size={14} />
@@ -626,8 +811,14 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
         </div>
       )}
 
-      {/* Main 2-Column Workbench Grid */}
-      <div className="grid gap-5 lg:grid-cols-[19.5rem_1fr] items-start">
+      {/* Main 2- or 3-Column Workbench Grid */}
+      <div
+        className={`grid gap-5 items-start ${
+          splitPreview
+            ? "lg:grid-cols-[18rem_1fr_450px] xl:grid-cols-[18.5rem_1fr_500px]"
+            : "lg:grid-cols-[19.5rem_1fr]"
+        }`}
+      >
         {/* Left Sidebar: Blueprint Metrics & Configuration */}
         <aside className="lg:sticky lg:top-20 lg:self-start flex flex-col lg:max-h-[calc(100vh-6rem)]">
           {/* Segmented Tab Switcher (Pinned at Top of Sidebar) */}
@@ -996,6 +1187,59 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                   />
                   <span>Print Invigilator Signature Box</span>
                 </label>
+
+                <div className="pt-2 border-t border-slate-100 space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-800">
+                    <input
+                      type="checkbox"
+                      checked={details.securityWatermark}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setDetails((d) => ({ ...d, securityWatermark: checked }));
+                        patch({ securityWatermark: checked });
+                      }}
+                      className="rounded text-indigo-600"
+                    />
+                    <span>Confidential Security Watermark</span>
+                  </label>
+                  {details.securityWatermark && (
+                    <div className="pl-6 space-y-1.5">
+                      <input
+                        className="input text-xs"
+                        placeholder="e.g. CONFIDENTIAL — SARVODAYA EXAM CELL"
+                        value={details.watermarkText}
+                        onChange={(e) => setDetails((d) => ({ ...d, watermarkText: e.target.value }))}
+                        onBlur={() => {
+                          if (details.watermarkText !== paper.watermarkText) {
+                            patch({ watermarkText: details.watermarkText });
+                          }
+                        }}
+                      />
+                      <div className="flex flex-wrap gap-1">
+                        {["CONFIDENTIAL", "CONFIDENTIAL — EXAM CELL", "PRE-BOARD SPECIMEN", "DO NOT COPY"].map((preset) => (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => {
+                              setDetails((d) => ({ ...d, watermarkText: preset }));
+                              patch({ watermarkText: preset });
+                            }}
+                            className={`rounded px-1.5 py-0.5 text-[10px] border transition ${
+                              details.watermarkText === preset
+                                ? "bg-indigo-50 border-indigo-300 text-indigo-900 font-bold"
+                                : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                            }`}
+                          >
+                            {preset}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-slate-500">
+                        Prints diagonal semi-transparent watermark text on all sheets to prevent unauthorized exam paper leaks.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             </section>
 
@@ -1251,15 +1495,42 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
 
                   <div className="flex items-center gap-1.5">
                     {canEditPaper && effectiveUnits < s.count && (
-                      <button
-                        className="btn btn-sm btn-primary shadow-2xs"
-                        onClick={() => {
-                          setCollapsedSections((prev) => ({ ...prev, [s.id]: false }));
-                          setPickerSectionId(s.id);
-                        }}
-                      >
-                        <Plus size={13} /> Add Question
-                      </button>
+                      <>
+                        <button
+                          className="btn btn-sm btn-primary shadow-2xs"
+                          onClick={() => {
+                            setCollapsedSections((prev) => ({ ...prev, [s.id]: false }));
+                            setPickerSectionId(s.id);
+                          }}
+                        >
+                          <Plus size={13} /> Add Question
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-sm border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 shadow-2xs flex items-center gap-1 text-xs font-semibold"
+                          onClick={() => {
+                            setCollapsedSections((prev) => ({ ...prev, [s.id]: false }));
+                            setSectionAiModalSection(s);
+                          }}
+                          title="Generate questions for this section using AI"
+                        >
+                          <Sparkles size={12} />
+                          <span>AI Fill</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={sectionAutofilling === s.id}
+                          className="btn btn-sm border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 shadow-2xs flex items-center gap-1 text-xs font-semibold disabled:opacity-50"
+                          onClick={() => {
+                            setCollapsedSections((prev) => ({ ...prev, [s.id]: false }));
+                            handleSectionAutofill(s.id);
+                          }}
+                          title="Auto-fill empty slots in this section from question bank"
+                        >
+                          <RefreshCw size={12} className={sectionAutofilling === s.id ? "animate-spin" : ""} />
+                          <span>{sectionAutofilling === s.id ? "Filling…" : "Auto-Fill"}</span>
+                        </button>
+                      </>
                     )}
                     <button
                       type="button"
@@ -1333,9 +1604,25 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                           : s.marksEach;
 
                         return (
-                          <li
-                            key={it.id}
-                            className={`rounded-xl border p-4 shadow-2xs transition hover:border-slate-300 ${
+                          <Fragment key={it.id}>
+                            {it.pageBreakBefore && (
+                              <div className="flex items-center gap-2 py-1 px-3 my-1.5 text-xs font-mono font-semibold text-amber-800 bg-amber-50/90 border-y border-dashed border-amber-300 rounded-lg">
+                                <Scissors size={13} className="text-amber-600 rotate-90" />
+                                <span>Forced Page Break (Starts new page here)</span>
+                                {canEditPaper && !final && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleTogglePageBreak(it.id, false)}
+                                    className="ml-auto text-amber-700 hover:text-amber-950 font-sans font-bold hover:underline"
+                                    title="Remove forced page break"
+                                  >
+                                    Remove
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                            <li
+                              className={`rounded-xl border p-4 shadow-2xs transition hover:border-slate-300 ${
                               isExcess || isTypeMismatch
                                 ? "border-amber-300 bg-amber-50/20"
                                 : "border-slate-200/90 bg-white"
@@ -1536,6 +1823,111 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                     <RefreshCw size={12} className="text-slate-400" /> Replace
                                   </button>
 
+                                  {/* Quick Swap Popover */}
+                                  <div className="relative">
+                                    <button
+                                      type="button"
+                                      className={`btn btn-sm font-medium ${
+                                        quickSwapItemId === it.id
+                                          ? "bg-indigo-100 text-indigo-900 border-indigo-300 shadow-2xs"
+                                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-2xs"
+                                      }`}
+                                      title="1-click Quick Swap with a sibling question from the same chapter"
+                                      onClick={() => {
+                                        if (quickSwapItemId === it.id) {
+                                          setQuickSwapItemId(null);
+                                        } else {
+                                          handleOpenQuickSwap(it.id);
+                                        }
+                                      }}
+                                    >
+                                      <RefreshCw size={11} className={`text-indigo-600 ${quickSwapItemId === it.id ? "rotate-180 transition-transform" : ""}`} />
+                                      <span>Quick Swap</span>
+                                    </button>
+
+                                    {quickSwapItemId === it.id && (
+                                      <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 rounded-xl border border-slate-200 bg-white p-3 shadow-xl z-30 space-y-2">
+                                        <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
+                                          <div>
+                                            <div className="text-xs font-bold text-slate-900">Sibling Questions</div>
+                                            <div className="text-[10px] text-slate-500">Same chapter &amp; type from bank</div>
+                                          </div>
+                                          <button
+                                            type="button"
+                                            onClick={() => setQuickSwapItemId(null)}
+                                            className="text-slate-400 hover:text-slate-600 font-bold text-xs"
+                                          >
+                                            ✕
+                                          </button>
+                                        </div>
+
+                                        {siblingLoading ? (
+                                          <div className="py-6 text-center text-xs text-slate-500 flex items-center justify-center gap-1.5">
+                                            <RefreshCw size={13} className="animate-spin text-indigo-600" />
+                                            <span>Searching question bank…</span>
+                                          </div>
+                                        ) : siblingQuestions.length === 0 ? (
+                                          <div className="py-4 text-center text-xs text-slate-500">
+                                            No alternative unused questions found in this chapter and question type.
+                                            <div className="mt-2">
+                                              <button
+                                                type="button"
+                                                className="text-indigo-600 font-semibold hover:underline text-[11px]"
+                                                onClick={() => {
+                                                  setQuickSwapItemId(null);
+                                                  setReplacingItem({ item: it, section: s });
+                                                }}
+                                              >
+                                                Open Full Question Bank Picker &rarr;
+                                              </button>
+                                            </div>
+                                          </div>
+                                        ) : (
+                                          <div className="max-h-72 overflow-y-auto space-y-2 pr-1">
+                                            {siblingQuestions.map((sib) => (
+                                              <div
+                                                key={sib.id}
+                                                className="group rounded-lg border border-slate-200 bg-slate-50/60 hover:bg-indigo-50/50 hover:border-indigo-200 p-2 text-xs transition flex flex-col gap-1.5"
+                                              >
+                                                <div className="line-clamp-2 text-slate-800 font-medium leading-relaxed group-hover:text-indigo-950">
+                                                  {sib.text}
+                                                </div>
+                                                <div className="flex items-center justify-between text-[10px] text-slate-500 pt-0.5">
+                                                  <span className="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-600">
+                                                    {sib.difficulty || "MEDIUM"}
+                                                  </span>
+                                                  <button
+                                                    type="button"
+                                                    disabled={swappingBusy}
+                                                    onClick={() => handleExecuteQuickSwap(it.id, sib.id)}
+                                                    className="btn btn-xs btn-primary shadow-2xs font-semibold"
+                                                  >
+                                                    Swap In
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Page Break Toggle */}
+                                  <button
+                                    type="button"
+                                    className={`btn btn-sm font-medium ${
+                                      it.pageBreakBefore
+                                        ? "bg-amber-100 text-amber-900 border-amber-300 shadow-2xs"
+                                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-2xs"
+                                    }`}
+                                    title={it.pageBreakBefore ? "Remove forced page break before this question" : "Force page break before this question in print & export"}
+                                    onClick={() => handleTogglePageBreak(it.id, !it.pageBreakBefore)}
+                                  >
+                                    <Scissors size={11} className={it.pageBreakBefore ? "text-amber-700" : "text-slate-400"} />
+                                    <span>{it.pageBreakBefore ? "Page Break ✓" : "Page Break"}</span>
+                                  </button>
+
                                   <div className="inline-flex items-center rounded-md border border-slate-200 bg-white shadow-2xs overflow-hidden">
                                     <button
                                       className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-50 disabled:opacity-30 disabled:hover:bg-white"
@@ -1593,8 +1985,9 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                               )}
                             </div>
                           </li>
-                        );
-                      })}
+                        </Fragment>
+                      );
+                    })}
 
                       {/* Interactive Empty Slot Targets */}
                       {Array.from({
@@ -1659,6 +2052,77 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
             );
           })}
         </div>
+
+        {/* Right Column: Live Sheet Preview (Split Screen) */}
+        {splitPreview && (
+          <aside className="sticky top-20 self-start flex flex-col h-[calc(100vh-6rem)] rounded-2xl border border-slate-200/90 bg-slate-100/70 p-3 shadow-xs">
+            {/* Header bar with Zoom controls, page count, and open print preview link */}
+            <div className="flex items-center justify-between pb-2.5 mb-2 border-b border-slate-200 px-1">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-bold text-slate-800">Live Print Sheet</span>
+                <span className="rounded bg-slate-200/80 px-1.5 py-0.5 text-[10px] text-slate-600 font-mono">
+                  {paper.layout === "BOOKLET_A4" ? "A5" : "A4"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center bg-white rounded-lg border border-slate-200 p-0.5 shadow-2xs">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewZoom((z) => Math.max(0.35, Number((z - 0.05).toFixed(2))))}
+                    className="px-1.5 py-0.5 text-xs text-slate-600 hover:text-slate-900 font-bold"
+                    title="Zoom out"
+                  >
+                    −
+                  </button>
+                  <span className="px-1 text-[11px] font-mono font-medium text-slate-700 min-w-[34px] text-center">
+                    {Math.round(previewZoom * 100)}%
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewZoom((z) => Math.min(1.0, Number((z + 0.05).toFixed(2))))}
+                    className="px-1.5 py-0.5 text-xs text-slate-600 hover:text-slate-900 font-bold"
+                    title="Zoom in"
+                  >
+                    +
+                  </button>
+                </div>
+                <Link
+                  href={`/papers/${id}/print`}
+                  target="_blank"
+                  className="text-slate-400 hover:text-indigo-600 transition p-1"
+                  title="Open full print view in new tab"
+                >
+                  <ExternalLink size={14} />
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setSplitPreview(false)}
+                  className="text-slate-400 hover:text-slate-600 transition p-1"
+                  title="Close live sheet preview"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            </div>
+
+            {/* Scrollable container with zoom applied */}
+            <div className="flex-1 overflow-y-auto overscroll-contain rounded-xl bg-slate-200/60 p-2 flex justify-center">
+              <div
+                className="origin-top transition-transform"
+                style={{ zoom: previewZoom }}
+              >
+                <PaperSheets
+                  paper={paper}
+                  view="reading"
+                  watermark={details.securityWatermark}
+                  watermarkText={details.watermarkText}
+                  compact={details.printDensity === "COMPACT"}
+                  showSignatures={details.showSignatures}
+                />
+              </div>
+            </div>
+          </aside>
+        )}
       </div>
 
       {/* Modals & Pickers */}
@@ -1874,6 +2338,33 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
               json: { imagePath: res.name },
             });
             await reloadPaper();
+          }}
+        />
+      )}
+
+      {/* Pre-Finalization Quality Preflight Modal */}
+      {preflightOpen && paper && (
+        <PaperPreflightModal
+          isOpen={preflightOpen}
+          paper={paper}
+          onClose={() => setPreflightOpen(false)}
+          onConfirmFinalize={() => {
+            setPreflightOpen(false);
+            patch({ status: "FINAL" });
+          }}
+        />
+      )}
+
+      {/* Section-Specific AI Question Generator Modal */}
+      {sectionAiModalSection && paper && (
+        <SectionAiModal
+          isOpen={Boolean(sectionAiModalSection)}
+          section={sectionAiModalSection}
+          paper={paper}
+          onClose={() => setSectionAiModalSection(null)}
+          onCommitted={(updated: PaperData) => {
+            adopt(updated);
+            setSectionAiModalSection(null);
           }}
         />
       )}

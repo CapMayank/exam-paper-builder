@@ -33,6 +33,16 @@ export const PATCH = route(async (req, { id, itemId }, user) => {
   const item = await editableItem(id, itemId, user);
   const raw = await req.clone().json().catch(() => ({}));
 
+  if ("pageBreakBefore" in raw) {
+    const pageBreakBefore = Boolean(raw.pageBreakBefore);
+    await prisma.paperQuestion.update({
+      where: { id: itemId },
+      data: { pageBreakBefore },
+    });
+    await prisma.paper.update({ where: { id }, data: { updatedAt: new Date() } });
+    return loadPaperView(id);
+  }
+
   if ("replaceWithQuestionId" in raw) {
     const { replaceWithQuestionId } = replaceItemSchema.parse(raw);
     const paper = await loadPaperView(id);
@@ -41,13 +51,28 @@ export const PATCH = route(async (req, { id, itemId }, user) => {
     const candidate = await prisma.question.findUnique({ where: { id: replaceWithQuestionId } });
     if (!candidate) throw new HttpError(404, "Replacement question not found");
     if (candidate.bookId !== paper.blueprint.bookId) throw new HttpError(400, "Replacement is from a different book");
-    if (paper.items.some((i) => i.question.id === candidate.id && i.id !== itemId)) {
-      throw new HttpError(409, "This question is already elsewhere in this paper");
+    if (item.orQuestionId === candidate.id) {
+      throw new HttpError(409, "Replacement question cannot be identical to the alternate (OR) choice of this slot");
+    }
+    if (paper.items.some((i) => (i.question.id === candidate.id || i.orQuestion?.id === candidate.id) && i.id !== itemId)) {
+      throw new HttpError(409, "This question is already elsewhere in this paper (as primary or alternate question)");
     }
 
     const itemsWithoutCurrent = paper.items
       .filter((i) => i.id !== itemId)
-      .map((i) => ({ sectionId: i.sectionId, chapterId: i.question.chapterId }));
+      .map((i) => {
+        const sps = parseSubparts(i.question.subpartsJson);
+        const sm = subpartsTotalMarks(sps);
+        return {
+          sectionId: i.sectionId,
+          chapterId: i.question.chapterId,
+          marks: sm > 0 ? sm : undefined,
+          subpartsCount: sps.length > 1 ? sps.length : undefined,
+        };
+      });
+
+    const candidateSubparts = parseSubparts(candidate.subpartsJson);
+    const candidateSubmarks = subpartsTotalMarks(candidateSubparts);
 
     const reason = whyCannotAdd(
       {
@@ -55,7 +80,13 @@ export const PATCH = route(async (req, { id, itemId }, user) => {
         chapters: paper.blueprint.chapters.map((c) => ({ chapterId: c.chapterId, marks: c.marks })),
       },
       itemsWithoutCurrent,
-      { sectionId: item.sectionId, chapterId: candidate.chapterId, type: candidate.type },
+      {
+        sectionId: item.sectionId,
+        chapterId: candidate.chapterId,
+        type: candidate.type,
+        marks: candidateSubmarks > 0 ? candidateSubmarks : undefined,
+        subpartsCount: candidateSubparts.length > 1 ? candidateSubparts.length : undefined,
+      },
     );
     if (reason) throw new HttpError(409, reason);
 
@@ -151,7 +182,18 @@ export const PUT = route(async (req, { id, itemId }, user) => {
   // Validate that the updated/forked question still conforms to this section and chapter quota
   const itemsWithoutCurrent = paper.items
     .filter((i) => i.id !== itemId)
-    .map((i) => ({ sectionId: i.sectionId, chapterId: i.question.chapterId }));
+    .map((i) => {
+      const sps = parseSubparts(i.question.subpartsJson);
+      const sm = subpartsTotalMarks(sps);
+      return {
+        sectionId: i.sectionId,
+        chapterId: i.question.chapterId,
+        marks: sm > 0 ? sm : undefined,
+        subpartsCount: sps.length > 1 ? sps.length : undefined,
+      };
+    });
+
+  const candidateSubmarks = subpartsTotalMarks(qInput.subparts || []);
 
   const reason = whyCannotAdd(
     {
@@ -159,7 +201,13 @@ export const PUT = route(async (req, { id, itemId }, user) => {
       chapters: paper.blueprint.chapters.map((c) => ({ chapterId: c.chapterId, marks: c.marks })),
     },
     itemsWithoutCurrent,
-    { sectionId: item.sectionId, chapterId: qInput.chapterId, type: qInput.type },
+    {
+      sectionId: item.sectionId,
+      chapterId: qInput.chapterId,
+      type: qInput.type,
+      marks: candidateSubmarks > 0 ? candidateSubmarks : undefined,
+      subpartsCount: (qInput.subparts?.length || 0) > 1 ? qInput.subparts?.length : undefined,
+    },
   );
   if (reason) throw new HttpError(409, reason);
 

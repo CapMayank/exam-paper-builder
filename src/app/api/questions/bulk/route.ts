@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { body, HttpError, route } from "@/lib/api";
+import { recordAudit } from "@/lib/audit";
 import { parseAndValidateBatch } from "@/lib/batchQuestionIo";
 import { DIFFICULTIES, QUESTION_TYPES } from "@/lib/constants";
 import { toQuestionDto } from "@/lib/dto";
@@ -108,6 +109,13 @@ export const POST = route(async (req, _params, user) => {
 
     const createdQuestions = createdRecords.map(toQuestionDto);
 
+    await recordAudit(user, "QUESTION_CREATE", "BOOK", input.bookId, {
+      action: "BATCH_IMPORT",
+      format: input.format,
+      bookTitle: book.title,
+      questionCount: createdQuestions.length,
+    });
+
     const fullReport = {
       ...report,
       createdQuestions,
@@ -142,6 +150,13 @@ export const POST = route(async (req, _params, user) => {
       }),
     ),
   );
+
+  await recordAudit(user, "QUESTION_CREATE", "CHAPTER", input.chapterId, {
+    action: "LEGACY_BULK_IMPORT",
+    bookId: input.bookId,
+    chapterNumber: chapter.number,
+    questionCount: createdQuestions.length,
+  });
 
   return {
     success: true,

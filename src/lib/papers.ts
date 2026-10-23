@@ -206,6 +206,7 @@ export async function loadPaperView(id: string) {
       id: i.id,
       sectionId: i.sectionId,
       position: i.position,
+      pageBreakBefore: Boolean(i.pageBreakBefore),
       question: toQuestionDto(i.question),
       orQuestion: i.orQuestion ? toQuestionDto(i.orQuestion) : null,
     })),

@@ -18,12 +18,45 @@ export const GET = route(async (req) => {
     take: 30,
   });
 
-  return calculations.map((c) => ({
-    ...c,
-    sections: JSON.parse(c.sectionsJson || "[]"),
-    sets: JSON.parse(c.setsJson || "[]"),
-    createdAt: c.createdAt.toISOString(),
-  }));
+  return calculations.map((c) => {
+    const sections = JSON.parse(c.sectionsJson || "[]");
+    const sets = JSON.parse(c.setsJson || "[]");
+    const isBooklet = c.layout === "BOOKLET" || c.layout === "BOOKLET_A4";
+    const sheetsPerCopy = isBooklet
+      ? Math.max(1, Math.ceil(c.pageCount / 4))
+      : Math.max(1, Math.ceil(c.pageCount / 2));
+
+    const packagingSlips = sections.map((section: any) => {
+      const setCount = sets.length || 1;
+      const basePerSet = Math.floor(section.count / setCount);
+      let remainder = section.count % setCount;
+
+      const setBreakdown = sets.map((s: any) => {
+        const extra = remainder > 0 ? 1 : 0;
+        if (remainder > 0) remainder--;
+        return {
+          set: s.set,
+          copies: basePerSet + extra,
+        };
+      });
+
+      return {
+        section: section.name,
+        studentCount: section.count,
+        sheetsRequired: section.count * sheetsPerCopy,
+        answerBookletsRequired: section.count,
+        sets: setBreakdown,
+      };
+    });
+
+    return {
+      ...c,
+      sections,
+      sets,
+      packagingSlips,
+      createdAt: c.createdAt.toISOString(),
+    };
+  });
 });
 
 export const POST = route(async (req, _params, user) => {
@@ -69,7 +102,7 @@ export const POST = route(async (req, _params, user) => {
     data: {
       paperId: input.paperId ?? null,
       paperTitle: input.paperTitle,
-      academicSession: input.academicSession,
+      academicSession: input.academicSession.replace(/-/g, "–"),
       className: input.className,
       subject: input.subject,
       layout: input.layout,

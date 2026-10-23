@@ -11,6 +11,8 @@ export type AutoFillResult = {
   added: { sectionId: string; questionId: string; chapterId: string }[];
   unfilled: { sectionId: string; title: string; count: number }[];
   complete: boolean;
+  solverMode?: "optimal" | "greedy";
+  exhaustedBudget?: boolean;
 };
 
 type Slot = {
@@ -51,9 +53,19 @@ export function autoFillPaper(
   bp: BlueprintDef,
   currentItems: (PlacedItem & { questionId: string })[],
   candidatePool: CandidateQuestion[],
+  excludedQuestionIds: string[] | { targetSectionId?: string; preferredDifficulty?: string } = [],
+  options?: {
+    targetSectionId?: string;
+    preferredDifficulty?: string;
+  },
 ): AutoFillResult {
+  const actualExcluded: string[] = Array.isArray(excludedQuestionIds) ? excludedQuestionIds : [];
+  const actualOptions = Array.isArray(excludedQuestionIds) ? options : excludedQuestionIds;
   const sectionById = new Map(bp.sections.map((s) => [s.id, s]));
-  const usedQuestionIds = new Set(currentItems.map((i) => i.questionId));
+  const usedQuestionIds = new Set([
+    ...currentItems.map((i) => i.questionId),
+    ...actualExcluded,
+  ]);
 
   // Compute remaining quota for each chapter
   const chapterRemaining = new Map<string, number>();
@@ -79,6 +91,9 @@ export function autoFillPaper(
   const slots: Slot[] = [];
   let order = 0;
   for (const sec of bp.sections) {
+    if (actualOptions?.targetSectionId && sec.id !== actualOptions.targetSectionId) {
+      continue;
+    }
     const placed = placedCount.get(sec.id) ?? 0;
     const needed = Math.max(0, sec.count - placed);
     for (let i = 0; i < needed; i++) {
@@ -116,10 +131,14 @@ export function autoFillPaper(
 
   let steps = 0;
   const maxSteps = 4000;
+  let hitStepLimit = false;
 
   function solve(slotIdx: number): boolean {
     if (slotIdx >= sortedSlots.length) return true;
-    if (++steps > maxSteps) return false;
+    if (++steps > maxSteps) {
+      hitStepLimit = true;
+      return false;
+    }
 
     const slot = sortedSlots[slotIdx];
     const pool = candidatesByType.get(slot.type) ?? [];
@@ -131,8 +150,13 @@ export function autoFillPaper(
       return rem >= slot.marksEach;
     });
 
-    // Heuristic: Pick from chapter with highest remaining quota first
+    // Heuristic: Pick from preferred difficulty first, then highest remaining chapter quota
     validCandidates.sort((a, b) => {
+      if (actualOptions?.preferredDifficulty && actualOptions.preferredDifficulty !== "ANY") {
+        const aDiff = a.difficulty === actualOptions.preferredDifficulty ? 0 : 1;
+        const bDiff = b.difficulty === actualOptions.preferredDifficulty ? 0 : 1;
+        if (aDiff !== bDiff) return aDiff - bDiff;
+      }
       const remA = chapterRemaining.get(a.chapterId) ?? 0;
       const remB = chapterRemaining.get(b.chapterId) ?? 0;
       return remB - remA;
@@ -213,6 +237,7 @@ export function autoFillPaper(
   }));
 
   const complete = unfilled.length === 0 && slots.length === added.length;
+  const solverMode = success ? "optimal" : "greedy";
 
-  return { added, unfilled, complete };
+  return { added, unfilled, complete, solverMode, exhaustedBudget: hitStepLimit };
 }

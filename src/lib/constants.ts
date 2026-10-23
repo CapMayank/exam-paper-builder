@@ -383,8 +383,9 @@ export function formatQuestionNumber(
   sectionIndex?: number,
 ): string {
   if (numberingStyle === "PREFIXED") return `Q.${num}`;
-  if (numberingStyle === "SECTION_RELATIVE" && sectionLetter && sectionIndex) {
-    return `${sectionLetter}${sectionIndex}.`;
+  if (numberingStyle === "SECTION_RELATIVE" && sectionLetter) {
+    const sIdx = sectionIndex != null ? (sectionIndex === 0 ? 1 : sectionIndex) : num;
+    return `${sectionLetter}${sIdx}.`;
   }
   return `${num}.`;
 }

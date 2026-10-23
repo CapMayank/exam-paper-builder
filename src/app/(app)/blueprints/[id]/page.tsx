@@ -55,6 +55,7 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
 
   const [books, setBooks] = useState<Book[]>([]);
   const [classes, setClasses] = useState<AcademicClassDto[]>([]);
+  const [currentUser, setCurrentUser] = useState<{ id: string; role?: string } | null>(null);
   const [name, setName] = useState("");
   const [academicSession, setAcademicSession] = useState(currentSession);
   const [bookId, setBookId] = useState("");
@@ -86,13 +87,15 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
   useEffect(() => {
     (async () => {
       try {
-        const [bs, clsList, source] = await Promise.all([
+        const [bs, clsList, source, me] = await Promise.all([
           api<Book[]>("/api/books"),
           api<AcademicClassDto[]>(`/api/classes?session=${encodeURIComponent(currentSession)}`).catch(() => []),
           id !== "new" ? api<Blueprint>(`/api/blueprints/${id}`) : from ? api<Blueprint>(`/api/blueprints/${from}`) : Promise.resolve(null),
+          api<{ id: string; role?: string }>("/api/me").catch(() => null),
         ]);
         setBooks(bs);
         setClasses(clsList);
+        setCurrentUser(me);
         if (source) {
           setName(id === "new" ? `${source.name} (copy)` : source.name);
           setBookId(source.bookId);
@@ -164,12 +167,20 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
 
   const hasPapers = paperCount > 0;
   const book = books.find((b) => b.id === bookId);
-  const chapterQuotas = (book?.chapters ?? []).map((c) => ({ chapterId: c.id, marks: marks[c.id] ?? 0 }));
+  const chapterQuotas = (book?.chapters ?? []).map((c) => ({
+    chapterId: c.id,
+    marks: marks[c.id] ?? 0,
+    title: c.title,
+    number: c.number,
+  }));
   const sections = flattenSectionGroups(sectionGroups);
   const total = blueprintTotalMarks(sections);
   const chapterTotal = chapterQuotas.reduce((s, c) => s + c.marks, 0);
   const problems = validateBlueprint({ sections, chapters: chapterQuotas });
   const feasibilityWarnings = checkBlueprintFeasibility({ sections, chapters: chapterQuotas });
+
+  const canManageBlueprint = currentUser?.role === "ADMIN" || currentUser?.role === "HOD";
+  const isReadOnly = id !== "new" && !canManageBlueprint;
 
   const currentBlueprintData = useMemo<BlueprintWithExportRelations>(() => {
     const flatSections = flattenSectionGroups(sectionGroups);
@@ -432,12 +443,39 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
     }
   }
 
+  async function buildPaperDirectly() {
+    setBusy(true);
+    setError(null);
+    try {
+      const paper = await api<PaperData>("/api/papers", {
+        method: "POST",
+        json: {
+          title: `${name} — Draft Paper`,
+          blueprintId: id,
+          examType,
+          layout: "BOOKLET_A4",
+          schoolName: DEFAULT_SCHOOL_NAME,
+          paperSet: "SET A",
+          subjectCode,
+          academicSession,
+        },
+      });
+      toast.success(`Created paper "${paper.title}"`);
+      router.push(`/papers/${paper.id}`);
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(false);
+    }
+  }
+
   if (!loaded) return error ? <ErrorBanner message={error} /> : <p className="text-sm text-slate-500">Loading…</p>;
 
   return (
-    <form onSubmit={save} className="space-y-4">
+    <form onSubmit={isReadOnly ? (e) => e.preventDefault() : save} className="space-y-4 pb-20">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">{id === "new" ? "New blueprint" : "Edit blueprint"}</h1>
+        <h1 className="text-xl font-semibold">
+          {id === "new" ? "New blueprint" : isReadOnly ? "View blueprint" : "Edit blueprint"}
+        </h1>
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -455,30 +493,47 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
           >
             <Download size={14} className="text-slate-600" /> Download JSON
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              setImportModalTab("ai");
-              setImportModalOpen(true);
-            }}
-            className="btn btn-ghost border border-indigo-200 bg-indigo-50/80 text-indigo-900 hover:bg-indigo-100 flex items-center gap-1.5 text-xs font-semibold shadow-2xs"
-            title="Parse blueprint circular, syllabus image, PDF, or text using Gemini AI"
-          >
-            <Sparkles size={14} className="text-indigo-600" /> AI Blueprint Creator
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setImportModalTab("import");
-              setImportModalOpen(true);
-            }}
-            className="btn btn-ghost border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 text-xs font-semibold shadow-2xs"
-            title="Import blueprint specification from JSON or CSV"
-          >
-            <Upload size={14} className="text-slate-600" /> Import blueprint
-          </button>
+          {!isReadOnly && (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setImportModalTab("ai");
+                  setImportModalOpen(true);
+                }}
+                className="btn btn-ghost border border-indigo-200 bg-indigo-50/80 text-indigo-900 hover:bg-indigo-100 flex items-center gap-1.5 text-xs font-semibold shadow-2xs"
+                title="Parse blueprint circular, syllabus image, PDF, or text using Gemini AI"
+              >
+                <Sparkles size={14} className="text-indigo-600" /> AI Blueprint Creator
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setImportModalTab("import");
+                  setImportModalOpen(true);
+                }}
+                className="btn btn-ghost border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 text-xs font-semibold shadow-2xs"
+                title="Import blueprint specification from JSON or CSV"
+              >
+                <Upload size={14} className="text-slate-600" /> Import blueprint
+              </button>
+            </>
+          )}
         </div>
       </div>
+
+      {isReadOnly && (
+        <div className="rounded-xl border border-sky-200 bg-sky-50/90 p-4 text-xs text-sky-950 shadow-2xs space-y-1.5">
+          <div className="flex items-center gap-2 font-bold text-sky-900">
+            <Sparkles size={16} className="text-sky-600" />
+            <span>View-Only Blueprint Mode</span>
+          </div>
+          <p className="leading-relaxed">
+            You are viewing an institutional blueprint. Only Administrators and Heads of Department (HODs) can modify blueprints directly.
+            You can use this blueprint to generate an exam paper or duplicate it as a new blueprint to customize it for your class.
+          </p>
+        </div>
+      )}
 
       {id === "new" && (
         <div className="rounded-xl border border-slate-200 bg-white p-3.5 text-xs text-slate-800 flex flex-wrap items-center justify-between gap-2 shadow-2xs">
@@ -529,7 +584,8 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
 
       <ErrorBanner message={error} />
 
-      <section className="card grid gap-3 sm:grid-cols-4">
+      <fieldset disabled={isReadOnly} className="space-y-4">
+        <section className="card grid gap-3 sm:grid-cols-4">
         <Field label="Academic session">
           <select className="input" value={academicSession} onChange={(e) => setAcademicSession(e.target.value)}>
             {availableSessions.map((s) => (
@@ -684,13 +740,15 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
                 Each section can contain multiple question types (e.g. 5 MCQ + 5 Fill in Blank in Section A).
               </p>
             </div>
-            <button
-              type="button"
-              className="btn btn-sm btn-primary"
-              onClick={addSectionGroup}
-            >
-              <Plus size={14} /> Add section
-            </button>
+            {!isReadOnly && (
+              <button
+                type="button"
+                className="btn btn-sm btn-primary"
+                onClick={addSectionGroup}
+              >
+                <Plus size={14} /> Add section
+              </button>
+            )}
           </div>
 
           <div className="space-y-4">
@@ -710,38 +768,43 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
                       onChange={(e) => patchSectionGroup(grp.key, { title: e.target.value })}
                       aria-label="Section title"
                     />
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        className="btn btn-sm"
-                        disabled={i === 0}
-                        onClick={() => moveSectionGroup(i, -1)}
-                        title="Move section up"
-                        aria-label="Move up"
-                      >
-                        <ArrowUp size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-sm"
-                        disabled={i === sectionGroups.length - 1}
-                        onClick={() => moveSectionGroup(i, 1)}
-                        title="Move section down"
-                        aria-label="Move down"
-                      >
-                        <ArrowDown size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-danger"
-                        disabled={sectionGroups.length <= 1}
-                        onClick={() => removeSectionGroup(grp.key)}
-                        title="Delete entire section"
-                        aria-label="Remove section"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
+                    <span className="badge bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold text-xs py-1 px-2.5 whitespace-nowrap shadow-2xs">
+                      {grpCount} Qs · {grpMarks} marks
+                    </span>
+                    {!isReadOnly && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          className="btn btn-sm"
+                          disabled={i === 0}
+                          onClick={() => moveSectionGroup(i, -1)}
+                          title="Move section up"
+                          aria-label="Move up"
+                        >
+                          <ArrowUp size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-sm"
+                          disabled={i === sectionGroups.length - 1}
+                          onClick={() => moveSectionGroup(i, 1)}
+                          title="Move section down"
+                          aria-label="Move down"
+                        >
+                          <ArrowDown size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-danger"
+                          disabled={sectionGroups.length <= 1}
+                          onClick={() => removeSectionGroup(grp.key)}
+                          title="Delete entire section"
+                          aria-label="Remove section"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Section Instructions */}
@@ -784,7 +847,7 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
                               </select>
                             </div>
 
-                            {grp.questionTypes.length > 1 && (
+                            {!isReadOnly && grp.questionTypes.length > 1 && (
                               <button
                                 type="button"
                                 className="btn btn-sm btn-ghost hover:bg-red-50 hover:text-red-700 text-slate-400 p-1.5 shrink-0"
@@ -836,13 +899,15 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
                       ))}
                     </div>
 
-                    <button
-                      type="button"
-                      className="btn btn-sm text-xs font-semibold text-indigo-700 bg-indigo-50/60 hover:bg-indigo-100/80 border border-indigo-200/80 w-full flex items-center justify-center gap-1.5 py-1.5 transition"
-                      onClick={() => addQuestionTypeToGroup(grp.key)}
-                    >
-                      <Plus size={13} className="text-indigo-600" /> Add another question type to {grp.title || `Section ${String.fromCharCode(65 + i)}`}
-                    </button>
+                    {!isReadOnly && (
+                      <button
+                        type="button"
+                        className="btn btn-sm text-xs font-semibold text-indigo-700 bg-indigo-50/60 hover:bg-indigo-100/80 border border-indigo-200/80 w-full flex items-center justify-center gap-1.5 py-1.5 transition"
+                        onClick={() => addQuestionTypeToGroup(grp.key)}
+                      >
+                        <Plus size={13} className="text-indigo-600" /> Add another question type to {grp.title || `Section ${String.fromCharCode(65 + i)}`}
+                      </button>
+                    )}
                   </div>
                 </fieldset>
               );
@@ -856,9 +921,22 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
         </section>
 
         <section className="card space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold">Chapter weightage (marks)</h2>
-            {book && book.chapters.length > 0 && total > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <h2 className="font-semibold text-slate-900">Chapter weightage (marks)</h2>
+              <span
+                className={`badge text-xs font-bold py-0.5 px-2 border ${
+                  chapterTotal === total && total > 0
+                    ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                    : chapterTotal > total
+                    ? "bg-red-50 text-red-800 border-red-300"
+                    : "bg-amber-50 text-amber-800 border-amber-300"
+                }`}
+              >
+                {chapterTotal}/{total}m {chapterTotal === total && total > 0 ? "✓" : chapterTotal < total ? `(${total - chapterTotal}m needed)` : `(${chapterTotal - total}m over)`}
+              </span>
+            </div>
+            {!isReadOnly && book && book.chapters.length > 0 && total > 0 && (
               <button
                 type="button"
                 className="btn btn-sm text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200"
@@ -926,31 +1004,63 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={(e) => void save(e, true)}
-          className="btn btn-primary flex items-center gap-1.5"
-          disabled={busy || problems.length > 0}
-          title="Save blueprint and open immediately in Paper Studio to generate exam paper"
-        >
-          <FileText size={15} /> Save &amp; Build Exam Paper
-        </button>
-        <button
-          type="submit"
-          className="btn btn-ghost border border-slate-300 bg-white text-slate-900 hover:bg-slate-50 font-semibold"
-          disabled={busy || problems.length > 0}
-        >
-          {busy ? "Saving…" : "Save Blueprint"}
-        </button>
-        <button
-          type="button"
-          className="btn btn-ghost border border-slate-200"
-          onClick={() => router.push("/blueprints")}
-        >
-          Cancel
-        </button>
-      </div>
+      </fieldset>
+
+      {isReadOnly ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={buildPaperDirectly}
+            className="btn btn-primary flex items-center gap-1.5"
+            disabled={busy}
+            title="Create a new draft exam paper using this blueprint"
+          >
+            <FileText size={15} /> Build Exam Paper
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push(`/blueprints/new?from=${id}`)}
+            className="btn btn-ghost border border-slate-300 bg-white text-slate-900 hover:bg-slate-50 font-semibold flex items-center gap-1.5"
+            disabled={busy}
+            title="Duplicate this blueprint into a new customizable blueprint"
+          >
+            <Sparkles size={14} className="text-indigo-600" /> Duplicate as New Blueprint
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost border border-slate-200"
+            onClick={() => router.push("/blueprints")}
+          >
+            Back to Blueprints
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={(e) => void save(e, true)}
+            className="btn btn-primary flex items-center gap-1.5"
+            disabled={busy || problems.length > 0}
+            title="Save blueprint and open immediately in Paper Studio to generate exam paper"
+          >
+            <FileText size={15} /> Save &amp; Build Exam Paper
+          </button>
+          <button
+            type="submit"
+            className="btn btn-ghost border border-slate-300 bg-white text-slate-900 hover:bg-slate-50 font-semibold"
+            disabled={busy || problems.length > 0}
+          >
+            {busy ? "Saving…" : "Save Blueprint"}
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost border border-slate-200"
+            onClick={() => router.push("/blueprints")}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
 
       <BlueprintImportModal
         isOpen={importModalOpen}
@@ -967,6 +1077,64 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
         blueprint={currentBlueprintData}
         book={book}
       />
+
+      {/* Sticky Blueprint Budget Bar */}
+      <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-slate-200/90 bg-white/95 backdrop-blur-md px-4 py-2.5 shadow-lg">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3 text-xs">
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-500 font-medium">Sections Target:</span>
+              <span className="font-mono font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                {total}m
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-500 font-medium">Chapter Quotas:</span>
+              <span className="font-mono font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                {chapterTotal}m
+              </span>
+            </div>
+            <span
+              className={`badge text-[11px] font-bold py-0.5 px-2 border ${
+                chapterTotal === total && total > 0
+                  ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                  : chapterTotal > total
+                  ? "bg-red-50 text-red-800 border-red-300"
+                  : "bg-amber-50 text-amber-800 border-amber-300"
+              }`}
+            >
+              {chapterTotal === total && total > 0
+                ? "✓ Balanced"
+                : chapterTotal < total
+                ? `Difference: -${total - chapterTotal}m`
+                : `Difference: +${chapterTotal - total}m`}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {!isReadOnly && book && book.chapters.length > 0 && total > 0 && chapterTotal !== total && (
+              <button
+                type="button"
+                className="btn btn-xs text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 shadow-2xs"
+                onClick={autoDistributeMarks}
+                title="Equally distribute section total marks across all chapters"
+              >
+                ⚡ Auto-Distribute {total}m
+              </button>
+            )}
+            {!isReadOnly && (
+              <button
+                type="button"
+                onClick={(e) => void save(e, false)}
+                disabled={busy || problems.length > 0}
+                className="btn btn-xs btn-primary shadow-2xs font-semibold px-3 py-1"
+              >
+                {busy ? "Saving…" : "Save Blueprint"}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
     </form>
   );
 }

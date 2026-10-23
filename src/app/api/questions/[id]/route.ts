@@ -1,4 +1,5 @@
 import { body, HttpError, route } from "@/lib/api";
+import { recordAudit } from "@/lib/audit";
 import { toQuestionDto } from "@/lib/dto";
 import { assertCanModifyQuestion, canModifyQuestion } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
@@ -46,6 +47,13 @@ export const PATCH = route(async (req, { id }, user) => {
     data,
     include: { chapter: true, _count: { select: { paperQuestions: true, orPaperQuestions: true } } },
   });
+
+  await recordAudit(user, "QUESTION_UPDATE", "QUESTION", id, {
+    action: "QUESTION_PATCH",
+    updatedFields: Object.keys(data),
+    textPreview: (updated.text || "").slice(0, 80),
+  });
+
   return toQuestionDto(updated);
 });
 
@@ -89,13 +97,21 @@ export const PUT = route(async (req, { id }, user) => {
     },
     include: { chapter: true, _count: { select: { paperQuestions: true, orPaperQuestions: true } } },
   });
+
+  await recordAudit(user, "QUESTION_UPDATE", "QUESTION", id, {
+    action: "QUESTION_PUT_REPLACE",
+    type: updated.type,
+    difficulty: updated.difficulty,
+    textPreview: (updated.text || "").slice(0, 80),
+  });
+
   return toQuestionDto(updated);
 });
 
 export const DELETE = route(async (_req, { id }, user) => {
   const existing = await prisma.question.findUnique({
     where: { id },
-    select: { id: true, createdById: true },
+    select: { id: true, text: true, type: true, createdById: true },
   });
   if (!existing) throw new HttpError(404, "Question not found");
   assertCanModifyQuestion(user, existing);
@@ -106,5 +122,10 @@ export const DELETE = route(async (_req, { id }, user) => {
   const used = primaryUses + orUses;
   if (used > 0) throw new HttpError(409, `This question is used in ${used} paper(s). Remove it from them first.`);
   await prisma.question.delete({ where: { id } });
+
+  await recordAudit(user, "QUESTION_DELETE", "QUESTION", id, {
+    type: existing.type,
+    textPreview: (existing.text || "").slice(0, 80),
+  });
 });
 

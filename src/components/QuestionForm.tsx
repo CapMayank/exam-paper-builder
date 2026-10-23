@@ -185,6 +185,8 @@ export function QuestionForm({
   const [imagePath, setImagePath] = useState<string | null>(initial?.imagePath ?? null);
   const [spaceMm, setSpaceMm] = useState(initial?.spaceMm ?? DEFAULT_SPACE[resolvedInitialType] ?? 0);
   const [showGrid, setShowGrid] = useState(initial?.showGrid ?? false);
+  const [secondaryText, setSecondaryText] = useState("");
+  const [bloomsLevel, setBloomsLevel] = useState("");
   const [sketching, setSketching] = useState(false);
   const [diagramSearchOpen, setDiagramSearchOpen] = useState(false);
   const [aiImproverOpen, setAiImproverOpen] = useState(false);
@@ -1283,6 +1285,72 @@ export function QuestionForm({
       </div>
       </>
       )}
+
+      {/* Optional Advanced Board & Bilingual Options (Collapsed by default) */}
+      <details className="group rounded-xl border border-slate-200/90 bg-slate-50/50 p-3.5 transition">
+        <summary className="flex cursor-pointer items-center justify-between text-xs font-semibold text-slate-700 select-none">
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-500">⚙️</span>
+            <span>Advanced Board &amp; Language Options (Optional)</span>
+          </div>
+          <span className="text-[11px] text-slate-400 font-normal group-open:rotate-180 transition-transform">
+            ▼
+          </span>
+        </summary>
+
+        <div className="mt-3.5 pt-3 border-t border-slate-200/60 space-y-3.5 text-xs">
+          {/* Optional Bilingual Hindi/Secondary Translation Input */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="font-semibold text-slate-700">
+                Hindi / Regional Translation (Optional)
+              </label>
+              <button
+                type="button"
+                className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800"
+                onClick={() => {
+                  if (secondaryText.trim()) {
+                    setText((prev) => prev + (prev.includes(" / ") ? "" : " / ") + secondaryText.trim());
+                    setSecondaryText("");
+                  }
+                }}
+              >
+                + Append to question text
+              </button>
+            </div>
+            <textarea
+              rows={2}
+              className="input text-xs font-sans leading-relaxed"
+              placeholder="e.g. प्रकाश संश्लेषण को परिभाषित कीजिए और इसका रासायनिक समीकरण लिखिए।"
+              value={secondaryText}
+              onChange={(e) => setSecondaryText(e.target.value)}
+            />
+            <p className="mt-1 text-[11px] text-slate-500">
+              For bilingual papers. You can append this secondary language text directly or keep it formatted.
+            </p>
+          </div>
+
+          {/* Optional Bloom's Taxonomy Cognitive Level */}
+          <div>
+            <label className="font-semibold text-slate-700 block mb-1">
+              Cognitive Level / Bloom&apos;s Taxonomy (Optional)
+            </label>
+            <select
+              className="input text-xs font-medium"
+              value={bloomsLevel}
+              onChange={(e) => setBloomsLevel(e.target.value)}
+            >
+              <option value="">None / Standard</option>
+              <option value="REMEMBER">Remembering (Recall, definitions, facts)</option>
+              <option value="UNDERSTAND">Understanding (Explanation, interpretation)</option>
+              <option value="APPLY">Applying (Problem solving, calculations)</option>
+              <option value="ANALYZE">Analyzing (Comparison, distinguishing, logic)</option>
+              <option value="EVALUATE">Evaluating (Judgment, critique, verification)</option>
+              <option value="CREATE">Creating (Design, synthesis, formulation)</option>
+            </select>
+          </div>
+        </div>
+      </details>
 
       {showPaperEditModes && (
         <div className="rounded-md border border-indigo-200 bg-indigo-50/60 p-3 space-y-1.5 text-xs text-slate-700">

@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ErrorBanner, Modal, Skeleton } from "@/components/ui";
+import { ErrorBanner, Modal, Skeleton, useToast } from "@/components/ui";
 import { useAcademicSession } from "@/lib/academicSession";
 import { api } from "@/lib/client";
 import {
@@ -78,6 +78,7 @@ export function getSectionsForClass(cls?: AcademicClassDto | null): ClassSection
 }
 
 export default function ExamCellPage() {
+  const toast = useToast();
   const { currentSession, availableSessions } = useAcademicSession();
   const [sessionFilter, setSessionFilter] = useState<string>(currentSession);
   const [activeTab, setActiveTab] = useState<Tab>("calculator");
@@ -188,12 +189,11 @@ export default function ExamCellPage() {
       const timetableQuery = sessionFilter !== "ALL" ? `?academicSession=${encodeURIComponent(sessionFilter)}` : "";
       const calcQuery = sessionFilter !== "ALL" ? `?academicSession=${encodeURIComponent(sessionFilter)}` : "";
 
-      const [u, p, c, t, a, clsList, bpList] = await Promise.all([
+      const [u, p, c, t, clsList, bpList] = await Promise.all([
         api<UserData>("/api/me"),
         api<PaperListItem[]>("/api/papers"),
         api<PrintRunCalculationDto[]>(`/api/exam-cell/calculator${calcQuery}`),
         api<ExamTimetableItem[]>(`/api/exam-cell/timetable${timetableQuery}`),
-        api<{ logs: AuditLogEntry[]; total: number }>("/api/audit?limit=50"),
         api<AcademicClassDto[]>(`/api/classes${sessionQuery}`),
         api<Blueprint[]>("/api/blueprints"),
       ]);
@@ -202,10 +202,19 @@ export default function ExamCellPage() {
       setPapers(p);
       setCalculations(c);
       setTimetable(t);
-      setAuditLogs(a.logs);
-      setAuditTotal(a.total);
       setClasses(clsList);
       setBlueprints(bpList);
+
+      // Audit logs are restricted to ADMIN, HOD, and EXAM_CELL
+      if (["ADMIN", "HOD", "EXAM_CELL"].includes(u.role || "")) {
+        try {
+          const a = await api<{ logs: AuditLogEntry[]; total: number }>("/api/audit?limit=50");
+          setAuditLogs(a.logs);
+          setAuditTotal(a.total);
+        } catch {
+          // Non-fatal if audit fetching fails
+        }
+      }
 
       // Auto-initialize class & subject from loaded classes if available
       if (clsList.length > 0) {
@@ -458,7 +467,8 @@ export default function ExamCellPage() {
   const addSection = () => {
     const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     const nextIdx = sections.length;
-    const nextName = `10-${letters[nextIdx] || nextIdx + 1}`;
+    const prefix = className ? `${className} - Section ` : "Section ";
+    const nextName = `${prefix}${letters[nextIdx] || nextIdx + 1}`;
     setSections([...sections, { name: nextName, count: 40 }]);
   };
 
@@ -507,6 +517,13 @@ export default function ExamCellPage() {
       );
     });
   }, [timetable, sessionFilter, timetableClassFilter, timetableExamTypeFilter, timetableStatusFilter, timetableSearch]);
+
+  const canManageTimetable = Boolean(
+    currentUser && (currentUser.role === "ADMIN" || currentUser.role === "HOD" || currentUser.role === "EXAM_CELL")
+  );
+  const canViewAudit = Boolean(
+    currentUser && (currentUser.role === "ADMIN" || currentUser.role === "HOD" || currentUser.role === "EXAM_CELL")
+  );
 
   if (loading) {
     return (
@@ -558,18 +575,20 @@ export default function ExamCellPage() {
             <CalendarDays size={15} className="text-indigo-600" />
             Exam Date-Sheet ({timetable.length})
           </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("audit")}
-            className={`flex items-center justify-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-bold transition-all flex-1 sm:flex-initial whitespace-nowrap ${
-              activeTab === "audit"
-                ? "bg-white text-indigo-900 shadow-xs"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
-          >
-            <History size={15} className="text-indigo-600" />
-            Audit Trail ({auditTotal})
-          </button>
+          {canViewAudit && (
+            <button
+              type="button"
+              onClick={() => setActiveTab("audit")}
+              className={`flex items-center justify-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-bold transition-all flex-1 sm:flex-initial whitespace-nowrap ${
+                activeTab === "audit"
+                  ? "bg-white text-indigo-900 shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <History size={15} className="text-indigo-600" />
+              Audit Trail ({auditTotal})
+            </button>
+          )}
         </div>
       </header>
 
@@ -999,11 +1018,27 @@ export default function ExamCellPage() {
                       >
                         <div className="flex justify-between font-semibold text-slate-800">
                           <span>{c.paperTitle}</span>
-                          <span className="text-indigo-700">{c.totalReamsRequired} Reams</span>
+                          <span className="text-indigo-700 font-bold">
+                            {Math.ceil(c.totalReamsRequired)} {Math.ceil(c.totalReamsRequired) === 1 ? "Ream" : "Reams"}{" "}
+                            <span className="text-slate-400 font-normal">({c.totalReamsRequired} exact)</span>
+                          </span>
                         </div>
-                        <div className="flex justify-between text-[11px] text-slate-500 mt-1">
+                        <div className="flex justify-between items-center text-[11px] text-slate-500 mt-1">
                           <span>{c.className} · {c.totalStudents} Students</span>
-                          <span>{timeAgo(c.createdAt || "")}</span>
+                          <div className="flex items-center gap-2">
+                            <span>{timeAgo(c.createdAt || "")}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setLatestCalcResult(c);
+                                setPackagingSlipModal(true);
+                              }}
+                              className="inline-flex items-center gap-1 rounded bg-indigo-50 px-2 py-0.5 font-semibold text-indigo-700 hover:bg-indigo-100 text-[10px]"
+                              title="Print Hall Packaging Slips & Envelope Labels"
+                            >
+                              <Printer size={11} /> Slips
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -1234,10 +1269,13 @@ export default function ExamCellPage() {
                         <td className="px-4 py-3 whitespace-nowrap">
                           <select
                             value={item.status}
+                            disabled={!canManageTimetable}
                             onChange={(e) =>
                               handleUpdateTimetableStatus(item.id, e.target.value as TimetableStatus)
                             }
                             className={`rounded-full px-2.5 py-1 text-[11px] font-bold border transition ${
+                              !canManageTimetable ? "opacity-75 cursor-not-allowed " : ""
+                            }${
                               item.status === "PRINTED"
                                 ? "bg-purple-50 text-purple-800 border-purple-200"
                                 : item.status === "MODERATED"
@@ -1255,19 +1293,26 @@ export default function ExamCellPage() {
                           </select>
                         </td>
                         <td className="px-4 py-3 text-right whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              if (confirm("Delete this scheduled exam?")) {
-                                await api(`/api/exam-cell/timetable/${item.id}`, { method: "DELETE" });
-                                setTimetable((prev) => prev.filter((t) => t.id !== item.id));
-                              }
-                            }}
-                            className="btn btn-icon btn-ghost text-slate-400 hover:text-red-600"
-                            title="Delete entry"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          {canManageTimetable && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (confirm("Delete this scheduled exam?")) {
+                                  try {
+                                    await api(`/api/exam-cell/timetable/${item.id}`, { method: "DELETE" });
+                                    setTimetable((prev) => prev.filter((t) => t.id !== item.id));
+                                    toast.success("Exam timetable entry deleted");
+                                  } catch (err) {
+                                    toast.error((err as Error).message);
+                                  }
+                                }
+                              }}
+                              className="btn btn-icon btn-ghost text-slate-400 hover:text-red-600"
+                              title="Delete entry"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}

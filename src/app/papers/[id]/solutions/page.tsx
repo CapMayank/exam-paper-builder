@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, CheckCircle2, FileText, Grid3X3, ListChecks, Printer, Table } from "lucide-react";
+import { ArrowLeft, CheckCircle2, FileDown, FileText, Grid3X3, ListChecks, Printer, Table } from "lucide-react";
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
 import { MathText } from "@/components/MathText";
@@ -17,6 +17,7 @@ import {
   resolvePaperExamType,
 } from "@/lib/constants";
 import { subpartsTotalMarks } from "@/lib/types";
+import { formatQuestionNumber } from "@/lib/layout";
 import type { PaperData, QuestionDto } from "@/lib/types";
 
 function getMarksRubric(marks: number, type: string) {
@@ -56,13 +57,45 @@ export default function SolutionsPage({ params }: PageProps<"/papers/[id]/soluti
       ? imageUrl(paper.logoPath)
       : paper.schoolLogo || DEFAULT_SCHOOL_LOGO;
 
-  // Flatten questions with continuous numbering
-  const allNumberedItems: { number: number; sectionTitle: string; marks: number; type: string; question: QuestionDto; orQuestion?: QuestionDto | null }[] = [];
+  // Flatten questions with numbering matching paper numbering style
+  const allNumberedItems: {
+    number: number;
+    label: string;
+    itemId: string;
+    sectionTitle: string;
+    marks: number;
+    type: string;
+    question: QuestionDto;
+    orQuestion?: QuestionDto | null;
+  }[] = [];
   let numCount = 0;
-  for (const s of blueprint.sections) {
-    const items = paper.items.filter((i) => i.sectionId === s.id);
+  let sectionGroupCounter = 0;
+  let sectionRelativeCounter = 0;
+  for (let i = 0; i < blueprint.sections.length; i++) {
+    const s = blueprint.sections[i];
+    const prev = i > 0 ? blueprint.sections[i - 1] : null;
+    const isSameAsPrev = Boolean(prev && prev.title.trim().toLowerCase() === s.title.trim().toLowerCase());
+    if (!isSameAsPrev) {
+      if (i > 0) {
+        sectionGroupCounter++;
+      }
+      sectionRelativeCounter = 0;
+    }
+    const match = s.title.match(/section\s+([a-z0-9]+)/i);
+    const sectionLetter = match ? match[1].toUpperCase() : String.fromCharCode(65 + sectionGroupCounter);
+
+    const items = paper.items.filter((item) => item.sectionId === s.id);
     for (const it of items) {
+      const globalIdx = numCount;
+      const numberLabel = formatQuestionNumber(
+        paper.numberingStyle || "CONTINUOUS",
+        globalIdx,
+        sectionLetter,
+        sectionRelativeCounter
+      );
       numCount++;
+      sectionRelativeCounter++;
+
       const isMatch = s.type === "MATCH_COLUMN" || it.question.type === "MATCH_COLUMN";
       const matchPairCount = isMatch
         ? (parseMatchColumnPairs(it.question.options, it.question.text).length || s.count)
@@ -76,6 +109,8 @@ export default function SolutionsPage({ params }: PageProps<"/papers/[id]/soluti
 
       allNumberedItems.push({
         number: numCount,
+        label: numberLabel,
+        itemId: it.id,
         sectionTitle: s.title,
         marks: totalQuestionMarks,
         type: s.type,
@@ -108,9 +143,18 @@ export default function SolutionsPage({ params }: PageProps<"/papers/[id]/soluti
               <Table size={13} className="inline mr-1" /> Examiner Award List (Foil)
             </button>
           </div>
-          <button className="btn btn-primary ml-auto" onClick={() => window.print()}>
-            <Printer size={14} /> Print {activeTab === "SOLUTIONS" ? "Solution Key" : "Award Sheet"}
-          </button>
+          <div className="ml-auto flex items-center gap-2">
+            <a
+              href={`/api/papers/${id}/export-docx?markingScheme=true`}
+              download
+              className="btn btn-sm border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+            >
+              <FileDown size={14} /> Word (.docx)
+            </a>
+            <button className="btn btn-sm btn-primary" onClick={() => window.print()}>
+              <Printer size={14} /> Print {activeTab === "SOLUTIONS" ? "Solution Key" : "Award Sheet"}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -243,12 +287,15 @@ export default function SolutionsPage({ params }: PageProps<"/papers/[id]/soluti
                   } else {
                     displayAns = <span className="text-slate-500 italic font-normal text-[11px]">[Descriptive]</span>;
                   }
+                  const cleanLabel = item.label.startsWith("Q") || /^[A-Za-z]\d+/.test(item.label)
+                    ? item.label
+                    : `Q${item.label}`;
                   return (
                     <div
                       key={item.number}
                       className="rounded border border-indigo-100 bg-white p-1.5 shadow-xs flex items-center justify-between"
                     >
-                      <span className="font-bold text-slate-800 shrink-0">Q{item.number}:</span>
+                      <span className="font-bold text-slate-800 shrink-0">{cleanLabel}:</span>
                       <span className="font-semibold text-emerald-800 truncate mx-1" title={cleanOptionText(item.question.answer)}>
                         {displayAns}
                       </span>
@@ -261,28 +308,48 @@ export default function SolutionsPage({ params }: PageProps<"/papers/[id]/soluti
 
         {/* Section by Section Solutions */}
         <div className="mt-6 space-y-6">
-          {blueprint.sections.map((s) => {
+          {blueprint.sections.map((s, si) => {
             const items = paper.items.filter((i) => i.sectionId === s.id);
             if (items.length === 0) return null;
+            const prev = si > 0 ? blueprint.sections[si - 1] : null;
+            const isSameAsPrev = Boolean(prev && prev.title.trim().toLowerCase() === s.title.trim().toLowerCase());
+            const allInGroup = blueprint.sections.filter(
+              (x) => x.title.trim().toLowerCase() === s.title.trim().toLowerCase()
+            );
+            const hasMultipleTypes = allInGroup.length > 1;
 
             return (
               <section key={s.id} className="space-y-4">
-                <div className="border-b border-slate-300 pb-1">
-                  <h2 className="text-sm font-bold uppercase text-slate-800">
-                    {s.title} — {QUESTION_TYPE_LABEL[s.type as keyof typeof QUESTION_TYPE_LABEL]} ({s.marksEach} Mark{s.marksEach === 1 ? "" : "s"} Each)
-                  </h2>
-                </div>
+                {!isSameAsPrev && (
+                  <div className="border-b-2 border-slate-300 pb-1 pt-2">
+                    <h2 className="text-sm font-bold uppercase text-slate-800 flex items-center justify-between">
+                      <span>{s.title}</span>
+                      {hasMultipleTypes && (
+                        <span className="text-xs font-semibold text-slate-500 normal-case">
+                          {allInGroup.reduce((sum, x) => sum + x.count, 0)} Questions · {allInGroup.reduce((sum, x) => sum + x.count * x.marksEach, 0)} Marks Total
+                        </span>
+                      )}
+                    </h2>
+                  </div>
+                )}
+                {hasMultipleTypes && (
+                  <div className="border-l-2 border-indigo-600 bg-indigo-50/50 px-2.5 py-1 text-xs font-semibold text-indigo-900">
+                    {QUESTION_TYPE_LABEL[s.type as keyof typeof QUESTION_TYPE_LABEL] || s.type} ({s.marksEach} Mark{s.marksEach === 1 ? "" : "s"} Each · {s.count} Questions)
+                  </div>
+                )}
 
                 <div className="space-y-4">
                   {items.map((it, idx) => {
-                    const numberedItem = allNumberedItems.find((x) => x.question.id === it.question.id);
+                    const numberedItem = allNumberedItems.find((x) => x.itemId === it.id);
                     const itemNumber = numberedItem?.number ?? idx + 1;
+                    const itemLabel = numberedItem?.label ?? `${itemNumber}`;
                     const itemMarks = numberedItem?.marks ?? s.marksEach;
                     return (
                       <div key={it.id} className="rounded border border-slate-200 p-3.5 bg-slate-50/50 print:bg-transparent">
                         {/* Primary Question Solution */}
                         <QuestionSolutionItem
                           number={itemNumber}
+                          numberLabel={itemLabel}
                           marks={itemMarks}
                           type={s.type}
                           q={it.question}
@@ -296,6 +363,7 @@ export default function SolutionsPage({ params }: PageProps<"/papers/[id]/soluti
                             </div>
                             <QuestionSolutionItem
                               number={itemNumber}
+                              numberLabel={itemLabel}
                               isOrOption
                               marks={itemMarks}
                               type={s.type}
@@ -325,12 +393,14 @@ export default function SolutionsPage({ params }: PageProps<"/papers/[id]/soluti
 
 function QuestionSolutionItem({
   number,
+  numberLabel,
   isOrOption,
   marks,
   type,
   q,
 }: {
   number: number;
+  numberLabel?: string;
   isOrOption?: boolean;
   marks: number;
   type: string;
@@ -338,12 +408,13 @@ function QuestionSolutionItem({
 }) {
   const isCaseStudyWithSubparts = type === "CASE_STUDY" && q.subparts && q.subparts.length > 0;
   const rubrics = getMarksRubric(marks, type);
+  const displayLabel = numberLabel ? `${numberLabel}.` : `${number}.`;
 
   return (
     <div className="space-y-2">
       <div className="flex items-start justify-between gap-2">
         <div className="font-semibold text-slate-900 text-sm">
-          {number}. {isOrOption && "(OR) "}
+          {displayLabel} {isOrOption && "(OR) "}
           <span className="font-normal text-slate-800">
             <MathText text={q.text} />
           </span>

@@ -1,4 +1,5 @@
 import { HttpError, route } from "@/lib/api";
+import { recordAudit } from "@/lib/audit";
 import type { GeneratedPaperQuestion } from "@/lib/gemini";
 import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
@@ -63,6 +64,13 @@ export const POST = route(async (req, { id }, user) => {
       where: { id },
       data: { updatedAt: new Date() },
     });
+  });
+
+  await recordAudit(user, "PAPER_UPDATE", "PAPER", id, {
+    action: "AI_COMMIT_SECTION",
+    sectionId,
+    sectionTitle: section.title,
+    questionsAdded: questions.length,
   });
 
   const updatedPaper = await loadPaperView(id);

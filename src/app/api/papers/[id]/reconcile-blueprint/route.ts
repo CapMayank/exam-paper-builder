@@ -46,9 +46,37 @@ export const POST = route(async (_req, { id }, user) => {
   if (reconciliation.reassignments.length > 0) {
     await prisma.$transaction(async (tx) => {
       for (const r of reconciliation.reassignments) {
-        await tx.question.update({
-          where: { id: r.questionId },
-          data: { chapterId: r.toChapterId },
+        // Always fork a paper-specific question variant with the adjusted chapter so the master bank remains uncorrupted
+        const orig = await tx.question.findUniqueOrThrow({ where: { id: r.questionId } });
+        let forkedSubparts = { _forkedFrom: orig.id, _reconciledToChapter: r.toChapterId };
+        try {
+          if (orig.subpartsJson) {
+            const parsed = JSON.parse(orig.subpartsJson);
+            if (typeof parsed === "object" && !Array.isArray(parsed)) {
+              forkedSubparts = { ...parsed, ...forkedSubparts };
+            }
+          }
+        } catch {}
+
+        const forked = await tx.question.create({
+          data: {
+            bookId: orig.bookId,
+            chapterId: r.toChapterId,
+            type: orig.type,
+            text: orig.text,
+            optionsJson: orig.optionsJson,
+            subpartsJson: JSON.stringify(forkedSubparts),
+            answer: orig.answer,
+            difficulty: orig.difficulty,
+            imagePath: orig.imagePath,
+            spaceMm: orig.spaceMm,
+            showGrid: orig.showGrid,
+            createdById: user.id,
+          },
+        });
+        await tx.paperQuestion.update({
+          where: { id: r.paperItemId },
+          data: { questionId: forked.id },
         });
       }
       await tx.paper.update({

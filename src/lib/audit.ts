@@ -25,9 +25,13 @@ export type AuditAction =
   | "TIMETABLE_CREATE"
   | "TIMETABLE_UPDATE"
   | "TIMETABLE_DELETE"
-  | "BOOK_IMPORT";
+  | "BOOK_IMPORT"
+  | "ACADEMIC_ROLLOVER"
+  | "PAPER_SNAPSHOT_CREATE"
+  | "PAPER_SNAPSHOT_RESTORE"
+  | "PAPERS_EXPORT_ZIP";
 
-export type AuditEntityType = "PAPER" | "QUESTION" | "BLUEPRINT" | "USER" | "TIMETABLE" | "LOGISTICS" | "BOOK";
+export type AuditEntityType = "PAPER" | "QUESTION" | "BLUEPRINT" | "USER" | "TIMETABLE" | "LOGISTICS" | "BOOK" | "ACADEMIC_SESSION" | "CHAPTER";
 
 export async function recordAudit(
   user: SessionUser | { id?: string | null; name: string; role?: string },

@@ -54,3 +54,4 @@ prisma/*.db.bak
 !/data/uploads/.gitkeep
 /scratch/
 .vscode/
+graphify-out/cache/

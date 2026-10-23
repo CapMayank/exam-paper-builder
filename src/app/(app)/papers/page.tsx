@@ -1,15 +1,16 @@
 "use client";
 
-import { Calendar, FileText, GraduationCap, Plus, Search, Upload, X } from "lucide-react";
+import { Calendar, Check, Copy, FileDown, FileText, GitCompare, GraduationCap, Lock, Plus, Search, Sparkles, Trash2, Upload, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { PaperCompareModal } from "@/components/PaperCompareModal";
 import { PaperImportModal } from "@/components/PaperImportModal";
 import { PaperRow } from "@/components/PaperRow";
 import { EmptyState, ErrorBanner, Field, ListSkeleton, Modal, PageHeader, Spinner, useConfirm, useToast } from "@/components/ui";
 import { normalizeSession, useAcademicSession } from "@/lib/academicSession";
 import { api } from "@/lib/client";
-import { DEFAULT_ACADEMIC_SESSION, DEFAULT_SCHOOL_NAME, EXAM_TYPE_LABEL, LAYOUTS, LAYOUT_LABEL, sortClassNames, type ExamType } from "@/lib/constants";
+import { ACADEMIC_SESSIONS, DEFAULT_ACADEMIC_SESSION, DEFAULT_SCHOOL_NAME, EXAM_TYPE_LABEL, LAYOUTS, LAYOUT_LABEL, sortClassNames, type ExamType } from "@/lib/constants";
 import type { Blueprint, PaperData, PaperListItem } from "@/lib/types";
 
 const SCHOOL_KEY = "epb:schoolName";
@@ -27,6 +28,9 @@ export default function PapersPage() {
   const [creating, setCreating] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [selectedPaperIds, setSelectedPaperIds] = useState<Set<string>>(new Set());
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [batchBusy, setBatchBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sessionFilter, setSessionFilter] = useState<string>(currentSession);
   const [classFilter, setClassFilter] = useState<string>("ALL");
@@ -95,15 +99,19 @@ export default function PapersPage() {
     const defaultBp = matchingBlueprints[0] || blueprints.find((b) => b.id === form.blueprintId) || blueprints[0];
     setModalClassFilter(defaultBp?.book.className || classFilter);
     setModalSubjectFilter(defaultBp?.book.subject || subjectFilter);
-    setForm((f) => ({
-      ...f,
-      blueprintId: defaultBp?.id || "",
-      examType: (defaultBp?.examType as ExamType) || "ANNUAL",
-      schoolName: f.schoolName || localStorage.getItem(SCHOOL_KEY) || DEFAULT_SCHOOL_NAME,
-      paperSet: f.paperSet || "SET A",
-      subjectCode: defaultBp?.subjectCode || f.subjectCode || "041",
-      academicSession: currentSession || DEFAULT_ACADEMIC_SESSION,
-    }));
+    setForm((f) => {
+      const initialTitle = f.title.trim() || (defaultBp ? `${defaultBp.name} (SET A)` : "");
+      return {
+        ...f,
+        title: initialTitle,
+        blueprintId: defaultBp?.id || "",
+        examType: (defaultBp?.examType as ExamType) || "ANNUAL",
+        schoolName: f.schoolName || localStorage.getItem(SCHOOL_KEY) || DEFAULT_SCHOOL_NAME,
+        paperSet: f.paperSet || "SET A",
+        subjectCode: defaultBp?.subjectCode || f.subjectCode || "041",
+        academicSession: currentSession || DEFAULT_ACADEMIC_SESSION,
+      };
+    });
     setCreating(true);
   }
 
@@ -122,8 +130,16 @@ export default function PapersPage() {
   }
 
   async function remove(p: PaperListItem) {
-    if (currentUser && currentUser.role !== "ADMIN" && (p.createdById !== currentUser.id || p.status === "FINAL")) {
-      setError("You can only delete your own draft papers. Finalized papers cannot be deleted.");
+    const isAdmin = currentUser?.role === "ADMIN";
+    const isHod = currentUser?.role === "HOD";
+    const isOwner = currentUser?.id && p.createdById ? p.createdById === currentUser.id : false;
+
+    if (!isAdmin && p.status === "FINAL") {
+      setError("Cannot delete a finalized paper. Only an Administrator can unlock or delete it.");
+      return;
+    }
+    if (!isAdmin && !isHod && !isOwner) {
+      setError("You can only delete your own draft papers, or department papers if you are an HOD.");
       return;
     }
     const ok = await confirm({
@@ -147,8 +163,22 @@ export default function PapersPage() {
     }
   }
 
+  async function duplicate(p: PaperListItem) {
+    setError(null);
+    try {
+      const res = await api<{ success: boolean; message: string; paper: PaperData }>(
+        `/api/papers/${p.id}/duplicate`,
+        { method: "POST", json: { academicSession: currentSession } },
+      );
+      toast.success(res.message);
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
   const availableSessions = useMemo(() => {
-    return Array.from(new Set([currentSession, ...papers.map((p) => p.academicSession || "2025–26")])).sort();
+    return Array.from(new Set([normalizeSession(currentSession), ...papers.map((p) => normalizeSession(p.academicSession))])).sort();
   }, [papers, currentSession]);
 
   const availableClasses = useMemo(() => {
@@ -182,7 +212,7 @@ export default function PapersPage() {
     return [...papers]
       .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
       .filter((p) => {
-        if (sessionFilter !== "ALL" && (p.academicSession || "2025–26") !== sessionFilter) return false;
+        if (sessionFilter !== "ALL" && normalizeSession(p.academicSession) !== normalizeSession(sessionFilter)) return false;
         if (classFilter !== "ALL" && p.blueprint.book.className !== classFilter) return false;
         if (subjectFilter !== "ALL" && p.blueprint.book.subject !== subjectFilter) return false;
         if (filterStatus !== "ALL" && p.status !== filterStatus) return false;
@@ -192,6 +222,96 @@ export default function PapersPage() {
         );
       });
   }, [papers, sessionFilter, classFilter, subjectFilter, filterStatus, searchQuery]);
+
+  const toggleSelectPaper = useCallback((p: PaperListItem) => {
+    setSelectedPaperIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(p.id)) next.delete(p.id);
+      else next.add(p.id);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAllVisible = useCallback(() => {
+    if (selectedPaperIds.size === filteredPapers.length && filteredPapers.length > 0) {
+      setSelectedPaperIds(new Set());
+    } else {
+      setSelectedPaperIds(new Set(filteredPapers.map((p) => p.id)));
+    }
+  }, [selectedPaperIds.size, filteredPapers]);
+
+  async function handleBatchFinalize() {
+    const selectedList = papers.filter((p) => selectedPaperIds.has(p.id) && p.status === "DRAFT");
+    if (selectedList.length === 0) {
+      toast.info("No draft papers selected to finalise.");
+      return;
+    }
+    const ok = await confirm({
+      title: `Finalise ${selectedList.length} exam paper${selectedList.length > 1 ? "s" : ""}?`,
+      message: "Once finalised, these papers will be locked. Only an Administrator can reopen them. Are you sure you are ready to finalise?",
+      confirmLabel: "Finalise Selected",
+      tone: "default",
+    });
+    if (!ok) return;
+
+    setBatchBusy(true);
+    setError(null);
+    try {
+      let successCount = 0;
+      for (const p of selectedList) {
+        try {
+          await api(`/api/papers/${p.id}`, { method: "PATCH", json: { status: "FINAL" } });
+          successCount++;
+        } catch {}
+      }
+      toast.success(`Finalised ${successCount} paper${successCount > 1 ? "s" : ""}.`);
+      setSelectedPaperIds(new Set());
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBatchBusy(false);
+    }
+  }
+
+  async function handleBatchDelete() {
+    const selectedList = papers.filter((p) => selectedPaperIds.has(p.id));
+    if (selectedList.length === 0) return;
+
+    const ok = await confirm({
+      title: `Delete ${selectedList.length} exam paper${selectedList.length > 1 ? "s" : ""}?`,
+      message: `This will remove ${selectedList.length} paper(s) and their question placements. Questions will remain safely in your question bank. This cannot be undone.`,
+      confirmLabel: "Delete Selected",
+      tone: "danger",
+    });
+    if (!ok) return;
+
+    setBatchBusy(true);
+    setError(null);
+    try {
+      let successCount = 0;
+      for (const p of selectedList) {
+        try {
+          await api(`/api/papers/${p.id}`, { method: "DELETE" });
+          successCount++;
+        } catch {}
+      }
+      toast.success(`Deleted ${successCount} paper${successCount > 1 ? "s" : ""}.`);
+      setSelectedPaperIds(new Set());
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBatchBusy(false);
+    }
+  }
+
+  const handleBatchExportZip = () => {
+    if (selectedPaperIds.size === 0) return;
+    const ids = Array.from(selectedPaperIds).join(",");
+    window.location.href = `/api/papers/export-zip?ids=${encodeURIComponent(ids)}`;
+    toast.success("Preparing your exam papers ZIP archive download…");
+  };
 
   const counts = {
     ALL: papers.length,
@@ -395,22 +515,99 @@ export default function PapersPage() {
           />
         )
       ) : (
-        <ul className="divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-200 bg-white" style={{ boxShadow: "var(--shadow-card)" }}>
-          {filteredPapers.map((p) => {
-            const isOwner = currentUser?.id && p.createdById ? p.createdById === currentUser.id : false;
-            const isAdmin = currentUser?.role === "ADMIN";
-            const isHod = currentUser?.role === "HOD";
-            const canDelete = currentUser ? (isAdmin || isHod || (isOwner && p.status !== "FINAL")) : false;
-            return (
-              <PaperRow
-                key={p.id}
-                p={p}
-                currentUser={currentUser}
-                onDelete={canDelete ? remove : undefined}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between px-4 py-2 bg-slate-50 border border-slate-200 rounded-t-2xl text-xs font-semibold text-slate-600">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                checked={selectedPaperIds.size > 0 && selectedPaperIds.size === filteredPapers.length}
+                onChange={toggleSelectAllVisible}
               />
-            );
-          })}
-        </ul>
+              <span>Select all {filteredPapers.length} papers</span>
+            </label>
+            {selectedPaperIds.size > 0 && (
+              <span className="text-indigo-700 font-bold">{selectedPaperIds.size} selected</span>
+            )}
+          </div>
+          <ul className="divide-y divide-slate-100 overflow-hidden rounded-b-2xl border border-t-0 border-slate-200 bg-white" style={{ boxShadow: "var(--shadow-card)" }}>
+            {filteredPapers.map((p) => {
+              const isOwner = currentUser?.id && p.createdById ? p.createdById === currentUser.id : false;
+              const isAdmin = currentUser?.role === "ADMIN";
+              const isHod = currentUser?.role === "HOD";
+              const canDelete = currentUser ? (isAdmin || isHod || (isOwner && p.status !== "FINAL")) : false;
+              return (
+                <PaperRow
+                  key={p.id}
+                  p={p}
+                  currentUser={currentUser}
+                  selected={selectedPaperIds.has(p.id)}
+                  onToggleSelect={toggleSelectPaper}
+                  onDuplicate={duplicate}
+                  onDelete={canDelete ? remove : undefined}
+                />
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      {/* Floating Sticky Bulk Actions Bar */}
+      {selectedPaperIds.size > 0 && (
+        <div className="sticky bottom-4 z-20 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-300 bg-white/95 px-5 py-3 shadow-xl backdrop-blur-md">
+          <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-600 text-xs text-white">
+              {selectedPaperIds.size}
+            </span>
+            <span>paper{selectedPaperIds.size > 1 ? "s" : ""} selected</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {selectedPaperIds.size === 2 && (
+              <button
+                type="button"
+                disabled={batchBusy}
+                onClick={() => setCompareOpen(true)}
+                className="btn btn-sm bg-indigo-600 hover:bg-indigo-700 text-white font-semibold flex items-center gap-1.5 shadow-2xs"
+                title="Compare questions, overlap ratio, and differences between these 2 examination papers"
+              >
+                <GitCompare size={13} /> Compare Sets (Diff)
+              </button>
+            )}
+            <button
+              type="button"
+              disabled={batchBusy}
+              onClick={handleBatchExportZip}
+              className="btn btn-sm bg-blue-600 hover:bg-blue-700 text-white font-semibold flex items-center gap-1.5 shadow-2xs"
+              title="Download a ZIP archive containing DOCX Question Papers and Marking Schemes for all selected papers"
+            >
+              <FileDown size={13} /> Export ZIP Bundle
+            </button>
+            <button
+              type="button"
+              disabled={batchBusy}
+              onClick={handleBatchFinalize}
+              className="btn btn-sm bg-emerald-600 hover:bg-emerald-700 text-white font-semibold flex items-center gap-1.5 shadow-2xs"
+            >
+              <Lock size={13} /> Finalise Selected
+            </button>
+            <button
+              type="button"
+              disabled={batchBusy}
+              onClick={handleBatchDelete}
+              className="btn btn-sm btn-danger font-semibold flex items-center gap-1.5 shadow-2xs"
+            >
+              <Trash2 size={13} /> Delete Selected
+            </button>
+            <button
+              type="button"
+              disabled={batchBusy}
+              onClick={() => setSelectedPaperIds(new Set())}
+              className="btn btn-sm btn-ghost text-slate-600"
+            >
+              Clear Selection
+            </button>
+          </div>
+        </div>
       )}
 
       {creating && (
@@ -514,11 +711,13 @@ export default function PapersPage() {
                     value={form.blueprintId}
                     onChange={(e) => {
                       const nextBp = blueprints.find((b) => b.id === e.target.value);
+                      const shouldUpdateTitle = !form.title.trim() || blueprints.some((b) => b.name === form.title.trim() || form.title.startsWith(b.name));
                       setForm({
                         ...form,
                         blueprintId: e.target.value,
                         examType: (nextBp?.examType as ExamType) || "ANNUAL",
                         ...(nextBp?.subjectCode ? { subjectCode: nextBp.subjectCode } : {}),
+                        ...(nextBp && shouldUpdateTitle ? { title: `${nextBp.name} (${form.paperSet || "SET A"})` } : {}),
                       });
                     }}
                   >
@@ -580,12 +779,17 @@ export default function PapersPage() {
                 <input className="input" placeholder="SET A" value={form.paperSet} onChange={(e) => setForm({ ...form, paperSet: e.target.value })} />
               </Field>
               <Field label="Academic session" helper="e.g. 2025–26, 2026–27">
-                <input
-                  className="input"
-                  placeholder={currentSession}
+                <select
+                  className="input bg-white"
                   value={form.academicSession}
                   onChange={(e) => setForm({ ...form, academicSession: e.target.value })}
-                />
+                >
+                  {ACADEMIC_SESSIONS.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
               </Field>
             </div>
 
@@ -598,23 +802,26 @@ export default function PapersPage() {
                 onChange={(e) => setForm({ ...form, generalInstructions: e.target.value })}
               />
             </Field>
-            <button
-              type="button"
-              className="-mt-2 text-sm font-medium text-indigo-700 hover:text-indigo-900"
-              onClick={() =>
-                setForm((f) => ({
-                  ...f,
-                  generalInstructions: [
-                    "1. This question paper contains multiple sections. All questions are compulsory.",
-                    "2. In questions with internal choice, attempt only one of the alternatives.",
-                    "3. Neat and labeled diagrams must be drawn wherever necessary. Take π = 22/7 wherever required if not stated.",
-                    "4. Use of calculators is strictly prohibited.",
-                  ].join("\n"),
-                }))
-              }
-            >
-              Fill in standard CBSE instructions
-            </button>
+            <div>
+              <button
+                type="button"
+                className="btn btn-sm btn-ghost bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 flex items-center gap-1.5 text-xs font-semibold"
+                onClick={() =>
+                  setForm((f) => ({
+                    ...f,
+                    generalInstructions: [
+                      "1. This question paper contains multiple sections. All questions are compulsory.",
+                      "2. In questions with internal choice, attempt only one of the alternatives.",
+                      "3. Neat and labeled diagrams must be drawn wherever necessary. Take π = 22/7 wherever required if not stated.",
+                      "4. Use of calculators is strictly prohibited.",
+                    ].join("\n"),
+                  }))
+                }
+              >
+                <Sparkles size={13} className="text-indigo-600" />
+                <span>Use Standard CBSE Instructions Template</span>
+              </button>
+            </div>
           </form>
         </Modal>
       )}
@@ -625,6 +832,14 @@ export default function PapersPage() {
           onClose={() => setImportOpen(false)}
           onSuccess={(paperId) => router.push(`/papers/${paperId}`)}
           blueprints={blueprints}
+        />
+      )}
+
+      {compareOpen && selectedPaperIds.size === 2 && (
+        <PaperCompareModal
+          paperIdA={Array.from(selectedPaperIds)[0]}
+          paperIdB={Array.from(selectedPaperIds)[1]}
+          onClose={() => setCompareOpen(false)}
         />
       )}
     </div>

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { checkBlueprintFeasibility, paperStatus, validateBlueprint, whyCannotAdd, type BlueprintDef } from "./blueprint";
+import { checkBlueprintFeasibility, diagnosePaperImplications, paperStatus, validateBlueprint, whyCannotAdd, type BlueprintDef } from "./blueprint";
+import { formatQuestionNumber } from "./constants";
 import { bookletPageCount, imposeBooklet, paginate } from "./layout";
 import { autoFillPaper, type CandidateQuestion } from "./autofill";
 
@@ -28,17 +29,19 @@ describe("validateBlueprint & checkBlueprintFeasibility", () => {
   it("flags impossible chapter quota below minimum section denomination", () => {
     const warnings = checkBlueprintFeasibility({
       sections: [{ count: 5, marksEach: 3 }],
-      chapters: [{ chapterId: "c1", marks: 2 }, { chapterId: "c2", marks: 13 }],
+      chapters: [{ chapterId: "c1", title: "Acids and Bases", marks: 2 }, { chapterId: "c2", marks: 13 }],
     });
     expect(warnings.length).toBeGreaterThan(0);
+    expect(warnings[0]).toMatch(/Chapter "Acids and Bases"/);
     expect(warnings[0]).toMatch(/smallest/);
   });
   it("flags chapter quota unreachable by denomination combination", () => {
     const warnings = checkBlueprintFeasibility({
       sections: [{ count: 2, marksEach: 2 }, { count: 2, marksEach: 4 }],
-      chapters: [{ chapterId: "c1", marks: 3 }, { chapterId: "c2", marks: 9 }],
+      chapters: [{ chapterId: "c1", title: "Metals", marks: 3 }, { chapterId: "c2", marks: 9 }],
     });
     expect(warnings.length).toBeGreaterThan(0);
+    expect(warnings[0]).toMatch(/Chapter "Metals"/);
     expect(warnings[0]).toMatch(/cannot be formed/);
   });
   it("passes when denominations can form chapter marks", () => {
@@ -80,6 +83,33 @@ describe("whyCannotAdd / paperStatus", () => {
     ];
     expect(paperStatus(bp, items.slice(0, 3)).complete).toBe(false);
     expect(paperStatus(bp, items).complete).toBe(true);
+  });
+  it("rejects candidate when subpart marks exceed remaining chapter quota", () => {
+    // c1 target is 3. Section A marksEach is 1. If candidate has 4 marks via subparts, it should reject even in 1-mark section.
+    expect(
+      whyCannotAdd(bp, [], {
+        sectionId: "A",
+        chapterId: "c1",
+        type: "MCQ",
+        marks: 4,
+      })
+    ).toMatch(/allows only 3 marks/);
+  });
+  it("diagnoses SECTION_OVERFILLED when section count is reduced below subparts count", () => {
+    const implications = diagnosePaperImplications(
+      {
+        sections: [{ id: "A", title: "Section A", type: "MCQ", count: 2, marksEach: 1 }],
+        chapters: [{ chapterId: "c1", marks: 5 }],
+      },
+      [{ sectionId: "A", chapterId: "c1", subpartsCount: 4 }]
+    );
+    expect(implications.some((imp) => imp.code === "SECTION_OVERFILLED")).toBe(true);
+    expect(implications.some((imp) => imp.code === "SECTION_UNDERFILLED")).toBe(false);
+  });
+  it("formats section-relative question number without falsy zero error", () => {
+    expect(formatQuestionNumber(0, "SECTION_RELATIVE", "A", 0)).toBe("A1.");
+    expect(formatQuestionNumber(1, "SECTION_RELATIVE", "A", 1)).toBe("A1.");
+    expect(formatQuestionNumber(2, "SECTION_RELATIVE", "A", 2)).toBe("A2.");
   });
 });
 

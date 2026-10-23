@@ -12,14 +12,18 @@ export function paginate(
   heights: number[],
   keepWithNext: boolean[],
   pageHeight: number,
-  blockGroupIds?: (string | null | undefined)[]
+  blockGroupIds?: (string | null | undefined)[],
+  forceBreakBefore?: boolean[]
 ): number[][] {
-  const units: { idx: number[]; h: number; groupId?: string | null }[] = [];
-  let cur: { idx: number[]; h: number; groupId?: string | null } | null = null;
+  const units: { idx: number[]; h: number; groupId?: string | null; forceBreak?: boolean }[] = [];
+  let cur: { idx: number[]; h: number; groupId?: string | null; forceBreak?: boolean } | null = null;
   heights.forEach((h, i) => {
-    if (!cur) cur = { idx: [], h: 0, groupId: blockGroupIds ? blockGroupIds[i] : null };
+    if (!cur) cur = { idx: [], h: 0, groupId: blockGroupIds ? blockGroupIds[i] : null, forceBreak: forceBreakBefore ? forceBreakBefore[i] : false };
     cur.idx.push(i);
     cur.h += h;
+    if (forceBreakBefore && forceBreakBefore[i]) {
+      cur.forceBreak = true;
+    }
     if (!keepWithNext[i] || i === heights.length - 1) {
       units.push(cur);
       cur = null;
@@ -41,7 +45,10 @@ export function paginate(
     );
     const extraH = isContinuation ? CONTINUATION_EXTRA_PX : 0;
 
-    if (page.length > 0 && used + u.h + extraH > pageHeight) {
+    const shouldBreakForForced = u.forceBreak && page.length > 0;
+    const shouldBreakForHeight = page.length > 0 && used + u.h + extraH > pageHeight;
+
+    if (shouldBreakForForced || shouldBreakForHeight) {
       pages.push(page);
       page = [];
       used = 0;

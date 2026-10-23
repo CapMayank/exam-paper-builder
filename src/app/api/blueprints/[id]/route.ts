@@ -46,8 +46,31 @@ export const PUT = route(async (req, { id }, user) => {
 
   // Perform atomic section, chapter, and blueprint update
   await prisma.$transaction(async (tx) => {
-    // 1. If sections were removed, clean up any paperQuestions linked to them first
+    // 1. If sections were removed, archive affected questions to snapshots before cleanup
     if (removedSections.length > 0) {
+      const affectedItems = await tx.paperQuestion.findMany({
+        where: { sectionId: { in: removedSections.map((s) => s.id) } },
+        include: { question: true, paper: { select: { id: true, title: true } } },
+      });
+      if (affectedItems.length > 0) {
+        const paperMap = new Map<string, typeof affectedItems>();
+        for (const it of affectedItems) {
+          const list = paperMap.get(it.paperId) ?? [];
+          list.push(it);
+          paperMap.set(it.paperId, list);
+        }
+        for (const [pId, items] of paperMap) {
+          await tx.paperSnapshot.create({
+            data: {
+              paperId: pId,
+              name: `Auto-Archive: Blueprint Section Sync (${items.length} item(s))`,
+              snapshotJson: JSON.stringify(items),
+              createdById: user.id,
+            },
+          });
+        }
+      }
+
       await tx.paperQuestion.deleteMany({
         where: { sectionId: { in: removedSections.map((s) => s.id) } },
       });

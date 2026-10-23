@@ -15,7 +15,7 @@ import {
   TextRun,
   WidthType,
 } from "docx";
-import { HttpError, route } from "@/lib/api";
+import { HttpError, route, type SessionUser } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { formatMathTextRuns, formatOptionPairRuns } from "@/lib/docxMath";
 import {
@@ -27,14 +27,17 @@ import {
   getMatchColumnInstruction,
   isMcqLikeType,
   parseMatchColumnPairs,
+  QUESTION_TYPE_LABEL,
   resolvePaperExamType,
 } from "@/lib/constants";
 import { prisma } from "@/lib/prisma";
 import { UPLOAD_DIR } from "@/lib/uploads";
 
-export const GET = route(async (_req, params, user) => {
-  const paperId = params.id;
-
+export async function buildPaperDocx(
+  paperId: string,
+  isMarkingScheme: boolean,
+  user: SessionUser,
+): Promise<{ buffer: Buffer; safeFilename: string; title: string }> {
   const paper = await prisma.paper.findUnique({
     where: { id: paperId },
     include: {
@@ -126,6 +129,23 @@ export const GET = route(async (_req, params, user) => {
         }),
       ],
     }),
+    ...(isMarkingScheme
+      ? [
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 100 },
+            children: [
+              new TextRun({
+                text: "CONFIDENTIAL — TEACHER'S MARKING SCHEME & MODEL ANSWERS (मूल्यांकन योजना)",
+                bold: true,
+                size: 20, // 10pt
+                color: "0B6623",
+                font: "Times New Roman",
+              }),
+            ],
+          }),
+        ]
+      : []),
   );
 
   // --- Metadata Bar (Class, Subject, Time, Marks) ---
@@ -206,31 +226,73 @@ export const GET = route(async (_req, params, user) => {
 
   // --- Sections & Questions ---
   let globalQNum = 1;
+  let sectionGroupCounter = 0;
+  let sectionRelativeNum = 1;
 
-  for (const section of paper.blueprint.sections) {
+  for (let sIdx = 0; sIdx < paper.blueprint.sections.length; sIdx++) {
+    const section = paper.blueprint.sections[sIdx];
+    const prev = sIdx > 0 ? paper.blueprint.sections[sIdx - 1] : null;
+    const isSameAsPrev = Boolean(prev && prev.title.trim().toLowerCase() === section.title.trim().toLowerCase());
+    if (!isSameAsPrev) {
+      if (sIdx > 0) {
+        sectionGroupCounter++;
+      }
+      sectionRelativeNum = 1;
+    }
+    const match = section.title.match(/section\s+([a-z0-9]+)/i);
+    const sectionLetter = match ? match[1].toUpperCase() : String.fromCharCode(65 + sectionGroupCounter);
+
     const items = sectionMap.get(section.id) || [];
-
-    // Section Header
-    paragraphs.push(
-      new Paragraph({
-        alignment: AlignmentType.CENTER,
-        heading: HeadingLevel.HEADING_2,
-        spacing: { before: 280, after: 140 },
-        children: [
-          new TextRun({
-            text: `${section.title.toUpperCase()}`,
-            bold: true,
-            size: 24, // 12pt
-            font: "Times New Roman",
-          }),
-          new TextRun({
-            text: ` (${section.count} × ${section.marksEach} = ${section.count * section.marksEach} Marks)`,
-            bold: true,
-            font: "Times New Roman",
-          }),
-        ],
-      }),
+    const allInGroup = paper.blueprint.sections.filter(
+      (x) => x.title.trim().toLowerCase() === section.title.trim().toLowerCase()
     );
+    const hasMultipleTypes = allInGroup.length > 1;
+
+    // Main Section Header (Only if first of its group)
+    if (!isSameAsPrev) {
+      const groupCount = allInGroup.reduce((sum, s) => sum + s.count, 0);
+      const groupMarks = allInGroup.reduce((sum, s) => sum + s.count * s.marksEach, 0);
+
+      paragraphs.push(
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          heading: HeadingLevel.HEADING_2,
+          spacing: { before: 280, after: 140 },
+          children: [
+            new TextRun({
+              text: `${section.title.toUpperCase()}`,
+              bold: true,
+              size: 24, // 12pt
+              font: "Times New Roman",
+            }),
+            new TextRun({
+              text: ` (${groupCount} Questions · ${groupMarks} Marks)`,
+              bold: true,
+              font: "Times New Roman",
+            }),
+          ],
+        }),
+      );
+    }
+
+    // Sub-heading for specific question type within grouped section
+    if (hasMultipleTypes) {
+      paragraphs.push(
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 120, after: 100 },
+          children: [
+            new TextRun({
+              text: `[${QUESTION_TYPE_LABEL[section.type as keyof typeof QUESTION_TYPE_LABEL] || section.type} · ${section.count} × ${section.marksEach} = ${section.count * section.marksEach} Marks]`,
+              bold: true,
+              italics: true,
+              size: 20, // 10pt
+              font: "Times New Roman",
+            }),
+          ],
+        }),
+      );
+    }
 
     if (section.instructions) {
       paragraphs.push(
@@ -253,7 +315,8 @@ export const GET = route(async (_req, params, user) => {
     for (const item of items) {
       const q = item.question;
       const qNum = globalQNum++;
-      const qLabel = formatQuestionNumber(qNum, paper.numberingStyle);
+      const currentSecRelNum = sectionRelativeNum++;
+      const qLabel = formatQuestionNumber(qNum, paper.numberingStyle, sectionLetter, currentSecRelNum);
 
       // Question line
       const isMatch = q.type === "MATCH_COLUMN";
@@ -282,6 +345,7 @@ export const GET = route(async (_req, params, user) => {
 
       paragraphs.push(
         new Paragraph({
+          pageBreakBefore: Boolean((item as any).pageBreakBefore),
           spacing: { before: 100, after: 60 },
           children: [
             new TextRun({ text: `${qLabel}  `, bold: true, font: "Times New Roman" }),
@@ -426,11 +490,43 @@ export const GET = route(async (_req, params, user) => {
                   ],
                 }),
               );
+
+              if (isMarkingScheme && sp.answer) {
+                paragraphs.push(
+                  new Paragraph({
+                    indent: { left: 1080 },
+                    spacing: { before: 20, after: 60 },
+                    children: [
+                      new TextRun({ text: "Ans: ", bold: true, color: "0B6623", font: "Times New Roman" }),
+                      ...formatMathTextRuns(sp.answer, { font: "Times New Roman" }),
+                    ],
+                  }),
+                );
+              }
             }
           }
         } catch {
           // ignore
         }
+      }
+
+      // Model Answer / Solution for primary question
+      if (isMarkingScheme && q.answer) {
+        paragraphs.push(
+          new Paragraph({
+            indent: { left: 720 },
+            spacing: { before: 40, after: 80 },
+            children: [
+              new TextRun({
+                text: "Model Answer / Scheme: ",
+                bold: true,
+                color: "0B6623",
+                font: "Times New Roman",
+              }),
+              ...formatMathTextRuns(q.answer, { font: "Times New Roman" }),
+            ],
+          }),
+        );
       }
 
       // Alternate (OR) Choice question
@@ -471,7 +567,7 @@ export const GET = route(async (_req, params, user) => {
           new Paragraph({
             spacing: { after: 60 },
             children: [
-              new TextRun({ text: `${formatQuestionNumber(qNum, paper.numberingStyle)} (OR)  `, bold: true, font: "Times New Roman" }),
+              new TextRun({ text: `${qLabel} (OR)  `, bold: true, font: "Times New Roman" }),
               ...formatMathTextRuns(orQText, { font: "Times New Roman" }),
               new TextRun({ text: `  [${orTotalMarks} Mark${orTotalMarks > 1 ? "s" : ""}]`, bold: true, font: "Times New Roman" }),
             ],
@@ -613,10 +709,42 @@ export const GET = route(async (_req, params, user) => {
                     ],
                   }),
                 );
+
+                if (isMarkingScheme && sp.answer) {
+                  paragraphs.push(
+                    new Paragraph({
+                      indent: { left: 1080 },
+                      spacing: { before: 20, after: 60 },
+                      children: [
+                        new TextRun({ text: "Ans: ", bold: true, color: "0B6623", font: "Times New Roman" }),
+                        ...formatMathTextRuns(sp.answer, { font: "Times New Roman" }),
+                      ],
+                    }),
+                  );
+                }
               }
             }
           } catch {
             // ignore
+          }
+
+          // Model Answer / Solution for OR question
+          if (isMarkingScheme && orQ.answer) {
+            paragraphs.push(
+              new Paragraph({
+                indent: { left: 720 },
+                spacing: { before: 40, after: 80 },
+                children: [
+                  new TextRun({
+                    text: "Model Answer / Scheme: ",
+                    bold: true,
+                    color: "0B6623",
+                    font: "Times New Roman",
+                  }),
+                  ...formatMathTextRuns(orQ.answer, { font: "Times New Roman" }),
+                ],
+              }),
+            );
           }
         }
       }
@@ -643,7 +771,7 @@ export const GET = route(async (_req, params, user) => {
                 alignment: AlignmentType.RIGHT,
                 children: [
                   new TextRun({
-                    text: `${paper.title} · ${paper.paperSet ? `Set ${paper.paperSet}` : ""}`,
+                    text: `${paper.title} · ${paper.paperSet ? `Set ${paper.paperSet} · ` : ""}${isMarkingScheme ? "Confidential Marking Scheme" : "Examination Paper"}`,
                     size: 16,
                     italics: true,
                     font: "Times New Roman",
@@ -663,9 +791,22 @@ export const GET = route(async (_req, params, user) => {
   await recordAudit(user, "PAPER_EXPORT_DOCX", "PAPER", paper.id, {
     paperTitle: paper.title,
     schoolName: paper.schoolName,
+    markingScheme: isMarkingScheme,
   });
 
-  const safeFilename = `${paper.title.replace(/[^a-zA-Z0-9_-]/g, "_")}_${paper.paperSet ? `Set_${paper.paperSet}` : "Paper"}.docx`;
+  const safeFilename = isMarkingScheme
+    ? `${paper.title.replace(/[^a-zA-Z0-9_-]/g, "_")}_${paper.paperSet ? `Set_${paper.paperSet}_` : ""}Marking_Scheme.docx`
+    : `${paper.title.replace(/[^a-zA-Z0-9_-]/g, "_")}_${paper.paperSet ? `Set_${paper.paperSet}` : "Paper"}.docx`;
+
+  return { buffer: Buffer.from(buffer), safeFilename, title: paper.title };
+}
+
+export const GET = route(async (_req, params, user) => {
+  const paperId = params.id;
+  const url = new URL(_req.url);
+  const isMarkingScheme = url.searchParams.get("markingScheme") === "true" || url.searchParams.get("type") === "solutions";
+
+  const { buffer, safeFilename } = await buildPaperDocx(paperId, isMarkingScheme, user);
 
   return new Response(new Uint8Array(buffer), {
     status: 200,

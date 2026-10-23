@@ -185,12 +185,20 @@ export function AIPaperGeneratorModal({
         );
 
         // 1. Generate section questions from AI
+        const customKey =
+          typeof window !== "undefined"
+            ? localStorage.getItem("exam_gemini_api_key") || ""
+            : "";
+        const headers: Record<string, string> = {};
+        if (customKey) headers["x-gemini-api-key"] = customKey;
+
         const genRes = await api<{
           success: boolean;
           isMock: boolean;
           questions: GeneratedPaperQuestion[];
         }>(`/api/papers/${paperId}/ai-generate-section`, {
           method: "POST",
+          headers,
           json: {
             sectionTitle: sec.sectionTitle,
             sectionType: sec.sectionType,
@@ -201,6 +209,7 @@ export function AIPaperGeneratorModal({
             teacherFocus,
             generateDiagrams: allowSectionDiagrams,
             slots: sec.slots,
+            customKey: customKey || undefined,
           },
         });
 

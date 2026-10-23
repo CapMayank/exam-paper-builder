@@ -216,6 +216,8 @@ export const paperCreateSchema = z.object({
   marksStyle: z.enum(MARKS_STYLES).default(DEFAULT_MARKS_STYLE),
   showCandidateDetails: z.boolean().default(true),
   showSignatures: z.boolean().default(false),
+  securityWatermark: z.boolean().default(false),
+  watermarkText: z.string().max(100).default(""),
 });
 
 export const paperUpdateSchema = z
@@ -239,6 +241,8 @@ export const paperUpdateSchema = z
     marksStyle: z.enum(MARKS_STYLES),
     showCandidateDetails: z.boolean(),
     showSignatures: z.boolean(),
+    securityWatermark: z.boolean(),
+    watermarkText: z.string().max(100),
   })
   .partial();
 

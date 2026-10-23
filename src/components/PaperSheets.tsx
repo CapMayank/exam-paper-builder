@@ -20,6 +20,7 @@ import type { PaperData } from "@/lib/types";
 type Block = {
   key: string;
   keepWithNext: boolean;
+  forceBreakBefore?: boolean;
   groupId?: string;
   node?: ReactNode;
   render?: (ctx: { isContinuation: boolean }) => ReactNode;
@@ -392,6 +393,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
         blocks.push({
           key: `${it.id}-stem`,
           keepWithNext: !isLongStem,
+          forceBreakBefore: Boolean(it.pageBreakBefore),
           groupId: it.id,
           render: () => (
             <div style={{ paddingBottom: isA5 ? "1.5mm" : "2.5mm" }}>
@@ -438,6 +440,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
         blocks.push({
           key: it.id,
           keepWithNext: false,
+          forceBreakBefore: Boolean(it.pageBreakBefore),
           groupId: it.id,
           render: () => (
             <div style={{ paddingBottom: questionBottomPadding }}>
@@ -489,22 +492,62 @@ function Page({
   blocks,
   isA5,
   continuationKeys,
+  watermark,
+  watermarkText,
 }: {
   n: number;
   total: number;
   blocks: Block[];
   isA5?: boolean;
   continuationKeys?: Set<string>;
+  watermark?: boolean;
+  watermarkText?: string;
 }) {
   const isLastPage = n === total;
   return (
-    <div className={`${isA5 ? "a5" : "a4"} paper-font`}>
-      {blocks.map((b) => (
-        <div key={b.key} style={{ display: "flow-root" }}>
-          {renderBlock(b, continuationKeys?.has(b.key) ?? false)}
+    <div className={`${isA5 ? "a5" : "a4"} paper-font relative overflow-hidden`}>
+      {watermark && (
+        <div
+          className="watermark-overlay"
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            pointerEvents: "none",
+            zIndex: 0,
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              transform: "rotate(-35deg)",
+              fontSize: isA5 ? "22pt" : "30pt",
+              fontWeight: 800,
+              color: "rgba(100, 116, 139, 0.08)",
+              textTransform: "uppercase",
+              letterSpacing: "0.15em",
+              whiteSpace: "nowrap",
+              userSelect: "none",
+            }}
+          >
+            {watermarkText || "CONFIDENTIAL — SARVODAYA EXAM CELL"}
+          </div>
         </div>
-      ))}
-      <div className="page-footer">
+      )}
+      <div style={{ position: "relative", zIndex: 1 }}>
+        {blocks.map((b) => (
+          <div key={b.key} style={{ display: "flow-root" }}>
+            {renderBlock(b, continuationKeys?.has(b.key) ?? false)}
+          </div>
+        ))}
+      </div>
+      <div className="page-footer" style={{ position: "relative", zIndex: 1 }}>
         <div style={{ width: isA5 ? "20mm" : "35mm" }}>{/* Left gutter spacer */}</div>
         <div style={{ fontWeight: 600, fontSize: isA5 ? "7.5pt" : "8.5pt", color: "#334155" }}>
           Page {n} of {total}
@@ -579,23 +622,29 @@ export type SheetsInfo = { pages: number; sheets: number };
  */
 export function PaperSheets({
   paper,
-  view,
-  zoom,
+  view = "sheets",
+  zoom = 1,
   compact,
   includeRoughWork = false,
   showSignatures,
+  watermark,
+  watermarkText,
   onInfo,
 }: {
   paper: PaperData;
-  view: "reading" | "sheets";
-  zoom: number;
+  view?: "reading" | "sheets";
+  zoom?: number;
   compact?: boolean;
   includeRoughWork?: boolean;
   showSignatures?: boolean;
+  watermark?: boolean;
+  watermarkText?: string;
   onInfo?: (i: SheetsInfo) => void;
 }) {
   const isA5 = paper.layout === "BOOKLET_A4";
   const isBooklet = isBookletLayout(paper.layout);
+  const effectiveWatermark = watermark ?? paper.securityWatermark ?? false;
+  const effectiveWatermarkText = watermarkText || paper.watermarkText || "CONFIDENTIAL — SARVODAYA EXAM CELL";
   const blocks = useMemo(
     () => buildBlocks(paper, compact, isA5, showSignatures),
     [paper, compact, isA5, showSignatures]
@@ -628,7 +677,8 @@ export function PaperSheets({
           heights,
           blocks.map((b) => b.keepWithNext),
           pageH - 6, // 6px safety buffer above bottom margin to prevent footer collision
-          blocks.map((b) => b.groupId)
+          blocks.map((b) => b.groupId),
+          blocks.map((b) => Boolean(b.forceBreakBefore))
         )
       );
     })();
@@ -694,6 +744,8 @@ export function PaperSheets({
         blocks={pages[i].map((b) => blocks[b])}
         isA5={isA5}
         continuationKeys={continuationKeys}
+        watermark={effectiveWatermark}
+        watermarkText={effectiveWatermarkText}
       />
     );
 

@@ -46,6 +46,8 @@ export function QuestionPicker({
     difficulty: "",
     q: "",
   });
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [batchBusy, setBatchBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [formKey, setFormKey] = useState(0);
@@ -73,7 +75,15 @@ export function QuestionPicker({
 
   const placed = paper.items
     .filter((i) => i.id !== replacingItemId)
-    .map((i) => ({ sectionId: i.sectionId, chapterId: i.question.chapterId }));
+    .map((i) => {
+      const submarks = i.question.subparts && i.question.subparts.length > 0 ? subpartsTotalMarks(i.question.subparts) : 0;
+      return {
+        sectionId: i.sectionId,
+        chapterId: i.question.chapterId,
+        marks: submarks > 0 ? submarks : undefined,
+        subpartsCount: i.question.subparts && i.question.subparts.length > 1 ? i.question.subparts.length : undefined,
+      };
+    });
 
   const sectionStatus = paper.progress.sections.find((s) => s.id === section.id)!;
   const full = !isReplacing && !isAlternate && sectionStatus.filled >= sectionStatus.needed;
@@ -122,7 +132,20 @@ export function QuestionPicker({
             why = `Subpart marks (${subpartsTotalMarks(q.subparts)}m) must match section (${section.marksEach}m).`;
           }
         } else {
-          why = whyCannotAdd(def, placed, { sectionId: section.id, chapterId: q.chapterId, type: q.type });
+          if (paper.items.some((i) => (i.question.id === q.id || i.orQuestion?.id === q.id) && i.id !== replacingItemId)) {
+            why = "Already used in this paper.";
+          } else if (isReplacing && activeItem?.orQuestion?.id === q.id) {
+            why = "Cannot be identical to the alternate (OR) choice of this slot.";
+          } else {
+            const qSubmarks = q.subparts && q.subparts.length > 0 ? subpartsTotalMarks(q.subparts) : 0;
+            why = whyCannotAdd(def, placed, {
+              sectionId: section.id,
+              chapterId: q.chapterId,
+              type: q.type,
+              marks: qSubmarks > 0 ? qSubmarks : undefined,
+              subpartsCount: q.subparts && q.subparts.length > 1 ? q.subparts.length : undefined,
+            });
+          }
         }
         return { q, why };
       })
@@ -155,6 +178,30 @@ export function QuestionPicker({
       }
     } catch (e) {
       setError((e as Error).message);
+    }
+  }
+
+  async function handleBatchInsert() {
+    if (selectedIds.size === 0) return;
+    setBatchBusy(true);
+    setError(null);
+    try {
+      const res = await api<{ success: boolean; addedCount: number; message: string; paper: PaperData }>(
+        `/api/papers/${paper.id}/questions/bulk`,
+        {
+          method: "POST",
+          json: {
+            sectionId: section.id,
+            questionIds: Array.from(selectedIds),
+          },
+        }
+      );
+      onPaper(res.paper);
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBatchBusy(false);
     }
   }
 
@@ -430,6 +477,8 @@ export function QuestionPicker({
                   className={`rounded-xl border p-3.5 transition ${
                     why
                       ? "border-slate-200 bg-slate-50/70 opacity-65"
+                      : selectedIds.has(q.id)
+                      ? "border-indigo-400 bg-indigo-50/20 ring-2 ring-indigo-500/50 shadow-xs"
                       : "border-slate-200/90 bg-white shadow-2xs hover:border-slate-300"
                   }`}
                 >
@@ -475,17 +524,37 @@ export function QuestionPicker({
                           {why}
                         </span>
                       ) : (
-                        <button
-                          className="btn btn-sm btn-primary shadow-2xs"
-                          onClick={() => add(q.id)}
-                        >
-                          <Plus size={13} />{" "}
-                          {isAlternate
-                            ? "Set as Alternate (OR)"
-                            : isReplacing
-                            ? "Use as Replacement"
-                            : "Add to Slot"}
-                        </button>
+                        <>
+                          {!isAlternate && !isReplacing && (
+                            <label className="flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-slate-700 px-2 py-1 rounded-md hover:bg-slate-100 transition select-none">
+                              <input
+                                type="checkbox"
+                                checked={selectedIds.has(q.id)}
+                                onChange={() => {
+                                  setSelectedIds((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(q.id)) next.delete(q.id);
+                                    else next.add(q.id);
+                                    return next;
+                                  });
+                                }}
+                                className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                              />
+                              <span className="text-[11px]">Select</span>
+                            </label>
+                          )}
+                          <button
+                            className="btn btn-sm btn-primary shadow-2xs"
+                            onClick={() => add(q.id)}
+                          >
+                            <Plus size={13} />{" "}
+                            {isAlternate
+                              ? "Set as Alternate (OR)"
+                              : isReplacing
+                              ? "Use as Replacement"
+                              : "Add to Slot"}
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>
@@ -498,6 +567,37 @@ export function QuestionPicker({
                 </li>
               )}
             </ul>
+
+            {/* Sticky Batch Multi-Select Action Bar */}
+            {selectedIds.size > 0 && (
+              <div className="sticky bottom-0 -mx-6 -mb-6 mt-3 flex items-center justify-between border-t border-indigo-200 bg-indigo-50/95 px-6 py-2.5 shadow-md backdrop-blur-sm z-10">
+                <div className="flex items-center gap-2 text-xs font-bold text-indigo-950">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[10px] text-white">
+                    {selectedIds.size}
+                  </span>
+                  <span>{selectedIds.size} question{selectedIds.size > 1 ? "s" : ""} selected for {section.title}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={batchBusy}
+                    className="btn btn-sm btn-ghost text-xs text-indigo-900"
+                    onClick={() => setSelectedIds(new Set())}
+                  >
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    disabled={batchBusy}
+                    onClick={handleBatchInsert}
+                    className="btn btn-sm bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs flex items-center gap-1.5 shadow-xs"
+                  >
+                    <Plus size={13} />
+                    <span>{batchBusy ? "Inserting…" : `Insert ${selectedIds.size} Question${selectedIds.size > 1 ? "s" : ""}`}</span>
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
               <button type="button" className="btn" onClick={onClose}>

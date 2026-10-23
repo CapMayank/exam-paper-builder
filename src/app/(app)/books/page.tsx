@@ -22,6 +22,7 @@ export default function BooksPage() {
   const { currentSession, setSession, availableSessions: hookSessions } = useAcademicSession();
   const [books, setBooks] = useState<Book[]>([]);
   const [classes, setClasses] = useState<AcademicClassDto[]>([]);
+  const [currentUser, setCurrentUser] = useState<{ id: string; role?: string } | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedSubjectKey, setSelectedSubjectKey] = useState<string | null>(null);
@@ -74,10 +75,15 @@ export default function BooksPage() {
 
   const load = useCallback(
     () =>
-      Promise.all([api<Book[]>("/api/books"), api<AcademicClassDto[]>("/api/classes")]).then(
-        ([data, clsData]) => {
+      Promise.all([
+        api<Book[]>("/api/books"),
+        api<AcademicClassDto[]>("/api/classes"),
+        api<{ id: string; role?: string }>("/api/me").catch(() => null),
+      ]).then(
+        ([data, clsData, me]) => {
           setBooks(data);
           setClasses(clsData);
+          setCurrentUser(me);
           setSelectedId((cur) => (cur && data.some((b) => b.id === cur) ? cur : null));
           setLoaded(true);
         },
@@ -299,6 +305,9 @@ export default function BooksPage() {
     return sub?.code || "";
   }, [classes, selected]);
 
+  const isAdmin = currentUser?.role === "ADMIN";
+  const canManageBooks = currentUser?.role === "ADMIN" || currentUser?.role === "HOD";
+
   async function run(fn: () => Promise<unknown>, success?: string) {
     setError(null);
     setBusy(true);
@@ -407,14 +416,16 @@ export default function BooksPage() {
         description="Add the textbooks you teach from and their chapters. Blueprints set marks per chapter against these."
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              className="btn btn-ghost border border-slate-200 bg-white text-slate-800 hover:bg-slate-50"
-              onClick={() => setRolloverModalOpen(true)}
-              title="Clone syllabus, classes, and blueprints into a new academic session"
-            >
-              <RotateCcw size={16} /> Rollover Session
-            </button>
+            {isAdmin && (
+              <button
+                type="button"
+                className="btn btn-ghost border border-slate-200 bg-white text-slate-800 hover:bg-slate-50"
+                onClick={() => setRolloverModalOpen(true)}
+                title="Clone syllabus, classes, and blueprints into a new academic session"
+              >
+                <RotateCcw size={16} /> Rollover Session
+              </button>
+            )}
             <button
               type="button"
               className="btn btn-ghost border border-purple-200 bg-purple-50/50 text-purple-800 hover:bg-purple-100 hover:border-purple-300"
@@ -676,15 +687,17 @@ export default function BooksPage() {
                                     >
                                       <Pencil size={11} />
                                     </button>
-                                    <button
-                                      type="button"
-                                      className="btn btn-ghost btn-icon btn-xs p-1 hover:bg-red-50 hover:text-red-700"
-                                      title="Delete textbook"
-                                      aria-label={`Delete ${b.title}`}
-                                      onClick={() => removeBook(b)}
-                                    >
-                                      <Trash2 size={11} />
-                                    </button>
+                                    {canManageBooks && (
+                                      <button
+                                        type="button"
+                                        className="btn btn-ghost btn-icon btn-xs p-1 hover:bg-red-50 hover:text-red-700"
+                                        title="Delete textbook"
+                                        aria-label={`Delete ${b.title}`}
+                                        onClick={() => removeBook(b)}
+                                      >
+                                        <Trash2 size={11} />
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
                               );
@@ -879,15 +892,17 @@ export default function BooksPage() {
                                   <button type="button" className="btn btn-ghost btn-icon btn-sm" title="Edit chapter" aria-label={`Edit chapter ${c.number}`} onClick={() => editChapter(c)}>
                                     <Pencil size={14} />
                                   </button>
-                                  <button
-                                    type="button"
-                                    className="btn btn-ghost btn-icon btn-sm hover:bg-red-50 hover:text-red-700"
-                                    title="Delete chapter"
-                                    aria-label={`Delete chapter ${c.number}`}
-                                    onClick={() => removeChapter(c)}
-                                  >
-                                    <Trash2 size={14} />
-                                  </button>
+                                  {canManageBooks && (
+                                    <button
+                                      type="button"
+                                      className="btn btn-ghost btn-icon btn-sm hover:bg-red-50 hover:text-red-700"
+                                      title="Delete chapter"
+                                      aria-label={`Delete chapter ${c.number}`}
+                                      onClick={() => removeChapter(c)}
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  )}
                                 </td>
                               </tr>
                             ))}

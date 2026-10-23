@@ -14,6 +14,7 @@ export const PATCH = route(async (req, { id }, user) => {
   const input = await body(req, paperUpdateSchema);
   const current = await loadPaperView(id);
   if (!current) throw new HttpError(404, "Paper not found");
+
   assertCanModifyPaper(user, current);
   if (input.status === "FINAL" && !current.progress.complete) {
     throw new HttpError(409, "The paper doesn't match its blueprint yet, so it can't be finalised.");
@@ -44,6 +45,15 @@ export const DELETE = route(async (_req, { id }, user) => {
   if (!paper) throw new HttpError(404, "Paper not found");
   assertCanModifyPaper(user, paper);
   await prisma.paper.delete({ where: { id } });
+
+  // Clean up any unreferenced shuffled variant questions created for this paper
+  await prisma.question.deleteMany({
+    where: {
+      subpartsJson: { contains: `"_paperId":"${id}"` },
+      paperQuestions: { none: {} },
+      orPaperQuestions: { none: {} },
+    },
+  });
 
   await recordAudit(user, "PAPER_UPDATE", "PAPER", id, {
     title: paper.title,

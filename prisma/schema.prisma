@@ -160,6 +160,8 @@ model Paper {
   marksStyle           String          @default("INLINE") // INLINE | RIGHT_COLUMN | SUPPRESSED
   showCandidateDetails Boolean         @default(true)
   showSignatures       Boolean         @default(true)
+  securityWatermark    Boolean         @default(false)
+  watermarkText        String          @default("")
   status               String          @default("DRAFT") // DRAFT | FINAL
   createdById          String
   createdAt            DateTime        @default(now())
@@ -177,6 +179,7 @@ model PaperQuestion {
   questionId   String
   orQuestionId String?
   position     Int
+  pageBreakBefore Boolean      @default(false)
   paper        Paper            @relation(fields: [paperId], references: [id], onDelete: Cascade)
   section      BlueprintSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   question     Question         @relation("PrimaryQuestion", fields: [questionId], references: [id], onDelete: Restrict)

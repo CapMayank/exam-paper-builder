@@ -1,4 +1,5 @@
 import { HttpError, route } from "@/lib/api";
+import { recordAudit } from "@/lib/audit";
 import { autoFillPaper } from "@/lib/autofill";
 import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
@@ -8,13 +9,30 @@ import { prisma } from "@/lib/prisma";
  * Automatically assembles remaining questions for a draft paper from the question bank,
  * strictly abiding by section question types and blueprint chapter weightage quotas.
  */
-export const POST = route(async (_req, { id }, user) => {
+export const POST = route(async (req, { id }, user) => {
   const paper = await loadPaperView(id);
   if (!paper) throw new HttpError(404, "Paper not found");
   assertCanModifyPaper(user, paper);
   if (paper.status === "FINAL") throw new HttpError(409, "This paper is finalised. Reopen it to make changes.");
 
-  if (paper.progress.complete) {
+  const raw = await req.clone().json().catch(() => ({}));
+  const targetSectionId = typeof raw.sectionId === "string" ? raw.sectionId : undefined;
+  const preferredDifficulty = typeof raw.difficulty === "string" ? raw.difficulty : undefined;
+
+  if (targetSectionId) {
+    const sec = paper.blueprint.sections.find((s) => s.id === targetSectionId);
+    const placed = paper.items.filter((i) => i.sectionId === targetSectionId).length;
+    if (sec && placed >= sec.count) {
+      return {
+        success: true,
+        addedCount: 0,
+        unfilled: [],
+        complete: paper.progress.complete,
+        message: `${sec.title} is already fully filled.`,
+        paper,
+      };
+    }
+  } else if (paper.progress.complete) {
     return {
       success: true,
       addedCount: 0,
@@ -31,6 +49,10 @@ export const POST = route(async (_req, { id }, user) => {
     select: { id: true, chapterId: true, type: true, difficulty: true },
   });
 
+  const orQuestionIds = paper.items
+    .map((i) => i.orQuestion?.id)
+    .filter((qid): qid is string => Boolean(qid));
+
   const result = autoFillPaper(
     {
       sections: paper.blueprint.sections,
@@ -42,7 +64,13 @@ export const POST = route(async (_req, { id }, user) => {
       questionId: i.question.id,
     })),
     bankQuestions,
+    orQuestionIds,
+    { targetSectionId, preferredDifficulty },
   );
+
+  const unfilledSummary = result.unfilled.length > 0
+    ? ` Unfilled: ${result.unfilled.map((u) => `${u.title} (${u.count} needed)`).join(", ")}.`
+    : "";
 
   if (result.added.length === 0) {
     return {
@@ -50,7 +78,7 @@ export const POST = route(async (_req, { id }, user) => {
       addedCount: 0,
       unfilled: result.unfilled,
       complete: false,
-      message: "No matching questions found in question bank for remaining blueprint quotas.",
+      message: `No matching questions found in question bank for remaining blueprint quotas.${unfilledSummary}`,
       paper,
     };
   }
@@ -82,16 +110,28 @@ export const POST = route(async (_req, { id }, user) => {
     });
   });
 
+  await recordAudit(user, "PAPER_UPDATE", "PAPER", id, {
+    action: "PAPER_AUTOFILL",
+    title: paper.title,
+    addedCount: result.added.length,
+    complete: result.complete,
+  });
+
   const updatedPaper = await loadPaperView(id);
+
+  const modeNote = result.exhaustedBudget || result.solverMode === "greedy"
+    ? " (Greedy mode used — manual review of chapter distribution recommended)."
+    : "";
 
   return {
     success: true,
     addedCount: result.added.length,
     unfilled: result.unfilled,
     complete: result.complete,
+    solverMode: result.solverMode,
     message: result.complete
-      ? `Successfully auto-filled ${result.added.length} questions. Paper is now complete!`
-      : `Auto-filled ${result.added.length} questions. Some slots could not be filled due to bank question limits.`,
+      ? `Successfully auto-filled ${result.added.length} questions. Paper is now complete!${modeNote}`
+      : `Auto-filled ${result.added.length} questions.${unfilledSummary}${modeNote}`,
     paper: updatedPaper,
   };
 });

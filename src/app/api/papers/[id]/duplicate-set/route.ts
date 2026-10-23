@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { body, HttpError, route } from "@/lib/api";
+import { recordAudit } from "@/lib/audit";
 import { permuteMcqOptions, shuffle } from "@/lib/multiset";
 import { loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
@@ -95,6 +96,7 @@ export const POST = route(async (req, params, user) => {
               imagePath: it.question.imagePath,
               spaceMm: it.question.spaceMm,
               showGrid: it.question.showGrid,
+              subpartsJson: it.question.subpartsJson ?? "[]",
               createdById: user.id,
             },
           });
@@ -122,6 +124,7 @@ export const POST = route(async (req, params, user) => {
               imagePath: it.orQuestion.imagePath,
               spaceMm: it.orQuestion.spaceMm,
               showGrid: it.orQuestion.showGrid,
+              subpartsJson: it.orQuestion.subpartsJson ?? "[]",
               createdById: user.id,
             },
           });
@@ -142,6 +145,14 @@ export const POST = route(async (req, params, user) => {
       });
     }
   }
+
+  await recordAudit(user, "PAPER_CREATE", "PAPER", newPaper.id, {
+    action: "PAPER_DUPLICATE_SET",
+    sourcePaperId: source.id,
+    targetSet: formattedSet,
+    title: newTitle,
+    itemsCount: source.items.length,
+  });
 
   const result = await loadPaperView(newPaper.id);
   return {

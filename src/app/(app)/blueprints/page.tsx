@@ -41,6 +41,7 @@ import { normalizeSession, useAcademicSession } from "@/lib/academicSession";
 import { blueprintTotalMarks } from "@/lib/blueprint";
 import { api } from "@/lib/client";
 import {
+  ACADEMIC_SESSIONS,
   DEFAULT_SCHOOL_NAME,
   EXAM_TYPES,
   EXAM_TYPE_LABEL,
@@ -71,6 +72,7 @@ export default function BlueprintsPage() {
 
   const [items, setItems] = useState<Blueprint[]>([]);
   const [classes, setClasses] = useState<AcademicClassDto[]>([]);
+  const [currentUser, setCurrentUser] = useState<{ id: string; role?: string } | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -93,6 +95,8 @@ export default function BlueprintsPage() {
     layout: "BOOKLET_A4" as Layout,
     paperSet: "SET A",
     examDate: "",
+    schoolName: DEFAULT_SCHOOL_NAME,
+    academicSession: "2025–26",
   });
   const [buildingPaper, setBuildingPaper] = useState(false);
 
@@ -110,12 +114,14 @@ export default function BlueprintsPage() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [bpData, clsData] = await Promise.all([
+      const [bpData, clsData, me] = await Promise.all([
         api<Blueprint[]>("/api/blueprints"),
         api<AcademicClassDto[]>(`/api/classes?session=${encodeURIComponent(activeSession)}`),
+        api<{ id: string; role?: string }>("/api/me").catch(() => null),
       ]);
       setItems(bpData);
       setClasses(clsData);
+      setCurrentUser(me);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -191,6 +197,9 @@ export default function BlueprintsPage() {
   const selectedTotalMarks = selected ? blueprintTotalMarks(selected.sections) : 0;
   const selectedTotalQuestions = selected ? selected.sections.reduce((sum, s) => sum + s.count, 0) : 0;
 
+  const isAdmin = currentUser?.role === "ADMIN";
+  const canManageBlueprint = currentUser?.role === "ADMIN" || currentUser?.role === "HOD";
+
   async function remove(b: Blueprint) {
     const ok = await confirm({
       title: `Delete “${b.name}”?`,
@@ -252,6 +261,8 @@ export default function BlueprintsPage() {
       layout: "BOOKLET_A4",
       paperSet: "SET A",
       examDate: "",
+      schoolName: DEFAULT_SCHOOL_NAME,
+      academicSession: bp.academicSession || activeSession,
     });
   }
 
@@ -270,11 +281,11 @@ export default function BlueprintsPage() {
           blueprintId: buildPaperBp.id,
           examType: paperForm.examType,
           layout: paperForm.layout,
-          schoolName: DEFAULT_SCHOOL_NAME,
+          schoolName: paperForm.schoolName.trim() || DEFAULT_SCHOOL_NAME,
           examDate: paperForm.examDate,
           paperSet: paperForm.paperSet,
           subjectCode: buildPaperBp.subjectCode || "",
-          academicSession: activeSession,
+          academicSession: paperForm.academicSession || activeSession,
         },
       });
       setBuildPaperBp(null);
@@ -300,14 +311,16 @@ export default function BlueprintsPage() {
             >
               <Sparkles size={15} className="text-indigo-600" /> AI Blueprint Creator
             </Link>
-            <button
-              type="button"
-              onClick={() => setRolloverOpen(true)}
-              className="btn btn-ghost border border-slate-200 bg-white text-slate-800 hover:bg-slate-50 text-xs py-1.5"
-              title="Carry forward blueprints, classes & syllabus into a new session"
-            >
-              <RotateCcw size={15} className="text-slate-600" /> Rollover Session
-            </button>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => setRolloverOpen(true)}
+                className="btn btn-ghost border border-slate-200 bg-white text-slate-800 hover:bg-slate-50 text-xs py-1.5"
+                title="Carry forward blueprints, classes & syllabus into a new session"
+              >
+                <RotateCcw size={15} className="text-slate-600" /> Rollover Session
+              </button>
+            )}
             <Link
               href="/blueprints/new?import=true"
               className="btn btn-ghost border border-slate-200 bg-white text-slate-800 hover:bg-slate-50 text-xs py-1.5"
@@ -593,15 +606,17 @@ export default function BlueprintsPage() {
                         >
                           <Pencil size={12} />
                         </Link>
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-icon btn-xs p-1 hover:bg-red-50 hover:text-red-700"
-                          title="Delete blueprint"
-                          aria-label={`Delete ${bp.name}`}
-                          onClick={() => remove(bp)}
-                        >
-                          <Trash2 size={12} />
-                        </button>
+                        {canManageBlueprint && (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-icon btn-xs p-1 hover:bg-red-50 hover:text-red-700"
+                            title="Delete blueprint"
+                            aria-label={`Delete ${bp.name}`}
+                            onClick={() => remove(bp)}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        )}
                       </div>
                     </div>
                   </li>
@@ -657,9 +672,9 @@ export default function BlueprintsPage() {
                     <Link
                       href={`/blueprints/${selected.id}`}
                       className="btn btn-ghost border border-slate-200 text-xs py-1.5 px-2.5 inline-flex items-center gap-1"
-                      title="Edit blueprint configuration"
+                      title={canManageBlueprint ? "Edit blueprint configuration" : "View blueprint specification"}
                     >
-                      <Pencil size={13} /> Edit
+                      <Pencil size={13} /> {canManageBlueprint ? "Edit" : "View"}
                     </Link>
                     <button
                       type="button"
@@ -677,14 +692,16 @@ export default function BlueprintsPage() {
                     >
                       <Copy size={13} /> Duplicate
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => remove(selected)}
-                      className="btn btn-ghost border border-slate-200 text-red-600 hover:bg-red-50 text-xs py-1.5 px-2.5 inline-flex items-center gap-1"
-                      title="Delete blueprint"
-                    >
-                      <Trash2 size={13} /> Delete
-                    </button>
+                    {canManageBlueprint && (
+                      <button
+                        type="button"
+                        onClick={() => remove(selected)}
+                        className="btn btn-ghost border border-slate-200 text-red-600 hover:bg-red-50 text-xs py-1.5 px-2.5 inline-flex items-center gap-1"
+                        title="Delete blueprint"
+                      >
+                        <Trash2 size={13} /> Delete
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -904,6 +921,32 @@ export default function BlueprintsPage() {
                   value={paperForm.examDate}
                   onChange={(e) => setPaperForm({ ...paperForm, examDate: e.target.value })}
                 />
+              </Field>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="School Name">
+                <input
+                  className="input text-xs"
+                  required
+                  value={paperForm.schoolName}
+                  onChange={(e) => setPaperForm({ ...paperForm, schoolName: e.target.value })}
+                  placeholder={DEFAULT_SCHOOL_NAME}
+                />
+              </Field>
+
+              <Field label="Academic Session">
+                <select
+                  className="input text-xs"
+                  value={paperForm.academicSession}
+                  onChange={(e) => setPaperForm({ ...paperForm, academicSession: e.target.value })}
+                >
+                  {ACADEMIC_SESSIONS.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
               </Field>
             </div>
 

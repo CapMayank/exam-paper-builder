@@ -1,6 +1,6 @@
 "use client";
 
-import { KeyRound, Printer, Trash2 } from "lucide-react";
+import { Copy, KeyRound, Printer, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { EXAM_TYPE_LABEL, resolvePaperExamType, type ExamType } from "@/lib/constants";
 import { plural, timeAgo } from "@/lib/format";
@@ -31,20 +31,39 @@ export function Progress({ filled, needed }: { filled: number; needed: number })
 export function PaperRow({
   p,
   onDelete,
+  onDuplicate,
   currentUser,
+  selected,
+  onToggleSelect,
 }: {
   p: PaperListItem;
   onDelete?: (p: PaperListItem) => void;
+  onDuplicate?: (p: PaperListItem) => void;
   currentUser?: { id: string; role?: string } | null;
+  selected?: boolean;
+  onToggleSelect?: (p: PaperListItem) => void;
 }) {
   const ready = p.needed > 0 && p.filled >= p.needed;
   const examType = resolvePaperExamType(p);
   const isOwner = currentUser?.id && p.createdById ? p.createdById === currentUser.id : false;
   const isAdmin = currentUser?.role === "ADMIN";
   const isHod = currentUser?.role === "HOD";
-  const canDelete = currentUser ? (isAdmin || isHod || (isOwner && p.status !== "FINAL")) : (p.status !== "FINAL");
+  const canDelete = currentUser ? (isAdmin || ((isHod || isOwner) && p.status !== "FINAL")) : (p.status !== "FINAL");
   return (
-    <li className="group grid gap-x-4 gap-y-2 px-4 py-3.5 transition-colors hover:bg-slate-50 sm:grid-cols-[minmax(0,1fr)_11rem_auto] sm:items-center">
+    <li className={`group grid gap-x-4 gap-y-2 px-4 py-3.5 transition-colors hover:bg-slate-50 sm:items-center ${
+      onToggleSelect ? "sm:grid-cols-[auto_minmax(0,1fr)_11rem_auto]" : "sm:grid-cols-[minmax(0,1fr)_11rem_auto]"
+    } ${selected ? "bg-indigo-50/50" : ""}`}>
+      {onToggleSelect && (
+        <div className="flex items-center">
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+            checked={Boolean(selected)}
+            onChange={() => onToggleSelect(p)}
+            aria-label={`Select ${p.title}`}
+          />
+        </div>
+      )}
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <Link href={`/papers/${p.id}`} className="truncate font-semibold text-slate-900 hover:text-indigo-700">
@@ -80,6 +99,17 @@ export function PaperRow({
         <Link href={`/papers/${p.id}/solutions`} target="_blank" className="btn btn-sm btn-ghost btn-icon" title="Marking scheme" aria-label={`Marking scheme for ${p.title}`}>
           <KeyRound size={15} />
         </Link>
+        {onDuplicate && (
+          <button
+            type="button"
+            className="btn btn-sm btn-ghost btn-icon text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+            title="Duplicate paper as draft"
+            aria-label={`Duplicate ${p.title}`}
+            onClick={() => onDuplicate(p)}
+          >
+            <Copy size={15} />
+          </button>
+        )}
         {onDelete && canDelete && (
           <button
             type="button"

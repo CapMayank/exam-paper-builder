@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { body, HttpError, route } from "@/lib/api";
+import { recordAudit } from "@/lib/audit";
 import {
   formatSetIdentifier,
   permuteMcqOptions,
@@ -159,7 +160,11 @@ export const POST = route(async (req, params, user) => {
                   imagePath: q.imagePath,
                   spaceMm: q.spaceMm,
                   showGrid: q.showGrid,
-                  subpartsJson: q.subpartsJson ?? "[]",
+                  subpartsJson: JSON.stringify({
+                    _forkedFrom: q.id,
+                    _paperSet: formattedSet,
+                    _paperId: createdPaper.id,
+                  }),
                   createdById: user.id,
                 },
               });
@@ -188,7 +193,11 @@ export const POST = route(async (req, params, user) => {
                     imagePath: orQ.imagePath,
                     spaceMm: orQ.spaceMm,
                     showGrid: orQ.showGrid,
-                    subpartsJson: orQ.subpartsJson ?? "[]",
+                    subpartsJson: JSON.stringify({
+                      _forkedFrom: orQ.id,
+                      _paperSet: formattedSet,
+                      _paperId: createdPaper.id,
+                    }),
                     createdById: user.id,
                   },
                 });
@@ -219,6 +228,17 @@ export const POST = route(async (req, params, user) => {
   for (const paperId of createdPaperIds) {
     const view = await loadPaperView(paperId);
     if (view) createdViews.push(view);
+  }
+
+  for (const p of summaryList) {
+    await recordAudit(user, "PAPER_CREATE", "PAPER", p.id, {
+      action: "PARALLEL_SET_GENERATED",
+      parentPaperId: source.id,
+      setCode: p.setCode,
+      title: p.title,
+      commonCount: p.commonCount,
+      variantCount: p.variantCount,
+    });
   }
 
   return {

@@ -4,6 +4,7 @@ import { recordAudit } from "@/lib/audit";
 import { toQuestionDto } from "@/lib/dto";
 import { prisma } from "@/lib/prisma";
 import { questionSchema } from "@/lib/schemas";
+import { subpartsTotalMarks } from "@/lib/types";
 
 const include = {
   chapter: true,
@@ -48,11 +49,21 @@ export const GET = route(async (req) => {
   const where: Prisma.QuestionWhereInput = {};
   const bookId = sp.get("bookId");
   const chapterId = sp.get("chapterId");
+  const className = sp.get("className")?.trim();
+  const subject = sp.get("subject")?.trim();
   const type = sp.get("type");
   const difficulty = sp.get("difficulty");
   const q = sp.get("q")?.trim();
   const excludePaperId = sp.get("excludePaperId");
-  if (bookId) where.bookId = bookId;
+
+  if (bookId) {
+    where.bookId = bookId;
+  } else if (className || subject) {
+    where.book = {
+      ...(className && className !== "ALL" ? { className } : {}),
+      ...(subject && subject !== "ALL" ? { subject } : {}),
+    };
+  }
   if (chapterId) where.chapterId = chapterId;
   if (type) where.type = type;
   if (difficulty) where.difficulty = difficulty;
@@ -69,13 +80,50 @@ export const GET = route(async (req) => {
     }
   }
 
+  // Filter out internal shuffled variant clones from bank browsing by default
+  if (sp.get("includeVariants") !== "true") {
+    const notForked: Prisma.QuestionWhereInput = {
+      NOT: { subpartsJson: { contains: "_forkedFrom" } },
+    };
+    if (where.AND) {
+      where.AND = Array.isArray(where.AND) ? [...where.AND, notForked] : [where.AND, notForked];
+    } else {
+      where.AND = [notForked];
+    }
+  }
+
+  const takeParam = sp.get("take");
+  const take = takeParam ? Math.min(1000, Math.max(1, parseInt(takeParam, 10))) : 500;
+  const skipParam = sp.get("skip");
+  const skip = skipParam ? Math.max(0, parseInt(skipParam, 10)) : undefined;
+
   const rows = await prisma.question.findMany({
     where,
     include,
     orderBy: { createdAt: "desc" },
-    take: 300,
+    take,
+    skip,
   });
-  return rows.map(toQuestionDto);
+
+  let dtos = rows.map(toQuestionDto);
+  const marksParam = sp.get("marks");
+  if (marksParam && !isNaN(Number(marksParam))) {
+    const targetMarks = Number(marksParam);
+    dtos = dtos.filter((q) => {
+      if (q.subparts && q.subparts.length > 0) {
+        return subpartsTotalMarks(q.subparts) === targetMarks;
+      }
+      if (targetMarks === 1) return ["MCQ", "VSA", "TRUE_FALSE", "FILL_BLANKS", "ASSERTION_REASON"].includes(q.type);
+      if (targetMarks === 2) return ["SA", "SHORT", "DRAW"].includes(q.type);
+      if (targetMarks === 3) return ["SA", "SHORT"].includes(q.type);
+      if (targetMarks === 4) return ["CASE_STUDY", "PASSAGE"].includes(q.type);
+      if (targetMarks === 5) return ["LA", "LONG"].includes(q.type);
+      if (targetMarks === 6) return ["LA", "LONG"].includes(q.type);
+      return true;
+    });
+  }
+
+  return dtos;
 });
 
 export const POST = route(async (req, _params, user) => {

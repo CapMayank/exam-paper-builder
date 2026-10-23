@@ -28,18 +28,51 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
   const [paper, setPaper] = useState<PaperData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<"reading" | "sheets">("sheets");
-  const [zoom, setZoom] = useState<number | null>(null);
+  const [zoom, setZoom] = useState<number | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const val = localStorage.getItem("epb:printPreviewZoom");
+        if (val) return parseFloat(val);
+      } catch {}
+    }
+    return null;
+  });
   const [info, setInfo] = useState<SheetsInfo | null>(null);
   const [compact, setCompact] = useState(true);
   const [includeRoughWork, setIncludeRoughWork] = useState(false);
   const [showSignatures, setShowSignatures] = useState<boolean>(false);
   const [showGuide, setShowGuide] = useState(false);
 
+  const handleSetZoom = (z: number | null) => {
+    setZoom(z);
+    try {
+      if (z === null) localStorage.removeItem("epb:printPreviewZoom");
+      else localStorage.setItem("epb:printPreviewZoom", String(z));
+    } catch {}
+  };
+
   useEffect(() => {
-    api<PaperData>(`/api/papers/${id}`).then(setPaper, (e) => setError(e.message));
+    api<PaperData>(`/api/papers/${id}`).then(
+      (p) => {
+        setPaper(p);
+        setShowSignatures(Boolean(p.showSignatures));
+      },
+      (e) => setError(e.message),
+    );
   }, [id]);
 
-  const onInfo = useCallback((i: SheetsInfo) => setInfo(i), []);
+  const onInfo = useCallback(
+    (i: SheetsInfo) => {
+      setInfo(i);
+      if (paper && i.pages > 0 && paper.targetPages !== i.pages) {
+        api(`/api/papers/${paper.id}`, {
+          method: "PATCH",
+          json: { targetPages: i.pages },
+        }).catch(() => undefined);
+      }
+    },
+    [paper],
+  );
 
   if (error) return <p className="p-8 text-red-700">{error}</p>;
   if (!paper) {
@@ -95,7 +128,7 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
                 <button
                   onClick={() => {
                     setView("sheets");
-                    setZoom(null);
+                    handleSetZoom(null);
                   }}
                   className={`rounded-md px-2.5 py-1 transition ${
                     view === "sheets"
@@ -113,7 +146,7 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
                 <button
                   onClick={() => {
                     setView("reading");
-                    setZoom(null);
+                    handleSetZoom(null);
                   }}
                   className={`rounded-md px-2.5 py-1 transition ${
                     view === "reading"
@@ -186,7 +219,7 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
             {/* Quick Zoom Presets */}
             <div className="hidden lg:flex items-center gap-1 border-l border-slate-200 pl-2">
               <button
-                onClick={() => setZoom(0.5)}
+                onClick={() => handleSetZoom(0.5)}
                 className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${
                   effectiveZoom === 0.5 ? "bg-slate-200 font-bold" : "text-slate-500 hover:bg-slate-100"
                 }`}
@@ -194,7 +227,7 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
                 50%
               </button>
               <button
-                onClick={() => setZoom(0.75)}
+                onClick={() => handleSetZoom(0.75)}
                 className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${
                   effectiveZoom === 0.75 ? "bg-slate-200 font-bold" : "text-slate-500 hover:bg-slate-100"
                 }`}
@@ -202,7 +235,7 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
                 75%
               </button>
               <button
-                onClick={() => setZoom(1.0)}
+                onClick={() => handleSetZoom(1.0)}
                 className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${
                   effectiveZoom === 1.0 ? "bg-slate-200 font-bold" : "text-slate-500 hover:bg-slate-100"
                 }`}

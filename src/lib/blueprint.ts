@@ -1,7 +1,7 @@
 // Pure blueprint rules. Used by the API (to reject) and the UI (to explain). No I/O here.
 
 export type SectionDef = { id: string; title: string; type: string; count: number; marksEach: number };
-export type ChapterQuota = { chapterId: string; marks: number };
+export type ChapterQuota = { chapterId: string; marks: number; title?: string; number?: number | null };
 export type BlueprintDef = { sections: SectionDef[]; chapters: ChapterQuota[] };
 export type PlacedItem = {
   sectionId: string;
@@ -167,9 +167,15 @@ export function checkBlueprintFeasibility(bp: {
 
   const minDenom = denominations[0];
   for (const c of bp.chapters) {
+    const chapterLabel = c.title
+      ? `Chapter "${c.title}"`
+      : c.number != null
+      ? `Chapter ${c.number}`
+      : "A chapter";
+
     if (c.marks > 0 && c.marks < minDenom) {
       warnings.push(
-        `A chapter is assigned ${c.marks} mark(s), but the smallest section question is ${minDenom} marks.`
+        `${chapterLabel} is assigned ${c.marks} mark(s), but the smallest section question is ${minDenom} marks.`
       );
     }
   }
@@ -177,6 +183,12 @@ export function checkBlueprintFeasibility(bp: {
   // Coin-change reachability check: can c.marks be formed using denominations?
   for (const c of bp.chapters) {
     if (c.marks <= 0) continue;
+    const chapterLabel = c.title
+      ? `Chapter "${c.title}"`
+      : c.number != null
+      ? `Chapter ${c.number}`
+      : "Chapter";
+
     const reachable = new Uint8Array(c.marks + 1);
     reachable[0] = 1;
     for (let i = 0; i <= c.marks; i++) {
@@ -187,7 +199,7 @@ export function checkBlueprintFeasibility(bp: {
     }
     if (!reachable[c.marks]) {
       warnings.push(
-        `Chapter quota (${c.marks}m) cannot be formed by any combination of section question denominations (${denominations.join("m, ")}m).`
+        `${chapterLabel} quota (${c.marks}m) cannot be formed by any combination of section question denominations (${denominations.join("m, ")}m).`
       );
     }
   }
@@ -256,7 +268,7 @@ export function paperStatus(bp: BlueprintDef, items: PlacedItem[]): PaperStatus 
 export function whyCannotAdd(
   bp: BlueprintDef,
   items: PlacedItem[],
-  candidate: { sectionId: string; chapterId: string; type: string },
+  candidate: { sectionId: string; chapterId: string; type: string; marks?: number; subpartsCount?: number },
 ): string | null {
   const section = bp.sections.find((s) => s.id === candidate.sectionId);
   if (!section) return "That section is not part of this paper's blueprint.";
@@ -264,9 +276,20 @@ export function whyCannotAdd(
   const status = paperStatus(bp, items);
   const sec = status.sections.find((s) => s.id === section.id)!;
   if (sec.filled >= sec.needed) return `${section.title} is already full (${sec.needed} questions).`;
+  const candidateUnits = candidate.subpartsCount && candidate.subpartsCount > 1 && section.count >= candidate.subpartsCount
+    ? candidate.subpartsCount
+    : 1;
+  if (sec.filled + candidateUnits > sec.needed) {
+    return `${section.title} does not have enough slots available (${sec.filled}/${sec.needed} filled).`;
+  }
   const chapter = status.chapters.find((c) => c.chapterId === candidate.chapterId);
   if (!chapter) return "This question's chapter is not in the blueprint.";
-  if (chapter.used + section.marksEach > chapter.target) {
+  const candidateMarks = candidate.marks && candidate.marks > 0
+    ? candidate.marks
+    : (candidate.subpartsCount && candidate.subpartsCount > 1
+        ? candidate.subpartsCount * section.marksEach
+        : section.marksEach);
+  if (chapter.used + candidateMarks > chapter.target) {
     return `The blueprint allows only ${chapter.target} marks from this chapter; ${chapter.used} are already used.`;
   }
   return null;
@@ -316,7 +339,7 @@ export function diagnosePaperImplications(
   for (const s of bp.sections) {
     const placed = items.filter((i) => i.sectionId === s.id);
     const filledUnits = placed.reduce((sum, i) => {
-      if (i.subpartsCount && i.subpartsCount > 1 && s.count >= i.subpartsCount) {
+      if (i.subpartsCount && i.subpartsCount > 1) {
         return sum + i.subpartsCount;
       }
       return sum + 1;

@@ -26,6 +26,7 @@ export type QuestionDto = {
   chapter?: { id: string; number: number; title: string };
   timesUsed?: number;
   subparts: SubPart[];
+  subpartsJson?: string;
   usages?: QuestionUsageTag[];
 };
 
@@ -193,6 +194,7 @@ export function toQuestionDto(
       ? usages.length
       : undefined,
     subparts,
+    subpartsJson: q.subpartsJson ?? undefined,
     usages,
   };
 }

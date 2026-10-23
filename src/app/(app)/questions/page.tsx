@@ -23,7 +23,7 @@ import { QuestionForm } from "@/components/QuestionForm";
 import { QuestionUsagePills } from "@/components/QuestionUsageHistory";
 import { QuestionView } from "@/components/QuestionView";
 import { AIQuestionGeneratorModal } from "@/components/AIQuestionGeneratorModal";
-import { ErrorBanner, Field, Modal } from "@/components/ui";
+import { ErrorBanner, Field, Modal, useConfirm, useToast } from "@/components/ui";
 import type { BatchImportReport } from "@/lib/batchQuestionIo";
 import { parseBulkQuestions } from "@/lib/bulkImport";
 import { api } from "@/lib/client";
@@ -93,14 +93,19 @@ Space: 50
 Diff: HARD`;
 
 export default function QuestionsPage() {
+  const confirm = useConfirm();
+  const toast = useToast();
   const [books, setBooks] = useState<Book[]>([]);
   const [questions, setQuestions] = useState<QuestionDto[]>([]);
   const [currentUser, setCurrentUser] = useState<{ id: string; name: string; email: string; role: string } | null>(null);
   const [classFilter, setClassFilter] = useState<string>("");
   const [subjectFilter, setSubjectFilter] = useState<string>("");
-  const [filters, setFilters] = useState({ bookId: "", chapterId: "", type: "", difficulty: "", q: "", freshness: "ALL" });
+  const [filters, setFilters] = useState({ bookId: "", chapterId: "", type: "", difficulty: "", marks: "", q: "", freshness: "ALL" });
   const [editing, setEditing] = useState<QuestionDto | "new" | null>(null);
   const [showAnswers, setShowAnswers] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
 
@@ -176,6 +181,8 @@ export default function QuestionsPage() {
 
   const load = useCallback(async () => {
     const sp = new URLSearchParams();
+    if (classFilter && classFilter !== "ALL") sp.set("className", classFilter);
+    if (subjectFilter && subjectFilter !== "ALL") sp.set("subject", subjectFilter);
     Object.entries(filters).forEach(([k, v]) => {
       if (k === "freshness") return;
       if (v) sp.set(k, v);
@@ -185,7 +192,7 @@ export default function QuestionsPage() {
     } catch (e) {
       setError((e as Error).message);
     }
-  }, [filters]);
+  }, [filters, classFilter, subjectFilter]);
 
   useEffect(() => {
     const t = setTimeout(() => void load(), 200); // debounce search box
@@ -215,17 +222,57 @@ export default function QuestionsPage() {
   async function remove(q: QuestionDto) {
     const isOwner = Boolean(currentUser?.id && q.createdById && q.createdById === currentUser.id);
     const isAdmin = currentUser?.role === "ADMIN";
-    if (!isAdmin && !isOwner) {
-      setError("You do not have permission to delete questions authored by other faculty members.");
+    const isHod = currentUser?.role === "HOD";
+    if (!isAdmin && !isHod && !isOwner) {
+      setError("You do not have permission to delete questions authored by other faculty members (Administrator or HOD access required).");
       return;
     }
-    if (!confirm("Delete this question from the bank?")) return;
+    const ok = await confirm({
+      title: "Delete question from bank?",
+      message: "Are you sure you want to delete this question? Any draft papers currently using this question may lose it. This cannot be undone.",
+      confirmLabel: "Delete Question",
+      tone: "danger",
+    });
+    if (!ok) return;
     setError(null);
     try {
       await api(`/api/questions/${q.id}`, { method: "DELETE" });
+      toast.success("Question deleted from bank.");
       await load();
     } catch (e) {
       setError((e as Error).message);
+    }
+  }
+
+  async function handleBulkDelete() {
+    const selectedList = displayedQuestions.filter((q) => selectedIds.has(q.id));
+    if (selectedList.length === 0) return;
+
+    const ok = await confirm({
+      title: `Delete ${selectedList.length} question${selectedList.length > 1 ? "s" : ""} from bank?`,
+      message: `This will permanently delete ${selectedList.length} selected question(s) from the bank. This action cannot be undone.`,
+      confirmLabel: "Delete Selected",
+      tone: "danger",
+    });
+    if (!ok) return;
+
+    setBulkDeleting(true);
+    setError(null);
+    try {
+      let count = 0;
+      for (const q of selectedList) {
+        try {
+          await api(`/api/questions/${q.id}`, { method: "DELETE" });
+          count++;
+        } catch {}
+      }
+      toast.success(`Deleted ${count} question${count > 1 ? "s" : ""}.`);
+      setSelectedIds(new Set());
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBulkDeleting(false);
     }
   }
 
@@ -350,17 +397,32 @@ export default function QuestionsPage() {
           >
             All Types
           </button>
-          {QUESTION_TYPES.map((t) => (
+          {QUESTION_TYPES.filter((t) => !isKindergartenType(t)).map((t) => (
             <button
               key={t}
               onClick={() => set("type", t)}
-              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+              className={`rounded-md px-2.5 py-1.5 text-xs font-semibold transition ${
                 filters.type === t
                   ? "bg-indigo-600 text-white shadow-xs"
                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
               }`}
             >
               {QUESTION_TYPE_LABEL[t]}
+            </button>
+          ))}
+          <span className="hidden sm:inline-block h-4 w-px bg-slate-200 mx-1" />
+          {QUESTION_TYPES.filter((t) => isKindergartenType(t)).map((t) => (
+            <button
+              key={t}
+              onClick={() => set("type", t)}
+              className={`rounded-md px-2 py-1.5 text-xs font-semibold transition ${
+                filters.type === t
+                  ? "bg-amber-600 text-white shadow-xs"
+                  : "text-amber-800 bg-amber-50 hover:bg-amber-100"
+              }`}
+              title="Pre-Primary / Kindergarten Type"
+            >
+              🎨 {QUESTION_TYPE_LABEL[t]}
             </button>
           ))}
         </div>
@@ -462,6 +524,21 @@ export default function QuestionsPage() {
 
         <select
           className="input text-xs"
+          value={filters.marks}
+          onChange={(e) => set("marks", e.target.value)}
+          aria-label="Marks Filter"
+        >
+          <option value="">Any marks</option>
+          <option value="1">1 Mark</option>
+          <option value="2">2 Marks</option>
+          <option value="3">3 Marks</option>
+          <option value="4">4 Marks</option>
+          <option value="5">5 Marks</option>
+          <option value="6">6 Marks</option>
+        </select>
+
+        <select
+          className="input text-xs"
           value={filters.freshness}
           onChange={(e) => set("freshness", e.target.value)}
           aria-label="Freshness Filter"
@@ -505,6 +582,29 @@ export default function QuestionsPage() {
       </div>
 
       {/* Question Cards List */}
+      {displayedQuestions.length > 0 && (
+        <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+              checked={selectedIds.size > 0 && selectedIds.size === displayedQuestions.length}
+              onChange={() => {
+                if (selectedIds.size === displayedQuestions.length && displayedQuestions.length > 0) {
+                  setSelectedIds(new Set());
+                } else {
+                  setSelectedIds(new Set(displayedQuestions.map((q) => q.id)));
+                }
+              }}
+            />
+            <span>Select all {displayedQuestions.length} questions</span>
+          </label>
+          {selectedIds.size > 0 && (
+            <span className="text-indigo-700 font-bold">{selectedIds.size} selected</span>
+          )}
+        </div>
+      )}
+
       <ul className="space-y-3">
         {displayedQuestions.map((q) => {
           const diffBadgeClass =
@@ -517,10 +617,28 @@ export default function QuestionsPage() {
           return (
             <li
               key={q.id}
-              className="card p-4 transition-all hover:border-slate-300 hover:shadow-xs border-slate-200/90"
+              className={`card p-4 transition-all hover:border-slate-300 hover:shadow-xs border-slate-200/90 ${
+                selectedIds.has(q.id) ? "bg-indigo-50/40 border-indigo-200" : ""
+              }`}
             >
-              <div className="paper-font text-sm leading-relaxed">
-                <QuestionView q={q} showAnswer={showAnswers} />
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 mt-1 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer shrink-0"
+                  checked={selectedIds.has(q.id)}
+                  onChange={() => {
+                    setSelectedIds((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(q.id)) next.delete(q.id);
+                      else next.add(q.id);
+                      return next;
+                    });
+                  }}
+                  aria-label={`Select question ${q.id}`}
+                />
+                <div className="flex-1 min-w-0 paper-font text-sm leading-relaxed">
+                  <QuestionView q={q} showAnswer={showAnswers || expandedIds.has(q.id)} />
+                </div>
               </div>
 
               <div className="mt-3.5 flex flex-wrap items-center justify-between gap-2.5 border-t border-slate-100 pt-2.5 text-xs text-slate-500">
@@ -553,31 +671,53 @@ export default function QuestionsPage() {
                   )}
                 </div>
 
-                {(() => {
-                  const isOwner = Boolean(currentUser?.id && q.createdById && q.createdById === currentUser.id);
-                  const isAdmin = currentUser?.role === "ADMIN";
-                  const isHod = currentUser?.role === "HOD";
-                  const canEditOrDelete = isAdmin || isHod || isOwner;
-                  if (!canEditOrDelete) return null;
-                  return (
-                    <div className="flex items-center gap-1.5 ml-auto">
-                      <button
-                        className="btn btn-sm text-slate-700 hover:text-slate-900"
-                        title="Edit question text, type, or answers"
-                        onClick={() => setEditing(q)}
-                      >
-                        <Pencil size={12} /> Edit
-                      </button>
-                      <button
-                        className="btn btn-sm btn-danger"
-                        title="Delete question from bank"
-                        onClick={() => remove(q)}
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                  );
-                })()}
+                <div className="flex items-center gap-1.5 ml-auto">
+                  <button
+                    className={`btn btn-sm ${
+                      expandedIds.has(q.id)
+                        ? "bg-slate-200 text-slate-800"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                    title={expandedIds.has(q.id) ? "Collapse preview" : "Expand preview (details & answer)"}
+                    onClick={() => {
+                      setExpandedIds((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(q.id)) next.delete(q.id);
+                        else next.add(q.id);
+                        return next;
+                      });
+                    }}
+                  >
+                    {expandedIds.has(q.id) ? <EyeOff size={12} /> : <Eye size={12} />}
+                    <span>{expandedIds.has(q.id) ? "Collapse" : "Preview"}</span>
+                  </button>
+
+                  {(() => {
+                    const isOwner = Boolean(currentUser?.id && q.createdById && q.createdById === currentUser.id);
+                    const isAdmin = currentUser?.role === "ADMIN";
+                    const isHod = currentUser?.role === "HOD";
+                    const canEditOrDelete = isAdmin || isHod || isOwner;
+                    if (!canEditOrDelete) return null;
+                    return (
+                      <>
+                        <button
+                          className="btn btn-sm text-slate-700 hover:text-slate-900"
+                          title="Edit question text, type, or answers"
+                          onClick={() => setEditing(q)}
+                        >
+                          <Pencil size={12} /> Edit
+                        </button>
+                        <button
+                          className="btn btn-sm btn-danger"
+                          title="Delete question from bank"
+                          onClick={() => remove(q)}
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </>
+                    );
+                  })()}
+                </div>
               </div>
             </li>
           );
@@ -600,6 +740,36 @@ export default function QuestionsPage() {
           </li>
         )}
       </ul>
+
+      {/* Floating Sticky Bulk Actions Bar */}
+      {selectedIds.size > 0 && (
+        <div className="sticky bottom-4 z-20 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-300 bg-white/95 px-5 py-3 shadow-xl backdrop-blur-md">
+          <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-600 text-xs text-white">
+              {selectedIds.size}
+            </span>
+            <span>question{selectedIds.size > 1 ? "s" : ""} selected</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={bulkDeleting}
+              onClick={handleBulkDelete}
+              className="btn btn-sm btn-danger font-semibold flex items-center gap-1.5 shadow-2xs"
+            >
+              <Trash2 size={13} /> Delete Selected
+            </button>
+            <button
+              type="button"
+              disabled={bulkDeleting}
+              onClick={() => setSelectedIds(new Set())}
+              className="btn btn-sm btn-ghost text-slate-600"
+            >
+              Clear Selection
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Edit / New Question Modal */}
       {editing && (

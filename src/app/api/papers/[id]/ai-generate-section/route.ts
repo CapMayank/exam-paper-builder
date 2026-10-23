@@ -40,7 +40,7 @@ export const POST = route(async (req, { id }, user) => {
     teacherFocus,
     generateDiagrams: Boolean(generateDiagrams),
     slots: slots as GeneratePaperSectionSlot[],
-    apiKey: customKey || (user as any)?.apiKey || null,
+    apiKey: customKey || req.headers.get("x-gemini-api-key") || (user as any)?.apiKey || null,
   });
 
   if (!res.success) {

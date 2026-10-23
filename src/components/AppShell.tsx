@@ -42,10 +42,25 @@ const COLLAPSE_KEY = "exam-builder:sidebar-collapsed";
 
 type User = { name: string; email: string; role?: string; department?: string };
 
-function NavList({ pathname, rail, onNavigate }: { pathname: string; rail: boolean; onNavigate?: () => void }) {
+function NavList({
+  pathname,
+  rail,
+  role,
+  onNavigate,
+}: {
+  pathname: string;
+  rail: boolean;
+  role?: string;
+  onNavigate?: () => void;
+}) {
+  const visibleNav = NAV.filter(({ href }) => {
+    if (href === "/admin/users") return role === "ADMIN";
+    return true;
+  });
+
   return (
     <nav aria-label="Main" className="flex flex-col gap-1">
-      {NAV.map(({ href, label, icon: Icon, hint }) => {
+      {visibleNav.map(({ href, label, icon: Icon, hint }) => {
         const active = isActive(pathname, href);
         return (
           <Link
@@ -228,7 +243,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <AcademicSessionSelector compact={collapsed} className={collapsed ? "" : "w-full"} />
           </div>
 
-          <NavList pathname={pathname} rail={collapsed} />
+          <NavList pathname={pathname} rail={collapsed} role={user?.role} />
 
           <div className="mt-auto space-y-2">
             <button
@@ -312,7 +327,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <div className="mb-4 px-1.5">
                 <AcademicSessionSelector className="w-full" />
               </div>
-              <NavList pathname={pathname} rail={false} onNavigate={() => setDrawerPath(null)} />
+              <NavList pathname={pathname} rail={false} role={user?.role} onNavigate={() => setDrawerPath(null)} />
               <div className="mt-auto">
                 <UserCard
                   user={user}
