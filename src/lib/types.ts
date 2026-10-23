@@ -202,6 +202,9 @@ export type PaperListItem = {
   blueprint: { name: string; examType: string; book: { title: string; subject: string; className: string } };
   filled: number;
   needed: number;
+  totalMarks?: number;
+  placedMarks?: number;
+  isComplete?: boolean;
   createdById?: string;
   academicSession?: string;
   paperSet?: string;

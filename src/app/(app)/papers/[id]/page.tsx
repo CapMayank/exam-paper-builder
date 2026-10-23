@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AlertCircle,
   AlertTriangle,
   ArrowDown,
   ArrowUp,
@@ -74,14 +75,24 @@ import { formatQuestionNumber } from "@/lib/layout";
 import { nextSetIdentifier } from "@/lib/multiset";
 import type { Book, PaperData, PaperItem, Section, MarksStyle, NumberingStyle, PrintDensity } from "@/lib/types";
 
-function Bar({ used, target }: { used: number; target: number }) {
+function Bar({ used, target, isComplete }: { used: number; target: number; isComplete?: boolean }) {
   const pct = target === 0 ? 0 : Math.min(100, (used / target) * 100);
+  const color =
+    isComplete !== undefined
+      ? isComplete
+        ? "bg-emerald-500"
+        : used >= target
+        ? "bg-amber-500"
+        : "bg-indigo-600"
+      : used === target
+      ? "bg-emerald-500"
+      : used > target
+      ? "bg-red-500"
+      : "bg-indigo-600";
   return (
     <div className="h-1.5 w-full rounded-full bg-slate-200 overflow-hidden">
       <div
-        className={`h-full rounded-full transition-all duration-300 ${
-          used === target ? "bg-emerald-500" : used > target ? "bg-red-500" : "bg-indigo-600"
-        }`}
+        className={`h-full rounded-full transition-all duration-300 ${color}`}
         style={{ width: `${pct}%` }}
       />
     </div>
@@ -903,7 +914,21 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                 </span>
                 {progress.complete ? (
                   <span className="flex items-center gap-1 text-xs font-bold text-emerald-700">
-                    <CheckCircle2 size={13} /> Complete
+                    <CheckCircle2 size={13} /> Quotas Complete
+                  </span>
+                ) : progress.usedMarks === progress.totalMarks ? (
+                  <span
+                    className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200"
+                    title="All marks placed, but chapter or section distribution differs from blueprint quotas"
+                  >
+                    <AlertTriangle size={12} /> Quotas Imbalanced
+                  </span>
+                ) : progress.usedMarks > progress.totalMarks ? (
+                  <span
+                    className="inline-flex items-center gap-1 text-xs font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded border border-red-200"
+                    title="Placed marks exceed blueprint quota"
+                  >
+                    <AlertCircle size={12} /> +{progress.usedMarks - progress.totalMarks}m over quota
                   </span>
                 ) : (
                   <span className="text-xs font-medium text-slate-500">
@@ -911,7 +936,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                   </span>
                 )}
               </div>
-              <Bar used={progress.usedMarks} target={progress.totalMarks} />
+              <Bar used={progress.usedMarks} target={progress.totalMarks} isComplete={progress.complete} />
             </section>
 
             {/* Chapter Weightage Quotas */}

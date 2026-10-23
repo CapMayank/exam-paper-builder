@@ -110,46 +110,64 @@ const paperInclude = {
   },
 } as const;
 
+/** Map raw paper items to normalized PlacedItem representation for blueprint calculation */
+export function toPlacedItems(
+  sections: { id: string; count: number; marksEach: number }[],
+  items: {
+    sectionId: string;
+    question: {
+      chapterId: string;
+      type: string;
+      text: string;
+      optionsJson?: string | null;
+      subpartsJson?: string | null;
+    };
+  }[],
+) {
+  return items.map((i) => {
+    const isMatch = i.question.type === "MATCH_COLUMN";
+    let matchCount = 0;
+    if (isMatch) {
+      let opts: string[] = [];
+      try {
+        const p = JSON.parse(i.question.optionsJson || "[]");
+        opts = Array.isArray(p) ? p : [];
+      } catch {}
+      matchCount = parseMatchColumnPairs(opts, i.question.text).length;
+    }
+    const subparts = parseSubparts(i.question.subpartsJson);
+    const submarks = subpartsTotalMarks(subparts);
+    const sec = sections.find((s) => s.id === i.sectionId);
+    const secMarksEach = sec?.marksEach ?? 1;
+    const secCount = sec?.count ?? 1;
+    const matchMarks = isMatch
+      ? (secCount === 1 ? secMarksEach : Math.min((matchCount || secCount) * secMarksEach, secCount * secMarksEach))
+      : 0;
+    const effectiveMarks = isMatch ? matchMarks : (submarks > 0 ? submarks : undefined);
+    const effectiveUnits = isMatch
+      ? (secCount === 1 ? 1 : (matchCount > 0 ? Math.min(matchCount, secCount) : undefined))
+      : (subparts.length > 0 ? subparts.length : undefined);
+    return {
+      sectionId: i.sectionId,
+      chapterId: i.question.chapterId,
+      marks: effectiveMarks,
+      subpartsCount: effectiveUnits,
+    };
+  });
+}
+
 /** Everything the builder and print views need, with progress computed server-side. */
 export async function loadPaperView(id: string) {
   const paper = await prisma.paper.findUnique({ where: { id }, include: paperInclude });
   if (!paper) return null;
   const { blueprint, items, ...rest } = paper;
+  const placedItems = toPlacedItems(blueprint.sections, items);
   const progress = paperStatus(
     {
       sections: blueprint.sections,
       chapters: blueprint.chapters.map((c) => ({ chapterId: c.chapterId, marks: c.marks })),
     },
-    items.map((i) => {
-      const isMatch = i.question.type === "MATCH_COLUMN";
-      let matchCount = 0;
-      if (isMatch) {
-        let opts: string[] = [];
-        try {
-          const p = JSON.parse(i.question.optionsJson || "[]");
-          opts = Array.isArray(p) ? p : [];
-        } catch {}
-        matchCount = parseMatchColumnPairs(opts, i.question.text).length;
-      }
-      const subparts = parseSubparts(i.question.subpartsJson);
-      const submarks = subpartsTotalMarks(subparts);
-      const sec = blueprint.sections.find((s) => s.id === i.sectionId);
-      const secMarksEach = sec?.marksEach ?? 1;
-      const secCount = sec?.count ?? 1;
-      const matchMarks = isMatch
-        ? (secCount === 1 ? secMarksEach : Math.min((matchCount || secCount) * secMarksEach, secCount * secMarksEach))
-        : 0;
-      const effectiveMarks = isMatch ? matchMarks : (submarks > 0 ? submarks : undefined);
-      const effectiveUnits = isMatch
-        ? (secCount === 1 ? 1 : (matchCount > 0 ? Math.min(matchCount, secCount) : undefined))
-        : (subparts.length > 0 ? subparts.length : undefined);
-      return {
-        sectionId: i.sectionId,
-        chapterId: i.question.chapterId,
-        marks: effectiveMarks,
-        subpartsCount: effectiveUnits,
-      };
-    }),
+    placedItems,
   );
   const implications = diagnosePaperImplications(
     {

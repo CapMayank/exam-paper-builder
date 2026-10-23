@@ -253,9 +253,22 @@ export default function DashboardPage() {
               {c.blueprint.book.className} · {c.blueprint.book.subject} · Blueprint: {c.blueprint.name}
             </p>
             <div className="max-w-md">
-              <Progress filled={c.filled} needed={c.needed} />
+              <Progress
+                filled={c.filled}
+                needed={c.needed}
+                totalMarks={c.totalMarks}
+                placedMarks={c.placedMarks}
+                isComplete={c.isComplete}
+                isFinal={c.status === "FINAL"}
+              />
               <p className="mt-1 text-sm text-slate-600">
-                {c.filled >= c.needed ? "Every slot is filled. Check the page budget and print." : `${plural(c.needed - c.filled, "question slot")} left to fill.`}
+                {c.status === "FINAL" || c.isComplete
+                  ? "Every quota is met. Ready to finalize and print."
+                  : !c.isComplete && ((c.totalMarks && (c.placedMarks ?? 0) >= c.totalMarks) || c.filled >= c.needed)
+                  ? "Questions are placed, but chapter quotas need rebalancing before finalizing."
+                  : c.totalMarks && c.placedMarks !== undefined
+                  ? `${c.totalMarks - c.placedMarks} marks left to place (${c.needed - c.filled} slots).`
+                  : `${plural(c.needed - c.filled, "question slot")} left to fill.`}
               </p>
             </div>
           </div>

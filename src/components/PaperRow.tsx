@@ -6,9 +6,37 @@ import { EXAM_TYPE_LABEL, resolvePaperExamType, type ExamType } from "@/lib/cons
 import { plural, timeAgo } from "@/lib/format";
 import type { PaperListItem } from "@/lib/types";
 
-export function Progress({ filled, needed }: { filled: number; needed: number }) {
-  const pct = needed === 0 ? 0 : Math.min(100, Math.round((filled / needed) * 100));
-  const ready = needed > 0 && filled >= needed;
+export function Progress({
+  filled,
+  needed,
+  totalMarks,
+  placedMarks,
+  isComplete,
+  isFinal,
+}: {
+  filled: number;
+  needed: number;
+  totalMarks?: number;
+  placedMarks?: number;
+  isComplete?: boolean;
+  isFinal?: boolean;
+}) {
+  const hasMarks = totalMarks !== undefined && totalMarks > 0;
+  const currentVal = hasMarks ? (placedMarks ?? 0) : filled;
+  const targetVal = hasMarks ? totalMarks : needed;
+  const pct = targetVal === 0 ? 0 : Math.min(100, Math.round((currentVal / targetVal) * 100));
+
+  const ready = Boolean(isFinal || isComplete);
+  const isImbalanced = !ready && !isFinal && (
+    (hasMarks && (placedMarks ?? 0) >= totalMarks) || (needed > 0 && filled >= needed)
+  );
+
+  const barColor = ready
+    ? "bg-emerald-500"
+    : isImbalanced
+    ? "bg-amber-500"
+    : "bg-indigo-500";
+
   return (
     <div className="flex items-center gap-3">
       <div
@@ -17,12 +45,19 @@ export function Progress({ filled, needed }: { filled: number; needed: number })
         aria-valuenow={pct}
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-label={`${filled} of ${needed} questions placed`}
+        aria-label={
+          hasMarks
+            ? `${placedMarks ?? 0} of ${totalMarks} marks placed (${filled}/${needed} questions)`
+            : `${filled} of ${needed} questions placed`
+        }
       >
-        <div className={`h-full rounded-full transition-[width] duration-500 ${ready ? "bg-emerald-500" : "bg-indigo-500"}`} style={{ width: `${pct}%` }} />
+        <div
+          className={`h-full rounded-full transition-[width] duration-500 ${barColor}`}
+          style={{ width: `${pct}%` }}
+        />
       </div>
-      <span className="w-14 shrink-0 text-right text-xs tabular-nums text-slate-600">
-        {filled}/{needed}
+      <span className="w-16 shrink-0 text-right text-xs tabular-nums font-medium text-slate-700">
+        {hasMarks ? `${placedMarks ?? 0}/${totalMarks}m` : `${filled}/${needed}`}
       </span>
     </div>
   );
@@ -43,7 +78,15 @@ export function PaperRow({
   selected?: boolean;
   onToggleSelect?: (p: PaperListItem) => void;
 }) {
-  const ready = p.needed > 0 && p.filled >= p.needed;
+  const isFinal = p.status === "FINAL";
+  const ready = isFinal || Boolean(p.isComplete);
+  const totalMarks = p.totalMarks ?? 0;
+  const placedMarks = p.placedMarks ?? 0;
+  const hasMarks = totalMarks > 0;
+  const isImbalanced = !ready && !isFinal && (
+    (hasMarks && placedMarks >= totalMarks) || (p.needed > 0 && p.filled >= p.needed)
+  );
+
   const examType = resolvePaperExamType(p);
   const isOwner = currentUser?.id && p.createdById ? p.createdById === currentUser.id : false;
   const isAdmin = currentUser?.role === "ADMIN";
@@ -84,9 +127,30 @@ export function PaperRow({
         </p>
       </div>
       <div className="min-w-0">
-        <Progress filled={p.filled} needed={p.needed} />
-        <p className={`mt-0.5 text-xs ${ready ? "font-medium text-emerald-700" : "text-slate-500"}`}>
-          {ready ? (p.status === "FINAL" ? "Ready to print" : "Quota met, ready to finalize") : `${plural(p.needed - p.filled, "slot")} to fill`}
+        <Progress
+          filled={p.filled}
+          needed={p.needed}
+          totalMarks={p.totalMarks}
+          placedMarks={p.placedMarks}
+          isComplete={p.isComplete}
+          isFinal={isFinal}
+        />
+        <p className={`mt-0.5 text-xs truncate ${
+          ready
+            ? "font-medium text-emerald-700"
+            : isImbalanced
+            ? "font-medium text-amber-700"
+            : "text-slate-500"
+        }`}>
+          {ready
+            ? (isFinal ? "Ready to print" : "✓ Quotas met, ready to finalize")
+            : isImbalanced
+            ? "⚠ Blueprint quota mismatch"
+            : hasMarks
+            ? p.needed > p.filled
+              ? `${totalMarks - placedMarks}m left (${p.needed - p.filled} slots)`
+              : `${totalMarks - placedMarks}m remaining`
+            : `${plural(p.needed - p.filled, "slot")} to fill`}
         </p>
       </div>
       <div className="flex items-center gap-1.5 sm:justify-end">
