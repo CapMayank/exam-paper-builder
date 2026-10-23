@@ -11,7 +11,9 @@ import {
   Minimize2,
   PenLine,
   Printer,
+  Scissors,
   Sliders,
+  Sparkles,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
@@ -41,7 +43,26 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
   const [compact, setCompact] = useState(true);
   const [includeRoughWork, setIncludeRoughWork] = useState(false);
   const [showSignatures, setShowSignatures] = useState<boolean>(false);
+  const [twoUpCutMode, setTwoUpCutMode] = useState<boolean>(true);
   const [showGuide, setShowGuide] = useState(false);
+  const [autoFitting, setAutoFitting] = useState(false);
+
+  const handleAutoFit = async () => {
+    setAutoFitting(true);
+    try {
+      await api(`/api/papers/${id}`, {
+        method: "PATCH",
+        json: { printDensity: "COMPACT" },
+      });
+      setCompact(true);
+      if (paper) {
+        setPaper({ ...paper, printDensity: "COMPACT" });
+      }
+    } catch {
+    } finally {
+      setAutoFitting(false);
+    }
+  };
 
   const handleSetZoom = (z: number | null) => {
     setZoom(z);
@@ -216,6 +237,39 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
               </button>
             </div>
 
+            {/* 2-Up Cut-in-Half Mode (For 1-2 page short papers) */}
+            {isA5 && (info?.pages ?? 0) <= 2 && (
+              <div className="flex items-center gap-1 rounded-lg border border-purple-200 bg-purple-50 p-0.5 text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setTwoUpCutMode(!twoUpCutMode)}
+                  className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 transition ${
+                    twoUpCutMode
+                      ? "bg-purple-700 text-white shadow-xs font-bold"
+                      : "text-purple-900 hover:bg-purple-100/70"
+                  }`}
+                  title="Prints 2 complete exam papers on one A4 sheet to cut down the center (halves paper consumption)"
+                >
+                  <Scissors size={13} />
+                  <span>2-Up Cut in Half: {twoUpCutMode ? "ON (2 copies/sheet)" : "OFF"}</span>
+                </button>
+              </div>
+            )}
+
+            {/* Auto-Fit to 4 Pages button if slightly overflowing */}
+            {info && info.pages === 5 && (
+              <button
+                type="button"
+                onClick={handleAutoFit}
+                disabled={autoFitting || compact}
+                className="btn btn-sm bg-amber-500 hover:bg-amber-600 text-white font-semibold flex items-center gap-1 text-xs shadow-xs"
+                title="Automatically adjust density to Compact to fit paper on exactly 4 pages"
+              >
+                <Sparkles size={13} />
+                <span>Auto-Fit to 4 Pages</span>
+              </button>
+            )}
+
             {/* Quick Zoom Presets */}
             <div className="hidden lg:flex items-center gap-1 border-l border-slate-200 pl-2">
               <button
@@ -294,6 +348,7 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
           compact={compact}
           includeRoughWork={includeRoughWork}
           showSignatures={showSignatures}
+          twoUpCutMode={twoUpCutMode}
           onInfo={onInfo}
         />
       </div>

@@ -54,15 +54,15 @@
     "semantic_hash": ""
   },
   "src/app/(app)/blueprints/[id]/page.tsx": {
-    "mtime": 1792758084.3657315,
-    "seen": 1792758426.3637133,
-    "ast_hash": "a12cd18090f36923f886f24682650378",
+    "mtime": 1792763000.7644122,
+    "seen": 1792763617.7547061,
+    "ast_hash": "027c68ec6cbe072da620b60187e88260",
     "semantic_hash": ""
   },
   "src/app/(app)/blueprints/page.tsx": {
-    "mtime": 1792734022.9659338,
-    "seen": 1792734551.9772098,
-    "ast_hash": "988c236044ef52840139c3891465d05a",
+    "mtime": 1792763042.0839689,
+    "seen": 1792763617.7547061,
+    "ast_hash": "b82976d1e52b5dcce475ee1fc6a0c6b9",
     "semantic_hash": ""
   },
   "src/app/(app)/books/page.tsx": {
@@ -78,9 +78,9 @@
     "semantic_hash": ""
   },
   "src/app/(app)/exam-cell/page.tsx": {
-    "mtime": 1792749696.168183,
-    "seen": 1792749847.4533799,
-    "ast_hash": "1e58cc96b6c969f57380951cf7c77324",
+    "mtime": 1792763334.6514246,
+    "seen": 1792763617.7547061,
+    "ast_hash": "6ba1a56f47f8a01161374709c051ab1e",
     "semantic_hash": ""
   },
   "src/app/(app)/layout.tsx": {
@@ -96,9 +96,9 @@
     "semantic_hash": ""
   },
   "src/app/(app)/papers/[id]/page.tsx": {
-    "mtime": 1792758344.6146634,
-    "seen": 1792758426.3637133,
-    "ast_hash": "f3a6be6b824b70b9227c3f9443aa5283",
+    "mtime": 1792762724.2702725,
+    "seen": 1792763617.7547061,
+    "ast_hash": "35d91f77f4b22507d8b95b91e9840955",
     "semantic_hash": ""
   },
   "src/app/(app)/papers/page.tsx": {
@@ -108,9 +108,9 @@
     "semantic_hash": ""
   },
   "src/app/(app)/questions/page.tsx": {
-    "mtime": 1792743743.2022657,
-    "seen": 1792744262.8739886,
-    "ast_hash": "24ac5c2fe692852cf102d1de65bb8a10",
+    "mtime": 1792762583.517096,
+    "seen": 1792763617.7547061,
+    "ast_hash": "82be1bdb4802beef37dd2a2aaeadec69",
     "semantic_hash": ""
   },
   "src/app/api/academic-rollover/route.ts": {
@@ -282,9 +282,9 @@
     "semantic_hash": ""
   },
   "src/app/api/exam-cell/calculator/route.ts": {
-    "mtime": 1792749682.648513,
-    "seen": 1792749847.4533799,
-    "ast_hash": "1b8c13d5bca5fa1eec63e5efcb692cd9",
+    "mtime": 1792762154.0359578,
+    "seen": 1792763617.7547061,
+    "ast_hash": "fdb4d5e1971558192aa42cf735ccaa00",
     "semantic_hash": ""
   },
   "src/app/api/exam-cell/timetable/[id]/route.ts": {
@@ -474,9 +474,9 @@
     "semantic_hash": ""
   },
   "src/app/papers/[id]/print/page.tsx": {
-    "mtime": 1792743675.284409,
-    "seen": 1792744262.8751564,
-    "ast_hash": "48f4c48593e603b1e4c2bc9194115523",
+    "mtime": 1792762118.28643,
+    "seen": 1792763617.7547061,
+    "ast_hash": "bd249740ed1c50f0dbc8003541a0ffb6",
     "semantic_hash": ""
   },
   "src/app/papers/[id]/solutions/page.tsx": {
@@ -594,9 +594,9 @@
     "semantic_hash": ""
   },
   "src/components/PaperSheets.tsx": {
-    "mtime": 1792756827.7386177,
-    "seen": 1792758426.3637133,
-    "ast_hash": "08175d6972a4d13c8ff74be178ec57fa",
+    "mtime": 1792768648.8382554,
+    "seen": 1792768814.823603,
+    "ast_hash": "04d3f52120529821a19911aab23eda8b",
     "semantic_hash": ""
   },
   "src/components/QuestionForm.tsx": {
@@ -726,9 +726,9 @@
     "semantic_hash": ""
   },
   "src/lib/audit.ts": {
-    "mtime": 1792744065.4321034,
-    "seen": 1792744262.8751564,
-    "ast_hash": "d64885bd519c818aa3fdf84005257fbb",
+    "mtime": 1792763498.3188746,
+    "seen": 1792763617.7547061,
+    "ast_hash": "943f85b8d36e0cee840b905f4765164a",
     "semantic_hash": ""
   },
   "src/lib/autofill.ts": {
@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "src/lib/layout.ts": {
-    "mtime": 1792756633.6482706,
-    "seen": 1792758426.3637133,
-    "ast_hash": "14652a5721ee2a7b9b9cafb79aa903d6",
+    "mtime": 1792763409.7754996,
+    "seen": 1792763617.7547061,
+    "ast_hash": "6c77c1f0f1c33c9158cf68701ca16d21",
     "semantic_hash": ""
   },
   "src/lib/logic.test.ts": {
@@ -1413,6 +1413,108 @@
     "mtime": 1792756561.6759107,
     "seen": 1792758426.3637133,
     "ast_hash": "e10df4800c4f66f8def87d4da434ab11",
+    "semantic_hash": ""
+  },
+  "src/app/api/papers/[id]/snapshots/[snapshotId]/route.ts": {
+    "mtime": 1792761778.1568453,
+    "seen": 1792763617.7547061,
+    "ast_hash": "22efce8c2db67884e82d6cd6587cdd4a",
+    "semantic_hash": ""
+  },
+  "src/app/api/questions/bulk-update/route.ts": {
+    "mtime": 1792762190.7986207,
+    "seen": 1792763617.7547061,
+    "ast_hash": "b3c1f9fe0b79cdbdda7eb0c079917744",
+    "semantic_hash": ""
+  },
+  "src/components/BlueprintTemplateModal.tsx": {
+    "mtime": 1792761878.8482218,
+    "seen": 1792763617.7547061,
+    "ast_hash": "a4a022ffa15f0bd44fa5104120d94cec",
+    "semantic_hash": ""
+  },
+  "src/components/PaperSnapshotDrawer.tsx": {
+    "mtime": 1792763533.1911557,
+    "seen": 1792763617.7547061,
+    "ast_hash": "aabf3d1f47d3ac1d9a50880b4be07072",
+    "semantic_hash": ""
+  },
+  "src/components/QuestionDuplicateModal.tsx": {
+    "mtime": 1792763548.4051633,
+    "seen": 1792763617.7547061,
+    "ast_hash": "db2fc093ba6edd323434f77164cdf853",
+    "semantic_hash": ""
+  },
+  "src/components/subject-workspace/SubjectWorkspaceDrawer.tsx": {
+    "mtime": 1792761939.3381429,
+    "seen": 1792763617.7547061,
+    "ast_hash": "6e02323281d3142582aeac65dbb3f15a",
+    "semantic_hash": ""
+  },
+  "src/components/subject-workspace/standardInstructions.ts": {
+    "mtime": 1792761912.5153935,
+    "seen": 1792763617.7547061,
+    "ast_hash": "d9216e4e70d7dbf63441c570f1a15144",
+    "semantic_hash": ""
+  },
+  "src/lib/curriculumTemplates.ts": {
+    "mtime": 1792761858.8000553,
+    "seen": 1792763617.7547061,
+    "ast_hash": "e00d9da60631899f6472109e31417edc",
+    "semantic_hash": ""
+  },
+  "src/lib/newFeatures.test.ts": {
+    "mtime": 1792763419.3461816,
+    "seen": 1792763617.7547061,
+    "ast_hash": "064782df436c9f8d756cd9c5100f44d3",
+    "semantic_hash": ""
+  },
+  "auth.json": {
+    "mtime": 1792767922.6163974,
+    "seen": 1792768814.823603,
+    "ast_hash": "76d65f992555a09d7ff50ea83f3e385a",
+    "semantic_hash": ""
+  },
+  "test.pdf": {
+    "mtime": 1792767846.4854546,
+    "seen": 1792768814.8246012,
+    "ast_hash": "d46fe3674a638c4c09b60faa737284cb",
+    "semantic_hash": ""
+  },
+  "preview.png": {
+    "mtime": 1792767934.740306,
+    "seen": 1792768814.8246012,
+    "ast_hash": "3fb21ae37571fbdc5aed5d234abd04fc",
+    "semantic_hash": ""
+  },
+  "preview2.png": {
+    "mtime": 1792767965.8302815,
+    "seen": 1792768814.8246012,
+    "ast_hash": "7793b0be1a9dd5b0812cc9901153d674",
+    "semantic_hash": ""
+  },
+  "preview3.png": {
+    "mtime": 1792767988.9185095,
+    "seen": 1792768814.8246012,
+    "ast_hash": "21bf26835d0b7537b3f02a83293c9586",
+    "semantic_hash": ""
+  },
+  "preview3_full.png": {
+    "mtime": 1792768026.5123887,
+    "seen": 1792768814.8246012,
+    "ast_hash": "768a9c33e7f2d55a683859625cb2ac92",
+    "semantic_hash": ""
+  },
+  "preview_fixed1.png": {
+    "mtime": 1792768333.3380253,
+    "seen": 1792768814.8246012,
+    "ast_hash": "3f16a9fcd26dbc4a76bb3ed2fc22a415",
+    "semantic_hash": ""
+  },
+  "screenshot.png": {
+    "mtime": 1792767757.642597,
+    "seen": 1792768814.8246012,
+    "ast_hash": "53d6d6fd2cdf5f6b183b78c45d1d8367",
     "semantic_hash": ""
   }
 }

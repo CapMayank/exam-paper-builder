@@ -4,6 +4,7 @@ import {
   AlertCircle,
   BookOpen,
   Check,
+  Copy,
   Download,
   Eye,
   EyeOff,
@@ -23,11 +24,12 @@ import { QuestionForm } from "@/components/QuestionForm";
 import { QuestionUsagePills } from "@/components/QuestionUsageHistory";
 import { QuestionView } from "@/components/QuestionView";
 import { AIQuestionGeneratorModal } from "@/components/AIQuestionGeneratorModal";
+import { QuestionDuplicateModal } from "@/components/QuestionDuplicateModal";
 import { ErrorBanner, Field, Modal, useConfirm, useToast } from "@/components/ui";
 import type { BatchImportReport } from "@/lib/batchQuestionIo";
 import { parseBulkQuestions } from "@/lib/bulkImport";
 import { api } from "@/lib/client";
-import { DIFFICULTIES, isKindergartenType, QUESTION_TYPES, QUESTION_TYPE_LABEL, sortClassNames, type QuestionType } from "@/lib/constants";
+import { DIFFICULTIES, isKindergartenType, isMcqLikeType, QUESTION_TYPES, QUESTION_TYPE_LABEL, sortClassNames, type QuestionType } from "@/lib/constants";
 import type { Book, QuestionDto } from "@/lib/types";
 
 const SAMPLE_CSV = `type,marks,text,answer,chapterNumber,difficulty,options,subparts
@@ -121,6 +123,8 @@ export default function QuestionsPage() {
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [aiGenModalOpen, setAiGenModalOpen] = useState(false);
+  const [duplicateModalOpen, setDuplicateModalOpen] = useState(false);
+  const [bulkUpdatingDiff, setBulkUpdatingDiff] = useState(false);
 
   useEffect(() => {
     api<{ id: string; name: string; email: string; role: string }>("/api/me").then(setCurrentUser, () => undefined);
@@ -276,6 +280,28 @@ export default function QuestionsPage() {
     }
   }
 
+  async function handleBulkUpdateDifficulty(diff: "EASY" | "MEDIUM" | "HARD") {
+    if (selectedIds.size === 0) return;
+    setBulkUpdatingDiff(true);
+    setError(null);
+    try {
+      await api("/api/questions/bulk-update", {
+        method: "POST",
+        json: {
+          questionIds: Array.from(selectedIds),
+          difficulty: diff,
+        },
+      });
+      toast.success(`Updated difficulty to ${diff} for ${selectedIds.size} question(s).`);
+      setSelectedIds(new Set());
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBulkUpdatingDiff(false);
+    }
+  }
+
   const parsedBulk = useMemo(() => parseBulkQuestions(bulkText, bulkFallbackType), [bulkText, bulkFallbackType]);
   const bulkBookChapters = books.find((b) => b.id === bulkBookId)?.chapters ?? [];
 
@@ -335,6 +361,17 @@ export default function QuestionsPage() {
           >
             <Download size={15} className="text-slate-600" />
             <span>Export Questions</span>
+          </button>
+
+          {/* Scan Duplicates Button */}
+          <button
+            className="btn border-slate-300 bg-white text-slate-700 hover:bg-slate-50 shadow-2xs"
+            disabled={questions.length < 2}
+            onClick={() => setDuplicateModalOpen(true)}
+            title="Scan question bank for near-identical duplicate wording"
+          >
+            <Copy size={15} className="text-slate-600" />
+            <span>Scan Duplicates</span>
           </button>
 
           {/* AI Question Co-Pilot */}
@@ -654,6 +691,15 @@ export default function QuestionsPage() {
                     {QUESTION_TYPE_LABEL[q.type as keyof typeof QUESTION_TYPE_LABEL]}
                   </span>
                   <span className={`badge border font-semibold ${diffBadgeClass}`}>{q.difficulty}</span>
+                  {q.answer && q.answer.trim().length > 0 ? (
+                    <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800 border border-emerald-200" title="Model answer key is present">
+                      ✓ Answer Key
+                    </span>
+                  ) : (isMcqLikeType(q.type) || q.type === "TRUE_FALSE" || q.type === "VERY_SHORT") ? (
+                    <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 border border-amber-200" title="Missing answer key">
+                      ⚠ Needs Answer
+                    </span>
+                  ) : null}
                   <span className="font-medium text-slate-600">
                     Ch {q.chapter?.number}. {q.chapter?.title}
                   </span>
@@ -751,6 +797,21 @@ export default function QuestionsPage() {
             <span>question{selectedIds.size > 1 ? "s" : ""} selected</span>
           </div>
           <div className="flex items-center gap-2">
+            {/* Quick Difficulty Bulk Update */}
+            <div className="flex items-center gap-1.5 border-r border-slate-200 pr-3">
+              <span className="text-xs text-slate-500 font-medium">Set Difficulty:</span>
+              {(["EASY", "MEDIUM", "HARD"] as const).map((diff) => (
+                <button
+                  key={diff}
+                  type="button"
+                  disabled={bulkUpdatingDiff}
+                  onClick={() => handleBulkUpdateDifficulty(diff)}
+                  className="btn btn-xs btn-outline text-slate-700 hover:text-indigo-700 hover:border-indigo-300"
+                >
+                  {diff}
+                </button>
+              ))}
+            </div>
             <button
               type="button"
               disabled={bulkDeleting}
@@ -961,6 +1022,14 @@ export default function QuestionsPage() {
           }}
         />
       )}
+
+      {/* Duplicate Question Scanner Modal */}
+      <QuestionDuplicateModal
+        isOpen={duplicateModalOpen}
+        questions={displayedQuestions}
+        onClose={() => setDuplicateModalOpen(false)}
+        onQuestionDeleted={load}
+      />
     </div>
   );
 }

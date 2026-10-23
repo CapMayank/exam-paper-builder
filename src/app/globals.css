@@ -410,11 +410,14 @@ input[type="range"] {
   bottom: 6mm;
   left: 14mm;
   right: 14mm;
+  width: calc(100% - 28mm);
+  box-sizing: border-box;
   display: flex;
   justify-content: space-between;
   align-items: center;
   font-size: 8.5pt;
   color: #333;
+  z-index: 10;
 }
 .a4 .page-no {
   position: absolute;
@@ -429,9 +432,15 @@ input[type="range"] {
   width: 420mm;
   height: 297mm;
   display: flex;
+  flex-direction: row;
   background: #fff;
   position: relative;
   box-sizing: border-box;
+}
+.a3-sheet > .a4 {
+  flex: 0 0 50%;
+  width: 50%;
+  max-width: 50%;
 }
 .a3-sheet .a4:first-child {
   border-right: 1px dashed #cbd5e1; /* faint fold line guide */
@@ -478,18 +487,21 @@ input[type="range"] {
 }
 .a5 .page-footer {
   position: absolute;
-  bottom: 3.5mm;
+  bottom: 4mm;
   left: 9mm;
   right: 9mm;
+  width: calc(100% - 18mm);
+  box-sizing: border-box;
   display: flex;
   justify-content: space-between;
   align-items: center;
   font-size: 8pt;
   color: #333;
+  z-index: 10;
 }
 .a5 .page-no {
   position: absolute;
-  bottom: 3.5mm;
+  bottom: 4mm;
   left: 0;
   right: 0;
   text-align: center;
@@ -509,9 +521,15 @@ input[type="range"] {
   width: 297mm;
   height: 210mm;
   display: flex;
+  flex-direction: row;
   background: #fff;
   position: relative;
   box-sizing: border-box;
+}
+.a4-sheet > .a5 {
+  flex: 0 0 50%;
+  width: 50%;
+  max-width: 50%;
 }
 .a4-sheet .a5:first-child {
   border-right: 1px dashed #cbd5e1; /* faint fold line guide */
@@ -598,6 +616,7 @@ input[type="range"] {
     max-height: 296.8mm !important;
     overflow: hidden !important;
     box-sizing: border-box !important;
+    padding: 14mm 14mm 16mm 14mm !important;
   }
   .a3-sheet {
     width: 420mm !important;
@@ -605,6 +624,13 @@ input[type="range"] {
     max-height: 296.8mm !important;
     overflow: hidden !important;
     box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: row !important;
+  }
+  .a3-sheet > .a4 {
+    flex: 0 0 50% !important;
+    width: 50% !important;
+    max-width: 50% !important;
   }
   .a5 {
     width: 148.5mm !important;
@@ -620,6 +646,41 @@ input[type="range"] {
     max-height: 209.8mm !important;
     overflow: hidden !important;
     box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: row !important;
+  }
+  .a4-sheet > .a5 {
+    flex: 0 0 50% !important;
+    width: 50% !important;
+    max-width: 50% !important;
+  }
+  .a4 .page-footer {
+    position: absolute !important;
+    bottom: 6mm !important;
+    left: 14mm !important;
+    right: 14mm !important;
+    width: calc(100% - 28mm) !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    font-size: 8.5pt !important;
+    color: #333 !important;
+    z-index: 10 !important;
+  }
+  .a5 .page-footer {
+    position: absolute !important;
+    bottom: 4mm !important;
+    left: 9mm !important;
+    right: 9mm !important;
+    width: calc(100% - 18mm) !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    font-size: 8pt !important;
+    color: #333 !important;
+    z-index: 10 !important;
   }
   .page-frame {
     display: block !important;

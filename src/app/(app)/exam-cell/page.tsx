@@ -1,13 +1,18 @@
 "use client";
 
 import {
+  AlertTriangle,
   Boxes,
   Calendar,
   CalendarDays,
+  Check,
+  CheckCircle,
   CheckCircle2,
+  ChevronRight,
   Clock,
   ExternalLink,
   Eye,
+  FileCheck,
   FileSpreadsheet,
   FileText,
   Filter,
@@ -25,12 +30,14 @@ import {
   Trash2,
   User,
   Users,
+  XCircle,
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ErrorBanner, Modal, Skeleton, useToast } from "@/components/ui";
 import { useAcademicSession } from "@/lib/academicSession";
 import { api } from "@/lib/client";
+import { isSubjectMatching } from "@/lib/schoolCurriculum";
 import {
   EXAM_TYPES,
   EXAM_TYPE_LABEL,
@@ -56,7 +63,7 @@ import type {
   UserData,
 } from "@/lib/types";
 
-type Tab = "calculator" | "timetable" | "audit";
+type Tab = "readiness" | "calculator" | "timetable" | "audit";
 
 export function getSectionsForClass(cls?: AcademicClassDto | null): ClassSectionInput[] {
   if (!cls) {
@@ -81,9 +88,14 @@ export default function ExamCellPage() {
   const toast = useToast();
   const { currentSession, availableSessions } = useAcademicSession();
   const [sessionFilter, setSessionFilter] = useState<string>(currentSession);
-  const [activeTab, setActiveTab] = useState<Tab>("calculator");
+  const [activeTab, setActiveTab] = useState<Tab>("readiness");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Readiness Matrix State
+  const [readinessExamType, setReadinessExamType] = useState<string>("ALL");
+  const [readinessSearch, setReadinessSearch] = useState<string>("");
+  const [readinessStatusFilter, setReadinessStatusFilter] = useState<"ALL" | "FINAL" | "DRAFT" | "MISSING">("ALL");
 
   // Data
   const [currentUser, setCurrentUser] = useState<UserData | null>(null);
@@ -525,6 +537,138 @@ export default function ExamCellPage() {
     currentUser && (currentUser.role === "ADMIN" || currentUser.role === "HOD" || currentUser.role === "EXAM_CELL")
   );
 
+  // Readiness Matrix Calculations
+  const sortedClasses = useMemo(() => {
+    return [...classes].sort((a, b) => {
+      if (a.displayOrder !== b.displayOrder) return a.displayOrder - b.displayOrder;
+      return a.name.localeCompare(b.name, undefined, { numeric: true });
+    });
+  }, [classes]);
+
+  const readinessData = useMemo(() => {
+    const filteredPapers = papers.filter((p) => {
+      if (sessionFilter !== "ALL" && p.academicSession && p.academicSession !== sessionFilter) return false;
+      if (readinessExamType !== "ALL" && p.blueprint.examType !== readinessExamType) return false;
+      return true;
+    });
+
+    const filteredBlueprints = blueprints.filter((b) => {
+      if (sessionFilter !== "ALL" && b.academicSession && b.academicSession !== sessionFilter) return false;
+      if (readinessExamType !== "ALL" && b.examType !== readinessExamType) return false;
+      return true;
+    });
+
+    let totalSlots = 0;
+    let finalizedCount = 0;
+    let draftCount = 0;
+    let blueprintOnlyCount = 0;
+    let missingCount = 0;
+
+    const classRows = sortedClasses.map((cls) => {
+      let subjects = cls.subjects && cls.subjects.length > 0 ? cls.subjects : [];
+      if (subjects.length === 0) {
+        const bps = blueprints.filter((b) => b.book.className.trim().toLowerCase() === cls.name.trim().toLowerCase());
+        const subjectNames = Array.from(new Set(bps.map((b) => b.book.subject)));
+        subjects = subjectNames.map((name) => ({ id: name, classId: cls.id, name, code: "" }));
+      }
+
+      const subjectStatuses = subjects.map((subj) => {
+        totalSlots++;
+        const matchedPaper = filteredPapers.find((p) => {
+          const pClass = p.blueprint.book.className.trim().toLowerCase();
+          const pSubj = p.blueprint.book.subject;
+          return pClass === cls.name.trim().toLowerCase() && isSubjectMatching(pSubj, subj.name);
+        });
+
+        const matchedBlueprint = filteredBlueprints.find((b) => {
+          const bClass = b.book.className.trim().toLowerCase();
+          const bSubj = b.book.subject;
+          return bClass === cls.name.trim().toLowerCase() && isSubjectMatching(bSubj, subj.name);
+        });
+
+        let status: "FINAL" | "DRAFT" | "BLUEPRINT_ONLY" | "MISSING" = "MISSING";
+        if (matchedPaper) {
+          if (matchedPaper.status === "FINAL") {
+            status = "FINAL";
+            finalizedCount++;
+          } else {
+            status = "DRAFT";
+            draftCount++;
+          }
+        } else if (matchedBlueprint) {
+          status = "BLUEPRINT_ONLY";
+          blueprintOnlyCount++;
+        } else {
+          missingCount++;
+        }
+
+        return {
+          subject: subj,
+          paper: matchedPaper,
+          blueprint: matchedBlueprint,
+          status,
+        };
+      });
+
+      const classFinalized = subjectStatuses.filter((s) => s.status === "FINAL").length;
+      const classTotal = subjectStatuses.length;
+      const classPercent = classTotal > 0 ? Math.round((classFinalized / classTotal) * 100) : 0;
+
+      return {
+        class: cls,
+        subjects: subjectStatuses,
+        finalizedCount: classFinalized,
+        totalCount: classTotal,
+        percent: classPercent,
+      };
+    });
+
+    const overallPercent = totalSlots > 0 ? Math.round((finalizedCount / totalSlots) * 100) : 0;
+
+    return {
+      rows: classRows,
+      metrics: {
+        totalSlots,
+        finalizedCount,
+        draftCount,
+        blueprintOnlyCount,
+        missingCount,
+        overallPercent,
+      },
+    };
+  }, [sortedClasses, papers, blueprints, sessionFilter, readinessExamType]);
+
+  const filteredReadinessRows = useMemo(() => {
+    const q = readinessSearch.trim().toLowerCase();
+    return readinessData.rows
+      .map((row) => {
+        const matchesClassName =
+          !q ||
+          row.class.name.toLowerCase().includes(q) ||
+          (row.class.stream && row.class.stream.toLowerCase().includes(q));
+
+        const filteredSubjects = row.subjects.filter((s) => {
+          if (readinessStatusFilter === "FINAL" && s.status !== "FINAL") return false;
+          if (readinessStatusFilter === "DRAFT" && s.status !== "DRAFT") return false;
+          if (readinessStatusFilter === "MISSING" && s.status !== "MISSING" && s.status !== "BLUEPRINT_ONLY")
+            return false;
+
+          if (!q) return true;
+          if (matchesClassName) return true;
+          return (
+            s.subject.name.toLowerCase().includes(q) ||
+            (s.subject.code && s.subject.code.toLowerCase().includes(q))
+          );
+        });
+
+        return {
+          ...row,
+          subjects: filteredSubjects,
+        };
+      })
+      .filter((row) => row.subjects.length > 0);
+  }, [readinessData.rows, readinessSearch, readinessStatusFilter]);
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -551,6 +695,18 @@ export default function ExamCellPage() {
 
         {/* Tab Navigation */}
         <div className="segmented flex flex-wrap sm:inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200 w-full sm:w-auto">
+          <button
+            type="button"
+            onClick={() => setActiveTab("readiness")}
+            className={`flex items-center justify-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-bold transition-all flex-1 sm:flex-initial whitespace-nowrap ${
+              activeTab === "readiness"
+                ? "bg-white text-emerald-950 shadow-xs"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            <Layers size={15} className="text-emerald-600" />
+            Exam Readiness Matrix
+          </button>
           <button
             type="button"
             onClick={() => setActiveTab("calculator")}
@@ -637,6 +793,421 @@ export default function ExamCellPage() {
       </div>
 
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
+
+      {/* ============================================================== */}
+      {/* TAB 0: MASTER EXAM READINESS MATRIX                             */}
+      {/* ============================================================== */}
+      {activeTab === "readiness" && (
+        <div className="space-y-6">
+          {/* Top Level Readiness Metrics Ribbon */}
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div className="card p-4 bg-white border border-slate-200 shadow-2xs">
+              <span className="text-xs font-bold uppercase text-slate-500">Overall Exam Readiness</span>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="font-display text-3xl font-extrabold text-slate-900">
+                  {readinessData.metrics.overallPercent}%
+                </span>
+                <span className="text-xs text-slate-500">
+                  ({readinessData.metrics.finalizedCount}/{readinessData.metrics.totalSlots})
+                </span>
+              </div>
+              <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                <div
+                  className="h-full bg-emerald-600 transition-all duration-500 rounded-full"
+                  style={{ width: `${readinessData.metrics.overallPercent}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="card p-4 bg-emerald-50/70 border border-emerald-200 shadow-2xs">
+              <span className="text-xs font-bold uppercase text-emerald-800">Finalized &amp; Ready to Print</span>
+              <div className="mt-1 font-display text-3xl font-extrabold text-emerald-950">
+                {readinessData.metrics.finalizedCount}
+              </div>
+              <span className="text-xs text-emerald-700 flex items-center gap-1 mt-1 font-medium">
+                <CheckCircle2 size={13} className="text-emerald-600" /> Print-ready for envelope packing
+              </span>
+            </div>
+
+            <div className="card p-4 bg-amber-50/70 border border-amber-200 shadow-2xs">
+              <span className="text-xs font-bold uppercase text-amber-800">In Draft Progress</span>
+              <div className="mt-1 font-display text-3xl font-extrabold text-amber-950">
+                {readinessData.metrics.draftCount}
+              </div>
+              <span className="text-xs text-amber-700 flex items-center gap-1 mt-1 font-medium">
+                <Clock size={13} className="text-amber-600" /> Questions partially populated
+              </span>
+            </div>
+
+            <div className="card p-4 bg-rose-50/70 border border-rose-200 shadow-2xs">
+              <span className="text-xs font-bold uppercase text-rose-800">Pending Setup</span>
+              <div className="mt-1 font-display text-3xl font-extrabold text-rose-950">
+                {readinessData.metrics.blueprintOnlyCount + readinessData.metrics.missingCount}
+              </div>
+              <span className="text-xs text-rose-700 flex items-center gap-1 mt-1 font-medium">
+                <AlertTriangle size={13} className="text-rose-600" /> Blueprint or paper missing
+              </span>
+            </div>
+          </div>
+
+          {/* Filtering & Actions Bar */}
+          <div className="card p-4 bg-white border border-slate-200 shadow-2xs space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-[280px]">
+                <div className="relative flex-1 min-w-[180px] max-w-sm">
+                  <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
+                  <input
+                    type="text"
+                    value={readinessSearch}
+                    onChange={(e) => setReadinessSearch(e.target.value)}
+                    placeholder="Search class or subject…"
+                    className="input input-sm pl-8 w-full text-xs"
+                  />
+                  {readinessSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setReadinessSearch("")}
+                      className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 text-xs"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                <select
+                  value={readinessExamType}
+                  onChange={(e) => setReadinessExamType(e.target.value)}
+                  className="input input-sm text-xs w-auto font-medium"
+                >
+                  <option value="ALL">All Exam Types</option>
+                  {EXAM_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {EXAM_TYPE_LABEL[t] || t}
+                    </option>
+                  ))}
+                </select>
+
+                <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setReadinessStatusFilter("ALL")}
+                    className={`px-2.5 py-1 rounded-md font-semibold transition ${
+                      readinessStatusFilter === "ALL"
+                        ? "bg-white text-slate-900 shadow-2xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    All ({readinessData.metrics.totalSlots})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReadinessStatusFilter("FINAL")}
+                    className={`px-2.5 py-1 rounded-md font-semibold transition ${
+                      readinessStatusFilter === "FINAL"
+                        ? "bg-emerald-600 text-white shadow-2xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Finalized ({readinessData.metrics.finalizedCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReadinessStatusFilter("DRAFT")}
+                    className={`px-2.5 py-1 rounded-md font-semibold transition ${
+                      readinessStatusFilter === "DRAFT"
+                        ? "bg-amber-600 text-white shadow-2xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Drafts ({readinessData.metrics.draftCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReadinessStatusFilter("MISSING")}
+                    className={`px-2.5 py-1 rounded-md font-semibold transition ${
+                      readinessStatusFilter === "MISSING"
+                        ? "bg-rose-600 text-white shadow-2xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Pending ({readinessData.metrics.blueprintOnlyCount + readinessData.metrics.missingCount})
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="btn btn-sm btn-ghost border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 text-xs font-semibold"
+                  title="Print examination readiness checklist"
+                >
+                  <Printer size={14} className="text-slate-600" /> Print Checklist
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Matrix Content: Class by Class */}
+          <div className="space-y-5">
+            {filteredReadinessRows.length === 0 ? (
+              <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center space-y-3">
+                <Layers size={36} className="mx-auto text-slate-400" />
+                <h3 className="text-base font-bold text-slate-800">No matching subjects found</h3>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  Try adjusting your search query, exam type filter, or status toggle to see scheduled examination papers.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReadinessSearch("");
+                    setReadinessExamType("ALL");
+                    setReadinessStatusFilter("ALL");
+                  }}
+                  className="btn btn-sm btn-ghost border border-slate-200 text-xs"
+                >
+                  Clear all filters
+                </button>
+              </div>
+            ) : (
+              filteredReadinessRows.map((row) => (
+                <div
+                  key={row.class.id}
+                  className="rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden"
+                >
+                  {/* Class Header Bar */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/70 px-5 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700 font-extrabold text-sm">
+                        {row.class.name.replace(/[^0-9]/g, "") || row.class.name.substring(0, 2).toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-display font-bold text-slate-900 text-sm">{row.class.name}</h3>
+                          {row.class.stream && (
+                            <span className="text-[11px] text-slate-500 font-medium">· {row.class.stream}</span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-500">
+                          {row.class.sections?.length || 1} Section(s) · {row.subjects.length} Subject(s) tracked
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <span className="text-[11px] font-semibold text-slate-600 block">
+                          Class Readiness: {row.finalizedCount}/{row.totalCount} ({row.percent}%)
+                        </span>
+                        <div className="mt-1 h-1.5 w-28 overflow-hidden rounded-full bg-slate-200">
+                          <div
+                            className={`h-full rounded-full transition-all ${
+                              row.percent === 100
+                                ? "bg-emerald-600"
+                                : row.percent >= 50
+                                ? "bg-amber-500"
+                                : "bg-rose-500"
+                            }`}
+                            style={{ width: `${row.percent}%` }}
+                          />
+                        </div>
+                      </div>
+                      <span
+                        className={`badge font-bold text-[11px] px-2.5 py-1 ${
+                          row.percent === 100
+                            ? "!bg-emerald-100 !text-emerald-800"
+                            : row.percent > 0
+                            ? "!bg-amber-100 !text-amber-800"
+                            : "!bg-slate-100 !text-slate-700"
+                        }`}
+                      >
+                        {row.percent === 100 ? "✓ Complete" : row.percent > 0 ? "In Progress" : "Pending"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Subject Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 p-4">
+                    {row.subjects.map((item) => {
+                      if (item.status === "FINAL" && item.paper) {
+                        return (
+                          <div
+                            key={item.subject.id}
+                            className="rounded-xl border border-emerald-200 bg-emerald-50/30 p-3.5 space-y-2.5 transition hover:shadow-xs"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <h4 className="font-bold text-slate-900 text-xs">{item.subject.name}</h4>
+                                <span className="text-[10px] text-slate-500 font-mono">
+                                  {item.subject.code ? `Code: ${item.subject.code}` : "Standard Curriculum"}
+                                </span>
+                              </div>
+                              <span className="badge !bg-emerald-600 !text-white font-bold text-[10px] px-2 py-0.5">
+                                ✓ FINALIZED
+                              </span>
+                            </div>
+
+                            <div className="text-[11px] text-slate-600 bg-white/80 rounded-lg p-2 border border-emerald-100/80 space-y-0.5">
+                              <p className="font-semibold text-slate-800 truncate" title={item.paper.title}>
+                                {item.paper.title}
+                              </p>
+                              <div className="flex items-center justify-between text-[10px] text-slate-500">
+                                <span>{item.paper.paperSet || "Set A"} · {item.paper.targetPages || 4} Pages</span>
+                                <span>Updated {timeAgo(item.paper.updatedAt)}</span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 pt-1">
+                              <Link
+                                href={`/papers/${item.paper.id}`}
+                                className="btn btn-xs btn-ghost border border-emerald-300 bg-white text-emerald-900 hover:bg-emerald-100/50 flex-1 justify-center text-[11px] font-semibold"
+                              >
+                                View Paper
+                              </Link>
+                              <Link
+                                href={`/papers/${item.paper.id}/print`}
+                                className="btn btn-xs btn-ghost border border-emerald-300 bg-white text-emerald-900 hover:bg-emerald-100/50 flex items-center justify-center gap-1 px-2 text-[11px] font-semibold"
+                                title="Print-Ready Inspection"
+                              >
+                                <Printer size={12} /> Print
+                              </Link>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleSelectPaper(item.paper!.id);
+                                  setActiveTab("calculator");
+                                }}
+                                className="btn btn-xs btn-primary text-[11px] px-2 font-semibold"
+                                title="Transfer to Paper Budget Calculator to compute paper reams & packing slips"
+                              >
+                                Calc
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      if (item.status === "DRAFT" && item.paper) {
+                        return (
+                          <div
+                            key={item.subject.id}
+                            className="rounded-xl border border-amber-200 bg-amber-50/30 p-3.5 space-y-2.5 transition hover:shadow-xs"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <h4 className="font-bold text-slate-900 text-xs">{item.subject.name}</h4>
+                                <span className="text-[10px] text-slate-500 font-mono">
+                                  {item.subject.code ? `Code: ${item.subject.code}` : "Standard Curriculum"}
+                                </span>
+                              </div>
+                              <span className="badge !bg-amber-500 !text-white font-bold text-[10px] px-2 py-0.5">
+                                ⏳ DRAFT
+                              </span>
+                            </div>
+
+                            <div className="text-[11px] text-slate-600 bg-white/80 rounded-lg p-2 border border-amber-100/80 space-y-0.5">
+                              <p className="font-semibold text-slate-800 truncate" title={item.paper.title}>
+                                {item.paper.title}
+                              </p>
+                              <div className="flex items-center justify-between text-[10px] text-slate-500">
+                                <span className="font-medium text-amber-900">
+                                  {item.paper.filled}/{item.paper.needed} questions placed
+                                </span>
+                                <span>Updated {timeAgo(item.paper.updatedAt)}</span>
+                              </div>
+                            </div>
+
+                            <div className="pt-1">
+                              <Link
+                                href={`/papers/${item.paper.id}`}
+                                className="btn btn-xs border border-amber-300 bg-white text-amber-950 hover:bg-amber-100/50 w-full justify-center text-[11px] font-semibold flex items-center gap-1"
+                              >
+                                Continue Drafting <ChevronRight size={13} />
+                              </Link>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      if (item.status === "BLUEPRINT_ONLY" && item.blueprint) {
+                        return (
+                          <div
+                            key={item.subject.id}
+                            className="rounded-xl border border-sky-200 bg-sky-50/20 p-3.5 space-y-2.5 transition hover:shadow-xs"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <h4 className="font-bold text-slate-900 text-xs">{item.subject.name}</h4>
+                                <span className="text-[10px] text-slate-500 font-mono">
+                                  {item.subject.code ? `Code: ${item.subject.code}` : "Standard Curriculum"}
+                                </span>
+                              </div>
+                              <span className="badge !bg-sky-100 !text-sky-800 border border-sky-200 font-bold text-[10px] px-2 py-0.5">
+                                📐 BLUEPRINT READY
+                              </span>
+                            </div>
+
+                            <div className="text-[11px] text-slate-600 bg-white/80 rounded-lg p-2 border border-sky-100/80 space-y-0.5">
+                              <p className="font-semibold text-slate-800 truncate" title={item.blueprint.name}>
+                                {item.blueprint.name}
+                              </p>
+                              <p className="text-[10px] text-slate-500">
+                                {EXAM_TYPE_LABEL[item.blueprint.examType as ExamType] || item.blueprint.examType} · {item.blueprint.durationMin} mins
+                              </p>
+                            </div>
+
+                            <div className="pt-1">
+                              <Link
+                                href={`/blueprints/${item.blueprint.id}`}
+                                className="btn btn-xs border border-sky-300 bg-white text-sky-950 hover:bg-sky-100/50 w-full justify-center text-[11px] font-semibold flex items-center gap-1"
+                              >
+                                Build Exam Paper <ChevronRight size={13} />
+                              </Link>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      // MISSING status
+                      return (
+                        <div
+                          key={item.subject.id}
+                          className="rounded-xl border border-dashed border-slate-300 bg-slate-50/50 p-3.5 space-y-2.5"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <h4 className="font-bold text-slate-700 text-xs">{item.subject.name}</h4>
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                {item.subject.code ? `Code: ${item.subject.code}` : "Standard Curriculum"}
+                              </span>
+                            </div>
+                            <span className="badge !bg-slate-200 !text-slate-600 font-medium text-[10px] px-2 py-0.5">
+                              NOT CREATED
+                            </span>
+                          </div>
+
+                          <div className="text-[11px] text-slate-500 bg-white/60 rounded-lg p-2 border border-slate-200/60">
+                            No examination blueprint or paper created for this subject yet.
+                          </div>
+
+                          <div className="pt-1">
+                            <Link
+                              href={`/blueprints/new?className=${encodeURIComponent(row.class.name)}&subject=${encodeURIComponent(item.subject.name)}`}
+                              className="btn btn-xs btn-ghost border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 w-full justify-center text-[11px] font-semibold flex items-center gap-1"
+                            >
+                              <Plus size={12} /> Create Blueprint
+                            </Link>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ============================================================== */}
       {/* TAB 1: PRINT RUN & PAPER BUDGET CALCULATOR                      */}

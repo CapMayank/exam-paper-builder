@@ -22,7 +22,10 @@ export const GET = route(async (req) => {
     const sections = JSON.parse(c.sectionsJson || "[]");
     const sets = JSON.parse(c.setsJson || "[]");
     const isBooklet = c.layout === "BOOKLET" || c.layout === "BOOKLET_A4";
-    const sheetsPerCopy = isBooklet
+    const isTwoUpCut = c.layout === "BOOKLET_A4" && c.pageCount <= 2;
+    const sheetsPerCopy = isTwoUpCut
+      ? 0.5
+      : isBooklet
       ? Math.max(1, Math.ceil(c.pageCount / 4))
       : Math.max(1, Math.ceil(c.pageCount / 2));
 
@@ -43,7 +46,7 @@ export const GET = route(async (req) => {
       return {
         section: section.name,
         studentCount: section.count,
-        sheetsRequired: section.count * sheetsPerCopy,
+        sheetsRequired: Math.ceil(section.count * sheetsPerCopy),
         answerBookletsRequired: section.count,
         sets: setBreakdown,
       };
@@ -63,13 +66,19 @@ export const POST = route(async (req, _params, user) => {
   const input = await body(req, printRunCalculationSchema);
 
   // Compute paper budget metrics
+  // 2-Up Cut mode: A 2-page or 1-page test printed on A4 landscape gives 2 complete copies per sheet (cut down center).
   // Booklet: 1 sheet = 4 page sides (A4 sheet folded to A5, or A3 sheet folded to A4). Page: 1 A4 sheet duplex = 2 page sides
   const isBooklet = input.layout === "BOOKLET" || input.layout === "BOOKLET_A4";
-  const sheetsPerCopy = isBooklet
+  const isTwoUpCut = input.layout === "BOOKLET_A4" && input.pageCount <= 2;
+  const sheetsPerCopy = isTwoUpCut
+    ? 0.5
+    : isBooklet
     ? Math.max(1, Math.ceil(input.pageCount / 4))
     : Math.max(1, Math.ceil(input.pageCount / 2));
 
-  const totalRawSheets = input.totalStudents * sheetsPerCopy;
+  const totalRawSheets = isTwoUpCut
+    ? Math.ceil(input.totalStudents / 2)
+    : input.totalStudents * sheetsPerCopy;
   const wastageSheets = Math.ceil(totalRawSheets * (input.wastagePercent / 100));
   const totalSheetsRequired = totalRawSheets + wastageSheets;
   const totalReamsRequired = parseFloat((totalSheetsRequired / 500).toFixed(2));
@@ -92,7 +101,7 @@ export const POST = route(async (req, _params, user) => {
     return {
       section: section.name,
       studentCount: section.count,
-      sheetsRequired: section.count * sheetsPerCopy,
+      sheetsRequired: Math.ceil(section.count * sheetsPerCopy),
       answerBookletsRequired: section.count,
       sets: setBreakdown,
     };

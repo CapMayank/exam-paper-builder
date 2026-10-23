@@ -14,7 +14,7 @@ import {
   resolvePaperExamType,
 } from "@/lib/constants";
 import { WorkbookHeader } from "@/lib/kindergarten/components/WorkbookHeader";
-import { formatQuestionNumber, imposeBooklet, paginate } from "@/lib/layout";
+import { formatQuestionNumber, imposeBooklet, imposeTwoUpCut, paginate } from "@/lib/layout";
 import type { PaperData } from "@/lib/types";
 
 type Block = {
@@ -35,9 +35,9 @@ function renderBlock(b: Block, isContinuation: boolean): ReactNode {
 const CONTENT_W_MM = 182;
 const CONTENT_H_MM = 267;
 
-// A5 minus page padding (see .a5 in globals.css): 9mm sides, 8mm top, 15mm bottom.
+// A5 minus page padding (see .a5 in globals.css): 9mm sides, 8mm top, 14mm bottom.
 const A5_CONTENT_W_MM = 130.5;
-const A5_CONTENT_H_MM = 184;
+const A5_CONTENT_H_MM = 188;
 
 function extractSectionLetter(title: string, fallbackIndex: number): string {
   const match = title.match(/\b([A-Z])\b/i);
@@ -205,46 +205,85 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
         {paper.showCandidateDetails !== false && (
           <div
             style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginTop: isA5 ? "1.5mm" : "2.5mm",
-              fontSize: "8.5pt",
-              border: "1px solid #333",
-              padding: isA5 ? "1.5mm 2mm" : "2mm 2.5mm",
+              marginTop: isA5 ? "1.5mm" : "2.2mm",
+              border: "1px solid #1e293b",
+              padding: isA5 ? "1.2mm 2mm" : "2mm 2.5mm",
               borderRadius: "2px",
               backgroundColor: "#fafafa",
+              fontSize: isA5 ? "8pt" : "8.5pt",
             }}
           >
-            <div>
-              <span style={{ fontWeight: 700 }}>Student Name: </span>
-              <span style={{ display: "inline-block", width: isA5 ? "30mm" : "42mm", borderBottom: "1px solid #000" }}>&nbsp;</span>
-            </div>
-            <div>
-              <span style={{ fontWeight: 700 }}>Class &amp; Sec: </span>
-              <span style={{ display: "inline-block", width: isA5 ? "12mm" : "16mm", borderBottom: "1px solid #000" }}>&nbsp;</span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "1.5mm" }}>
-              <span style={{ fontWeight: 700 }}>Roll No:</span>
-              <span style={{ display: "inline-flex", gap: "1.5px" }}>
-                {[0, 1, 2, 3, 4, 5, 6].map((i) => (
-                  <span
-                    key={i}
-                    style={{
-                      width: isA5 ? "3.8mm" : "4.5mm",
-                      height: isA5 ? "4.5mm" : "5.2mm",
-                      border: "1.2px solid #000",
-                      display: "inline-block",
-                      backgroundColor: "#fff",
-                    }}
-                  />
-                ))}
-              </span>
-            </div>
-            {effectiveShowSignatures && (
-              <div>
-                <span style={{ fontWeight: 700 }}>Invigilator Sign: </span>
-                <span style={{ display: "inline-block", width: isA5 ? "16mm" : "20mm", borderBottom: "1px solid #000" }}>&nbsp;</span>
+            {isA5 ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: "1.2mm" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ display: "flex", alignItems: "center", flex: 1, minWidth: 0, marginRight: "3mm" }}>
+                    <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>Student Name:&nbsp;</span>
+                    <span style={{ display: "inline-block", flex: 1, borderBottom: "1px solid #000" }}>&nbsp;</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "1.5mm", flexShrink: 0 }}>
+                    <span style={{ fontWeight: 700 }}>Roll No:</span>
+                    <span style={{ display: "inline-flex", gap: "1px" }}>
+                      {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+                        <span
+                          key={i}
+                          style={{
+                            width: "3.5mm",
+                            height: "4.2mm",
+                            border: "1px solid #000",
+                            display: "inline-block",
+                            backgroundColor: "#fff",
+                          }}
+                        />
+                      ))}
+                    </span>
+                  </div>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ display: "flex", alignItems: "center", flex: 1, minWidth: 0, marginRight: "3mm" }}>
+                    <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>Class &amp; Section:&nbsp;</span>
+                    <span style={{ display: "inline-block", width: "24mm", borderBottom: "1px solid #000" }}>&nbsp;</span>
+                  </div>
+                  {effectiveShowSignatures && (
+                    <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+                      <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>Invigilator Sign:&nbsp;</span>
+                      <span style={{ display: "inline-block", width: "24mm", borderBottom: "1px solid #000" }}>&nbsp;</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1.5mm" }}>
+                <div style={{ display: "flex", alignItems: "center", flex: "1 1 50mm" }}>
+                  <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>Student Name:&nbsp;</span>
+                  <span style={{ display: "inline-block", flex: 1, borderBottom: "1px solid #000" }}>&nbsp;</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+                  <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>Class &amp; Sec:&nbsp;</span>
+                  <span style={{ display: "inline-block", width: "16mm", borderBottom: "1px solid #000" }}>&nbsp;</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "1.5mm", flexShrink: 0 }}>
+                  <span style={{ fontWeight: 700 }}>Roll No:</span>
+                  <span style={{ display: "inline-flex", gap: "1.5px" }}>
+                    {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+                      <span
+                        key={i}
+                        style={{
+                          width: "4.5mm",
+                          height: "5.2mm",
+                          border: "1.2px solid #000",
+                          display: "inline-block",
+                          backgroundColor: "#fff",
+                        }}
+                      />
+                    ))}
+                  </span>
+                </div>
+                {effectiveShowSignatures && (
+                  <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+                    <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>Invigilator Sign:&nbsp;</span>
+                    <span style={{ display: "inline-block", width: "20mm", borderBottom: "1px solid #000" }}>&nbsp;</span>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -547,13 +586,15 @@ function Page({
           </div>
         ))}
       </div>
-      <div className="page-footer" style={{ position: "relative", zIndex: 1 }}>
-        <div style={{ width: isA5 ? "20mm" : "35mm" }}>{/* Left gutter spacer */}</div>
-        <div style={{ fontWeight: 600, fontSize: isA5 ? "7.5pt" : "8.5pt", color: "#334155" }}>
+      <div className="page-footer">
+        <div style={{ flex: 1, textAlign: "left", fontSize: isA5 ? "7pt" : "8pt", color: "#64748b" }}>
+          {/* Left margin spacer */}
+        </div>
+        <div style={{ flex: 1, textAlign: "center", fontWeight: 700, fontSize: isA5 ? "7.5pt" : "8.5pt", color: "#334155" }}>
           Page {n} of {total}
         </div>
-        <div style={{ width: isA5 ? "20mm" : "35mm", textAlign: "right", fontWeight: 700, fontSize: isA5 ? "7pt" : "8pt", color: "#1e293b" }}>
-          {!isLastPage && <span>P.T.O. / कृपया उलटिए &rarr;</span>}
+        <div style={{ flex: 1, textAlign: "right", fontWeight: 700, fontSize: isA5 ? "7pt" : "8pt", color: "#1e293b" }}>
+          {!isLastPage ? <span>P.T.O. / कृपया उलटिए &rarr;</span> : null}
         </div>
       </div>
     </div>
@@ -614,7 +655,7 @@ function BlankPage({ showTemplate = true, isA5 }: { showTemplate?: boolean; isA5
   );
 }
 
-export type SheetsInfo = { pages: number; sheets: number };
+export type SheetsInfo = { pages: number; sheets: number; isTwoUpCut?: boolean };
 
 /**
  * Lays the paper out on real A4 or A5 pages (measured in the browser), then stacks them (PAGE),
@@ -629,6 +670,7 @@ export function PaperSheets({
   showSignatures,
   watermark,
   watermarkText,
+  twoUpCutMode,
   onInfo,
 }: {
   paper: PaperData;
@@ -639,6 +681,7 @@ export function PaperSheets({
   showSignatures?: boolean;
   watermark?: boolean;
   watermarkText?: string;
+  twoUpCutMode?: boolean;
   onInfo?: (i: SheetsInfo) => void;
 }) {
   const isA5 = paper.layout === "BOOKLET_A4";
@@ -688,12 +731,18 @@ export function PaperSheets({
   }, [blocks]);
 
   const pageCount = pages?.length ?? 0;
-  const sheets = useMemo(
-    () => (isBooklet && pageCount > 0 ? imposeBooklet(pageCount) : []),
-    [isBooklet, pageCount],
-  );
+  const isEligibleTwoUp = isA5 && pageCount > 0 && pageCount <= 2;
+  const isEffectiveTwoUp = Boolean(isEligibleTwoUp && twoUpCutMode);
 
-  const isBookletPrint = isBooklet && view === "sheets";
+  const sheets = useMemo(() => {
+    if (pageCount <= 0) return [];
+    if (isEffectiveTwoUp) {
+      return imposeTwoUpCut(pageCount);
+    }
+    return isBooklet ? imposeBooklet(pageCount) : [];
+  }, [isBooklet, pageCount, isEffectiveTwoUp]);
+
+  const isBookletPrint = (isBooklet || isEffectiveTwoUp) && view === "sheets";
   const pageSize = isBookletPrint
     ? isA5
       ? "A4 landscape"
@@ -707,9 +756,9 @@ export function PaperSheets({
       const totalPages = isBookletPrint
         ? sheets.length * 4
         : pageCount + (includeRoughWork ? 1 : 0);
-      onInfo?.({ pages: totalPages, sheets: sheets.length });
+      onInfo?.({ pages: totalPages, sheets: sheets.length, isTwoUpCut: isEffectiveTwoUp });
     }
-  }, [pageCount, sheets.length, isBookletPrint, includeRoughWork, onInfo]);
+  }, [pageCount, sheets.length, isBookletPrint, includeRoughWork, isEffectiveTwoUp, onInfo]);
 
   const continuationKeys = useMemo(() => {
     if (!pages) return new Set<string>();
@@ -767,17 +816,42 @@ export function PaperSheets({
   const sheetEls =
     pages &&
     sheets.flatMap((s, k) =>
-      (["front", "back"] as const).map((side) => (
-        <div key={`${k}-${side}`} className="page-frame shadow-md">
-          <div className="no-print mb-1 text-center text-xs font-semibold text-slate-500">
-            {isA5 ? "A4 Sheet (Fold to A5)" : "A3 Sheet (Fold to A4)"} {k + 1} · {side.toUpperCase()} (Side {side === "front" ? "1" : "2"})
+      (["front", "back"] as const)
+        .filter((side) => s[side][0] !== null || s[side][1] !== null)
+        .map((side) => (
+          <div key={`${k}-${side}`} className="page-frame shadow-md relative">
+            <div className="no-print mb-1 text-center text-xs font-semibold text-slate-500">
+              {isEffectiveTwoUp
+                ? `A4 Sheet (2-Up Cut Mode · 2 Copies per sheet) · ${side.toUpperCase()} (Side ${side === "front" ? "1" : "2"})`
+                : isA5
+                ? `A4 Sheet (Fold to A5) ${k + 1} · ${side.toUpperCase()} (Side ${side === "front" ? "1" : "2"})`
+                : `A3 Sheet (Fold to A4) ${k + 1} · ${side.toUpperCase()} (Side ${side === "front" ? "1" : "2"})`}
+            </div>
+            <div className={`${isA5 ? "a4-sheet" : "a3-sheet"} relative`}>
+              {pageEl(s[side][0], "l")}
+              {pageEl(s[side][1], "r")}
+              {isEffectiveTwoUp && (
+                <div
+                  className="absolute left-1/2 top-0 bottom-0 -translate-x-1/2 pointer-events-none z-20 flex flex-col justify-between items-center"
+                  style={{ width: "0px", borderLeft: "1.5px dashed #94a3b8" }}
+                >
+                  <div
+                    className="absolute top-[2mm] -translate-x-1/2 bg-white px-1.5 py-0.5 rounded border border-slate-300 font-mono text-[6.5pt] font-semibold text-slate-600 tracking-wider whitespace-nowrap select-none shadow-2xs"
+                    style={{ lineHeight: 1 }}
+                  >
+                    ✂ CUT
+                  </div>
+                  <div
+                    className="absolute bottom-[2mm] -translate-x-1/2 bg-white px-1.5 py-0.5 rounded border border-slate-300 font-mono text-[6.5pt] font-semibold text-slate-600 tracking-wider whitespace-nowrap select-none shadow-2xs"
+                    style={{ lineHeight: 1 }}
+                  >
+                    ✂ CUT
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-          <div className={isA5 ? "a4-sheet" : "a3-sheet"}>
-            {pageEl(s[side][0], "l")}
-            {pageEl(s[side][1], "r")}
-          </div>
-        </div>
-      )),
+        )),
     );
 
   return (

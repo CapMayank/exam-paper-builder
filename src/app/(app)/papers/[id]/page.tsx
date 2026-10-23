@@ -13,8 +13,10 @@ import {
   ExternalLink,
   FileDown,
   Grid3X3,
+  History,
   ImagePlus,
   KeyRound,
+  Lightbulb,
   Lock,
   Pencil,
   PencilRuler,
@@ -38,6 +40,8 @@ import { FigureStudio } from "@/components/figure-studio";
 import { PaperImportModal } from "@/components/PaperImportModal";
 import { PaperPreflightModal } from "@/components/PaperPreflightModal";
 import { PaperSheets } from "@/components/PaperSheets";
+import { PaperSnapshotDrawer } from "@/components/PaperSnapshotDrawer";
+import { SubjectWorkspaceDrawer } from "@/components/subject-workspace/SubjectWorkspaceDrawer";
 import { SectionAiModal } from "@/components/SectionAiModal";
 import { QuestionForm } from "@/components/QuestionForm";
 import { QuestionPicker } from "@/components/QuestionPicker";
@@ -142,6 +146,8 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   const [paperImportOpen, setPaperImportOpen] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [toolsMenuOpen, setToolsMenuOpen] = useState(false);
+  const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
+  const [toolkitDrawerOpen, setToolkitDrawerOpen] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<"quotas" | "settings">("quotas");
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [showAllChapters, setShowAllChapters] = useState(false);
@@ -304,6 +310,12 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
     setInfoMessage(null);
     setAutofilling(true);
     try {
+      if (paper && paper.items.length > 0) {
+        api(`/api/papers/${id}/snapshots`, {
+          method: "POST",
+          json: { name: `Auto-checkpoint (Before Auto-Fill - ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})` },
+        }).catch(() => undefined);
+      }
       const res = await api<{
         success: boolean;
         addedCount: number;
@@ -694,6 +706,28 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
             >
               <Columns2 size={14} className={splitPreview ? "text-indigo-200" : "text-slate-500"} />
               <span>{splitPreview ? "Hide Live Sheet" : "Live Sheet Preview"}</span>
+            </button>
+
+            {/* Version History & Rollback Checkpoints */}
+            <button
+              type="button"
+              onClick={() => setHistoryDrawerOpen(true)}
+              className="btn border-slate-300 bg-white text-slate-700 hover:bg-slate-50 text-xs font-semibold flex items-center gap-1.5 shadow-2xs"
+              title="View saved checkpoints, revisions, and rollback versions"
+            >
+              <History size={14} className="text-indigo-600" />
+              <span>History</span>
+            </button>
+
+            {/* Subject Toolkit & Instructions Library */}
+            <button
+              type="button"
+              onClick={() => setToolkitDrawerOpen(true)}
+              className="btn border-slate-300 bg-white text-slate-700 hover:bg-slate-50 text-xs font-semibold flex items-center gap-1.5 shadow-2xs"
+              title="Subject instructions, formulas, and rubrics"
+            >
+              <Lightbulb size={14} className="text-amber-600" />
+              <span>Toolkit</span>
             </button>
 
             {/* 3. Primary Contextual CTA */}
@@ -2368,6 +2402,31 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
           }}
         />
       )}
+
+      {/* Version History Checkpoint Drawer */}
+      {paper && (
+        <PaperSnapshotDrawer
+          isOpen={historyDrawerOpen}
+          paperId={id}
+          paperTitle={paper.title}
+          isFinalized={paper.status === "FINAL"}
+          onClose={() => setHistoryDrawerOpen(false)}
+          onRestore={adopt}
+        />
+      )}
+
+      {/* Subject Instructions & Formula Toolkit Drawer */}
+      <SubjectWorkspaceDrawer
+        isOpen={toolkitDrawerOpen}
+        onClose={() => setToolkitDrawerOpen(false)}
+        onApplyInstructions={(instructions) => {
+          setDetails((d) => ({ ...d, generalInstructions: instructions }));
+          api(`/api/papers/${id}`, {
+            method: "PATCH",
+            json: { generalInstructions: instructions },
+          }).then((p) => adopt(p as PaperData)).catch(() => undefined);
+        }}
+      />
     </div>
   );
 }

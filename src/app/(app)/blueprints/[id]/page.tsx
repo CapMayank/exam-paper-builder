@@ -1,12 +1,14 @@
 "use client";
 
-import { ArrowDown, ArrowUp, BookOpen, Code2, Download, FileText, Plus, Sparkles, Trash2, Upload } from "lucide-react";
+import { ArrowDown, ArrowUp, BookOpen, Code2, Download, FileText, Layers, Plus, Sparkles, Trash2, Upload } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useEffect, useMemo, useState } from "react";
 import { ErrorBanner, Field, useConfirm, useToast } from "@/components/ui";
 import { BlueprintImportModal } from "@/components/BlueprintImportModal";
 import { BlueprintJsonModal } from "@/components/BlueprintJsonModal";
+import { BlueprintTemplateModal } from "@/components/BlueprintTemplateModal";
+import { STANDARD_BLUEPRINT_TEMPLATES, type BlueprintTemplate } from "@/lib/curriculumTemplates";
 import { downloadBlueprintJson, type BlueprintWithExportRelations } from "@/lib/blueprintExport";
 import { useAcademicSession } from "@/lib/academicSession";
 import {
@@ -71,6 +73,7 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importModalTab, setImportModalTab] = useState<"import" | "ai" | "examples">("import");
   const [jsonModalOpen, setJsonModalOpen] = useState(false);
+  const [templateModalOpen, setTemplateModalOpen] = useState(false);
 
   const [selectedClassFilter, setSelectedClassFilter] = useState("");
   const [selectedSubjectFilter, setSelectedSubjectFilter] = useState("");
@@ -147,23 +150,43 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
             setSubjectCode(matchingSubject.code);
           }
           setAcademicSession(currentSession);
-          setSectionGroups([
-            newSectionGroup(
-              {
-                title: "Section A",
-                instructions: "All questions are compulsory.",
-                questionTypes: [newQuestionType({ type: "MCQ", count: 10, marksEach: 1 })],
-              },
-              0
-            ),
-          ]);
+          const urlTemplateId = typeof sp.templateId === "string" ? sp.templateId : undefined;
+          const matchedTmpl = urlTemplateId ? STANDARD_BLUEPRINT_TEMPLATES.find((t) => t.id === urlTemplateId) : null;
+          if (matchedTmpl) {
+            setExamType(matchedTmpl.examType);
+            setDurationMin(matchedTmpl.durationMin);
+            setSectionGroups(
+              matchedTmpl.sections.map((sec, idx) => ({
+                key: `sec_tmpl_${idx}`,
+                title: sec.title,
+                instructions: sec.instructions,
+                questionTypes: sec.questionTypes.map((qt, qIdx) => ({
+                  key: `qt_tmpl_${idx}_${qIdx}`,
+                  type: qt.type,
+                  count: qt.count,
+                  marksEach: qt.marksEach,
+                })),
+              }))
+            );
+          } else {
+            setSectionGroups([
+              newSectionGroup(
+                {
+                  title: "Section A",
+                  instructions: "All questions are compulsory.",
+                  questionTypes: [newQuestionType({ type: "MCQ", count: 10, marksEach: 1 })],
+                },
+                0
+              ),
+            ]);
+          }
         }
         setLoaded(true);
       } catch (e) {
         setError((e as Error).message);
       }
     })();
-  }, [id, from, currentSession, sp.bookId, sp.subjectCode, sp.className, sp.subject]);
+  }, [id, from, currentSession, sp.bookId, sp.subjectCode, sp.className, sp.subject, sp.templateId]);
 
   const hasPapers = paperCount > 0;
   const book = books.find((b) => b.id === bookId);
@@ -370,6 +393,25 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
     );
   }
 
+  function applyStarterTemplate(template: BlueprintTemplate) {
+    setExamType(template.examType);
+    setDurationMin(template.durationMin);
+    const newGroups: SectionGroup[] = template.sections.map((sec, idx) => ({
+      key: `sec_tmpl_${Date.now()}_${idx}`,
+      title: sec.title,
+      instructions: sec.instructions,
+      questionTypes: sec.questionTypes.map((qt, qIdx) => ({
+        key: `qt_tmpl_${Date.now()}_${idx}_${qIdx}`,
+        type: qt.type,
+        count: qt.count,
+        marksEach: qt.marksEach,
+      })),
+    }));
+    setSectionGroups(newGroups);
+    setTemplateModalOpen(false);
+    toast.success(`Applied template "${template.title}" (${template.totalMarks} marks)`);
+  }
+
   async function save(e?: React.FormEvent, andBuildPaper = false) {
     if (e) e.preventDefault();
     setError(null);
@@ -505,6 +547,14 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
                 title="Parse blueprint circular, syllabus image, PDF, or text using Gemini AI"
               >
                 <Sparkles size={14} className="text-indigo-600" /> AI Blueprint Creator
+              </button>
+              <button
+                type="button"
+                onClick={() => setTemplateModalOpen(true)}
+                className="btn btn-ghost border border-purple-200 bg-purple-50/80 text-purple-900 hover:bg-purple-100 flex items-center gap-1.5 text-xs font-semibold shadow-2xs"
+                title="Populate blueprint sections using standard CBSE/ICSE patterns"
+              >
+                <Layers size={14} className="text-purple-600" /> Starter Templates
               </button>
               <button
                 type="button"
@@ -1076,6 +1126,12 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
         onClose={() => setJsonModalOpen(false)}
         blueprint={currentBlueprintData}
         book={book}
+      />
+
+      <BlueprintTemplateModal
+        isOpen={templateModalOpen}
+        onClose={() => setTemplateModalOpen(false)}
+        onSelectTemplate={applyStarterTemplate}
       />
 
       {/* Sticky Blueprint Budget Bar */}

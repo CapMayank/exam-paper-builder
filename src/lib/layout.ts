@@ -72,10 +72,36 @@ export function paginate(
 }
 
 export type Sheet = {
-  /** Page indices (0-based, null = blank page) as [left, right] on each side of the A3 sheet. */
+  /** Page indices (0-based, null = blank page) as [left, right] on each side of the A3/A4 sheet. */
   front: [number | null, number | null];
   back: [number | null, number | null];
 };
+
+/**
+ * Impose 2-Up Cut-in-half layout for a 2-page or 1-page exam paper onto an A4 landscape sheet.
+ * Prints 2 complete copies of the paper on 1 sheet that can be cut down the middle with a guillotine cutter!
+ * 2 Pages: Front [Page 0, Page 0], Back [Page 1, Page 1] (duplex).
+ * 1 Page: Front [Page 0, Page 0] (single-sided).
+ */
+export function imposeTwoUpCut(realPages: number): Sheet[] {
+  if (realPages > 2) {
+    throw new Error("2-Up Cut-in-Half mode is only supported for papers with 1 or 2 pages");
+  }
+  if (realPages <= 1) {
+    return [
+      {
+        front: [0, 0], // Left: Copy 1 Page 1, Right: Copy 2 Page 1
+        back: [null, null],
+      },
+    ];
+  }
+  return [
+    {
+      front: [0, 0], // Left: Copy 1 Page 1, Right: Copy 2 Page 1
+      back: [1, 1],  // Left: Copy 1 Page 2, Right: Copy 2 Page 2
+    },
+  ];
+}
 
 /** Booklets need a multiple of 4 pages (one A3 sheet = 4 A4 pages). */
 export function bookletPageCount(pages: number) {

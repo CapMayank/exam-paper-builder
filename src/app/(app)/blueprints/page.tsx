@@ -26,6 +26,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AcademicRolloverModal } from "@/components/AcademicRolloverModal";
 import { AIBlueprintModal } from "@/components/AIBlueprintModal";
 import { BlueprintJsonModal } from "@/components/BlueprintJsonModal";
+import { BlueprintTemplateModal } from "@/components/BlueprintTemplateModal";
 import {
   EmptyState,
   ErrorBanner,
@@ -83,6 +84,7 @@ export default function BlueprintsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [rolloverOpen, setRolloverOpen] = useState(false);
   const [aiBlueprintOpen, setAiBlueprintOpen] = useState(false);
+  const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [jsonModalBlueprint, setJsonModalBlueprint] = useState<Blueprint | null>(null);
   const [mobileTab, setMobileTab] = useState<"directory" | "details">("directory");
 
@@ -321,6 +323,14 @@ export default function BlueprintsPage() {
                 <RotateCcw size={15} className="text-slate-600" /> Rollover Session
               </button>
             )}
+            <button
+              type="button"
+              onClick={() => setTemplateModalOpen(true)}
+              className="btn btn-ghost border border-purple-200 bg-purple-50/80 text-purple-900 hover:bg-purple-100 text-xs py-1.5 font-semibold flex items-center gap-1.5"
+              title="Browse standard CBSE/ICSE board blueprint starter templates"
+            >
+              <Layers size={15} className="text-purple-600" /> Starter Templates
+            </button>
             <Link
               href="/blueprints/new?import=true"
               className="btn btn-ghost border border-slate-200 bg-white text-slate-800 hover:bg-slate-50 text-xs py-1.5"
@@ -996,6 +1006,17 @@ export default function BlueprintsPage() {
         isOpen={Boolean(jsonModalBlueprint)}
         onClose={() => setJsonModalBlueprint(null)}
         blueprint={jsonModalBlueprint}
+      />
+
+      <BlueprintTemplateModal
+        isOpen={templateModalOpen}
+        onClose={() => setTemplateModalOpen(false)}
+        onSelectTemplate={(tmpl) => {
+          setTemplateModalOpen(false);
+          const classQuery = classFilter !== "ALL" ? `&className=${encodeURIComponent(classFilter)}` : "";
+          const subjectQuery = subjectFilter !== "ALL" ? `&subject=${encodeURIComponent(subjectFilter)}` : "";
+          router.push(`/blueprints/new?templateId=${encodeURIComponent(tmpl.id)}${classQuery}${subjectQuery}`);
+        }}
       />
     </div>
   );
