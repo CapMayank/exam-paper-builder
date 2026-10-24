@@ -305,5 +305,21 @@ describe("AI Fill, AI Replace, Question Mapping, and Marks Allocation Suite", ()
         expect(p.right).toBeTruthy();
       }
     }, 20000);
+
+    it("recovers matching pairs from explanation text when LLM places pairs in explanation", () => {
+      const text =
+        "Match the integrals in Column I with their correct evaluated forms in Column II based on standard integration formulas and algebraic substitutions:";
+      const explanation =
+        "To solve this, apply standard integration formulas: (A) \\int \\frac{1}{a^2 - x^2} dx = \\sin^{-1}(x/a) + C, which matches (iv). (B) \\int \\frac{1}{x^2 - a^2} dx = \\frac{1}{2a} \\log |(x-a)/(x+a)| + C, which matches (ii). (C) \\int \\sqrt{x^2 - a^2} dx = \\frac{x}{2} \\sqrt{x^2 - a^2} - \\frac{a^2}{2} \\log |x + \\sqrt{x^2 - a^2}| + C, which matches (iii). (D) \\int \\tan^{-1} x dx = x \\tan^{-1} x - \\frac{1}{2} \\log(1+x^2) + C, which matches (i).";
+
+      const pairs = parseMatchColumnPairs([], text, explanation);
+      expect(pairs).toHaveLength(4);
+      expect(pairs[0].left).toContain("\\int \\frac{1}{a^2 - x^2} dx");
+      expect(pairs[0].right).toContain("\\sin^{-1}(x/a) + C");
+      expect(pairs[1].left).toContain("\\int \\frac{1}{x^2 - a^2} dx");
+      expect(pairs[1].right).toContain("\\frac{1}{2a} \\log");
+      expect(pairs[2].left).toContain("\\int \\sqrt{x^2 - a^2} dx");
+      expect(pairs[3].left).toContain("\\int \\tan^{-1} x dx");
+    });
   });
 });

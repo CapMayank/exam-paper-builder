@@ -96,9 +96,9 @@
     "semantic_hash": ""
   },
   "src/app/(app)/papers/[id]/page.tsx": {
-    "mtime": 1792820946.4249618,
-    "seen": 1792821706.1951902,
-    "ast_hash": "54995feacff6c63cbae2354cd4fd7386",
+    "mtime": 1792823698.8348677,
+    "seen": 1792823901.5529256,
+    "ast_hash": "a80f3d754d592ac192f898998508777b",
     "semantic_hash": ""
   },
   "src/app/(app)/papers/page.tsx": {
@@ -366,15 +366,15 @@
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/questions/[itemId]/route.ts": {
-    "mtime": 1792787049.1837626,
-    "seen": 1792787344.8373156,
-    "ast_hash": "54cd32f937fcd1efed14a46704b5100c",
+    "mtime": 1792823177.2632773,
+    "seen": 1792823901.5529256,
+    "ast_hash": "4a8722779768166267da3272520f3b69",
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/questions/route.ts": {
-    "mtime": 1792787058.1862347,
-    "seen": 1792787344.8373156,
-    "ast_hash": "2a301aeb5b213d3ebc568993fb6094c3",
+    "mtime": 1792823151.510703,
+    "seen": 1792823901.5529256,
+    "ast_hash": "7d6bbb0904e3074df7285b7d546968b1",
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/reconcile-blueprint/route.ts": {
@@ -606,9 +606,9 @@
     "semantic_hash": ""
   },
   "src/components/QuestionPicker.tsx": {
-    "mtime": 1792820894.3087554,
-    "seen": 1792821706.1951902,
-    "ast_hash": "10503b50e78d35f0699b8dd51e0d9a56",
+    "mtime": 1792825084.1427047,
+    "seen": 1792825221.5837584,
+    "ast_hash": "2aa94325155d42c38ecfaff093762685",
     "semantic_hash": ""
   },
   "src/components/QuestionUsageHistory.tsx": {
@@ -750,9 +750,9 @@
     "semantic_hash": ""
   },
   "src/lib/blueprint.ts": {
-    "mtime": 1792736987.4141438,
-    "seen": 1792737093.5706325,
-    "ast_hash": "f322c4411ae8bf5295f0327f76e08a1f",
+    "mtime": 1792823791.4728737,
+    "seen": 1792823901.5529256,
+    "ast_hash": "6767d5ce26338e779afff168384c78d2",
     "semantic_hash": ""
   },
   "src/lib/blueprintExport.ts": {
@@ -804,9 +804,9 @@
     "semantic_hash": ""
   },
   "src/lib/constants.ts": {
-    "mtime": 1792790075.774156,
-    "seen": 1792790327.3774147,
-    "ast_hash": "deaca0f768e0802f32cb0bad536355fd",
+    "mtime": 1792824816.3940248,
+    "seen": 1792825221.5837584,
+    "ast_hash": "44439e533916a3ce16a8a7a1e25f317f",
     "semantic_hash": ""
   },
   "src/lib/curriculumPresets.ts": {
@@ -870,9 +870,9 @@
     "semantic_hash": ""
   },
   "src/lib/gemini.ts": {
-    "mtime": 1792820744.5367646,
-    "seen": 1792821706.1951902,
-    "ast_hash": "8baf7391bca9eecd6dfa048c81dd4f24",
+    "mtime": 1792824892.1568594,
+    "seen": 1792825221.5847647,
+    "ast_hash": "da208be32b6791e815c86a6563704596",
     "semantic_hash": ""
   },
   "src/lib/kindergarten.test.ts": {
@@ -1104,9 +1104,9 @@
     "semantic_hash": ""
   },
   "src/lib/papers.ts": {
-    "mtime": 1792820923.8355422,
-    "seen": 1792821706.1951902,
-    "ast_hash": "161cf307b3905acc129ea90656439b69",
+    "mtime": 1792823867.2389686,
+    "seen": 1792823901.5529256,
+    "ast_hash": "f177b27ca64246bfd2b45edfa5abbb8c",
     "semantic_hash": ""
   },
   "src/lib/print-logistics.test.ts": {
@@ -1398,9 +1398,9 @@
     "semantic_hash": ""
   },
   "src/components/SectionAiModal.tsx": {
-    "mtime": 1792820827.4131389,
-    "seen": 1792821706.1951902,
-    "ast_hash": "bf239dc6b75081c1520493da961a3989",
+    "mtime": 1792823500.7162924,
+    "seen": 1792823901.5529256,
+    "ast_hash": "e2607eed36b0d0cb7b3e3c46096a008d",
     "semantic_hash": ""
   },
   "src/lib/preflight.ts": {
@@ -1488,9 +1488,9 @@
     "semantic_hash": ""
   },
   "src/lib/ai-fill-replace-marks.test.ts": {
-    "mtime": 1792821610.0582125,
-    "seen": 1792821706.1951902,
-    "ast_hash": "11149fa555e8a9b99e08e055b966568c",
+    "mtime": 1792825114.9413097,
+    "seen": 1792825221.5837584,
+    "ast_hash": "49bb9cb170858378408f23b366506332",
     "semantic_hash": ""
   }
 }

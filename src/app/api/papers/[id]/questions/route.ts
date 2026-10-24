@@ -1,6 +1,7 @@
 import { body, HttpError, route } from "@/lib/api";
 import { whyCannotAdd } from "@/lib/blueprint";
-import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
+import { parseMatchColumnPairs } from "@/lib/constants";
+import { assertCanModifyPaper, loadPaperView, toPlacedItems } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { addItemSchema } from "@/lib/schemas";
 import { parseSubparts, subpartsTotalMarks } from "@/lib/types";
@@ -20,22 +21,11 @@ export const POST = route(async (req, { id }, user) => {
     throw new HttpError(409, "This question is already in the paper (as primary or alternate question).");
   }
 
-  const placedItems = paper.items.map((i) => {
-    const subparts = parseSubparts(i.question.subpartsJson);
-    const submarks = subpartsTotalMarks(subparts);
-    return {
-      sectionId: i.sectionId,
-      chapterId: i.question.chapterId,
-      marks: submarks > 0 ? submarks : undefined,
-      subpartsCount: subparts.length > 1 ? subparts.length : undefined,
-    };
-  });
+  const targetSection = paper.blueprint.sections.find((s) => s.id === input.sectionId);
+  if (!targetSection) throw new HttpError(404, "Section not found");
 
   const candidateSubparts = parseSubparts(question.subpartsJson);
   const candidateSubmarks = subpartsTotalMarks(candidateSubparts);
-
-  const targetSection = paper.blueprint.sections.find((s) => s.id === input.sectionId);
-  if (!targetSection) throw new HttpError(404, "Section not found");
 
   if (candidateSubparts.length > 0 && candidateSubmarks !== targetSection.marksEach) {
     throw new HttpError(
@@ -43,6 +33,27 @@ export const POST = route(async (req, { id }, user) => {
       `Board Guardrail Violation: Question total subpart marks (${candidateSubmarks}) must match section marks (${targetSection.marksEach}).`
     );
   }
+
+  const isTargetMatch = targetSection.type === "MATCH_COLUMN";
+  const isMultiUnitMatch = isTargetMatch && targetSection.count > 1 && targetSection.marksEach === 1;
+  let matchPairsCount = 0;
+  if (isTargetMatch) {
+    try {
+      const parsed = JSON.parse(question.optionsJson || "[]");
+      matchPairsCount = parseMatchColumnPairs(Array.isArray(parsed) ? parsed : [], question.text).length;
+    } catch {}
+  }
+
+  const candidateMarks = isTargetMatch
+    ? (isMultiUnitMatch
+        ? Math.min(matchPairsCount || targetSection.count, targetSection.count) * targetSection.marksEach
+        : targetSection.marksEach)
+    : (candidateSubmarks > 0 ? candidateSubmarks : targetSection.marksEach);
+  const candidateUnits = isMultiUnitMatch
+    ? Math.min(matchPairsCount || targetSection.count, targetSection.count)
+    : undefined;
+
+  const placedItems = toPlacedItems(paper.blueprint.sections, paper.items);
 
   const reason = whyCannotAdd(
     {
@@ -54,8 +65,8 @@ export const POST = route(async (req, { id }, user) => {
       sectionId: input.sectionId,
       chapterId: question.chapterId,
       type: question.type,
-      marks: candidateSubmarks > 0 ? candidateSubmarks : undefined,
-      subpartsCount: candidateSubparts.length > 1 ? candidateSubparts.length : undefined,
+      marks: candidateMarks,
+      subpartsCount: candidateUnits,
     },
   );
   if (reason) throw new HttpError(409, reason);

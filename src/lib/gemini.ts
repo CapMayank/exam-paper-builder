@@ -3,6 +3,7 @@ import {
   cleanMatchItem,
   cleanOptionText,
   derangeMatchColumnPairs,
+  extractMatchPairsFromExplanation,
   getMatchColumnInstruction,
   isKindergartenType,
   isMcqLikeType,
@@ -223,7 +224,64 @@ export async function generateQuestionsWithGemini(params: {
 Your task is to generate high-standard examination questions strictly aligned with NCERT curriculum, Bloom's Taxonomy, and official CBSE blueprinted patterns.
 Output format: JSON array of question objects only. No conversational wrapper.`;
 
-  const userPrompt = `Generate ${count} distinct board-aligned question(s) with the following specifications:
+  const normalizedType = normalizeQuestionType(type);
+  const isMatchColumn = normalizedType === "MATCH_COLUMN";
+
+  const userPrompt = isMatchColumn
+    ? `Generate ${count} distinct board-aligned Match the Columns question(s) with the following specifications:
+- Class: ${className}
+- Subject: ${subject}
+- Chapter: ${chapter}
+- Question Type: MATCH_COLUMN
+- Marks: ${marks} marks each
+- Difficulty: ${difficulty}
+- Cognitive Level: ${cognitiveLevel || "APPLYING"}
+- Language: ${language === "bilingual" ? "Bilingual (English with Hindi translation in parentheses)" : language === "hi" ? "Hindi (Devanagari script)" : "English"}
+${topicContext ? `- Specific Topic / Context Focus: ${topicContext}` : ""}
+
+CRITICAL MATCH_COLUMN STRUCTURE REQUIREMENTS:
+1. The "text" field MUST contain:
+   - The opening instruction line (e.g. "Match the items in Column I with their correct evaluated forms in Column II:")
+   - Followed by "Column I:" on its own line
+   - Followed by EXACTLY 4 Column I items labeled (A), (B), (C), (D) on separate lines.
+   Example:
+   "Match the integrals in Column I with their correct evaluated forms in Column II:\nColumn I:\n(A) $\\int \\frac{1}{a^2 - x^2} dx$\n(B) $\\int \\frac{1}{x^2 - a^2} dx$\n(C) $\\int \\sqrt{x^2 - a^2} dx$\n(D) $\\int \\tan^{-1} x dx$"
+
+2. The "options" array MUST contain EXACTLY the 4 corresponding Column II matching items/expressions.
+   DO NOT leave "options" empty!
+   Example:
+   [
+     "$\\frac{1}{2a} \\log \\left| \\frac{x-a}{x+a} \\right| + C$",
+     "$\\frac{x}{2} \\sqrt{x^2 - a^2} - \\frac{a^2}{2} \\log \\left| x + \\sqrt{x^2 - a^2} \\right| + C$",
+     "$x \\tan^{-1} x - \\frac{1}{2} \\log(1 + x^2) + C$",
+     "$\\frac{1}{2a} \\log \\left| \\frac{a+x}{a-x} \\right| + C$"
+   ]
+
+3. The "answer" field MUST specify the correct pairing for all items:
+   Example: "(A)-(iv), (B)-(i), (C)-(ii), (D)-(iii)"
+
+4. Use standard LaTeX math $...$ for any mathematical expressions, integrals, equations, fractions, or symbols.
+
+Return a JSON array strictly matching this TypeScript structure:
+[
+  {
+    "type": "MATCH_COLUMN",
+    "text": "Match the items in Column I with Column II:\nColumn I:\n(A) First concept\n(B) Second concept\n(C) Third concept\n(D) Fourth concept",
+    "options": [
+      "Definition / result for B (shuffled)",
+      "Definition / result for C (shuffled)",
+      "Definition / result for D (shuffled)",
+      "Definition / result for A (shuffled)"
+    ],
+    "subparts": [],
+    "answer": "(A)-(iv), (B)-(i), (C)-(ii), (D)-(iii)",
+    "marks": ${marks},
+    "difficulty": "${difficulty}",
+    "cognitiveLevel": "${cognitiveLevel || "APPLYING"}",
+    "explanation": "Step-by-step evaluation showing why each pairing is correct."
+  }
+]`
+    : `Generate ${count} distinct board-aligned question(s) with the following specifications:
 - Class: ${className}
 - Subject: ${subject}
 - Chapter: ${chapter}
@@ -245,7 +303,7 @@ Strict requirements:
 4. For SHORT, LONG, NUMERICAL: Provide step-wise model answer and marking scheme breakdown.
 5. For FILL_BLANK: Provide question text containing one or more blanks indicated by "________" (at least 8 underscores). Options should be empty []. The answer should be the exact word(s) filling the blank.
 6. For TRUE_FALSE: Provide a clear declarative statement. Options should be ["True", "False"] (or ["सत्य", "असत्य"] for Hindi). Answer must be "True" or "False" (or Hindi equivalent).
-7. For MATCH_COLUMN: Set text with instructions and Column I items labeled (A), (B), (C), (D). Set options to the 4 corresponding Column II items, SHUFFLED/DERANGED so they do NOT line up directly with the corresponding Column I item. Set answer to the full pairing string (e.g. "(A)-(iii), (B)-(i), (C)-(iv), (D)-(ii)").
+7. For MATCH_COLUMN: Set text with instructions and Column I items labeled (A), (B), (C), (D). Set options to the 4 corresponding Column II items. Set answer to the full pairing string (e.g. "(A)-(iii), (B)-(i), (C)-(iv), (D)-(ii)").
 8. Use standard LaTeX math $...$ for any mathematical expressions, formulas, chemical reactions, or units.
 
 Return a JSON array strictly matching this TypeScript structure:
@@ -253,10 +311,10 @@ Return a JSON array strictly matching this TypeScript structure:
   {
     "type": "${type}",
     "text": "Question text...",
-    "options": ["Option A", "Option B", "Option C", "Option D"], // empty for non-MCQ
+    "options": ["Option A", "Option B", "Option C", "Option D"], // 4 for MCQ/ASSERTION_REASON, 2 for TRUE_FALSE, empty [] for subjective
     "subparts": [
       { "label": "(i)", "text": "Subpart text", "marks": 1, "answer": "Answer" }
-    ], // for case study only
+    ], // for case study only, empty [] for others
     "answer": "Detailed model answer / step marking scheme",
     "marks": ${marks},
     "difficulty": "${difficulty}",
@@ -574,22 +632,51 @@ A student took three test tubes A, B, and C containing clean iron nails. In tube
       let qText = repairLatex(String(item.text || "").trim());
       let qAnswer = isMcqLikeType(qType) ? cleanOptionText(item.answer || "") : repairLatex(String(item.answer || "").trim());
 
-      // If MATCH_COLUMN, ensure derangement
+      // If MATCH_COLUMN, ensure robust pair extraction, column formatting, and derangement
       if (isMatch) {
-        const pairs = parseMatchColumnPairs(options, qText);
-        const isDirectMatch =
-          /^\s*\(?[Aa]\)?\s*[-→:]\s*\(?([1iI])\)?\s*,\s*\(?[Bb]\)?\s*[-→:]\s*\(?([2iI]{2})\)?/.test(qAnswer) ||
-          !qAnswer ||
-          qAnswer.toLowerCase().includes("direct");
-        if (pairs.length > 1 && isDirectMatch) {
-          const letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
-          const romans = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
-          const deranged = derangeMatchColumnPairs(pairs);
+        let pairs = parseMatchColumnPairs(options, qText, item.explanation);
+        if (pairs.length === 0) {
+          pairs = extractMatchPairsFromExplanation(item.explanation);
+        }
+        if (pairs.length === 0 && qText) {
+          pairs = extractMatchPairsFromExplanation(qText);
+        }
+
+        const letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
+        const romans = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
+
+        if (pairs.length > 0) {
+          const isDirectMatch =
+            /^\s*\(?[Aa]\)?\s*[-→:]\s*\(?([1iI])\)?\s*,\s*\(?[Bb]\)?\s*[-→:]\s*\(?([2iI]{2})\)?/.test(qAnswer) ||
+            !qAnswer ||
+            qAnswer.toLowerCase().includes("direct");
+
+          const deranged = isDirectMatch && pairs.length > 1 ? derangeMatchColumnPairs(pairs) : pairs;
           const col1Lines = pairs.map((p, idx) => `(${letters[idx] ?? idx + 1}) ${cleanMatchItem(p.left)}`);
           const col2Items = deranged.map((p) => cleanMatchItem(p.right));
           const answers = pairs.map((p, idx) => {
             const optIdx = col2Items.indexOf(cleanMatchItem(p.right));
-            return `(${letters[idx] ?? idx + 1})-${romans[optIdx] ?? `(${optIdx + 1})`}`;
+            const romanLabel = optIdx >= 0 ? (romans[optIdx] ?? `(${optIdx + 1})`) : (romans[idx] ?? `(${idx + 1})`);
+            return `(${letters[idx] ?? idx + 1})-${romanLabel}`;
+          });
+          const instr = getMatchColumnInstruction(qText);
+          qText = `${instr}\nColumn I:\n${col1Lines.join("\n")}`;
+          options = col2Items;
+          qAnswer = answers.join(", ");
+        } else {
+          // Fallback if no pairs could be extracted from text or explanation
+          const fallbackPairs = [
+            { left: "(A) Fundamental principle", right: "Underlying mathematical formulation" },
+            { left: "(B) Operational theorem", right: "Boundary conditions and validity" },
+            { left: "(C) Empirical relationship", right: "Quantitative correlation in syllabus unit" },
+            { left: "(D) Application model", right: "Concrete analytical outcome" },
+          ];
+          const deranged = derangeMatchColumnPairs(fallbackPairs);
+          const col1Lines = fallbackPairs.map((p, idx) => `(${letters[idx]}) ${p.left}`);
+          const col2Items = deranged.map((p) => cleanMatchItem(p.right));
+          const answers = fallbackPairs.map((p, idx) => {
+            const optIdx = col2Items.indexOf(cleanMatchItem(p.right));
+            return `(${letters[idx]})-${romans[optIdx] ?? `(${optIdx + 1})`}`;
           });
           const instr = getMatchColumnInstruction(qText);
           qText = `${instr}\nColumn I:\n${col1Lines.join("\n")}`;

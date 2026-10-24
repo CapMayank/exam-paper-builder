@@ -1,6 +1,7 @@
 import { body, HttpError, route, type SessionUser } from "@/lib/api";
 import { whyCannotAdd } from "@/lib/blueprint";
-import { assertCanModifyPaper, assertCanModifyQuestion, loadPaperView } from "@/lib/papers";
+import { parseMatchColumnPairs } from "@/lib/constants";
+import { assertCanModifyPaper, assertCanModifyQuestion, loadPaperView, toPlacedItems } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { editPaperItemSchema, moveItemSchema, replaceItemSchema } from "@/lib/schemas";
 import { parseSubparts, subpartsTotalMarks } from "@/lib/types";
@@ -58,18 +59,10 @@ export const PATCH = route(async (req, { id, itemId }, user) => {
       throw new HttpError(409, "This question is already elsewhere in this paper (as primary or alternate question)");
     }
 
-    const itemsWithoutCurrent = paper.items
-      .filter((i) => i.id !== itemId)
-      .map((i) => {
-        const sps = parseSubparts(i.question.subpartsJson);
-        const sm = subpartsTotalMarks(sps);
-        return {
-          sectionId: i.sectionId,
-          chapterId: i.question.chapterId,
-          marks: sm > 0 ? sm : undefined,
-          subpartsCount: sps.length > 1 ? sps.length : undefined,
-        };
-      });
+    const itemsWithoutCurrent = toPlacedItems(
+      paper.blueprint.sections,
+      paper.items.filter((i) => i.id !== itemId),
+    );
 
     const candidateSubparts = parseSubparts(candidate.subpartsJson);
     const candidateSubmarks = subpartsTotalMarks(candidateSubparts);
@@ -81,6 +74,25 @@ export const PATCH = route(async (req, { id, itemId }, user) => {
       );
     }
 
+    const isTargetMatch = item.section.type === "MATCH_COLUMN";
+    const isMultiUnitMatch = isTargetMatch && item.section.count > 1 && item.section.marksEach === 1;
+    let matchPairsCount = 0;
+    if (isTargetMatch) {
+      try {
+        const parsed = JSON.parse(candidate.optionsJson || "[]");
+        matchPairsCount = parseMatchColumnPairs(Array.isArray(parsed) ? parsed : [], candidate.text).length;
+      } catch {}
+    }
+
+    const candidateMarks = isTargetMatch
+      ? (isMultiUnitMatch
+          ? Math.min(matchPairsCount || item.section.count, item.section.count) * item.section.marksEach
+          : item.section.marksEach)
+      : (candidateSubmarks > 0 ? candidateSubmarks : item.section.marksEach);
+    const candidateUnits = isMultiUnitMatch
+      ? Math.min(matchPairsCount || item.section.count, item.section.count)
+      : undefined;
+
     const reason = whyCannotAdd(
       {
         sections: paper.blueprint.sections,
@@ -91,8 +103,8 @@ export const PATCH = route(async (req, { id, itemId }, user) => {
         sectionId: item.sectionId,
         chapterId: candidate.chapterId,
         type: candidate.type,
-        marks: candidateSubmarks > 0 ? candidateSubmarks : undefined,
-        subpartsCount: candidateSubparts.length > 1 ? candidateSubparts.length : undefined,
+        marks: candidateMarks,
+        subpartsCount: candidateUnits,
       },
     );
     if (reason) throw new HttpError(409, reason);

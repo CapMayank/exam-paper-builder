@@ -6,11 +6,13 @@ import { QuestionForm } from "@/components/QuestionForm";
 import { isExhaustedUsage, QuestionFreshnessAlert, QuestionUsagePills } from "@/components/QuestionUsageHistory";
 import { QuestionView } from "@/components/QuestionView";
 import { ErrorBanner, Modal, Spinner } from "@/components/ui";
-import { whyCannotAdd, type BlueprintDef } from "@/lib/blueprint";
+import { toPlacedItems, whyCannotAdd, type BlueprintDef } from "@/lib/blueprint";
 import { api } from "@/lib/client";
 import {
+  cleanMatchItem,
   cleanOptionText,
   DIFFICULTIES,
+  getMatchColumnInstruction,
   isKindergartenType,
   isSubpartQuestionType,
   parseMatchColumnPairs,
@@ -81,17 +83,23 @@ export function QuestionPicker({
     [paper.blueprint],
   );
 
-  const placed = paper.items
-    .filter((i) => i.id !== replacingItemId)
-    .map((i) => {
-      const submarks = i.question.subparts && i.question.subparts.length > 0 ? subpartsTotalMarks(i.question.subparts) : 0;
-      return {
-        sectionId: i.sectionId,
-        chapterId: i.question.chapterId,
-        marks: submarks > 0 ? submarks : undefined,
-        subpartsCount: i.question.subparts && i.question.subparts.length > 1 ? i.question.subparts.length : undefined,
-      };
-    });
+  const isMultiUnitMatch = section.type === "MATCH_COLUMN" && section.count > 1 && section.marksEach === 1;
+  const targetSlotMarks = isMultiUnitMatch ? section.count * section.marksEach : section.marksEach;
+
+  const placed = useMemo(
+    () => toPlacedItems(paper.blueprint.sections, paper.items.filter((i) => i.id !== replacingItemId)),
+    [paper.blueprint.sections, paper.items, replacingItemId],
+  );
+
+  const activeItemMarks = activeItem
+    ? (activeItem.question.subparts && activeItem.question.subparts.length > 0
+        ? subpartsTotalMarks(activeItem.question.subparts)
+        : (isMultiUnitMatch
+            ? Math.min(parseMatchColumnPairs(activeItem.question.options, activeItem.question.text).length || section.count, section.count) * section.marksEach
+            : section.marksEach))
+    : 0;
+
+  const marksToGenerate = isReplacing && activeItemMarks > 0 ? activeItemMarks : targetSlotMarks;
 
   const sectionStatus = paper.progress.sections.find((s) => s.id === section.id)!;
   const full = !isReplacing && !isAlternate && sectionStatus.filled >= sectionStatus.needed;
@@ -102,9 +110,9 @@ export function QuestionPicker({
     : paper.blueprint.chapters.filter((c) => {
         let used = paper.progress.chapters.find((p) => p.chapterId === c.chapterId)?.used ?? 0;
         if (activeItem && activeItem.question.chapterId === c.chapterId && isReplacing) {
-          used -= section.marksEach;
+          used -= activeItemMarks;
         }
-        return used + section.marksEach <= c.marks;
+        return used + targetSlotMarks <= c.marks;
       });
 
   useEffect(() => {
@@ -136,8 +144,8 @@ export function QuestionPicker({
             why = `Must match section question type (${section.type}).`;
           } else if (activeItem && q.chapterId !== activeItem.question.chapterId) {
             why = `Must match primary question chapter (Ch ${activeItem.question.chapter?.number}).`;
-          } else if (q.subparts && q.subparts.length > 0 && subpartsTotalMarks(q.subparts) !== section.marksEach) {
-            why = `Subpart marks (${subpartsTotalMarks(q.subparts)}m) must match section (${section.marksEach}m).`;
+          } else if (q.subparts && q.subparts.length > 0 && subpartsTotalMarks(q.subparts) !== targetSlotMarks) {
+            why = `Subpart marks (${subpartsTotalMarks(q.subparts)}m) must match slot (${targetSlotMarks}m).`;
           }
         } else {
           if (paper.items.some((i) => (i.question.id === q.id || i.orQuestion?.id === q.id) && i.id !== replacingItemId)) {
@@ -146,15 +154,22 @@ export function QuestionPicker({
             why = "Cannot be identical to the alternate (OR) choice of this slot.";
           } else {
             const qSubmarks = q.subparts && q.subparts.length > 0 ? subpartsTotalMarks(q.subparts) : 0;
-            if (q.subparts && q.subparts.length > 0 && qSubmarks !== section.marksEach) {
-              why = `Subpart marks (${qSubmarks}m) must match section (${section.marksEach}m).`;
+            if (q.subparts && q.subparts.length > 0 && qSubmarks !== targetSlotMarks) {
+              why = `Subpart marks (${qSubmarks}m) must match slot (${targetSlotMarks}m).`;
             } else {
+              const qMatchPairs = isMultiUnitMatch ? parseMatchColumnPairs(q.options, q.text).length : 0;
+              const qCandidateMarks = isMultiUnitMatch
+                ? Math.min(qMatchPairs || section.count, section.count) * section.marksEach
+                : (qSubmarks > 0 ? qSubmarks : targetSlotMarks);
+              const qCandidateUnits = isMultiUnitMatch
+                ? Math.min(qMatchPairs || section.count, section.count)
+                : undefined;
               why = whyCannotAdd(def, placed, {
                 sectionId: section.id,
                 chapterId: q.chapterId,
                 type: q.type,
-                marks: qSubmarks > 0 ? qSubmarks : undefined,
-                subpartsCount: q.subparts && q.subparts.length > 1 ? q.subparts.length : undefined,
+                marks: qCandidateMarks,
+                subpartsCount: qCandidateUnits,
               });
             }
           }
@@ -162,7 +177,7 @@ export function QuestionPicker({
         return { q, why };
       })
       .sort((a, b) => Number(!!a.why) - Number(!!b.why) || (a.q.timesUsed ?? 0) - (b.q.timesUsed ?? 0));
-  }, [bank, placed, def, section.id, isAlternate, activeItem, paper.items, section.type, section.marksEach]);
+  }, [bank, placed, def, section.id, isAlternate, activeItem, paper.items, section.type, targetSlotMarks, isMultiUnitMatch, replacingItemId]);
 
   async function add(questionId: string) {
     setError(null);
@@ -243,11 +258,6 @@ export function QuestionPicker({
       const headers: Record<string, string> = {};
       if (customKey) headers["x-gemini-api-key"] = customKey;
 
-      const targetSlotMarks =
-        section.type === "MATCH_COLUMN" && section.count > 1 && section.marksEach === 1
-          ? section.count * section.marksEach
-          : section.marksEach;
-
       const res = await api<{
         success: boolean;
         isMock: boolean;
@@ -261,7 +271,7 @@ export function QuestionPicker({
           className: paper.blueprint.book.className,
           subject: paper.blueprint.book.subject,
           type: section.type,
-          marks: targetSlotMarks,
+          marks: marksToGenerate,
           difficulty: aiDifficulty,
           cognitiveLevel: aiCognitiveLevel,
           language: aiLanguage,
@@ -301,7 +311,7 @@ export function QuestionPicker({
       const isMatch = section.type === "MATCH_COLUMN";
       let processedOptions = aiGenerated.options || [];
       if (isMatch) {
-        const pairs = parseMatchColumnPairs(aiGenerated.options || [], aiGenerated.text);
+        const pairs = parseMatchColumnPairs(aiGenerated.options || [], aiGenerated.text, aiGenerated.explanation);
         if (pairs.length > 0 && pairs.some((p) => p.left && p.right)) {
           processedOptions = pairs.map((p) => serializeMatchColumnPair(p.left, p.right));
         }
@@ -314,7 +324,7 @@ export function QuestionPicker({
         answer: sp.answer || "",
         options: Array.isArray(sp.options) && sp.options.length > 0 ? sp.options.map((o: string) => cleanOptionText(String(o))) : undefined,
       }));
-      const normalizedSubparts = rawSubparts.length > 0 ? normalizeSubpartMarks(rawSubparts, section.marksEach) : [];
+      const normalizedSubparts = rawSubparts.length > 0 ? normalizeSubpartMarks(rawSubparts, marksToGenerate) : [];
 
       const payload = {
         bookId: paper.blueprint.bookId,
@@ -348,7 +358,7 @@ export function QuestionPicker({
     const isMatch = section.type === "MATCH_COLUMN";
     let processedOptions = aiGenerated.options || [];
     if (isMatch) {
-      const pairs = parseMatchColumnPairs(aiGenerated.options || [], aiGenerated.text);
+      const pairs = parseMatchColumnPairs(aiGenerated.options || [], aiGenerated.text, aiGenerated.explanation);
       if (pairs.length > 0 && pairs.some((p) => p.left && p.right)) {
         processedOptions = pairs.map((p) => serializeMatchColumnPair(p.left, p.right));
       }
@@ -361,7 +371,7 @@ export function QuestionPicker({
       answer: sp.answer || "",
       options: Array.isArray(sp.options) && sp.options.length > 0 ? sp.options.map((o: string) => cleanOptionText(String(o))) : undefined,
     }));
-    const normalizedSubparts = rawSubparts.length > 0 ? normalizeSubpartMarks(rawSubparts, section.marksEach) : [];
+    const normalizedSubparts = rawSubparts.length > 0 ? normalizeSubpartMarks(rawSubparts, marksToGenerate) : [];
 
     const dummyDto: QuestionDto = {
       id: "",
@@ -390,10 +400,10 @@ export function QuestionPicker({
   }
 
   const modalTitle = isAlternate
-    ? `Select Alternate Choice (OR) in ${section.title} — (${section.marksEach}m)`
+    ? `Select Alternate Choice (OR) in ${section.title} — (${marksToGenerate}m)`
     : isReplacing
-    ? `Replace Question in ${section.title} — ${QUESTION_TYPE_LABEL[section.type as keyof typeof QUESTION_TYPE_LABEL]} (${section.marksEach}m)`
-    : `Add to ${section.title} — ${QUESTION_TYPE_LABEL[section.type as keyof typeof QUESTION_TYPE_LABEL]} · ${section.marksEach} mark(s) each`;
+    ? `Replace Question in ${section.title} — ${QUESTION_TYPE_LABEL[section.type as keyof typeof QUESTION_TYPE_LABEL]} (${marksToGenerate}m)`
+    : `Add to ${section.title} — ${QUESTION_TYPE_LABEL[section.type as keyof typeof QUESTION_TYPE_LABEL]} · ${marksToGenerate} mark(s)`;
 
   return (
     <Modal
@@ -746,10 +756,19 @@ export function QuestionPicker({
                       {paper.blueprint.book.className} · {paper.blueprint.book.subject}
                     </span>
                     <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 font-bold text-indigo-800 text-[11px]">
-                      {QUESTION_TYPE_LABEL[section.type as keyof typeof QUESTION_TYPE_LABEL]} · {section.marksEach} Mark{section.marksEach > 1 ? "s" : ""}
+                      {QUESTION_TYPE_LABEL[section.type as keyof typeof QUESTION_TYPE_LABEL]} · {targetSlotMarks} Mark{targetSlotMarks > 1 ? "s" : ""}
                     </span>
                   </div>
                 </div>
+
+                {isReplacing && activeItem && (
+                  <div className="flex items-center gap-2 rounded-lg bg-indigo-100/70 px-3 py-2 text-xs text-indigo-950 font-medium border border-indigo-200">
+                    <RefreshCw size={13} className="text-indigo-700 shrink-0" />
+                    <span>
+                      Replacing question in <strong>{section.title}</strong> (currently carrying {activeItemMarks}m from Ch {activeItem.question.chapter?.number}). The replacement question will carry <strong>{targetSlotMarks} marks</strong>.
+                    </span>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                   {/* Chapter Selection */}
@@ -763,9 +782,14 @@ export function QuestionPicker({
                     >
                       {openChapters.map((c) => {
                         const ch = paper.blueprint.chapters.find((x) => x.chapterId === c.chapterId)?.chapter;
+                        const used = paper.progress.chapters.find((p) => p.chapterId === c.chapterId)?.used ?? 0;
+                        const adjustedUsed = (activeItem && activeItem.question.chapterId === c.chapterId && isReplacing)
+                          ? Math.max(0, used - activeItemMarks)
+                          : used;
+                        const remaining = Math.max(0, c.marks - adjustedUsed);
                         return (
                           <option key={c.chapterId} value={c.chapterId}>
-                            Ch {ch?.number}: {ch?.title} ({c.marks}m quota)
+                            Ch {ch?.number}: {ch?.title} ({remaining}m available of {c.marks}m quota)
                           </option>
                         );
                       })}
@@ -857,14 +881,22 @@ export function QuestionPicker({
                       <span className="badge badge-emerald font-bold">
                         {aiGenerated.subparts && aiGenerated.subparts.length > 0
                           ? `${subpartsTotalMarks(aiGenerated.subparts)} Mark(s)`
-                          : `${section.marksEach} Mark${section.marksEach > 1 ? "s" : ""}`}
+                          : isMultiUnitMatch
+                          ? `${marksToGenerate} Marks (${section.count} Pairs)`
+                          : `${aiGenerated.marks || marksToGenerate} Mark${(aiGenerated.marks || marksToGenerate) > 1 ? "s" : ""}`}
                       </span>
                     </div>
                   </div>
 
                   {/* Question Text */}
                   <div className="text-slate-900 text-sm leading-relaxed font-medium">
-                    <MathText text={aiGenerated.text} />
+                    <MathText
+                      text={
+                        section.type === "MATCH_COLUMN"
+                          ? getMatchColumnInstruction(aiGenerated.text)
+                          : aiGenerated.text
+                      }
+                    />
                   </div>
 
                   {/* MCQ Options */}
@@ -908,37 +940,58 @@ export function QuestionPicker({
                   )}
 
                   {/* Match the Columns Preview */}
-                  {section.type === "MATCH_COLUMN" && (
-                    <div className="space-y-2 rounded-lg border border-teal-200 bg-teal-50/30 p-3">
-                      <span className="font-bold text-xs text-teal-950 uppercase tracking-wider block">
-                        Matching Columns Preview (स्तम्भ &apos;अ&apos; ↔ स्तम्भ &apos;ब&apos;)
-                      </span>
-                      {(() => {
-                        const pairs = parseMatchColumnPairs(aiGenerated.options || [], aiGenerated.text);
-                        if (pairs.length === 0) return null;
-                        return (
-                          <div className="overflow-x-auto rounded border border-teal-200 bg-white">
-                            <table className="w-full text-xs text-left">
-                              <thead className="bg-teal-100/60 font-semibold text-teal-900 border-b border-teal-200">
-                                <tr>
-                                  <th className="p-2 w-1/2">Column I / स्तम्भ &apos;अ&apos;</th>
-                                  <th className="p-2 w-1/2">Column II / स्तम्भ &apos;ब&apos;</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-teal-100">
-                                {pairs.map((p, pIdx) => (
-                                  <tr key={pIdx}>
-                                    <td className="p-2 text-slate-800"><MathText text={p.left} /></td>
-                                    <td className="p-2 text-slate-800"><MathText text={p.right} /></td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                  {section.type === "MATCH_COLUMN" && (() => {
+                    const pairs = parseMatchColumnPairs(aiGenerated.options || [], aiGenerated.text, aiGenerated.explanation);
+                    const letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
+                    const romans = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
+
+                    return (
+                      <div className="space-y-2 rounded-xl border border-teal-200 bg-teal-50/30 p-3.5">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-xs text-teal-950 uppercase tracking-wider block">
+                            Matching Columns Preview (स्तम्भ &apos;अ&apos; ↔ स्तम्भ &apos;ब&apos;)
+                          </span>
+                          <span className="text-[11px] font-semibold text-teal-800">
+                            {pairs.length} Matching Pairs
+                          </span>
+                        </div>
+                        {pairs.length > 0 ? (
+                          <div className="overflow-hidden rounded-lg border border-teal-200 bg-white">
+                            <div className="grid grid-cols-2 bg-teal-100/70 px-3 py-1.5 font-semibold text-teal-950 border-b border-teal-200 text-xs">
+                              <span>Column I / स्तम्भ &apos;अ&apos;</span>
+                              <span className="pl-2 border-l border-teal-200">Column II / स्तम्भ &apos;ब&apos;</span>
+                            </div>
+                            <div className="divide-y divide-teal-100">
+                              {pairs.map((p, pIdx) => (
+                                <div key={pIdx} className="grid grid-cols-2 px-3 py-2 text-slate-800 text-xs items-start">
+                                  <div className="flex items-start gap-1.5 pr-2">
+                                    <span className="font-bold text-teal-700 font-mono text-[11px] shrink-0">
+                                      ({letters[pIdx] ?? pIdx + 1})
+                                    </span>
+                                    <div className="min-w-0 flex-1 leading-relaxed">
+                                      <MathText text={cleanMatchItem(p.left)} />
+                                    </div>
+                                  </div>
+                                  <div className="flex items-start gap-1.5 pl-2 border-l border-teal-100">
+                                    <span className="font-bold text-slate-500 font-mono text-[11px] shrink-0">
+                                      {romans[pIdx] ?? `(${pIdx + 1})`}
+                                    </span>
+                                    <div className="min-w-0 flex-1 leading-relaxed">
+                                      <MathText text={cleanMatchItem(p.right)} />
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
                           </div>
-                        );
-                      })()}
-                    </div>
-                  )}
+                        ) : (
+                          <div className="rounded-lg border border-dashed border-amber-300 bg-amber-50/60 p-3 text-xs text-amber-900 text-center">
+                            ⚠ No matching pairs detected. Please click Retry or Edit Before Placing.
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Multi-part Subparts (Case Study, Unseen Passage, Reference to Context) */}
                   {(section.type === "CASE_STUDY" || isSubpartQuestionType(section.type) || (aiGenerated.subparts && aiGenerated.subparts.length > 0)) &&

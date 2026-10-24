@@ -241,7 +241,11 @@ export function serializeMatchColumnPair(left: string, right: string): string {
   return `${left.trim()} ||| ${right.trim()}`;
 }
 
-export function parseMatchColumnPairs(options: string[] = [], questionText?: string | null): MatchColumnPair[] {
+export function parseMatchColumnPairs(
+  options: string[] = [],
+  questionText?: string | null,
+  explanation?: string | null,
+): MatchColumnPair[] {
   const opts = Array.isArray(options) ? options : [];
 
   // Dedicated pair delimiters including equals, colons, and arrows
@@ -322,6 +326,64 @@ export function parseMatchColumnPairs(options: string[] = [], questionText?: str
       left: item,
       right: "",
     }));
+  }
+
+  // 5. Intelligent Fallback: Check if explanation contains matching pairs
+  // e.g. "(A) \int ... = sin^-1(x/a) + C, which matches (iv). (B) \int ... = ..."
+  if (explanation) {
+    const recovered = extractMatchPairsFromExplanation(explanation);
+    if (recovered.length > 0) {
+      return recovered;
+    }
+  }
+
+  // 6. Intelligent Fallback: Check if questionText has embedded pairing statements
+  if (questionText) {
+    const recoveredFromText = extractMatchPairsFromExplanation(questionText);
+    if (recoveredFromText.length > 0) {
+      return recoveredFromText;
+    }
+  }
+
+  return [];
+}
+
+/**
+ * Extracts matching pairs from unstructured explanation or free-text solution breakdowns.
+ * Supports patterns like:
+ *   "(A) Left concept = Right definition, which matches (iv)"
+ *   "(A) Formula -> Evaluated expression"
+ *   "(1) Item A :: Definition A"
+ */
+export function extractMatchPairsFromExplanation(explanation?: string | null): MatchColumnPair[] {
+  if (!explanation) return [];
+  const text = String(explanation).trim();
+  if (!text) return [];
+
+  // Match items starting with (A), (B), (C), (D) or A., B., C., D. or (1), (2), (3), (4)
+  const regex = /(?:^|\s|\n)(?:\(([A-Da-d1-6])\)|([A-Da-d1-6])[.)\]:])\s+([^\n\r]+?)(?=(?:(?:\s|\n)(?:\([A-Da-d1-6]\)|[A-Da-d1-6][.)\]:])\s+)|$)/g;
+  const matches = [...text.matchAll(regex)];
+
+  if (matches.length >= 2) {
+    const pairs: MatchColumnPair[] = [];
+    for (const m of matches) {
+      const full = m[3].trim();
+      // Try to split on '=' or 'which matches' or 'matches' or '->' or '::' or 'corresponds to'
+      const splitPoint = full.match(/\s*(?:which matches|matches|corresponds to|=|->|→|::)\s*/i);
+      if (splitPoint && splitPoint.index !== undefined && splitPoint.index > 0) {
+        const left = full.substring(0, splitPoint.index).trim();
+        let right = full.substring(splitPoint.index + splitPoint[0].length).trim();
+        // Strip trailing match indicators like ", which matches (iv)" or " (iv)" or trailing periods
+        right = right.replace(/,?\s*(?:which matches|matches|corresponds to)\s*\(?[ivx0-9]+\)?[\s.]*$/i, "").trim();
+        right = right.replace(/\.\s*$/, "").trim();
+        if (left && right) {
+          pairs.push({ left: cleanMatchItem(left), right: cleanMatchItem(right) });
+        }
+      }
+    }
+    if (pairs.length >= 2) {
+      return pairs;
+    }
   }
 
   return [];

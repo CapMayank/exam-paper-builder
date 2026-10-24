@@ -1503,10 +1503,36 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
               }
               return sum + 1;
             }, 0);
+            const placedSectionMarks = items.reduce((sum, it) => {
+              if (it.question.type === "MATCH_COLUMN" && s.type === "MATCH_COLUMN" && s.count > 1 && s.marksEach === 1) {
+                const pairs = parseMatchColumnPairs(it.question.options, it.question.text);
+                return sum + (pairs.length > 0 ? Math.min(pairs.length, s.count) : s.count) * s.marksEach;
+              }
+              const subTotal = it.question.subparts && it.question.subparts.length > 0
+                ? it.question.subparts.reduce((subSum, sp) => subSum + (sp.marks || 1), 0)
+                : 0;
+              return sum + (subTotal > 0 ? subTotal : s.marksEach);
+            }, 0);
+            const targetSectionMarks = s.count * s.marksEach;
             const isOverfilled = effectiveUnits > s.count;
             const isSectionFull = effectiveUnits === s.count;
+            const isMarksMismatch = isSectionFull && placedSectionMarks !== targetSectionMarks;
             const emptySlots = Math.max(0, s.count - effectiveUnits);
             const isCollapsed = !!collapsedSections[s.id];
+
+            const openChaptersForSection = (blueprint.chapters || [])
+              .map((bc) => {
+                const used = progress.chapters.find((p) => p.chapterId === bc.chapterId)?.used ?? 0;
+                const rem = bc.marks - used;
+                return {
+                  id: bc.chapterId,
+                  number: bc.chapter?.number ?? 0,
+                  title: bc.chapter?.title ?? "General",
+                  remainingMarks: rem,
+                };
+              })
+              .filter((c) => c.remainingMarks > 0)
+              .sort((a, b) => b.remainingMarks - a.remainingMarks);
 
             return (
               <section
@@ -1516,7 +1542,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                 {/* Section Header */}
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <h2 className="text-base font-bold text-slate-900">
                         {s.title}
                         {blueprint.sections.filter((x) => x.title.trim().toLowerCase() === s.title.trim().toLowerCase()).length > 1 && (
@@ -1535,19 +1561,40 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                         }`}
                       >
                         {items.length === 1 && s.type === "MATCH_COLUMN"
-                          ? `1 question (${parseMatchColumnPairs(items[0].question.options, items[0].question.text).length || s.count} matching pairs)`
+                          ? `1 question (${parseMatchColumnPairs(items[0].question.options, items[0].question.text).length || s.count} pairs)`
                           : items.length === 1 && effectiveUnits > 1
-                          ? `1 question (${effectiveUnits} sub-parts)`
+                          ? `1 question (${effectiveUnits} subparts)`
                           : s.type === "MATCH_COLUMN" && items.length === 0
                           ? `0/1 question (${s.count} pairs)`
                           : `${effectiveUnits}/${s.count} questions`}{" "}
                         {isOverfilled ? `(${effectiveUnits - s.count} excess!)` : ""}
                       </span>
+
+                      {/* Live Placed Marks vs Section Target */}
+                      <span
+                        className={`badge font-semibold ${
+                          isMarksMismatch
+                            ? "!bg-amber-100 !text-amber-900 border border-amber-300"
+                            : placedSectionMarks === targetSectionMarks
+                            ? "!bg-emerald-50 !text-emerald-800 border border-emerald-200"
+                            : placedSectionMarks > targetSectionMarks
+                            ? "!bg-red-100 !text-red-800 border border-red-200"
+                            : "!bg-slate-100 !text-slate-700 border border-slate-200"
+                        }`}
+                        title="Placed Marks / Target Section Marks"
+                      >
+                        {placedSectionMarks} / {targetSectionMarks} Marks
+                      </span>
                     </div>
                     <div className="text-xs text-slate-500 mt-0.5">
-                      {QUESTION_TYPE_LABEL[s.type as keyof typeof QUESTION_TYPE_LABEL]} · {s.count} question(s) ×{" "}
+                      {QUESTION_TYPE_LABEL[s.type as keyof typeof QUESTION_TYPE_LABEL]} · {s.count} slot(s) ×{" "}
                       {s.marksEach} mark(s) ={" "}
-                      <span className="font-semibold text-slate-700">{s.count * s.marksEach} marks</span>
+                      <span className="font-semibold text-slate-700">{targetSectionMarks} marks</span>
+                      {isMarksMismatch && (
+                        <span className="ml-2 font-bold text-amber-700">
+                          ⚠ Placed marks ({placedSectionMarks}m) do not match target ({targetSectionMarks}m)
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -1672,6 +1719,10 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                           : subpartsMarks > 0
                           ? subpartsMarks
                           : s.marksEach;
+                        const targetSlotMarksForQ = isMatchQ && s.count > 1 && s.marksEach === 1
+                          ? s.count * s.marksEach
+                          : s.marksEach;
+                        const isQuestionMarksMismatch = questionTotalMarks !== targetSlotMarksForQ;
 
                         return (
                           <Fragment key={it.id}>
@@ -1693,16 +1744,21 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                             )}
                             <li
                               className={`rounded-xl border p-4 shadow-2xs transition hover:border-slate-300 ${
-                              isExcess || isTypeMismatch
+                              isExcess || isTypeMismatch || isQuestionMarksMismatch
                                 ? "border-amber-300 bg-amber-50/20"
                                 : "border-slate-200/90 bg-white"
                             }`}
                           >
-                            {(isTypeMismatch || isExcess) && (
+                            {(isTypeMismatch || isExcess || isQuestionMarksMismatch) && (
                               <div className="mb-2.5 flex flex-wrap gap-1.5">
                                 {isTypeMismatch && (
                                   <span className="badge !bg-red-100 !text-red-800 border border-red-200 text-[10px] font-bold">
                                     ⚠ Type Mismatch: Expected {QUESTION_TYPE_LABEL[s.type as keyof typeof QUESTION_TYPE_LABEL] || s.type}, but question is {it.question.type}
+                                  </span>
+                                )}
+                                {isQuestionMarksMismatch && (
+                                  <span className="badge !bg-amber-100 !text-amber-800 border border-amber-200 text-[10px] font-bold">
+                                    ⚠ Marks Mismatch: Question carries {questionTotalMarks}m, but section slot expects {targetSlotMarksForQ}m
                                   </span>
                                 )}
                                 {isExcess && (
@@ -1756,6 +1812,10 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                     Exhausted Question
                                   </span>
                                 )}
+                                <span className="badge font-bold !bg-indigo-50 !text-indigo-700 border border-indigo-200">
+                                  {questionTotalMarks} Mark{questionTotalMarks > 1 ? "s" : ""}
+                                  {it.question.subparts && it.question.subparts.length > 0 && ` (${it.question.subparts.length} parts)`}
+                                </span>
                                 <span className="badge font-semibold !bg-slate-100 !text-slate-700 border border-slate-200">{it.question.difficulty}</span>
                                 <span className="badge !bg-slate-100 text-slate-700 font-medium border border-slate-200">
                                   Ch {it.question.chapter?.number}. {it.question.chapter?.title}
@@ -2064,37 +2124,79 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                         length: s.type === "MATCH_COLUMN" ? (items.length === 0 ? 1 : 0) : emptySlots,
                       }).map((_, i) => {
                         const slotNum = effectiveUnits + i + 1;
+                        const targetMarksForSlot = s.type === "MATCH_COLUMN" && s.count > 1 && s.marksEach === 1
+                          ? s.count * s.marksEach
+                          : s.marksEach;
+                        const topChapters = openChaptersForSection.slice(0, 3);
+
                         return (
                           <li key={`empty-${i}`}>
                             {canEditPaper ? (
-                              <button
-                                type="button"
-                                onClick={() => setPickerSectionId(s.id)}
-                                className="w-full rounded-xl border-2 border-dashed border-slate-300 bg-slate-50/50 p-4 text-sm text-slate-500 hover:border-indigo-400 hover:bg-indigo-50/40 hover:text-indigo-800 transition flex items-center justify-center gap-2 group cursor-pointer"
-                              >
-                                <Plus
-                                  size={16}
-                                  className="text-slate-400 group-hover:text-indigo-600 transition group-hover:scale-110"
-                                />
-                                <span>
-                                  {s.type === "MATCH_COLUMN" ? (
-                                    <>
-                                      Match the Columns Question &mdash;{" "}
-                                      <strong className="font-semibold">
-                                        Click to select question ({s.count * s.marksEach}m · {s.count} pairs)
-                                      </strong>
-                                    </>
-                                  ) : (
-                                    <>
-                                      Slot {slotNum} of {s.count} &mdash;{" "}
-                                      <strong className="font-semibold">
-                                        Click to select question ({s.marksEach}m{" "}
-                                        {QUESTION_TYPE_LABEL[s.type as keyof typeof QUESTION_TYPE_LABEL]})
-                                      </strong>
-                                    </>
-                                  )}
-                                </span>
-                              </button>
+                              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/70 p-3.5 transition hover:border-indigo-300 hover:bg-slate-50 shadow-2xs">
+                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-bold text-xs text-slate-800">
+                                        {s.type === "MATCH_COLUMN"
+                                          ? `Match the Columns Set (${s.count} Pairs)`
+                                          : `Empty Slot ${slotNum} of ${s.count}`}
+                                      </span>
+                                      <span className="rounded bg-indigo-50 border border-indigo-200/60 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700">
+                                        {targetMarksForSlot} Mark{targetMarksForSlot > 1 ? "s" : ""}
+                                      </span>
+                                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
+                                        {QUESTION_TYPE_LABEL[s.type as keyof typeof QUESTION_TYPE_LABEL] || s.type}
+                                      </span>
+                                    </div>
+
+                                    {/* Smart Chapter Deficit Suggestions */}
+                                    <div className="text-[11px] text-slate-500 flex items-center gap-1.5 flex-wrap">
+                                      <span className="font-medium text-slate-600">Open Quotas:</span>
+                                      {topChapters.length > 0 ? (
+                                        topChapters.map((tc) => (
+                                          <span
+                                            key={tc.id}
+                                            className="inline-flex items-center gap-1 rounded bg-white px-1.5 py-0.2 border border-slate-200 text-slate-700 text-[10px]"
+                                            title={`Chapter ${tc.number}: ${tc.title} (${tc.remainingMarks}m remaining)`}
+                                          >
+                                            <span className="font-semibold text-indigo-600">Ch {tc.number}</span>
+                                            <span className="text-slate-400 font-mono">({tc.remainingMarks}m left)</span>
+                                          </span>
+                                        ))
+                                      ) : (
+                                        <span className="text-slate-400 italic">All chapter quotas allocated</span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-2 ml-auto">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setCollapsedSections((prev) => ({ ...prev, [s.id]: false }));
+                                        setSectionAiModalSection(s);
+                                      }}
+                                      className="btn btn-sm border border-indigo-200 bg-white text-indigo-700 hover:bg-indigo-50 shadow-2xs flex items-center gap-1.5 text-xs font-semibold"
+                                      title="Generate matching question with AI"
+                                    >
+                                      <Sparkles size={12} className="text-indigo-600" />
+                                      <span>AI Fill</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setCollapsedSections((prev) => ({ ...prev, [s.id]: false }));
+                                        setPickerSectionId(s.id);
+                                      }}
+                                      className="btn btn-sm btn-primary shadow-2xs flex items-center gap-1.5 text-xs font-semibold"
+                                      title="Pick from question bank"
+                                    >
+                                      <Plus size={13} />
+                                      <span>Pick from Bank</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
                             ) : (
                               <div className="rounded-xl border border-dashed border-slate-200 p-3 text-xs text-slate-400 text-center">
                                 {s.type === "MATCH_COLUMN"

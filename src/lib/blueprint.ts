@@ -1,5 +1,8 @@
 // Pure blueprint rules. Used by the API (to reject) and the UI (to explain). No I/O here.
 
+import { parseMatchColumnPairs } from "./constants";
+import { parseSubparts, subpartsTotalMarks } from "./types";
+
 export type SectionDef = { id: string; title: string; type: string; count: number; marksEach: number };
 export type ChapterQuota = { chapterId: string; marks: number; title?: string; number?: number | null };
 export type BlueprintDef = { sections: SectionDef[]; chapters: ChapterQuota[] };
@@ -226,7 +229,7 @@ function getItemMarks(item: PlacedItem, secMarksEach: number): number {
   if (item.marks && item.marks > 0) {
     return item.marks;
   }
-  if (item.subpartsCount && item.subpartsCount > 1) {
+  if (item.subpartsCount && item.subpartsCount > 1 && secMarksEach === 1) {
     return item.subpartsCount * secMarksEach;
   }
   return secMarksEach;
@@ -276,7 +279,8 @@ export function whyCannotAdd(
   const status = paperStatus(bp, items);
   const sec = status.sections.find((s) => s.id === section.id)!;
   if (sec.filled >= sec.needed) return `${section.title} is already full (${sec.needed} questions).`;
-  const candidateUnits = candidate.subpartsCount && candidate.subpartsCount > 1 && section.count >= candidate.subpartsCount
+  const isMultiUnitMatch = section.type === "MATCH_COLUMN" && section.count > 1 && section.marksEach === 1;
+  const candidateUnits = isMultiUnitMatch && candidate.subpartsCount && candidate.subpartsCount > 1 && section.count >= candidate.subpartsCount
     ? candidate.subpartsCount
     : 1;
   if (sec.filled + candidateUnits > sec.needed) {
@@ -286,7 +290,7 @@ export function whyCannotAdd(
   if (!chapter) return "This question's chapter is not in the blueprint.";
   const candidateMarks = candidate.marks && candidate.marks > 0
     ? candidate.marks
-    : (candidate.subpartsCount && candidate.subpartsCount > 1
+    : (isMultiUnitMatch && candidate.subpartsCount && candidate.subpartsCount > 1
         ? candidate.subpartsCount * section.marksEach
         : section.marksEach);
   if (chapter.used + candidateMarks > chapter.target) {
@@ -443,4 +447,64 @@ export function diagnosePaperImplications(
   }
 
   return implications;
+}
+
+/** Map raw paper items or DTO items to normalized PlacedItem representation for blueprint calculation */
+export function toPlacedItems(
+  sections: { id: string; count: number; marksEach: number; type?: string }[],
+  items: {
+    sectionId: string;
+    question: {
+      chapterId: string;
+      type: string;
+      text: string;
+      optionsJson?: string | null;
+      subpartsJson?: string | null;
+      options?: string[];
+      subparts?: Array<{ marks: number }>;
+    };
+  }[],
+): PlacedItem[] {
+  return items.map((i) => {
+    const isMatch = i.question.type === "MATCH_COLUMN";
+    let matchCount = 0;
+    if (isMatch) {
+      let opts: string[] = [];
+      if (Array.isArray(i.question.options)) {
+        opts = i.question.options;
+      } else {
+        try {
+          const p = JSON.parse(i.question.optionsJson || "[]");
+          opts = Array.isArray(p) ? p : [];
+        } catch {}
+      }
+      matchCount = parseMatchColumnPairs(opts, i.question.text).length;
+    }
+    const subparts =
+      Array.isArray(i.question.subparts) && i.question.subparts.length > 0
+        ? i.question.subparts
+        : parseSubparts(i.question.subpartsJson);
+    const submarks = subpartsTotalMarks(subparts as any);
+    const sec = sections.find((s) => s.id === i.sectionId);
+    const secMarksEach = sec?.marksEach ?? 1;
+    const secCount = sec?.count ?? 1;
+    const secIsMatch = sec?.type === "MATCH_COLUMN";
+    const isMultiUnitMatch = isMatch && secIsMatch && secCount > 1 && secMarksEach === 1;
+
+    const matchMarks = isMatch
+      ? (isMultiUnitMatch
+          ? Math.min(matchCount || secCount, secCount) * secMarksEach
+          : secMarksEach)
+      : 0;
+    const effectiveMarks = isMatch ? matchMarks : (submarks > 0 ? submarks : secMarksEach);
+    const effectiveUnits = isMultiUnitMatch
+      ? Math.min(matchCount > 0 ? matchCount : secCount, secCount)
+      : undefined;
+    return {
+      sectionId: i.sectionId,
+      chapterId: i.question.chapterId,
+      marks: effectiveMarks,
+      subpartsCount: effectiveUnits,
+    };
+  });
 }

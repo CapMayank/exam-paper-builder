@@ -2,10 +2,12 @@ import "server-only";
 import { HttpError, type SessionUser } from "./api";
 import { parseMatchColumnPairs, resolvePaperExamType } from "./constants";
 import { toQuestionDto } from "./dto";
-import { diagnosePaperImplications, paperStatus } from "./blueprint";
+import { diagnosePaperImplications, paperStatus, toPlacedItems } from "./blueprint";
 import { blueprintInclude } from "./blueprints";
 import { prisma } from "./prisma";
 import { parseSubparts, subpartsTotalMarks } from "./types";
+
+export { toPlacedItems };
 
 export function canModifyPaper(
   user: SessionUser,
@@ -110,56 +112,6 @@ const paperInclude = {
   },
 } as const;
 
-/** Map raw paper items to normalized PlacedItem representation for blueprint calculation */
-export function toPlacedItems(
-  sections: { id: string; count: number; marksEach: number }[],
-  items: {
-    sectionId: string;
-    question: {
-      chapterId: string;
-      type: string;
-      text: string;
-      optionsJson?: string | null;
-      subpartsJson?: string | null;
-    };
-  }[],
-) {
-  return items.map((i) => {
-    const isMatch = i.question.type === "MATCH_COLUMN";
-    let matchCount = 0;
-    if (isMatch) {
-      let opts: string[] = [];
-      try {
-        const p = JSON.parse(i.question.optionsJson || "[]");
-        opts = Array.isArray(p) ? p : [];
-      } catch {}
-      matchCount = parseMatchColumnPairs(opts, i.question.text).length;
-    }
-    const subparts = parseSubparts(i.question.subpartsJson);
-    const submarks = subpartsTotalMarks(subparts);
-    const sec = sections.find((s) => s.id === i.sectionId);
-    const secMarksEach = sec?.marksEach ?? 1;
-    const secCount = sec?.count ?? 1;
-    const secIsMatch = (sec as any)?.type === "MATCH_COLUMN";
-    const isMultiUnitMatch = isMatch && secIsMatch && secCount > 1 && secMarksEach === 1;
-
-    const matchMarks = isMatch
-      ? (isMultiUnitMatch
-          ? Math.min(matchCount || secCount, secCount) * secMarksEach
-          : secMarksEach)
-      : 0;
-    const effectiveMarks = isMatch ? matchMarks : (submarks > 0 ? submarks : secMarksEach);
-    const effectiveUnits = isMultiUnitMatch
-      ? Math.min(matchCount > 0 ? matchCount : secCount, secCount)
-      : undefined;
-    return {
-      sectionId: i.sectionId,
-      chapterId: i.question.chapterId,
-      marks: effectiveMarks,
-      subpartsCount: effectiveUnits,
-    };
-  });
-}
 
 /** Everything the builder and print views need, with progress computed server-side. */
 export async function loadPaperView(id: string) {
