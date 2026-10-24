@@ -1,5 +1,14 @@
 import "server-only";
-import { cleanOptionText, isKindergartenType, isMcqLikeType, QUESTION_TYPES } from "./constants";
+import {
+  cleanMatchItem,
+  cleanOptionText,
+  derangeMatchColumnPairs,
+  getMatchColumnInstruction,
+  isKindergartenType,
+  isMcqLikeType,
+  parseMatchColumnPairs,
+  QUESTION_TYPES,
+} from "./constants";
 import {
   findEligibleDiagrams,
   isSectionVisuallyEligible,
@@ -185,7 +194,7 @@ export interface GeneratedQuestionItem {
   type: string;
   text: string;
   options: string[];
-  subparts: Array<{ label: string; text: string; marks: number; answer: string }>;
+  subparts: Array<{ label: string; text: string; marks: number; answer: string; options?: string[] }>;
   answer: string;
   marks: number;
   difficulty: "EASY" | "MEDIUM" | "HARD";
@@ -216,7 +225,7 @@ Output format: JSON array of question objects only. No conversational wrapper.`;
 - Class: ${className}
 - Subject: ${subject}
 - Chapter: ${chapter}
-- Question Type: ${type} (Options: MCQ, SHORT, LONG, CASE_STUDY, ASSERTION_REASON, NUMERICAL)
+- Question Type: ${type} (Options: MCQ, SHORT, LONG, CASE_STUDY, ASSERTION_REASON, NUMERICAL, FILL_BLANK, TRUE_FALSE, MATCH_COLUMN)
 - Marks: ${marks} marks each
 - Difficulty: ${difficulty}
 - Cognitive Level: ${cognitiveLevel || "APPLYING"}
@@ -232,7 +241,10 @@ Strict requirements:
    (d) A is false but R is true
 3. For CASE_STUDY: Provide a real-world scenario/passage, followed by 3-4 subparts with label (e.g. "(i)", "(ii)", "(iii)"), question text, marks distribution totaling ${marks} marks, and answers.
 4. For SHORT, LONG, NUMERICAL: Provide step-wise model answer and marking scheme breakdown.
-5. Use standard LaTeX math $...$ for any mathematical expressions, formulas, chemical reactions, or units.
+5. For FILL_BLANK: Provide question text containing one or more blanks indicated by "________" (at least 8 underscores). Options should be empty []. The answer should be the exact word(s) filling the blank.
+6. For TRUE_FALSE: Provide a clear declarative statement. Options should be ["True", "False"] (or ["सत्य", "असत्य"] for Hindi). Answer must be "True" or "False" (or Hindi equivalent).
+7. For MATCH_COLUMN: Set text with instructions and Column I items labeled (A), (B), (C), (D). Set options to the 4 corresponding Column II items, SHUFFLED/DERANGED so they do NOT line up directly with the corresponding Column I item. Set answer to the full pairing string (e.g. "(A)-(iii), (B)-(i), (C)-(iv), (D)-(ii)").
+8. Use standard LaTeX math $...$ for any mathematical expressions, formulas, chemical reactions, or units.
 
 Return a JSON array strictly matching this TypeScript structure:
 [
@@ -457,19 +469,67 @@ A student took three test tubes A, B, and C containing clean iron nails. In tube
       ];
     }
 
+    if (type === "FILL_BLANK") {
+      return [
+        {
+          type: "FILL_BLANK",
+          text: `The process of depositing a protective layer of zinc on iron to prevent corrosion is called ________. ${
+            language === "bilingual" ? "(लोहे को जंग से सुरक्षित रखने के लिए उस पर जस्ते की परत चढ़ाने की प्रक्रिया को ________ कहा जाता है।)" : ""
+          }`,
+          options: [],
+          subparts: [],
+          answer: "Galvanisation (गैल्वनीकरण)",
+          marks: marks || 1,
+          difficulty: "EASY",
+          cognitiveLevel: "REMEMBERING",
+          explanation: "Galvanisation creates both a physical barrier and sacrificial anodic protection against rusting.",
+        },
+      ];
+    }
+
+    if (type === "TRUE_FALSE") {
+      return [
+        {
+          type: "TRUE_FALSE",
+          text: `Corrosion of iron is an irreversible electrochemical oxidation that requires the simultaneous presence of oxygen and moisture. ${
+            language === "bilingual" ? "(लोहे में जंग लगना एक अनुत्क्रमणीय विद्युत-रासायनिक ऑक्सीकरण है जिसके लिए ऑक्सीजन और नमी दोनों की एक साथ उपस्थिति आवश्यक है।)" : ""
+          }`,
+          options: language === "hi" ? ["सत्य", "असत्य"] : ["True", "False"],
+          subparts: [],
+          answer: language === "hi" ? "सत्य" : "True",
+          marks: marks || 1,
+          difficulty: "EASY",
+          cognitiveLevel: "UNDERSTANDING",
+          explanation: "Both oxygen and moisture are indispensable reactants for the formation of hydrated ferric oxide.",
+        },
+      ];
+    }
+
     if (type === "MATCH_COLUMN") {
+      const basePairs = [
+        { left: "(A) Primary factor", right: "Metabolic activation pathway" },
+        { left: "(B) Secondary regulator", right: "Structural stability and conformation" },
+        { left: "(C) Catalytic center", right: "Substrate binding site" },
+        { left: "(D) Feedback inhibitor", right: "Allosteric control regulation" },
+      ];
+      const deranged = derangeMatchColumnPairs(basePairs);
+      const options = deranged.map((p) => p.right);
+      const romans = ["(i)", "(ii)", "(iii)", "(iv)"];
+      const mapping = basePairs
+        .map((bp, i) => {
+          const optIdx = options.indexOf(bp.right);
+          const letter = String.fromCharCode(65 + i);
+          return `(${letter})-${romans[optIdx] ?? `(${optIdx + 1})`}`;
+        })
+        .join(", ");
+
       return [
         {
           type: "MATCH_COLUMN",
-          text: `Match the items in Column I with their corresponding features in Column II:\nColumn I:\n(A) Primary factor\n(B) Secondary regulator\n(C) Catalytic center\n(D) Feedback inhibitor`,
-          options: [
-            "Metabolic activation pathway",
-            "Structural stability and conformation",
-            "Substrate binding site",
-            "Allosteric control regulation",
-          ],
+          text: `Match the items in Column I with their corresponding features in Column II:\nColumn I:\n${basePairs.map((bp) => bp.left).join("\n")}`,
+          options,
           subparts: [],
-          answer: "(A)-(i), (B)-(ii), (C)-(iii), (D)-(iv)",
+          answer: mapping,
           marks: marks || 4,
           difficulty: (difficulty as any) || "MEDIUM",
           cognitiveLevel: (cognitiveLevel as any) || "UNDERSTANDING",
@@ -508,7 +568,16 @@ A student took three test tubes A, B, and C containing clean iron nails. In tube
     callResult.data = callResult.data.map((item) => ({
       ...item,
       options: Array.isArray(item.options) ? item.options.map((o) => cleanOptionText(String(o).trim())) : [],
-      answer: cleanOptionText(item.answer || ""),
+      answer: isMcqLikeType(item.type) ? cleanOptionText(item.answer || "") : String(item.answer || "").trim(),
+      subparts: Array.isArray(item.subparts)
+        ? item.subparts.map((sp, spIdx) => ({
+            label: String(sp.label || `(${spIdx + 1})`),
+            text: String(sp.text || ""),
+            marks: Number(sp.marks) || 1,
+            options: Array.isArray(sp.options) ? sp.options.map((o) => cleanOptionText(String(o).trim())) : undefined,
+            answer: sp.answer ? (isMcqLikeType(item.type) ? cleanOptionText(String(sp.answer)) : String(sp.answer)) : "",
+          }))
+        : [],
     }));
   }
 
@@ -551,7 +620,7 @@ export interface GeneratedPaperQuestion {
   type: string;
   text: string;
   options: string[];
-  subparts: Array<{ label: string; text: string; marks: number; answer?: string }>;
+  subparts: Array<{ label: string; text: string; marks: number; answer?: string; options?: string[] }>;
   answer: string;
   difficulty: "EASY" | "MEDIUM" | "HARD";
   cognitiveLevel?: string;
@@ -729,9 +798,19 @@ JSON Array Output Schema:
     if (normalizedType === "MATCH_COLUMN") {
       const letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
       const romans = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
-      const col1Lines = slots.map((s, idx) => `(${letters[idx] ?? idx + 1}) Concept of ${s.chapterTitle}`);
-      const col2Items = slots.map((s) => `Key mechanism and definition of ${s.chapterTitle}`);
-      const answerPairs = slots.map((_, idx) => `(${letters[idx] ?? idx + 1})-${romans[idx] ?? `(${idx + 1})`}`).join(", ");
+      const rawPairs = slots.map((s, idx) => ({
+        left: `(${letters[idx] ?? idx + 1}) Concept of ${s.chapterTitle}`,
+        right: `Key mechanism and definition of ${s.chapterTitle}`,
+      }));
+      const deranged = derangeMatchColumnPairs(rawPairs);
+      const col1Lines = rawPairs.map((p) => p.left);
+      const col2Items = deranged.map((d) => d.right);
+      const answerPairs = rawPairs
+        .map((p, idx) => {
+          const optIdx = col2Items.indexOf(p.right);
+          return `(${letters[idx] ?? idx + 1})-${romans[optIdx] ?? `(${optIdx + 1})`}`;
+        })
+        .join(", ");
 
       return [
         {
@@ -755,6 +834,7 @@ JSON Array Output Schema:
       const isMcq = normalizedType === "MCQ";
       const isAssertionReason = normalizedType === "ASSERTION_REASON";
       const isTrueFalse = normalizedType === "TRUE_FALSE";
+      const isFillBlank = normalizedType === "FILL_BLANK";
       const isMatch = normalizedType === "MATCH_COLUMN";
       const isCaseStudy = normalizedType === "CASE_STUDY";
 
@@ -786,10 +866,24 @@ JSON Array Output Schema:
         text = `In ${slot.chapterTitle}, the primary mechanism proceeds unidirectionally under standard physiological conditions.`;
         options = ["True", "False"];
         answer = "True";
+      } else if (isFillBlank) {
+        text = `In the study of ${slot.chapterTitle}, the primary process responsible for physiological regulation is known as ________.`;
+        options = [];
+        answer = "Homeostasis";
       } else if (isMatch) {
-        text = `Match the items in Column I with their corresponding features in Column II:\nColumn I:\n(A) Primary factor\n(B) Secondary regulator\nColumn II:\n(1) Metabolic activation\n(2) Structural stability`;
-        options = ["A-1, B-2", "A-2, B-1"];
-        answer = "A-1, B-2";
+        const rawPairs = [
+          { left: "(A) Primary factor", right: "Metabolic activation" },
+          { left: "(B) Secondary regulator", right: "Structural stability" },
+        ];
+        const deranged = derangeMatchColumnPairs(rawPairs);
+        const col2 = deranged.map((d) => d.right);
+        const romans = ["(i)", "(ii)"];
+        const answers = rawPairs
+          .map((p, i) => `(${String.fromCharCode(65 + i)})-${romans[col2.indexOf(p.right)] || "(1)"}`)
+          .join(", ");
+        text = `Match the items in Column I with their corresponding features in Column II:\nColumn I:\n(A) Primary factor\n(B) Secondary regulator`;
+        options = col2;
+        answer = answers;
       } else if (isCaseStudy) {
         text = `Read the following excerpt and answer the questions:\nIn a laboratory study of ${slot.chapterTitle}, researchers observed the response of biological specimens to varying external stimuli over a 72-hour period.`;
         subparts = [
@@ -919,22 +1013,49 @@ JSON Array Output Schema:
     if (callResult.data.length > 1) {
       const letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
       const romans = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
-      const col1Items: string[] = [];
-      const col2Items: string[] = [];
-      const answers: string[] = [];
-
-      callResult.data.forEach((item, idx) => {
+      const rawPairs = callResult.data.map((item, idx) => {
         const itemText = typeof item.text === "string" ? item.text.replace(/^Match.*?:\s*/i, "").trim() : `Item ${idx + 1}`;
         const itemOpt = Array.isArray(item.options) && item.options.length > 0 ? String(item.options[0]).trim() : (item.answer || `Feature ${idx + 1}`);
-        col1Items.push(`(${letters[idx] ?? idx + 1}) ${itemText}`);
-        col2Items.push(itemOpt);
-        answers.push(`(${letters[idx] ?? idx + 1})-${romans[idx] ?? `(${idx + 1})`}`);
+        return {
+          left: `(${letters[idx] ?? idx + 1}) ${itemText}`,
+          right: itemOpt,
+        };
+      });
+
+      const deranged = derangeMatchColumnPairs(rawPairs);
+      const col1Items = rawPairs.map((p) => p.left);
+      const col2Items = deranged.map((p) => p.right);
+      const answers = rawPairs.map((p, idx) => {
+        const optIdx = col2Items.indexOf(p.right);
+        return `(${letters[idx] ?? idx + 1})-${romans[optIdx] ?? `(${optIdx + 1})`}`;
       });
 
       qText = `Match the items in Column I with Column II:\nColumn I:\n${col1Items.join("\n")}`;
       qOptions = col2Items;
       qAnswer = answers.join(", ");
-    } else if (!qText || qOptions.length === 0) {
+    } else if (callResult.data.length === 1) {
+      const pairs = parseMatchColumnPairs(qOptions, qText);
+      const isDirectMatch =
+        /^\s*\(?[Aa]\)?\s*[-→:]\s*\(?([1iI])\)?\s*,\s*\(?[Bb]\)?\s*[-→:]\s*\(?([2iI]{2})\)?/.test(qAnswer) ||
+        !qAnswer ||
+        qAnswer.toLowerCase().includes("direct");
+      if (pairs.length > 1 && isDirectMatch) {
+        const letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
+        const romans = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
+        const deranged = derangeMatchColumnPairs(pairs);
+        const col1Lines = pairs.map((p, idx) => `(${letters[idx] ?? idx + 1}) ${cleanMatchItem(p.left)}`);
+        const col2Items = deranged.map((p) => cleanMatchItem(p.right));
+        const answers = pairs.map((p, idx) => {
+          const optIdx = col2Items.indexOf(cleanMatchItem(p.right));
+          return `(${letters[idx] ?? idx + 1})-${romans[optIdx] ?? `(${optIdx + 1})`}`;
+        });
+        const instr = getMatchColumnInstruction(qText);
+        qText = `${instr}\nColumn I:\n${col1Lines.join("\n")}`;
+        qOptions = col2Items;
+        qAnswer = answers.join(", ");
+      }
+    }
+    if (!qText || qOptions.length === 0) {
       const fb = fallbackQuestions()[0];
       qText = fb.text;
       qOptions = fb.options;

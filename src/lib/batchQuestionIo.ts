@@ -2,6 +2,7 @@ import {
   DIFFICULTIES,
   isKindergartenType,
   isMcqLikeType,
+  isSubpartQuestionType,
   QUESTION_TYPES,
   type Difficulty,
   type QuestionType,
@@ -661,9 +662,9 @@ export function validateQuestionRow(
     }
   }
 
-  // 6. Case Study Subparts validation
+  // 6. Subparts validation (CASE_STUDY, UNSEEN_PASSAGE, REFERENCE_CONTEXT)
   let subparts: SubPart[] = [];
-  if (type === "CASE_STUDY" || raw.subparts) {
+  if (isSubpartQuestionType(type) || raw.subparts) {
     const subRes = parseSubpartsField(raw.subparts);
     if (subRes.error) {
       return {
@@ -677,7 +678,7 @@ export function validateQuestionRow(
     }
     subparts = subRes.subparts;
 
-    if (type === "CASE_STUDY" && subparts.length > 0 && marks !== undefined) {
+    if (isSubpartQuestionType(type) && subparts.length > 0 && marks !== undefined) {
       const sum = subpartsTotalMarks(subparts);
       if (sum !== marks) {
         return {
@@ -689,7 +690,7 @@ export function validateQuestionRow(
           },
         };
       }
-    } else if (type === "CASE_STUDY" && marks === undefined && subparts.length > 0) {
+    } else if (isSubpartQuestionType(type) && marks === undefined && subparts.length > 0) {
       marks = subpartsTotalMarks(subparts);
     }
   }

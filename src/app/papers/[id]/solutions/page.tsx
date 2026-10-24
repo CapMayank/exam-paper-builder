@@ -11,6 +11,7 @@ import {
   DEFAULT_SCHOOL_NAME,
   EXAM_TYPE_LABEL,
   isMcqLikeType,
+  isSubpartQuestionType,
   normalizeMcqAnswer,
   parseMatchColumnPairs,
   QUESTION_TYPE_LABEL,
@@ -268,7 +269,7 @@ export default function SolutionsPage({ params }: PageProps<"/papers/[id]/soluti
                   ) {
                     displayAns = <MathText text={item.question.answer} />;
                   } else if (
-                    item.question.type === "CASE_STUDY" &&
+                    (isSubpartQuestionType(item.question.type) || item.question.type === "CASE_STUDY") &&
                     item.question.subparts &&
                     item.question.subparts.length > 0
                   ) {
@@ -282,6 +283,15 @@ export default function SolutionsPage({ params }: PageProps<"/papers/[id]/soluti
                         {item.question.subparts
                           .map((sp) => `${sp.label}${sp.answer ? ` (${sp.answer})` : ""}`)
                           .join(", ")}
+                      </span>
+                    );
+                  } else if (
+                    (item.question.type === "MATCH_COLUMN" || item.type === "MATCH_COLUMN") &&
+                    item.question.answer
+                  ) {
+                    displayAns = (
+                      <span className="font-mono text-[10px] text-indigo-900" title={item.question.answer}>
+                        {item.question.answer}
                       </span>
                     );
                   } else {
@@ -406,7 +416,9 @@ function QuestionSolutionItem({
   type: string;
   q: QuestionDto;
 }) {
-  const isCaseStudyWithSubparts = type === "CASE_STUDY" && q.subparts && q.subparts.length > 0;
+  const isCaseStudyWithSubparts =
+    (type === "CASE_STUDY" || isSubpartQuestionType(type) || (q.subparts && q.subparts.length > 0)) &&
+    Boolean(q.subparts && q.subparts.length > 0);
   const rubrics = getMarksRubric(marks, type);
   const displayLabel = numberLabel ? `${numberLabel}.` : `${number}.`;
 

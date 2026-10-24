@@ -213,11 +213,29 @@ export type PaperListItem = {
   targetPages?: number | null;
 };
 
-export function parseSubparts(json?: string | null): SubPart[] {
+export function parseSubparts(json?: unknown): SubPart[] {
   if (!json) return [];
   try {
-    const parsed = JSON.parse(json);
-    return Array.isArray(parsed) ? parsed : [];
+    const parsed = typeof json === "string" ? JSON.parse(json) : json;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((sp) => Boolean(sp && typeof sp === "object"))
+      .map((sp, idx) => {
+        const item: SubPart = {
+          label: typeof sp?.label === "string" && sp.label.trim() ? sp.label.trim() : `(${idx + 1})`,
+          text: typeof sp?.text === "string" ? sp.text : "",
+          marks:
+            typeof sp?.marks === "number" && Number.isFinite(sp.marks)
+              ? sp.marks
+              : typeof sp?.marks === "string" && Number.isFinite(Number(sp.marks))
+              ? Number(sp.marks)
+              : 1,
+        };
+        if (typeof sp?.id === "string") item.id = sp.id;
+        if (typeof sp?.answer === "string") item.answer = sp.answer;
+        if (Array.isArray(sp?.options)) item.options = sp.options.map((o: unknown) => String(o));
+        return item;
+      });
   } catch {
     return [];
   }
@@ -227,7 +245,10 @@ export function subpartsTotalMarks(
   subparts?: (Pick<SubPart, "marks"> | null | undefined)[] | null,
 ): number {
   if (!subparts || !Array.isArray(subparts)) return 0;
-  return subparts.reduce((sum, sp) => sum + (sp && Number.isFinite(sp.marks) ? sp.marks : 0), 0);
+  return subparts.reduce((sum, sp) => {
+    const m = sp?.marks;
+    return sum + (typeof m === "number" && Number.isFinite(m) ? m : 0);
+  }, 0);
 }
 
 export const sumSubPartMarks = subpartsTotalMarks;

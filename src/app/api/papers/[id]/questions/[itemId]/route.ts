@@ -74,6 +74,13 @@ export const PATCH = route(async (req, { id, itemId }, user) => {
     const candidateSubparts = parseSubparts(candidate.subpartsJson);
     const candidateSubmarks = subpartsTotalMarks(candidateSubparts);
 
+    if (candidateSubparts.length > 0 && candidateSubmarks !== item.section.marksEach) {
+      throw new HttpError(
+        400,
+        `Board Guardrail Violation: Replacement question total subpart marks (${candidateSubmarks}) must match section marks (${item.section.marksEach}).`
+      );
+    }
+
     const reason = whyCannotAdd(
       {
         sections: paper.blueprint.sections,
@@ -194,6 +201,13 @@ export const PUT = route(async (req, { id, itemId }, user) => {
     });
 
   const candidateSubmarks = subpartsTotalMarks(qInput.subparts || []);
+
+  if (qInput.subparts && qInput.subparts.length > 0 && candidateSubmarks !== item.section.marksEach) {
+    throw new HttpError(
+      400,
+      `Board Guardrail Violation: Edited question total subpart marks (${candidateSubmarks}) must match section marks (${item.section.marksEach}).`
+    );
+  }
 
   const reason = whyCannotAdd(
     {

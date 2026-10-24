@@ -18,6 +18,7 @@ import {
 import { HttpError, route, type SessionUser } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { formatMathTextRuns, formatOptionPairRuns } from "@/lib/docxMath";
+import { extractTableFromText } from "@/lib/math";
 import {
   cleanMatchItem,
   cleanOptionText,
@@ -31,7 +32,209 @@ import {
   resolvePaperExamType,
 } from "@/lib/constants";
 import { prisma } from "@/lib/prisma";
+import { parseSubparts, subpartsTotalMarks, type SubPart } from "@/lib/types";
 import { UPLOAD_DIR } from "@/lib/uploads";
+
+function renderQuestionOptions(
+  opts: string[],
+  type: string,
+  paragraphs: (Paragraph | Table)[],
+  indent = 720,
+) {
+  const letters = ["A", "B", "C", "D", "E", "F"];
+  const maxOptionLen = Math.max(...opts.map((o) => String(o).length));
+  const isMathComplex = opts.some(
+    (o) => String(o).includes("\\frac") || String(o).includes("\\sqrt") || String(o).includes("\n"),
+  );
+  const singleColumn = type === "ASSERTION_REASON" || isMathComplex || maxOptionLen > 35;
+
+  if (singleColumn) {
+    for (let i = 0; i < opts.length; i++) {
+      const optText = `(${letters[i] ?? i + 1}) ${cleanOptionText(opts[i])}`;
+      paragraphs.push(
+        new Paragraph({
+          indent: { left: indent },
+          spacing: { after: 30 },
+          children: formatMathTextRuns(optText, { font: "Times New Roman" }),
+        }),
+      );
+    }
+  } else {
+    for (let i = 0; i < opts.length; i += 2) {
+      const leftOpt = `(${letters[i]}) ${cleanOptionText(opts[i])}`;
+      const rightOpt = i + 1 < opts.length ? `(${letters[i + 1]}) ${cleanOptionText(opts[i + 1])}` : "";
+      paragraphs.push(
+        new Paragraph({
+          indent: { left: indent },
+          spacing: { after: 30 },
+          children: formatOptionPairRuns(leftOpt, rightOpt, { font: "Times New Roman" }),
+        }),
+      );
+    }
+  }
+}
+
+function renderSubpartsDocx(
+  subparts: SubPart[],
+  paragraphs: (Paragraph | Table)[],
+  isMarkingScheme: boolean,
+) {
+  const romans = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
+  for (let spIdx = 0; spIdx < subparts.length; spIdx++) {
+    const sp = subparts[spIdx];
+    const spLabel = sp.label && String(sp.label).trim() ? String(sp.label).trim() : (romans[spIdx] || `(${spIdx + 1})`);
+    const spMarks = typeof sp.marks === "number" && Number.isFinite(sp.marks) ? sp.marks : 1;
+    paragraphs.push(
+      new Paragraph({
+        indent: { left: 720 },
+        spacing: { after: 40 },
+        children: [
+          new TextRun({ text: `${spLabel} `, bold: true, font: "Times New Roman" }),
+          ...formatMathTextRuns(sp.text || "", { font: "Times New Roman" }),
+          new TextRun({ text: ` [${spMarks} Mark${spMarks > 1 ? "s" : ""}]`, bold: true, font: "Times New Roman" }),
+        ],
+      }),
+    );
+
+    if (Array.isArray(sp.options) && sp.options.length > 0) {
+      const letters = ["a", "b", "c", "d", "e", "f"];
+      const maxOptLen = Math.max(...sp.options.map((o: unknown) => String(o).length));
+      const singleCol = maxOptLen > 35;
+      if (singleCol) {
+        for (let oIdx = 0; oIdx < sp.options.length; oIdx++) {
+          const optText = `(${letters[oIdx] ?? oIdx + 1}) ${cleanOptionText(String(sp.options[oIdx]))}`;
+          paragraphs.push(
+            new Paragraph({
+              indent: { left: 1080 },
+              spacing: { after: 30 },
+              children: formatMathTextRuns(optText, { font: "Times New Roman" }),
+            }),
+          );
+        }
+      } else {
+        for (let oIdx = 0; oIdx < sp.options.length; oIdx += 2) {
+          const leftOpt = `(${letters[oIdx] ?? oIdx + 1}) ${cleanOptionText(String(sp.options[oIdx]))}`;
+          const rightOpt = oIdx + 1 < sp.options.length ? `(${letters[oIdx + 1] ?? oIdx + 2}) ${cleanOptionText(String(sp.options[oIdx + 1]))}` : "";
+          paragraphs.push(
+            new Paragraph({
+              indent: { left: 1080 },
+              spacing: { after: 30 },
+              children: formatOptionPairRuns(leftOpt, rightOpt, { font: "Times New Roman" }),
+            }),
+          );
+        }
+      }
+    }
+
+    if (isMarkingScheme && sp.answer) {
+      paragraphs.push(
+        new Paragraph({
+          indent: { left: 1080 },
+          spacing: { before: 20, after: 60 },
+          children: [
+            new TextRun({ text: "Ans: ", bold: true, color: "0B6623", font: "Times New Roman" }),
+            ...formatMathTextRuns(sp.answer, { font: "Times New Roman" }),
+          ],
+        }),
+      );
+    }
+  }
+}
+
+function renderQuestionTextWithTable(
+  qLabel: string,
+  qText: string,
+  qTotalMarks: number,
+  isMatch: boolean,
+  pageBreakBefore: boolean,
+  paragraphs: (Paragraph | Table)[],
+) {
+  const tableData = !isMatch ? extractTableFromText(qText) : null;
+  if (tableData && tableData.table) {
+    paragraphs.push(
+      new Paragraph({
+        pageBreakBefore,
+        spacing: { before: 100, after: 60 },
+        children: [
+          new TextRun({ text: `${qLabel}  `, bold: true, font: "Times New Roman" }),
+          ...formatMathTextRuns(tableData.prefixText, { font: "Times New Roman" }),
+          new TextRun({ text: `  [${qTotalMarks} Mark${qTotalMarks > 1 ? "s" : ""}]`, bold: true, font: "Times New Roman" }),
+        ],
+      }),
+    );
+    const numCols = Math.max(
+      tableData.table.headers ? tableData.table.headers.length : 0,
+      ...tableData.table.rows.map((r) => r.length),
+      1,
+    );
+    const colPct = Math.floor(100 / numCols);
+    const tableRows: TableRow[] = [];
+    if (tableData.table.headers && tableData.table.headers.length > 0) {
+      const paddedHeaders = [...tableData.table.headers];
+      while (paddedHeaders.length < numCols) paddedHeaders.push("");
+      tableRows.push(
+        new TableRow({
+          children: paddedHeaders.map(
+            (h) =>
+              new TableCell({
+                width: { size: colPct, type: WidthType.PERCENTAGE },
+                children: [
+                  new Paragraph({
+                    children: formatMathTextRuns(h, { bold: true, font: "Times New Roman" }),
+                  }),
+                ],
+              }),
+          ),
+        }),
+      );
+    }
+    for (const row of tableData.table.rows) {
+      const paddedRow = [...row];
+      while (paddedRow.length < numCols) paddedRow.push("");
+      tableRows.push(
+        new TableRow({
+          children: paddedRow.map(
+            (cell) =>
+              new TableCell({
+                width: { size: colPct, type: WidthType.PERCENTAGE },
+                children: [
+                  new Paragraph({
+                    children: formatMathTextRuns(cell, { font: "Times New Roman" }),
+                  }),
+                ],
+              }),
+          ),
+        }),
+      );
+    }
+    paragraphs.push(
+      new Table({
+        width: { size: 92, type: WidthType.PERCENTAGE },
+        rows: tableRows,
+      }),
+    );
+    if (tableData.suffixText.trim()) {
+      paragraphs.push(
+        new Paragraph({
+          spacing: { before: 60, after: 60 },
+          children: formatMathTextRuns(tableData.suffixText, { font: "Times New Roman" }),
+        }),
+      );
+    }
+  } else {
+    paragraphs.push(
+      new Paragraph({
+        pageBreakBefore,
+        spacing: { before: 100, after: 60 },
+        children: [
+          new TextRun({ text: `${qLabel}  `, bold: true, font: "Times New Roman" }),
+          ...formatMathTextRuns(qText, { font: "Times New Roman" }),
+          new TextRun({ text: `  [${qTotalMarks} Mark${qTotalMarks > 1 ? "s" : ""}]`, bold: true, font: "Times New Roman" }),
+        ],
+      }),
+    );
+  }
+}
 
 export async function buildPaperDocx(
   paperId: string,
@@ -327,15 +530,8 @@ export async function buildPaperDocx(
           matchCount = parseMatchColumnPairs(opts, q.text).length;
         } catch {}
       }
-      let subpartsMarks = 0;
-      if (q.subpartsJson) {
-        try {
-          const sps = JSON.parse(q.subpartsJson);
-          if (Array.isArray(sps)) {
-            subpartsMarks = sps.reduce((sum: number, sp: any) => sum + (Number(sp?.marks) || 0), 0);
-          }
-        } catch {}
-      }
+      const parsedSubparts = parseSubparts(q.subpartsJson);
+      const subpartsMarks = subpartsTotalMarks(parsedSubparts);
       const qTotalMarks = isMatch
         ? (section.count === 1 ? section.marksEach : Math.min(matchCount * section.marksEach, section.count * section.marksEach))
         : subpartsMarks > 0
@@ -343,16 +539,13 @@ export async function buildPaperDocx(
         : section.marksEach;
       const qText = isMatch ? getMatchColumnInstruction(q.text) : q.text;
 
-      paragraphs.push(
-        new Paragraph({
-          pageBreakBefore: Boolean((item as any).pageBreakBefore),
-          spacing: { before: 100, after: 60 },
-          children: [
-            new TextRun({ text: `${qLabel}  `, bold: true, font: "Times New Roman" }),
-            ...formatMathTextRuns(qText, { font: "Times New Roman" }),
-            new TextRun({ text: `  [${qTotalMarks} Mark${qTotalMarks > 1 ? "s" : ""}]`, bold: true, font: "Times New Roman" }),
-          ],
-        }),
+      renderQuestionTextWithTable(
+        qLabel,
+        qText,
+        qTotalMarks,
+        isMatch,
+        Boolean((item as any).pageBreakBefore),
+        paragraphs,
       );
 
       // Embedded diagram image if present
@@ -385,22 +578,31 @@ export async function buildPaperDocx(
         try {
           const opts: string[] = JSON.parse(q.optionsJson);
           if (Array.isArray(opts) && opts.length > 0) {
-            const letters = ["A", "B", "C", "D", "E", "F"];
-            for (let i = 0; i < opts.length; i += 2) {
-              const leftOpt = `(${letters[i]}) ${cleanOptionText(opts[i])}`;
-              const rightOpt = i + 1 < opts.length ? `(${letters[i + 1]}) ${cleanOptionText(opts[i + 1])}` : "";
-              paragraphs.push(
-                new Paragraph({
-                  indent: { left: 720 }, // 0.5 inch indent
-                  spacing: { after: 40 },
-                  children: formatOptionPairRuns(leftOpt, rightOpt, { font: "Times New Roman" }),
-                }),
-              );
-            }
+            renderQuestionOptions(opts, q.type, paragraphs, 720);
           }
         } catch {
           // ignore parsing error
         }
+      }
+
+      // True / False indicator
+      if (q.type === "TRUE_FALSE") {
+        const hasHindi = /[\u0900-\u097F]/.test(q.text);
+        paragraphs.push(
+          new Paragraph({
+            indent: { left: 720 },
+            spacing: { before: 20, after: 40 },
+            children: [
+              new TextRun({
+                text: hasHindi ? "(सही / गलत — True / False)" : "(True / False)",
+                italics: true,
+                size: 18, // 9pt
+                color: "475569",
+                font: "Times New Roman",
+              }),
+            ],
+          }),
+        );
       }
 
       // Match the Column Table
@@ -473,41 +675,9 @@ export async function buildPaperDocx(
         }
       }
 
-      // Subparts for case study
-      if (q.subpartsJson) {
-        try {
-          const subparts = JSON.parse(q.subpartsJson);
-          if (Array.isArray(subparts) && subparts.length > 0) {
-            for (const sp of subparts) {
-              paragraphs.push(
-                new Paragraph({
-                  indent: { left: 720 },
-                  spacing: { after: 40 },
-                  children: [
-                    new TextRun({ text: `${sp.label || "(i)"} `, bold: true, font: "Times New Roman" }),
-                    ...formatMathTextRuns(sp.text || "", { font: "Times New Roman" }),
-                    new TextRun({ text: ` [${sp.marks} Mark${sp.marks > 1 ? "s" : ""}]`, bold: true, font: "Times New Roman" }),
-                  ],
-                }),
-              );
-
-              if (isMarkingScheme && sp.answer) {
-                paragraphs.push(
-                  new Paragraph({
-                    indent: { left: 1080 },
-                    spacing: { before: 20, after: 60 },
-                    children: [
-                      new TextRun({ text: "Ans: ", bold: true, color: "0B6623", font: "Times New Roman" }),
-                      ...formatMathTextRuns(sp.answer, { font: "Times New Roman" }),
-                    ],
-                  }),
-                );
-              }
-            }
-          }
-        } catch {
-          // ignore
-        }
+      // Subparts for case study / passage / multi-part questions
+      if (parsedSubparts.length > 0) {
+        renderSubpartsDocx(parsedSubparts, paragraphs, isMarkingScheme);
       }
 
       // Model Answer / Solution for primary question
@@ -540,15 +710,8 @@ export async function buildPaperDocx(
             orMatchCount = parseMatchColumnPairs(opts, orQ.text).length;
           } catch {}
         }
-        let orSubpartsMarks = 0;
-        if (orQ.subpartsJson) {
-          try {
-            const sps = JSON.parse(orQ.subpartsJson);
-            if (Array.isArray(sps)) {
-              orSubpartsMarks = sps.reduce((sum: number, sp: any) => sum + (Number(sp?.marks) || 0), 0);
-            }
-          } catch {}
-        }
+        const parsedOrSubparts = parseSubparts(orQ.subpartsJson);
+        const orSubpartsMarks = subpartsTotalMarks(parsedOrSubparts);
         const orTotalMarks = isOrMatch
           ? (section.count === 1 ? section.marksEach : Math.min(orMatchCount * section.marksEach, section.count * section.marksEach))
           : orSubpartsMarks > 0
@@ -564,14 +727,14 @@ export async function buildPaperDocx(
               new TextRun({ text: "— OR —", bold: true, italics: true, font: "Times New Roman" }),
             ],
           }),
-          new Paragraph({
-            spacing: { after: 60 },
-            children: [
-              new TextRun({ text: `${qLabel} (OR)  `, bold: true, font: "Times New Roman" }),
-              ...formatMathTextRuns(orQText, { font: "Times New Roman" }),
-              new TextRun({ text: `  [${orTotalMarks} Mark${orTotalMarks > 1 ? "s" : ""}]`, bold: true, font: "Times New Roman" }),
-            ],
-          }),
+        );
+        renderQuestionTextWithTable(
+          `${qLabel} (OR)`,
+          orQText,
+          orTotalMarks,
+          isOrMatch,
+          false,
+          paragraphs,
         );
 
         // Embedded diagram image for OR question if present
@@ -604,22 +767,31 @@ export async function buildPaperDocx(
           try {
             const opts: string[] = JSON.parse(orQ.optionsJson);
             if (Array.isArray(opts) && opts.length > 0) {
-              const letters = ["A", "B", "C", "D", "E", "F"];
-              for (let i = 0; i < opts.length; i += 2) {
-                const leftOpt = `(${letters[i]}) ${cleanOptionText(opts[i])}`;
-                const rightOpt = i + 1 < opts.length ? `(${letters[i + 1]}) ${cleanOptionText(opts[i + 1])}` : "";
-                paragraphs.push(
-                  new Paragraph({
-                    indent: { left: 720 },
-                    spacing: { after: 40 },
-                    children: formatOptionPairRuns(leftOpt, rightOpt, { font: "Times New Roman" }),
-                  }),
-                );
-              }
+              renderQuestionOptions(opts, orQ.type, paragraphs, 720);
             }
           } catch {
             // ignore
           }
+        }
+
+        // True / False indicator for OR question
+        if (orQ.type === "TRUE_FALSE") {
+          const hasHindi = /[\u0900-\u097F]/.test(orQ.text);
+          paragraphs.push(
+            new Paragraph({
+              indent: { left: 720 },
+              spacing: { before: 20, after: 40 },
+              children: [
+                new TextRun({
+                  text: hasHindi ? "(सही / गलत — True / False)" : "(True / False)",
+                  italics: true,
+                  size: 18, // 9pt
+                  color: "475569",
+                  font: "Times New Roman",
+                }),
+              ],
+            }),
+          );
         }
 
         // Match the Column Table for OR question
@@ -693,59 +865,48 @@ export async function buildPaperDocx(
         }
 
         // Subparts for case study / passage for OR question
-        if (orQ.subpartsJson) {
-          try {
-            const subparts = JSON.parse(orQ.subpartsJson);
-            if (Array.isArray(subparts) && subparts.length > 0) {
-              for (const sp of subparts) {
-                paragraphs.push(
-                  new Paragraph({
-                    indent: { left: 720 },
-                    spacing: { after: 40 },
-                    children: [
-                      new TextRun({ text: `${sp.label || "(i)"} `, bold: true, font: "Times New Roman" }),
-                      ...formatMathTextRuns(sp.text || "", { font: "Times New Roman" }),
-                      new TextRun({ text: ` [${sp.marks} Mark${sp.marks > 1 ? "s" : ""}]`, bold: true, font: "Times New Roman" }),
-                    ],
-                  }),
-                );
+        if (parsedOrSubparts.length > 0) {
+          renderSubpartsDocx(parsedOrSubparts, paragraphs, isMarkingScheme);
+        }
 
-                if (isMarkingScheme && sp.answer) {
-                  paragraphs.push(
-                    new Paragraph({
-                      indent: { left: 1080 },
-                      spacing: { before: 20, after: 60 },
-                      children: [
-                        new TextRun({ text: "Ans: ", bold: true, color: "0B6623", font: "Times New Roman" }),
-                        ...formatMathTextRuns(sp.answer, { font: "Times New Roman" }),
-                      ],
-                    }),
-                  );
-                }
-              }
-            }
-          } catch {
-            // ignore
-          }
+        // Model Answer / Solution for OR question
+        if (isMarkingScheme && orQ.answer) {
+          paragraphs.push(
+            new Paragraph({
+              indent: { left: 720 },
+              spacing: { before: 40, after: 80 },
+              children: [
+                new TextRun({
+                  text: "Model Answer / Scheme: ",
+                  bold: true,
+                  color: "0B6623",
+                  font: "Times New Roman",
+                }),
+                ...formatMathTextRuns(orQ.answer, { font: "Times New Roman" }),
+              ],
+            }),
+          );
+        }
+      }
 
-          // Model Answer / Solution for OR question
-          if (isMarkingScheme && orQ.answer) {
-            paragraphs.push(
-              new Paragraph({
-                indent: { left: 720 },
-                spacing: { before: 40, after: 80 },
-                children: [
-                  new TextRun({
-                    text: "Model Answer / Scheme: ",
-                    bold: true,
-                    color: "0B6623",
-                    font: "Times New Roman",
-                  }),
-                  ...formatMathTextRuns(orQ.answer, { font: "Times New Roman" }),
-                ],
-              }),
-            );
-          }
+      // Blank answer space / lines for student paper copy
+      if (!isMarkingScheme) {
+        const maxSpace = Math.max(q.spaceMm || 0, item.orQuestion?.spaceMm || 0);
+        if (maxSpace > 0) {
+          paragraphs.push(
+            new Paragraph({
+              spacing: { before: 60, after: Math.min(2400, Math.round(maxSpace * 56.7)) },
+              children: [
+                new TextRun({
+                  text: q.type === "DRAW" ? "[Space for Diagram / चित्र हेतु स्थान]" : "[Space for Answer / उत्तर हेतु स्थान]",
+                  size: 16, // 8pt
+                  italics: true,
+                  color: "94A3B8",
+                  font: "Times New Roman",
+                }),
+              ],
+            }),
+          );
         }
       }
     }

@@ -11,6 +11,7 @@ import {
   isSubpartQuestionType,
   MAX_OPTIONS,
   MIN_OPTIONS,
+  getMatchColumnInstruction,
   parseMatchColumnPairs,
   QUESTION_TYPES,
   QUESTION_TYPE_LABEL,
@@ -145,7 +146,13 @@ export function QuestionForm({
   );
   const resolvedInitialType = initial?.type ?? fixedType ?? "SHORT";
   const [type, setType] = useState(resolvedInitialType);
-  const [text, setText] = useState(initial?.text ?? "");
+  const [text, setText] = useState(() => {
+    if (initial?.type === "MATCH_COLUMN" && initial.text) {
+      const instruction = getMatchColumnInstruction(initial.text);
+      if (instruction) return instruction;
+    }
+    return initial?.text ?? "";
+  });
   const [options, setOptions] = useState<string[]>(() => {
     if (initial?.options && initial.options.length > 0 && initial.type !== "MATCH_COLUMN") {
       return initial.options;
@@ -156,8 +163,11 @@ export function QuestionForm({
     return ["", "", "", ""];
   });
   const [matchPairs, setMatchPairs] = useState<MatchColumnPair[]>(() => {
-    if (initial?.type === "MATCH_COLUMN" && initial.options && initial.options.length > 0) {
-      return parseMatchColumnPairs(initial.options);
+    if (initial?.type === "MATCH_COLUMN") {
+      const parsed = parseMatchColumnPairs(initial.options || [], initial.text);
+      if (parsed.length > 0 && parsed.some((p) => p.left || p.right)) {
+        return parsed;
+      }
     }
     return [
       { left: "", right: "" },
@@ -396,9 +406,9 @@ export function QuestionForm({
     }));
     const keyParts = matchPairs.map((_, origIdx) => {
       const newColBIdx = indexedRights.findIndex((r) => r.origIdx === origIdx);
-      const roman = ROMAN_LABELS[origIdx] ?? `(${origIdx + 1})`;
-      const letter = LETTERS[newColBIdx]?.toLowerCase() ?? String(newColBIdx + 1);
-      return `${roman} → (${letter})`;
+      const colA = `(${LETTERS[origIdx] ?? String.fromCharCode(65 + origIdx)})`;
+      const colB = ROMAN_LABELS[newColBIdx] ?? `(${newColBIdx + 1})`;
+      return `${colA} → ${colB}`;
     });
     setMatchPairs(nextPairs);
     setAnswer(keyParts.join(", "));
@@ -470,6 +480,8 @@ export function QuestionForm({
                 }
               } else if (isSubpartQuestionType(newType)) {
                 setSubparts(getDefaultSubpartsForType(newType, targetMarks));
+              } else {
+                setSubparts([]);
               }
             }}
           >
@@ -821,12 +833,12 @@ export function QuestionForm({
                 onClick={() => {
                   setText("सही जोड़ी बनाइए (स्तम्भ 'अ' को स्तम्भ 'ब' से सुमेलित कीजिए):");
                   setMatchPairs([
-                    { left: "कामायनी", right: "जयशंकर प्रसाद" },
-                    { left: "गोदान", right: "मुंशी प्रेमचंद" },
-                    { left: "रामचरितमानस", right: "गोस्वामी तुलसीदास" },
-                    { left: "मधुशाला", right: "हरिवंशराय बच्चन" },
+                    { left: "कामायनी", right: "हरिवंशराय बच्चन" },
+                    { left: "गोदान", right: "जयशंकर प्रसाद" },
+                    { left: "रामचरितमानस", right: "मुंशी प्रेमचंद" },
+                    { left: "मधुशाला", right: "गोस्वामी तुलसीदास" },
                   ]);
-                  setAnswer("(i) → (a), (ii) → (b), (iii) → (c), (iv) → (d)");
+                  setAnswer("(A) → (ii), (B) → (iii), (C) → (iv), (D) → (i)");
                 }}
                 className="btn btn-xs border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 font-medium"
               >
@@ -862,25 +874,25 @@ export function QuestionForm({
               <div key={idx} className="grid grid-cols-12 items-center gap-2">
                 <div className="col-span-6 flex items-center gap-1.5">
                   <span className="w-6 text-xs font-bold text-slate-600">
-                    {ROMAN_LABELS[idx] ?? `(${idx + 1})`}
+                    ({LETTERS[idx] ?? String.fromCharCode(65 + idx)})
                   </span>
                   <input
                     className="input text-xs"
                     value={pair.left}
-                    placeholder={`Column A item ${idx + 1}`}
+                    placeholder={`Column A item ${LETTERS[idx] ?? idx + 1}`}
                     onChange={(e) =>
                       setMatchPairs(matchPairs.map((p, j) => (j === idx ? { ...p, left: e.target.value } : p)))
                     }
                   />
                 </div>
                 <div className="col-span-5 flex items-center gap-1.5">
-                  <span className="w-5 text-xs font-bold text-slate-600">
-                    ({LETTERS[idx]?.toLowerCase() ?? idx + 1})
+                  <span className="w-6 text-xs font-bold text-slate-600">
+                    {ROMAN_LABELS[idx] ?? `(${idx + 1})`}
                   </span>
                   <input
                     className="input text-xs"
                     value={pair.right}
-                    placeholder={`Column B item ${LETTERS[idx]?.toLowerCase() ?? idx + 1}`}
+                    placeholder={`Column B item ${ROMAN_LABELS[idx] ?? idx + 1}`}
                     onChange={(e) =>
                       setMatchPairs(matchPairs.map((p, j) => (j === idx ? { ...p, right: e.target.value } : p)))
                     }

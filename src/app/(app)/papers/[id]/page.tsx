@@ -1499,7 +1499,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
             const effectiveUnits = items.reduce((sum, it) => {
               if (it.question.type === "MATCH_COLUMN" || s.type === "MATCH_COLUMN") {
                 const pairs = parseMatchColumnPairs(it.question.options, it.question.text);
-                return sum + (pairs.length > 0 ? pairs.length : s.count);
+                return sum + (s.count === 1 ? 1 : (pairs.length > 0 ? Math.min(pairs.length, s.count) : s.count));
               }
               const subLen = it.question.subparts?.length || 0;
               return sum + (subLen > 1 && s.count >= subLen ? subLen : 1);
@@ -1535,10 +1535,10 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                             : "!bg-amber-50 !text-amber-800 border border-amber-200"
                         }`}
                       >
-                        {items.length === 1 && effectiveUnits > 1
-                          ? s.type === "MATCH_COLUMN"
-                            ? `1 question (${effectiveUnits} matching pairs)`
-                            : `1 question (${effectiveUnits} sub-parts)`
+                        {items.length === 1 && s.type === "MATCH_COLUMN"
+                          ? `1 question (${parseMatchColumnPairs(items[0].question.options, items[0].question.text).length || s.count} matching pairs)`
+                          : items.length === 1 && effectiveUnits > 1
+                          ? `1 question (${effectiveUnits} sub-parts)`
                           : s.type === "MATCH_COLUMN" && items.length === 0
                           ? `0/1 question (${s.count} pairs)`
                           : `${effectiveUnits}/${s.count} questions`}{" "}

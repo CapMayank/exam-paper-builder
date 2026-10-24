@@ -34,6 +34,16 @@ export const POST = route(async (req, { id }, user) => {
   const candidateSubparts = parseSubparts(question.subpartsJson);
   const candidateSubmarks = subpartsTotalMarks(candidateSubparts);
 
+  const targetSection = paper.blueprint.sections.find((s) => s.id === input.sectionId);
+  if (!targetSection) throw new HttpError(404, "Section not found");
+
+  if (candidateSubparts.length > 0 && candidateSubmarks !== targetSection.marksEach) {
+    throw new HttpError(
+      400,
+      `Board Guardrail Violation: Question total subpart marks (${candidateSubmarks}) must match section marks (${targetSection.marksEach}).`
+    );
+  }
+
   const reason = whyCannotAdd(
     {
       sections: paper.blueprint.sections,

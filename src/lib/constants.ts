@@ -90,21 +90,22 @@ export interface MatchColumnPair {
 export function cleanMatchItem(text: string): string {
   if (!text) return "";
   return text
-    .replace(/^[\s\u200B]*(\([A-Za-z0-9ivxIVX\u0900-\u097F]+\)|[A-Za-z0-9ivxIVX\u0900-\u097F]+[.)\]:-])\s*/, "")
+    .replace(/^[\s\u200B]*(\([A-Za-z0-9ivxIVX\u0900-\u097F]{1,6}\)|(?:[A-Za-z]|\d{1,2}|[ivxIVX]{1,4}|[\u0900-\u097F]{1,2})\s*[.)\]:-])\s*/, "")
     .trim();
 }
 
 /**
- * Strips redundant leading choice labels ((a), (A), a., 1.) and unescaped LaTeX formatting macros
- * from multiple choice and objective question options.
+ * Strips redundant leading choice labels ((a), (A), a., 1., iv.) and unescaped LaTeX formatting macros
+ * from multiple choice and objective question options without stripping legitimate English words
+ * like Observation:, Definition:, Assertion:, Reason:, etc.
  */
 export function cleanOptionText(text?: string | null): string {
   if (!text) return "";
   let s = text
-    .replace(/^[\s\u200B]*(\([A-Za-z0-9ivxIVX\u0900-\u097F]+\)|[A-Za-z0-9ivxIVX\u0900-\u097F]+[.)\]:-])\s*/, "")
+    .replace(/^[\s\u200B]*(\([A-Za-z0-9ivxIVX\u0900-\u097F]{1,6}\)|(?:[A-Za-z]|\d{1,2}|[ivxIVX]{1,4}|[\u0900-\u097F]{1,2})\s*[.)\]:-])\s*/, "")
     .trim();
-  // Strip raw unescaped LaTeX formatting macros that leaked outside $...$
-  if (!s.startsWith("$") && !s.includes("$$")) {
+  // Strip raw unescaped LaTeX formatting macros that leaked outside $...$ only if string has no math delimiters
+  if (!s.includes("$")) {
     s = s
       .replace(/\\text\{([^}]+)\}/g, "$1")
       .replace(/\\mathrm\{([^}]+)\}/g, "$1")
@@ -115,25 +116,102 @@ export function cleanOptionText(text?: string | null): string {
   return s;
 }
 
+/**
+ * Splits a string by the first occurrence of one of the delimiters,
+ * but ONLY if the delimiter is strictly outside LaTeX math mode ($...$ or $$...$$).
+ */
+export function splitOutsideMath(str: string, delimiters: string[]): [string, string] | null {
+  if (!str) return null;
+  let inInline = false;
+  let inDisplay = false;
+  let i = 0;
+
+  while (i < str.length) {
+    if (str.slice(i, i + 2) === "$$") {
+      inDisplay = !inDisplay;
+      i += 2;
+      continue;
+    }
+    if (str[i] === "$" && !inDisplay && (i === 0 || str[i - 1] !== "\\")) {
+      inInline = !inInline;
+      i += 1;
+      continue;
+    }
+    if (!inInline && !inDisplay) {
+      for (const delim of delimiters) {
+        if (str.slice(i, i + delim.length) === delim) {
+          return [str.slice(0, i), str.slice(i + delim.length)];
+        }
+      }
+    }
+    i++;
+  }
+  return null;
+}
+
 export function extractColumnIItems(text?: string | null): string[] {
   if (!text) return [];
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   const items: string[] = [];
   let inColumnI = false;
+  let hasExplicitColumnI = false;
+
+  const col1Regex = /\bcolumn\s*(?:i\b|a\b|1\b)|स्तम्भ\s*['"]?(?:अ|1)['"]?|खण्ड\s*['"]?(?:क|1)['"]?/i;
+  const col2Regex = /\bcolumn\s*(?:ii\b|b\b|2\b)|स्तम्भ\s*['"]?(?:ब|2)['"]?|खण्ड\s*['"]?(?:ख|2)['"]?/i;
 
   for (const line of lines) {
-    const lower = line.toLowerCase();
-    if (lower.includes("column i") || lower.includes("column a") || lower.includes("स्तम्भ 'अ'") || lower.includes("स्तम्भ 1")) {
-      inColumnI = true;
-      continue;
-    }
-    if (lower.includes("column ii") || lower.includes("column b") || lower.includes("स्तम्भ 'ब'") || lower.includes("स्तम्भ 2")) {
+    // Check col2 first so 'Column II' is never matched as 'Column I'
+    if (col2Regex.test(line)) {
       inColumnI = false;
+      if (hasExplicitColumnI) {
+        break; // Stop collecting Column I items once Column II is reached
+      }
       continue;
     }
+    if (col1Regex.test(line)) {
+      inColumnI = true;
+      hasExplicitColumnI = true;
+      continue;
+    }
+
     const isItemLine = /^(\([A-Za-z0-9ivxIVX\u0900-\u097F]+\)|[A-Za-z0-9ivxIVX\u0900-\u097F]+[.)\]:-])\s+/.test(line);
-    if (isItemLine || inColumnI) {
+    if (hasExplicitColumnI) {
+      if (inColumnI) {
+        items.push(cleanMatchItem(line));
+      }
+    } else if (isItemLine) {
       items.push(cleanMatchItem(line));
+    }
+  }
+  return items;
+}
+
+export function extractColumnIIItems(text?: string | null): string[] {
+  if (!text) return [];
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const items: string[] = [];
+  let inColumnII = false;
+
+  const col2Regex = /\bcolumn\s*(?:ii\b|b\b|2\b)|स्तम्भ\s*['"]?(?:ब|2)['"]?|खण्ड\s*['"]?(?:ख|2)['"]?/i;
+  const col1Regex = /\bcolumn\s*(?:i\b|a\b|1\b)|स्तम्भ\s*['"]?(?:अ|1)['"]?|खण्ड\s*['"]?(?:क|1)['"]?/i;
+
+  for (const line of lines) {
+    if (col2Regex.test(line)) {
+      inColumnII = true;
+      continue;
+    }
+    // If another column header or new section appears, stop
+    if (inColumnII && col1Regex.test(line)) {
+      break;
+    }
+
+    if (inColumnII) {
+      const isItemLine = /^(\([A-Za-z0-9ivxIVX\u0900-\u097F]+\)|[A-Za-z0-9ivxIVX\u0900-\u097F]+[.)\]:-])\s+/.test(line);
+      if (isItemLine) {
+        items.push(cleanMatchItem(line));
+      } else if (!line.toLowerCase().startsWith("options") && !line.toLowerCase().startsWith("उत्तर") && !line.toLowerCase().startsWith("answer")) {
+        items.push(cleanMatchItem(line));
+      }
     }
   }
   return items;
@@ -144,13 +222,11 @@ export function getMatchColumnInstruction(text?: string | null): string {
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   if (lines.length === 0) return "Match the items in Column I with Column II:";
 
+  const colHeaderRegex = /\bcolumn\s*(?:i\b|a\b|1\b)|स्तम्भ\s*['"]?(?:अ|1)['"]?|खण्ड\s*['"]?(?:क|1)['"]?/i;
   const instructionLines: string[] = [];
   for (const line of lines) {
-    const lower = line.toLowerCase();
     if (
-      lower.startsWith("column i") ||
-      lower.startsWith("column a") ||
-      lower.includes("स्तम्भ 'अ'") ||
+      colHeaderRegex.test(line) ||
       /^(\([A-Za-z0-9ivxIVX\u0900-\u097F]+\)|[A-Za-z0-9ivxIVX\u0900-\u097F]+[.)\]:-])\s+/.test(line)
     ) {
       break;
@@ -166,57 +242,135 @@ export function serializeMatchColumnPair(left: string, right: string): string {
 }
 
 export function parseMatchColumnPairs(options: string[] = [], questionText?: string | null): MatchColumnPair[] {
-  if (!options || options.length === 0) return [];
+  const opts = Array.isArray(options) ? options : [];
 
-  const hasDelimiters = options.some(
-    (opt) =>
-      opt.includes("|||") ||
-      opt.includes("::") ||
-      opt.includes("→") ||
-      opt.includes("->") ||
-      opt.includes(" - ")
-  );
+  // Dedicated pair delimiters including equals, colons, and arrows
+  const PAIR_DELIMITERS = [" ||| ", "|||", " :: ", "::", " : ", ": ", " → ", "→", " -> ", "->", " = ", "=", " - "];
 
-  if (hasDelimiters) {
-    return options.map((opt) => {
-      let left = opt;
-      let right = "";
-      if (opt.includes("|||")) {
-        const [l, ...rest] = opt.split("|||");
-        left = l;
-        right = rest.join("|||");
-      } else if (opt.includes("::")) {
-        const [l, ...rest] = opt.split("::");
-        left = l;
-        right = rest.join("::");
-      } else if (opt.includes("→")) {
-        const [l, ...rest] = opt.split("→");
-        left = l;
-        right = rest.join("→");
-      } else if (opt.includes("->")) {
-        const [l, ...rest] = opt.split("->");
-        left = l;
-        right = rest.join("->");
-      } else if (opt.includes(" - ")) {
-        const [l, ...rest] = opt.split(" - ");
-        left = l;
-        right = rest.join(" - ");
-      }
-      return { left: cleanMatchItem(left), right: cleanMatchItem(right) };
-    });
+  // 1. Explicit serialized pairs with triple pipes (e.g. from QuestionForm)
+  const hasTriplePipe = opts.some((opt) => typeof opt === "string" && opt.includes("|||"));
+  if (hasTriplePipe) {
+    return opts
+      .map((opt) => {
+        const parts = splitOutsideMath(String(opt), [" ||| ", "|||"]);
+        if (parts) {
+          return { left: cleanMatchItem(parts[0]), right: cleanMatchItem(parts[1]) };
+        }
+        return { left: cleanMatchItem(String(opt)), right: "" };
+      })
+      .filter((p) => p.left || p.right);
   }
 
-  const columnIItems = questionText ? extractColumnIItems(questionText) : [];
-
-  return options.map((opt, idx) => {
-    if (columnIItems.length > 0) {
-      return {
-        left: columnIItems[idx] ?? `Item ${idx + 1}`,
-        right: cleanMatchItem(opt),
-      };
-    }
-    return { left: cleanMatchItem(opt), right: "" };
+  // 2. Check if options themselves are paired strings with other standard delimiters
+  const hasDelimitedOptions = opts.some((opt) => {
+    if (typeof opt !== "string") return false;
+    // Don't treat MCQ combination strings like "(a) A-ii, B-i" as pairs
+    if (/^[A-D]\s*[-=]\s*|\([a-d]\)\s*[A-Z]-/i.test(opt.trim())) return false;
+    return splitOutsideMath(opt, PAIR_DELIMITERS) !== null;
   });
+
+  if (hasDelimitedOptions) {
+    return opts
+      .map((opt) => {
+        const str = String(opt);
+        const parts = splitOutsideMath(str, PAIR_DELIMITERS);
+        if (parts) {
+          return { left: cleanMatchItem(parts[0]), right: cleanMatchItem(parts[1]) };
+        }
+        return { left: cleanMatchItem(str), right: "" };
+      })
+      .filter((p) => p.left || p.right);
+  }
+
+  // 3. Check if question text defines Column I and/or Column II items
+  const colIItems = questionText ? extractColumnIItems(questionText) : [];
+  const colIIItems = questionText ? extractColumnIIItems(questionText) : [];
+
+  // 3a. Both Column I and Column II extracted directly from text
+  if (colIItems.length > 0 && colIIItems.length > 0) {
+    const maxLen = Math.max(colIItems.length, colIIItems.length);
+    const pairs: MatchColumnPair[] = [];
+    for (let i = 0; i < maxLen; i++) {
+      pairs.push({
+        left: colIItems[i] ?? "",
+        right: colIIItems[i] ?? "",
+      });
+    }
+    return pairs;
+  }
+
+  // 3b. Column I in text, Column II provided in options
+  if (colIItems.length > 0 && opts.length > 0) {
+    // Check if options are MCQ match combination strings like "(a) A-ii, B-i"
+    const isMcqOptions = opts.every((opt) => /^[A-D]\s*[-=]\s*|\([a-d]\)\s*[A-Z]-/i.test(String(opt).trim()));
+    if (!isMcqOptions) {
+      const maxLen = Math.max(colIItems.length, opts.length);
+      const pairs: MatchColumnPair[] = [];
+      for (let i = 0; i < maxLen; i++) {
+        pairs.push({
+          left: colIItems[i] ?? `Item ${i + 1}`,
+          right: opts[i] !== undefined ? cleanMatchItem(String(opts[i])) : "",
+        });
+      }
+      return pairs;
+    }
+  }
+
+  // 4. Fallback if options was empty but text had Column I
+  if (colIItems.length > 0) {
+    return colIItems.map((item) => ({
+      left: item,
+      right: "",
+    }));
+  }
+
+  return [];
+}
+
+/**
+ * Permutes Column B items across matching pairs so that no answer is displayed
+ * directly adjacent to its corresponding Column A item, eliminating answer leakage.
+ * Generates the strictly mapped answer key string.
+ */
+export type DerangedMatchColumnResult = MatchColumnPair[] & {
+  pairs: MatchColumnPair[];
+  answerKey: string;
+};
+
+export function derangeMatchColumnPairs(pairs: MatchColumnPair[]): DerangedMatchColumnResult {
+  if (!pairs || pairs.length <= 1) {
+    const list = pairs || [];
+    const res = [...list] as DerangedMatchColumnResult;
+    res.pairs = list;
+    res.answerKey = list && list.length === 1 ? "(A) → (i)" : "";
+    return res;
+  }
+
+  const n = pairs.length;
+  const letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
+  const romans = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
+
+  // Derangement mapping: target column B index for left[i] is (i + 1) % n
+  // Therefore column B at position j contains the answer for item (j - 1 + n) % n
+  const derangedPairs: MatchColumnPair[] = pairs.map((pair, j) => {
+    const origSourceIdx = (j - 1 + n) % n;
+    return {
+      left: pair.left,
+      right: pairs[origSourceIdx].right,
+    };
+  });
+
+  const keyParts = pairs.map((_, i) => {
+    const targetColBIdx = (i + 1) % n;
+    const colALabel = `(${letters[i] ?? i + 1})`;
+    const colBLabel = romans[targetColBIdx] ?? `(${targetColBIdx + 1})`;
+    return `${colALabel} → ${colBLabel}`;
+  });
+
+  const result = [...derangedPairs] as DerangedMatchColumnResult;
+  result.pairs = derangedPairs;
+  result.answerKey = keyParts.join(", ");
+  return result;
 }
 
 export const DIFFICULTIES = ["EASY", "MEDIUM", "HARD"] as const;

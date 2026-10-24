@@ -8,7 +8,15 @@ import { QuestionView } from "@/components/QuestionView";
 import { ErrorBanner, Modal, Spinner } from "@/components/ui";
 import { whyCannotAdd, type BlueprintDef } from "@/lib/blueprint";
 import { api } from "@/lib/client";
-import { cleanOptionText, DIFFICULTIES, isKindergartenType, QUESTION_TYPE_LABEL } from "@/lib/constants";
+import {
+  cleanOptionText,
+  DIFFICULTIES,
+  isKindergartenType,
+  isSubpartQuestionType,
+  parseMatchColumnPairs,
+  QUESTION_TYPE_LABEL,
+  serializeMatchColumnPair,
+} from "@/lib/constants";
 import { type Book, type PaperData, type QuestionDto, type Section, subpartsTotalMarks } from "@/lib/types";
 import { MathText } from "./MathText";
 import type { GeneratedQuestionItem } from "@/lib/gemini";
@@ -138,13 +146,17 @@ export function QuestionPicker({
             why = "Cannot be identical to the alternate (OR) choice of this slot.";
           } else {
             const qSubmarks = q.subparts && q.subparts.length > 0 ? subpartsTotalMarks(q.subparts) : 0;
-            why = whyCannotAdd(def, placed, {
-              sectionId: section.id,
-              chapterId: q.chapterId,
-              type: q.type,
-              marks: qSubmarks > 0 ? qSubmarks : undefined,
-              subpartsCount: q.subparts && q.subparts.length > 1 ? q.subparts.length : undefined,
-            });
+            if (q.subparts && q.subparts.length > 0 && qSubmarks !== section.marksEach) {
+              why = `Subpart marks (${qSubmarks}m) must match section (${section.marksEach}m).`;
+            } else {
+              why = whyCannotAdd(def, placed, {
+                sectionId: section.id,
+                chapterId: q.chapterId,
+                type: q.type,
+                marks: qSubmarks > 0 ? qSubmarks : undefined,
+                subpartsCount: q.subparts && q.subparts.length > 1 ? q.subparts.length : undefined,
+              });
+            }
           }
         }
         return { q, why };
@@ -281,17 +293,27 @@ export function QuestionPicker({
         throw new Error("Please select a valid chapter.");
       }
 
+      const isMatch = section.type === "MATCH_COLUMN";
+      let processedOptions = aiGenerated.options || [];
+      if (isMatch) {
+        const pairs = parseMatchColumnPairs(aiGenerated.options || [], aiGenerated.text);
+        if (pairs.length > 0 && pairs.some((p) => p.left && p.right)) {
+          processedOptions = pairs.map((p) => serializeMatchColumnPair(p.left, p.right));
+        }
+      }
+
       const payload = {
         bookId: paper.blueprint.bookId,
         chapterId: aiChapterId,
         type: section.type,
         text: aiGenerated.text,
-        options: aiGenerated.options || [],
+        options: processedOptions,
         subparts: (aiGenerated.subparts || []).map((sp, idx) => ({
           label: sp.label || `(${idx + 1})`,
           text: sp.text,
           marks: sp.marks || 1,
           answer: sp.answer || "",
+          options: Array.isArray(sp.options) && sp.options.length > 0 ? sp.options.map((o: string) => cleanOptionText(String(o))) : undefined,
         })),
         answer: aiGenerated.answer || "",
         difficulty: aiDifficulty,
@@ -315,18 +337,28 @@ export function QuestionPicker({
   function handleEditAiQuestion() {
     if (!aiGenerated) return;
     const selectedChapter = paper.blueprint.chapters.find((c) => c.chapterId === aiChapterId)?.chapter;
+    const isMatch = section.type === "MATCH_COLUMN";
+    let processedOptions = aiGenerated.options || [];
+    if (isMatch) {
+      const pairs = parseMatchColumnPairs(aiGenerated.options || [], aiGenerated.text);
+      if (pairs.length > 0 && pairs.some((p) => p.left && p.right)) {
+        processedOptions = pairs.map((p) => serializeMatchColumnPair(p.left, p.right));
+      }
+    }
+
     const dummyDto: QuestionDto = {
       id: "",
       bookId: paper.blueprint.bookId,
       chapterId: aiChapterId,
       type: section.type,
       text: aiGenerated.text,
-      options: aiGenerated.options || [],
+      options: processedOptions,
       subparts: (aiGenerated.subparts || []).map((sp, idx) => ({
         label: sp.label || `(${idx + 1})`,
         text: sp.text,
         marks: sp.marks || 1,
         answer: sp.answer || "",
+        options: Array.isArray(sp.options) && sp.options.length > 0 ? sp.options.map((o: string) => cleanOptionText(String(o))) : undefined,
       })),
       answer: aiGenerated.answer || "",
       difficulty: aiDifficulty,
@@ -862,8 +894,43 @@ export function QuestionPicker({
                     </div>
                   )}
 
-                  {/* Case Study Subparts */}
-                  {section.type === "CASE_STUDY" && aiGenerated.subparts && aiGenerated.subparts.length > 0 && (
+                  {/* Match the Columns Preview */}
+                  {section.type === "MATCH_COLUMN" && (
+                    <div className="space-y-2 rounded-lg border border-teal-200 bg-teal-50/30 p-3">
+                      <span className="font-bold text-xs text-teal-950 uppercase tracking-wider block">
+                        Matching Columns Preview (स्तम्भ &apos;अ&apos; ↔ स्तम्भ &apos;ब&apos;)
+                      </span>
+                      {(() => {
+                        const pairs = parseMatchColumnPairs(aiGenerated.options || [], aiGenerated.text);
+                        if (pairs.length === 0) return null;
+                        return (
+                          <div className="overflow-x-auto rounded border border-teal-200 bg-white">
+                            <table className="w-full text-xs text-left">
+                              <thead className="bg-teal-100/60 font-semibold text-teal-900 border-b border-teal-200">
+                                <tr>
+                                  <th className="p-2 w-1/2">Column I / स्तम्भ &apos;अ&apos;</th>
+                                  <th className="p-2 w-1/2">Column II / स्तम्भ &apos;ब&apos;</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-teal-100">
+                                {pairs.map((p, pIdx) => (
+                                  <tr key={pIdx}>
+                                    <td className="p-2 text-slate-800"><MathText text={p.left} /></td>
+                                    <td className="p-2 text-slate-800"><MathText text={p.right} /></td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+
+                  {/* Multi-part Subparts (Case Study, Unseen Passage, Reference to Context) */}
+                  {(section.type === "CASE_STUDY" || isSubpartQuestionType(section.type) || (aiGenerated.subparts && aiGenerated.subparts.length > 0)) &&
+                    aiGenerated.subparts &&
+                    aiGenerated.subparts.length > 0 && (
                     <div className="space-y-2.5 rounded-lg border border-purple-100 bg-purple-50/30 p-3">
                       <span className="font-bold text-xs text-purple-950 uppercase tracking-wider block">
                         Sub-questions ({aiGenerated.subparts.length})

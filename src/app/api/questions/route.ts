@@ -113,12 +113,24 @@ export const GET = route(async (req) => {
       if (q.subparts && q.subparts.length > 0) {
         return subpartsTotalMarks(q.subparts) === targetMarks;
       }
-      if (targetMarks === 1) return ["MCQ", "VSA", "TRUE_FALSE", "FILL_BLANKS", "ASSERTION_REASON"].includes(q.type);
-      if (targetMarks === 2) return ["SA", "SHORT", "DRAW"].includes(q.type);
-      if (targetMarks === 3) return ["SA", "SHORT"].includes(q.type);
-      if (targetMarks === 4) return ["CASE_STUDY", "PASSAGE"].includes(q.type);
-      if (targetMarks === 5) return ["LA", "LONG"].includes(q.type);
-      if (targetMarks === 6) return ["LA", "LONG"].includes(q.type);
+      if (targetMarks === 1) {
+        return [
+          "MCQ",
+          "ASSERTION_REASON",
+          "TRUE_FALSE",
+          "FILL_BLANK",
+          "FILL_BLANKS",
+          "VERY_SHORT",
+          "VSA",
+          "GRAMMAR",
+          "ONE_WORD",
+        ].includes(q.type);
+      }
+      if (targetMarks === 2) return ["SA", "SHORT", "DRAW", "VERY_SHORT", "GRAMMAR"].includes(q.type);
+      if (targetMarks === 3) return ["SA", "SHORT", "DRAW", "GRAMMAR", "REFERENCE_CONTEXT"].includes(q.type);
+      if (targetMarks === 4) return ["CASE_STUDY", "PASSAGE", "UNSEEN_PASSAGE", "REFERENCE_CONTEXT", "WRITING_SKILL", "MATCH_COLUMN"].includes(q.type);
+      if (targetMarks === 5) return ["LA", "LONG", "WRITING_SKILL", "MAP_WORK", "CASE_STUDY", "MATCH_COLUMN"].includes(q.type);
+      if (targetMarks === 6) return ["LA", "LONG", "WRITING_SKILL"].includes(q.type);
       return true;
     });
   }

@@ -81,6 +81,13 @@ export const POST = route(async (req, params, user) => {
     const candidateSubparts = parseSubparts(q.subpartsJson);
     const candidateSubmarks = subpartsTotalMarks(candidateSubparts);
 
+    if (candidateSubparts.length > 0 && candidateSubmarks !== section.marksEach) {
+      throw new HttpError(
+        400,
+        `Board Guardrail Violation: Question "${q.text.slice(0, 30)}…" subpart marks (${candidateSubmarks}) must match section marks (${section.marksEach}).`
+      );
+    }
+
     const candidate = {
       sectionId,
       chapterId: q.chapterId,

@@ -96,9 +96,9 @@
     "semantic_hash": ""
   },
   "src/app/(app)/papers/[id]/page.tsx": {
-    "mtime": 1792771444.6884687,
-    "seen": 1792771648.8012478,
-    "ast_hash": "30749526939e8f5dfb8be9a701d92050",
+    "mtime": 1792788399.2257745,
+    "seen": 1792788902.9761164,
+    "ast_hash": "e3ee8141f02d9f83ae93949bbad37c9c",
     "semantic_hash": ""
   },
   "src/app/(app)/papers/page.tsx": {
@@ -348,9 +348,9 @@
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/export-docx/route.ts": {
-    "mtime": 1792756844.6873708,
-    "seen": 1792758426.3637133,
-    "ast_hash": "886de9e7f43c19bfe1741114e9a25885",
+    "mtime": 1792788505.4983718,
+    "seen": 1792788902.9761164,
+    "ast_hash": "580d0ab189309dc63e68b170ce1c6459",
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/import-questions/route.ts": {
@@ -366,15 +366,15 @@
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/questions/[itemId]/route.ts": {
-    "mtime": 1792756553.3546042,
-    "seen": 1792758426.3637133,
-    "ast_hash": "ba46ad040707ba50f9bf1ddfc4fdc245",
+    "mtime": 1792787049.1837626,
+    "seen": 1792787344.8373156,
+    "ast_hash": "54cd32f937fcd1efed14a46704b5100c",
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/questions/route.ts": {
-    "mtime": 1792736177.3967683,
-    "seen": 1792737093.5706325,
-    "ast_hash": "3f0939680a1cbff81ebe15c276edbd14",
+    "mtime": 1792787058.1862347,
+    "seen": 1792787344.8373156,
+    "ast_hash": "2a301aeb5b213d3ebc568993fb6094c3",
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/reconcile-blueprint/route.ts": {
@@ -420,9 +420,9 @@
     "semantic_hash": ""
   },
   "src/app/api/questions/route.ts": {
-    "mtime": 1792744108.0141346,
-    "seen": 1792744262.8751564,
-    "ast_hash": "5f7e0370bacbb102d20ac51946daf8ad",
+    "mtime": 1792788379.9802165,
+    "seen": 1792788902.9761164,
+    "ast_hash": "9869c34002bcad4a3373a9bd6a23a64d",
     "semantic_hash": ""
   },
   "src/app/api/uploads/[name]/route.ts": {
@@ -480,9 +480,9 @@
     "semantic_hash": ""
   },
   "src/app/papers/[id]/solutions/page.tsx": {
-    "mtime": 1792736863.7551708,
-    "seen": 1792737093.5706325,
-    "ast_hash": "6cfd14fa024b889a002bbb192b190f16",
+    "mtime": 1792790022.0751812,
+    "seen": 1792790327.3774147,
+    "ast_hash": "52f13650b901acc9cd8f4f68a2ecad0d",
     "semantic_hash": ""
   },
   "src/components/AIBlueprintModal.tsx": {
@@ -600,15 +600,15 @@
     "semantic_hash": ""
   },
   "src/components/QuestionForm.tsx": {
-    "mtime": 1792749739.1598802,
-    "seen": 1792749847.4533799,
-    "ast_hash": "f99275b48845c671cee9a7c98d384cc3",
+    "mtime": 1792789973.002866,
+    "seen": 1792790327.3774147,
+    "ast_hash": "aa0fb1d7f2f83f1b342bb5f2da093b32",
     "semantic_hash": ""
   },
   "src/components/QuestionPicker.tsx": {
-    "mtime": 1792748914.269901,
-    "seen": 1792749847.4533799,
-    "ast_hash": "ca01b862ecd45a9a87b548936e28fed4",
+    "mtime": 1792790774.2118328,
+    "seen": 1792790865.3914664,
+    "ast_hash": "de32af741849ff1be60ecd7705538960",
     "semantic_hash": ""
   },
   "src/components/QuestionUsageHistory.tsx": {
@@ -738,9 +738,9 @@
     "semantic_hash": ""
   },
   "src/lib/batchQuestionIo.ts": {
-    "mtime": 1792683065.6539385,
-    "seen": 1792685467.5911267,
-    "ast_hash": "1e3d599f65f89db21a93436684f9c2be",
+    "mtime": 1792788634.752931,
+    "seen": 1792788902.9761164,
+    "ast_hash": "e94dc825df4fd4e7de75c016529359f4",
     "semantic_hash": ""
   },
   "src/lib/blueprint-section-groups.test.ts": {
@@ -804,9 +804,9 @@
     "semantic_hash": ""
   },
   "src/lib/constants.ts": {
-    "mtime": 1792699431.39125,
-    "seen": 1792699869.3490603,
-    "ast_hash": "873857f0c225463dee7c6dee74d17b2c",
+    "mtime": 1792790075.774156,
+    "seen": 1792790327.3774147,
+    "ast_hash": "deaca0f768e0802f32cb0bad536355fd",
     "semantic_hash": ""
   },
   "src/lib/curriculumPresets.ts": {
@@ -870,9 +870,9 @@
     "semantic_hash": ""
   },
   "src/lib/gemini.ts": {
-    "mtime": 1792670898.555837,
-    "seen": 1792685467.5911267,
-    "ast_hash": "28576ea6dda0b85cfa43513cc817087e",
+    "mtime": 1792790759.6702862,
+    "seen": 1792790865.3914664,
+    "ast_hash": "a501cf4483bdc59255b2e174dc4fd57a",
     "semantic_hash": ""
   },
   "src/lib/kindergarten.test.ts": {
@@ -1068,9 +1068,9 @@
     "semantic_hash": ""
   },
   "src/lib/math.ts": {
-    "mtime": 1792672251.0749278,
-    "seen": 1792685467.5911267,
-    "ast_hash": "e9b24a34e4bc662eb41e2696919f0555",
+    "mtime": 1792790058.2031145,
+    "seen": 1792790327.378414,
+    "ast_hash": "9eb9842699d8647ce8471d60bc6e12dc",
     "semantic_hash": ""
   },
   "src/lib/multiset.ts": {
@@ -1194,9 +1194,9 @@
     "semantic_hash": ""
   },
   "src/lib/types.ts": {
-    "mtime": 1792771277.7904935,
-    "seen": 1792771648.8017602,
-    "ast_hash": "6c596d3cd275416d0376f2428ffa59fb",
+    "mtime": 1792790719.322619,
+    "seen": 1792790865.3914664,
+    "ast_hash": "f1547deff0d6be2e28981f4169ae6aac",
     "semantic_hash": ""
   },
   "src/lib/uploads.ts": {
@@ -1386,9 +1386,9 @@
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/questions/bulk/route.ts": {
-    "mtime": 1792748818.6643548,
-    "seen": 1792749847.4533799,
-    "ast_hash": "0140b75d045244e1f84064a5c897b6e5",
+    "mtime": 1792787067.5950363,
+    "seen": 1792787344.8373156,
+    "ast_hash": "5d7dc27e220a7db0bb977f3028a63ed8",
     "semantic_hash": ""
   },
   "src/components/PaperPreflightModal.tsx": {
@@ -1467,6 +1467,24 @@
     "mtime": 1792763419.3461816,
     "seen": 1792763617.7547061,
     "ast_hash": "064782df436c9f8d756cd9c5100f44d3",
+    "semantic_hash": ""
+  },
+  "src/lib/math-repair.test.ts": {
+    "mtime": 1792790124.9497464,
+    "seen": 1792790327.378414,
+    "ast_hash": "d32cfae30a1fa8f6ce0d3439aff2ea07",
+    "semantic_hash": ""
+  },
+  "src/lib/question-pipeline-audit.test.ts": {
+    "mtime": 1792790221.4775002,
+    "seen": 1792790327.378414,
+    "ast_hash": "89286352f9c03638e9f414cdfb234f1c",
+    "semantic_hash": ""
+  },
+  "src/lib/docx-export-audit.test.ts": {
+    "mtime": 1792788754.1932518,
+    "seen": 1792788902.9761164,
+    "ast_hash": "5ef0f99d82e44e4064ad2cf2c72092bd",
     "semantic_hash": ""
   }
 }
