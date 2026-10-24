@@ -40,7 +40,7 @@ export const POST = route(async (req, { id }, user) => {
   if (isTargetMatch) {
     try {
       const parsed = JSON.parse(question.optionsJson || "[]");
-      matchPairsCount = parseMatchColumnPairs(Array.isArray(parsed) ? parsed : [], question.text).length;
+      matchPairsCount = parseMatchColumnPairs(Array.isArray(parsed) ? parsed : [], question.text, (question as any).explanation).length;
     } catch {}
   }
 

@@ -683,7 +683,7 @@ export function AIPaperGeneratorModal({
                                   plan?.sections.find((s) => s.sectionTitle === q.sectionTitle)?.marksEach || 1;
                                 const isMatch = q.type === "MATCH_COLUMN";
                                 const matchPairs =
-                                  isMatch && q.options ? parseMatchColumnPairs(q.options, q.text) : [];
+                                  isMatch && q.options ? parseMatchColumnPairs(q.options, q.text, q.explanation) : [];
                                 const subpartsTotal =
                                   q.subparts && q.subparts.length > 0
                                     ? q.subparts.reduce((sum, sp) => sum + (Number(sp.marks) || 0), 0)
@@ -742,7 +742,7 @@ export function AIPaperGeneratorModal({
 
                           {/* Options if MATCH_COLUMN */}
                           {q.type === "MATCH_COLUMN" && q.options && q.options.length > 0 && (() => {
-                            const pairs = parseMatchColumnPairs(q.options, q.text);
+                            const pairs = parseMatchColumnPairs(q.options, q.text, q.explanation);
                             const letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
                             const roman = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
                             return (

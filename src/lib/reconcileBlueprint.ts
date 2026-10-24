@@ -47,7 +47,7 @@ export interface ReconcileBlueprintOutput {
  * Calculates effective marks of a question item accounting for MATCH_COLUMN pairs and subparts.
  */
 export function getEffectiveQuestionMarks(
-  item: { type: string; text: string; optionsJson?: string; subpartsJson?: string },
+  item: { type: string; text: string; optionsJson?: string; subpartsJson?: string; explanation?: string },
   sectionMarksEach: number,
 ): number {
   if (item.type === "MATCH_COLUMN") {
@@ -55,7 +55,7 @@ export function getEffectiveQuestionMarks(
     try {
       opts = JSON.parse(item.optionsJson || "[]");
     } catch {}
-    const pairs = parseMatchColumnPairs(opts, item.text);
+    const pairs = parseMatchColumnPairs(opts, item.text, item.explanation);
     if (pairs.length > 0) return pairs.length * sectionMarksEach;
   }
 

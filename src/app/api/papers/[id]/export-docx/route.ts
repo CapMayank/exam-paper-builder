@@ -527,7 +527,7 @@ export async function buildPaperDocx(
       if (isMatch && q.optionsJson) {
         try {
           const opts = JSON.parse(q.optionsJson);
-          matchCount = parseMatchColumnPairs(opts, q.text).length;
+          matchCount = parseMatchColumnPairs(opts, q.text, (q as any).explanation).length;
         } catch {}
       }
       const parsedSubparts = parseSubparts(q.subpartsJson);
@@ -609,7 +609,7 @@ export async function buildPaperDocx(
       if (q.type === "MATCH_COLUMN" && q.optionsJson) {
         try {
           const opts: string[] = JSON.parse(q.optionsJson);
-          const pairs = parseMatchColumnPairs(opts, q.text);
+          const pairs = parseMatchColumnPairs(opts, q.text, (q as any).explanation);
           if (pairs.length > 0) {
             const letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
             const roman = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
@@ -707,7 +707,7 @@ export async function buildPaperDocx(
         if (isOrMatch && orQ.optionsJson) {
           try {
             const opts = JSON.parse(orQ.optionsJson);
-            orMatchCount = parseMatchColumnPairs(opts, orQ.text).length;
+            orMatchCount = parseMatchColumnPairs(opts, orQ.text, (orQ as any).explanation).length;
           } catch {}
         }
         const parsedOrSubparts = parseSubparts(orQ.subpartsJson);
@@ -798,7 +798,7 @@ export async function buildPaperDocx(
         if (orQ.type === "MATCH_COLUMN" && orQ.optionsJson) {
           try {
             const opts: string[] = JSON.parse(orQ.optionsJson);
-            const pairs = parseMatchColumnPairs(opts, orQ.text);
+            const pairs = parseMatchColumnPairs(opts, orQ.text, (orQ as any).explanation);
             if (pairs.length > 0) {
               const letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
               const roman = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];

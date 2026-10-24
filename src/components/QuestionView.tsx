@@ -159,7 +159,7 @@ function SingleQuestionBody({
       : "1fr 1fr";
 
   const normalizedMcq = isMcq ? normalizeMcqAnswer(q.answer, q.options) : null;
-  const matchPairs = q.type === "MATCH_COLUMN" ? parseMatchColumnPairs(q.options, q.text) : [];
+  const matchPairs = q.type === "MATCH_COLUMN" ? parseMatchColumnPairs(q.options, q.text, (q as any).explanation) : [];
   const stemText = q.type === "MATCH_COLUMN" && matchPairs.length > 0 ? getMatchColumnInstruction(q.text) : q.text;
   const hasHindi = /[\u0900-\u097F]/.test(q.text) || q.options.some((o) => /[\u0900-\u097F]/.test(o));
 

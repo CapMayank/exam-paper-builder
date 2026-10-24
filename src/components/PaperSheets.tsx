@@ -416,7 +416,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
       const canDecompose = !isPrePrimary && !it.orQuestion && subparts && subparts.length > 1;
       const isMatch = s.type === "MATCH_COLUMN" || it.question.type === "MATCH_COLUMN";
       const matchPairCount = isMatch
-        ? (parseMatchColumnPairs(it.question.options, it.question.text).length || s.count)
+        ? (parseMatchColumnPairs(it.question.options, it.question.text, (it.question as any).explanation).length || s.count)
         : 0;
       const subpartsMarks = subparts && subparts.length > 0 ? subparts.reduce((sum, sp) => sum + (sp.marks || 1), 0) : 0;
       const totalQuestionMarks = isMatch

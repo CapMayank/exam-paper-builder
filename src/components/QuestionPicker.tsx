@@ -95,11 +95,11 @@ export function QuestionPicker({
     ? (activeItem.question.subparts && activeItem.question.subparts.length > 0
         ? subpartsTotalMarks(activeItem.question.subparts)
         : (isMultiUnitMatch
-            ? Math.min(parseMatchColumnPairs(activeItem.question.options, activeItem.question.text).length || section.count, section.count) * section.marksEach
+            ? Math.min(parseMatchColumnPairs(activeItem.question.options, activeItem.question.text, (activeItem.question as any).explanation).length || section.count, section.count) * section.marksEach
             : section.marksEach))
     : 0;
 
-  const marksToGenerate = isReplacing && activeItemMarks > 0 ? activeItemMarks : targetSlotMarks;
+  const marksToGenerate = targetSlotMarks;
 
   const sectionStatus = paper.progress.sections.find((s) => s.id === section.id)!;
   const full = !isReplacing && !isAlternate && sectionStatus.filled >= sectionStatus.needed;
@@ -157,7 +157,7 @@ export function QuestionPicker({
             if (q.subparts && q.subparts.length > 0 && qSubmarks !== targetSlotMarks) {
               why = `Subpart marks (${qSubmarks}m) must match slot (${targetSlotMarks}m).`;
             } else {
-              const qMatchPairs = isMultiUnitMatch ? parseMatchColumnPairs(q.options, q.text).length : 0;
+              const qMatchPairs = isMultiUnitMatch ? parseMatchColumnPairs(q.options, q.text, (q as any).explanation).length : 0;
               const qCandidateMarks = isMultiUnitMatch
                 ? Math.min(qMatchPairs || section.count, section.count) * section.marksEach
                 : (qSubmarks > 0 ? qSubmarks : targetSlotMarks);

@@ -321,5 +321,59 @@ describe("AI Fill, AI Replace, Question Mapping, and Marks Allocation Suite", ()
       expect(pairs[2].left).toContain("\\int \\sqrt{x^2 - a^2} dx");
       expect(pairs[3].left).toContain("\\int \\tan^{-1} x dx");
     });
+
+    it("generateQuestionsWithGemini generates exactly 7 pairs for a 7-mark MATCH_COLUMN slot without marks mismatch", async () => {
+      const res = await generateQuestionsWithGemini({
+        subject: "Mathematics",
+        className: "Class 12",
+        chapter: "Integrals",
+        type: "MATCH_COLUMN",
+        marks: 7,
+        difficulty: "MEDIUM",
+        count: 1,
+        language: "en",
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.data.length).toBe(1);
+
+      const q = res.data[0];
+      expect(q.type).toBe("MATCH_COLUMN");
+      expect(q.marks).toBe(7);
+      expect(q.options?.length).toBe(7);
+
+      const pairs = parseMatchColumnPairs(q.options || [], q.text, q.explanation);
+      expect(pairs.length).toBe(7);
+      expect(q.text).toContain("(A)");
+      expect(q.text).toContain("(G)");
+    }, 20000);
+
+    it("post-processor supplements missing pairs up to 7 when input has only 4 pairs", async () => {
+      // Direct verification of parseMatchColumnPairs and post-processor mechanics
+      const partialOptions = [
+        "Metabolic pathway A",
+        "Structural stability B",
+        "Substrate site C",
+        "Allosteric control D",
+      ];
+      const partialText =
+        "Match the following:\nColumn I:\n(A) Primary factor\n(B) Secondary regulator\n(C) Catalytic center\n(D) Feedback inhibitor";
+      const parsed = parseMatchColumnPairs(partialOptions, partialText);
+      expect(parsed).toHaveLength(4);
+
+      // Verify that generateQuestionsWithGemini with 7 marks guarantees 7 options
+      const res = await generateQuestionsWithGemini({
+        subject: "Science",
+        className: "Class 10",
+        chapter: "Life Processes",
+        type: "MATCH_COLUMN",
+        marks: 7,
+        difficulty: "MEDIUM",
+        count: 1,
+        language: "en",
+      });
+      expect(res.data[0].options.length).toBe(7);
+      expect(res.data[0].marks).toBe(7);
+    }, 20000);
   });
 });

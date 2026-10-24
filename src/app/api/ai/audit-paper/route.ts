@@ -45,7 +45,7 @@ export const POST = route(async (req) => {
       const marksEach = sec?.marksEach ?? 1;
       const isMatch = it.question.type === "MATCH_COLUMN" || sec?.type === "MATCH_COLUMN";
       const matchPairCount = isMatch
-        ? (parseMatchColumnPairs(it.question.options, it.question.text).length || sec?.count || 1)
+        ? (parseMatchColumnPairs(it.question.options, it.question.text, (it.question as any).explanation).length || sec?.count || 1)
         : 0;
       const subpartsMarks = subpartsTotalMarks(it.question.subparts);
       const actualMarks = isMatch

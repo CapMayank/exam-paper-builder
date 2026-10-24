@@ -27,7 +27,7 @@
   "25": "AppShell.tsx",
   "26": "lib/types.ts",
   "27": "Modal",
-  "28": "PaperBuilderPage",
+  "28": "PaperSheets.tsx",
   "29": "compilerOptions",
   "30": "dependencies",
   "31": "app/layout.tsx",
@@ -60,5 +60,6 @@
   "58": "register/route.ts",
   "59": "QuestionType",
   "60": "Project: Sarvodaya School Examination Portal — Production Business Logic",
-  "61": "seed-kindergarten.mjs"
+  "61": "seed-kindergarten.mjs",
+  "62": "PaperBuilderPage"
 }

@@ -1,17 +1,17 @@
 # Graph Report - exam-paper-builder  (2026-10-24)
 
 ## Corpus Check
-- 242 files · ~346,053 words
+- 242 files · ~346,611 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 6 file(s) not represented in the graph (top: (none) 3, .prisma 1, .ico 1)
 
 ## Summary
-- 1462 nodes · 5305 edges · 62 communities (57 shown, 5 thin omitted)
+- 1462 nodes · 5306 edges · 63 communities (58 shown, 5 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 46 edges (avg confidence: 0.88)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `9bc1f06c`
+- Built from commit: `b6fea131`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -44,7 +44,7 @@
 - AppShell.tsx
 - lib/types.ts
 - Modal
-- PaperBuilderPage
+- PaperSheets.tsx
 - compilerOptions
 - dependencies
 - app/layout.tsx
@@ -77,6 +77,7 @@
 - QuestionType
 - Project: Sarvodaya School Examination Portal — Production Business Logic
 - seed-kindergarten.mjs
+- PaperBuilderPage
 
 ## God Nodes (most connected - your core abstractions)
 1. `HttpError` - 129 edges
@@ -105,7 +106,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (62 total, 5 thin omitted)
+## Communities (63 total, 5 thin omitted)
 
 ### Community 0 - "kindergarten/types.ts"
 Cohesion: 0.06
@@ -172,8 +173,8 @@ Cohesion: 0.50
 Nodes (3): QuestionImportModal(), handleFileChange(), validateContent()
 
 ### Community 16 - "gemini.ts"
-Cohesion: 0.10
-Nodes (29): improveSchema, POST, parseSchema, POST, GET, getMaxPaperDiagramBudget(), isSectionVisuallyEligible(), isSubjectChapterVisual() (+21 more)
+Cohesion: 0.09
+Nodes (28): improveSchema, POST, parseSchema, POST, GET, getMaxPaperDiagramBudget(), isSectionVisuallyEligible(), isSubjectChapterVisual() (+20 more)
 
 ### Community 17 - "logic.test.ts"
 Cohesion: 0.14
@@ -184,8 +185,8 @@ Cohesion: 0.08
 Nodes (28): zod, auditSchema, generateSchema, POST, parseBlueprintSchema, POST, figureSchema, POST (+20 more)
 
 ### Community 19 - "QuestionForm"
-Cohesion: 0.18
-Nodes (16): getDefaultSubpartsForType(), getSubpartLabel(), QuestionForm(), submit(), LETTERS_LIST, QuestionRenderMode, QuestionView(), ROMAN_LOWER (+8 more)
+Cohesion: 0.19
+Nodes (15): getDefaultSubpartsForType(), getSubpartLabel(), QuestionForm(), submit(), LETTERS_LIST, QuestionRenderMode, QuestionView(), ROMAN_LOWER (+7 more)
 
 ### Community 20 - "render.ts"
 Cohesion: 0.19
@@ -219,9 +220,9 @@ Nodes (23): MarksStyle, PrintDensity, SessionSlot, TimetableStatus, UserRole, ca
 Cohesion: 0.15
 Nodes (24): UsersAdminPage(), ExamCellPage(), getSectionsForClass(), Tab, ConfirmContext, ConfirmOptions, ErrorBanner(), FALLBACK_TOAST (+16 more)
 
-### Community 28 - "PaperBuilderPage"
-Cohesion: 0.11
-Nodes (22): Bar(), PaperBuilderPage(), handleAutofill(), OmrSheetPage(), PrintPage(), DiagramSearchModalProps, BlankPage(), Block (+14 more)
+### Community 28 - "PaperSheets.tsx"
+Cohesion: 0.21
+Nodes (15): PrintPage(), BlankPage(), Block, buildBlocks(), extractSectionLetter(), Page(), PaperSheets(), renderBlock() (+7 more)
 
 ### Community 29 - "compilerOptions"
 Cohesion: 0.11
@@ -268,8 +269,8 @@ Cohesion: 0.22
 Nodes (15): BlueprintSectionDef, calculateSectionOverlap(), CandidateQuestionDef, formatSetIdentifier(), LETTERS, MultiSetPlanResult, OverlapCalculationResult, permuteMcqOptions() (+7 more)
 
 ### Community 40 - "solutions/page.tsx"
-Cohesion: 0.29
-Nodes (12): getMarksRubric(), QuestionSolutionItem(), SolutionsPage(), PaperPreflightModal(), PaperPreflightModalProps, cleanOptionText(), isMcqLikeType(), isSubpartQuestionType() (+4 more)
+Cohesion: 0.38
+Nodes (12): OmrSheetPage(), getMarksRubric(), QuestionSolutionItem(), SolutionsPage(), DiagramSearchModalProps, imageUrl(), cleanOptionText(), isMcqLikeType() (+4 more)
 
 ### Community 41 - "SubjectWorkspaceDrawer.tsx"
 Cohesion: 0.43
@@ -312,8 +313,8 @@ Cohesion: 0.09
 Nodes (44): lucide-react, react, AIPaperAuditModal(), AIPaperAuditModalProps, AIPaperGeneratorModal(), AIPaperGeneratorModalProps, AIQuestionGeneratorModal(), AIQuestionGeneratorModalProps (+36 more)
 
 ### Community 55 - "parseMatchColumnPairs"
-Cohesion: 0.24
-Nodes (15): QuestionPicker(), add(), handleAcceptAiQuestion(), handleEditAiQuestion(), SectionAiModal(), handleCommit(), cleanMatchItem(), derangeMatchColumnPairs() (+7 more)
+Cohesion: 0.25
+Nodes (16): QuestionPicker(), add(), handleAcceptAiQuestion(), handleEditAiQuestion(), SectionAiModal(), handleCommit(), cleanMatchItem(), derangeMatchColumnPairs() (+8 more)
 
 ### Community 56 - "constants.ts"
 Cohesion: 0.11
@@ -335,6 +336,10 @@ Nodes (9): BatchImportOptions, BatchParseOptions, ValidatedQuestionPayload, DEFA
 Cohesion: 0.25
 Nodes (7): Architecture, Code Layout, Interface Contracts, M2 (Section Enrollment & Print Logistics), Milestones, Project: Sarvodaya School Examination Portal — Production Business Logic, SectionDetail
 
+### Community 62 - "PaperBuilderPage"
+Cohesion: 0.13
+Nodes (8): Bar(), PaperBuilderPage(), handleAutofill(), PaperPreflightModal(), PaperPreflightModalProps, PreflightIssue, PreflightReport, validatePaperPreflight()
+
 ## Knowledge Gaps
 - **9 isolated node(s):** `@tailwindcss/turbopack`, `@types/katex`, `@types/node`, `@types/react`, `@types/react-dom` (+4 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 381 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
@@ -343,17 +348,17 @@ Nodes (7): Architecture, Code Layout, Interface Contracts, M2 (Section Enrollmen
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `react` connect `papers/[id]/page.tsx` to `kindergarten/types.ts`, `paperImport.ts`, `FigureStudio.tsx`, `package.json`, `solutions/page.tsx`, `SubjectWorkspaceDrawer.tsx`, `syllabusImport.ts`, `blueprint.ts`, `blueprints/page.tsx`, `blueprints/[id]/page.tsx`, `Modal`, `PaperBuilderPage`, `AppShell.tsx`?**
+- **Why does `react` connect `papers/[id]/page.tsx` to `kindergarten/types.ts`, `paperImport.ts`, `FigureStudio.tsx`, `package.json`, `solutions/page.tsx`, `SubjectWorkspaceDrawer.tsx`, `syllabusImport.ts`, `blueprint.ts`, `blueprints/page.tsx`, `PaperBuilderPage`, `blueprints/[id]/page.tsx`, `Modal`, `PaperSheets.tsx`, `AppShell.tsx`?**
   _High betweenness centrality (0.087) - this node is a cross-community bridge._
 - **What connects `@tailwindcss/turbopack`, `@types/katex`, `@types/node` to the rest of the system?**
   _9 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `kindergarten/types.ts` be split into smaller, more focused modules?**
   _Cohesion score 0.06354642313546423 - nodes in this community are weakly interconnected._
-- **Why does `api()` connect `api` to `solutions/page.tsx`, `syllabusImport.ts`, `blueprint.ts`, `parseMatchColumnPairs`, `papers/[id]/page.tsx`, `blueprints/page.tsx`, `blueprints/[id]/page.tsx`, `Modal`, `PaperBuilderPage`, `AppShell.tsx`?**
+- **Why does `api()` connect `api` to `solutions/page.tsx`, `syllabusImport.ts`, `blueprint.ts`, `AppShell.tsx`, `parseMatchColumnPairs`, `papers/[id]/page.tsx`, `blueprints/page.tsx`, `blueprints/[id]/page.tsx`, `Modal`, `PaperSheets.tsx`, `PaperBuilderPage`?**
   _High betweenness centrality (0.052) - this node is a cross-community bridge._
 - **Should `diagram-search.ts` be split into smaller, more focused modules?**
   _Cohesion score 0.10873440285204991 - nodes in this community are weakly interconnected._
-- **Why does `lucide-react` connect `papers/[id]/page.tsx` to `kindergarten/types.ts`, `paperImport.ts`, `FigureStudio.tsx`, `package.json`, `solutions/page.tsx`, `SubjectWorkspaceDrawer.tsx`, `vitest`, `syllabusImport.ts`, `blueprint.ts`, `blueprints/page.tsx`, `blueprints/[id]/page.tsx`, `Modal`, `PaperBuilderPage`, `AppShell.tsx`?**
+- **Why does `lucide-react` connect `papers/[id]/page.tsx` to `kindergarten/types.ts`, `paperImport.ts`, `FigureStudio.tsx`, `package.json`, `solutions/page.tsx`, `SubjectWorkspaceDrawer.tsx`, `vitest`, `syllabusImport.ts`, `blueprint.ts`, `blueprints/page.tsx`, `PaperBuilderPage`, `blueprints/[id]/page.tsx`, `Modal`, `AppShell.tsx`?**
   _High betweenness centrality (0.051) - this node is a cross-community bridge._
 - **Should `paperImport.ts` be split into smaller, more focused modules?**
   _Cohesion score 0.11033681765389082 - nodes in this community are weakly interconnected._

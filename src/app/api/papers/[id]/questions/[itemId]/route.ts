@@ -80,7 +80,7 @@ export const PATCH = route(async (req, { id, itemId }, user) => {
     if (isTargetMatch) {
       try {
         const parsed = JSON.parse(candidate.optionsJson || "[]");
-        matchPairsCount = parseMatchColumnPairs(Array.isArray(parsed) ? parsed : [], candidate.text).length;
+        matchPairsCount = parseMatchColumnPairs(Array.isArray(parsed) ? parsed : [], candidate.text, (candidate as any).explanation).length;
       } catch {}
     }
 

@@ -164,7 +164,7 @@ export function QuestionForm({
   });
   const [matchPairs, setMatchPairs] = useState<MatchColumnPair[]>(() => {
     if (initial?.type === "MATCH_COLUMN") {
-      const parsed = parseMatchColumnPairs(initial.options || [], initial.text);
+      const parsed = parseMatchColumnPairs(initial.options || [], initial.text, (initial as any).explanation);
       if (parsed.length > 0 && parsed.some((p) => p.left || p.right)) {
         return parsed;
       }

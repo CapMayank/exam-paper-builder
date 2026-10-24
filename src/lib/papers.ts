@@ -144,7 +144,7 @@ export async function loadPaperView(id: string) {
           const p = JSON.parse(i.question.optionsJson || "[]");
           opts = Array.isArray(p) ? p : [];
         } catch {}
-        matchCount = parseMatchColumnPairs(opts, i.question.text).length;
+        matchCount = parseMatchColumnPairs(opts, i.question.text, (i.question as any).explanation).length;
       }
       const subparts = parseSubparts(i.question.subpartsJson);
       const submarks = subpartsTotalMarks(subparts);

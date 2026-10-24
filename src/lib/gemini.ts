@@ -226,6 +226,11 @@ Output format: JSON array of question objects only. No conversational wrapper.`;
 
   const normalizedType = normalizeQuestionType(type);
   const isMatchColumn = normalizedType === "MATCH_COLUMN";
+  const letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
+  const romans = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
+  const pairCount = isMatchColumn ? (marks <= 1 ? 4 : Math.min(10, marks)) : 4;
+  const targetLetters = letters.slice(0, pairCount);
+  const targetRomans = romans.slice(0, pairCount);
 
   const userPrompt = isMatchColumn
     ? `Generate ${count} distinct board-aligned Match the Columns question(s) with the following specifications:
@@ -233,7 +238,7 @@ Output format: JSON array of question objects only. No conversational wrapper.`;
 - Subject: ${subject}
 - Chapter: ${chapter}
 - Question Type: MATCH_COLUMN
-- Marks: ${marks} marks each
+- Marks: ${marks} marks each (containing exactly ${pairCount} matching pairs)
 - Difficulty: ${difficulty}
 - Cognitive Level: ${cognitiveLevel || "APPLYING"}
 - Language: ${language === "bilingual" ? "Bilingual (English with Hindi translation in parentheses)" : language === "hi" ? "Hindi (Devanagari script)" : "English"}
@@ -243,22 +248,17 @@ CRITICAL MATCH_COLUMN STRUCTURE REQUIREMENTS:
 1. The "text" field MUST contain:
    - The opening instruction line (e.g. "Match the items in Column I with their correct evaluated forms in Column II:")
    - Followed by "Column I:" on its own line
-   - Followed by EXACTLY 4 Column I items labeled (A), (B), (C), (D) on separate lines.
+   - Followed by EXACTLY ${pairCount} Column I items labeled ${targetLetters.map((l) => `(${l})`).join(", ")} on separate lines.
    Example:
-   "Match the integrals in Column I with their correct evaluated forms in Column II:\nColumn I:\n(A) $\\int \\frac{1}{a^2 - x^2} dx$\n(B) $\\int \\frac{1}{x^2 - a^2} dx$\n(C) $\\int \\sqrt{x^2 - a^2} dx$\n(D) $\\int \\tan^{-1} x dx$"
+   "Match the items in Column I with their correct corresponding forms in Column II:\nColumn I:\n${targetLetters.map((l, i) => `(${l}) Concept ${i + 1}`).join("\n")}"
 
-2. The "options" array MUST contain EXACTLY the 4 corresponding Column II matching items/expressions.
+2. The "options" array MUST contain EXACTLY the ${pairCount} corresponding Column II matching items/expressions (shuffled/deranged relative to Column I).
    DO NOT leave "options" empty!
    Example:
-   [
-     "$\\frac{1}{2a} \\log \\left| \\frac{x-a}{x+a} \\right| + C$",
-     "$\\frac{x}{2} \\sqrt{x^2 - a^2} - \\frac{a^2}{2} \\log \\left| x + \\sqrt{x^2 - a^2} \\right| + C$",
-     "$x \\tan^{-1} x - \\frac{1}{2} \\log(1 + x^2) + C$",
-     "$\\frac{1}{2a} \\log \\left| \\frac{a+x}{a-x} \\right| + C$"
-   ]
+   ${JSON.stringify(targetLetters.map((_, i) => `Definition / result ${i + 1}`), null, 2)}
 
-3. The "answer" field MUST specify the correct pairing for all items:
-   Example: "(A)-(iv), (B)-(i), (C)-(ii), (D)-(iii)"
+3. The "answer" field MUST specify the correct pairing for all ${pairCount} items:
+   Example: "${targetLetters.map((l, i) => `(${l})-${targetRomans[(i + 1) % pairCount]}`).join(", ")}"
 
 4. Use standard LaTeX math $...$ for any mathematical expressions, integrals, equations, fractions, or symbols.
 
@@ -266,15 +266,10 @@ Return a JSON array strictly matching this TypeScript structure:
 [
   {
     "type": "MATCH_COLUMN",
-    "text": "Match the items in Column I with Column II:\nColumn I:\n(A) First concept\n(B) Second concept\n(C) Third concept\n(D) Fourth concept",
-    "options": [
-      "Definition / result for B (shuffled)",
-      "Definition / result for C (shuffled)",
-      "Definition / result for D (shuffled)",
-      "Definition / result for A (shuffled)"
-    ],
+    "text": "Match the items in Column I with Column II:\nColumn I:\n${targetLetters.map((l, i) => `(${l}) Concept ${i + 1}`).join("\n")}",
+    "options": ${JSON.stringify(targetLetters.map((_, i) => `Definition / result for ${letters[(i + 1) % pairCount]} (shuffled)`), null, 4)},
     "subparts": [],
-    "answer": "(A)-(iv), (B)-(i), (C)-(ii), (D)-(iii)",
+    "answer": "${targetLetters.map((l, i) => `(${l})-${targetRomans[(i + 1) % pairCount]}`).join(", ")}",
     "marks": ${marks},
     "difficulty": "${difficulty}",
     "cognitiveLevel": "${cognitiveLevel || "APPLYING"}",
@@ -303,7 +298,7 @@ Strict requirements:
 4. For SHORT, LONG, NUMERICAL: Provide step-wise model answer and marking scheme breakdown.
 5. For FILL_BLANK: Provide question text containing one or more blanks indicated by "________" (at least 8 underscores). Options should be empty []. The answer should be the exact word(s) filling the blank.
 6. For TRUE_FALSE: Provide a clear declarative statement. Options should be ["True", "False"] (or ["सत्य", "असत्य"] for Hindi). Answer must be "True" or "False" (or Hindi equivalent).
-7. For MATCH_COLUMN: Set text with instructions and Column I items labeled (A), (B), (C), (D). Set options to the 4 corresponding Column II items. Set answer to the full pairing string (e.g. "(A)-(iii), (B)-(i), (C)-(iv), (D)-(ii)").
+7. For MATCH_COLUMN: Set text with instructions and Column I items labeled (${targetLetters.map((l) => `(${l})`).join(", ")}). Set options to the ${pairCount} corresponding Column II items. Set answer to the full pairing string (e.g. "${targetLetters.map((l, i) => `(${l})-${targetRomans[(i + 1) % pairCount]}`).join(", ")}").
 8. Use standard LaTeX math $...$ for any mathematical expressions, formulas, chemical reactions, or units.
 
 Return a JSON array strictly matching this TypeScript structure:
@@ -566,19 +561,28 @@ A student took three test tubes A, B, and C containing clean iron nails. In tube
     }
 
     if (type === "MATCH_COLUMN") {
-      const basePairs = [
-        { left: "(A) Primary factor", right: "Metabolic activation pathway" },
-        { left: "(B) Secondary regulator", right: "Structural stability and conformation" },
-        { left: "(C) Catalytic center", right: "Substrate binding site" },
-        { left: "(D) Feedback inhibitor", right: "Allosteric control regulation" },
+      const pool = [
+        { left: "Primary factor", right: "Metabolic activation pathway" },
+        { left: "Secondary regulator", right: "Structural stability and conformation" },
+        { left: "Catalytic center", right: "Substrate binding site" },
+        { left: "Feedback inhibitor", right: "Allosteric control regulation" },
+        { left: "Allosteric effector", right: "Conformational transition trigger" },
+        { left: "Coenzyme component", right: "Transient electron carrier" },
+        { left: "Kinetic modulator", right: "Activation energy reduction" },
+        { left: "Competitive analog", right: "Active site blockading" },
+        { left: "Membrane transducer", right: "Signal cascade propagation" },
+        { left: "Macromolecular scaffold", right: "Supramolecular complex assembly" },
       ];
+      const basePairs = pool.slice(0, pairCount).map((p, idx) => ({
+        left: `(${letters[idx] ?? idx + 1}) ${p.left}`,
+        right: p.right,
+      }));
       const deranged = derangeMatchColumnPairs(basePairs);
       const options = deranged.map((p) => p.right);
-      const romans = ["(i)", "(ii)", "(iii)", "(iv)"];
       const mapping = basePairs
         .map((bp, i) => {
           const optIdx = options.indexOf(bp.right);
-          const letter = String.fromCharCode(65 + i);
+          const letter = letters[i] ?? String.fromCharCode(65 + i);
           return `(${letter})-${romans[optIdx] ?? `(${optIdx + 1})`}`;
         })
         .join(", ");
@@ -590,7 +594,7 @@ A student took three test tubes A, B, and C containing clean iron nails. In tube
           options,
           subparts: [],
           answer: mapping,
-          marks: marks || 4,
+          marks: marks || pairCount,
           difficulty: (difficulty as any) || "MEDIUM",
           cognitiveLevel: (cognitiveLevel as any) || "UNDERSTANDING",
           explanation: "Curriculum standard match the column exercise.",
@@ -644,8 +648,35 @@ A student took three test tubes A, B, and C containing clean iron nails. In tube
 
         const letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
         const romans = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
+        const targetPairCount = marks <= 1 ? 4 : Math.min(10, marks);
+
+        const supplementPool = [
+          { left: "Fundamental principle", right: "Underlying mathematical formulation" },
+          { left: "Operational theorem", right: "Boundary conditions and validity" },
+          { left: "Empirical relationship", right: "Quantitative correlation in syllabus unit" },
+          { left: "Application model", right: "Concrete analytical outcome" },
+          { left: "Thermodynamic parameter", right: "State function equilibrium criteria" },
+          { left: "Dynamic variable", right: "Rate constant and kinetic trajectory" },
+          { left: "Constitutive relation", right: "Material property tensor response" },
+          { left: "Conservation metric", right: "Invariance under coordinate transformation" },
+          { left: "Spectroscopic signature", right: "Quantized energy level transition" },
+          { left: "Asymptotic limit", right: "Singularity resolution behavior" },
+        ];
 
         if (pairs.length > 0) {
+          // If Gemini output fewer pairs than targetPairCount, supplement missing pairs
+          if (pairs.length < targetPairCount) {
+            for (let idx = pairs.length; idx < targetPairCount; idx++) {
+              const sup = supplementPool[idx] ?? { left: `Property ${idx + 1}`, right: `Definition ${idx + 1}` };
+              pairs.push({
+                left: `(${letters[idx] ?? idx + 1}) ${sup.left}`,
+                right: sup.right,
+              });
+            }
+          } else if (pairs.length > targetPairCount) {
+            pairs = pairs.slice(0, targetPairCount);
+          }
+
           const isDirectMatch =
             /^\s*\(?[Aa]\)?\s*[-→:]\s*\(?([1iI])\)?\s*,\s*\(?[Bb]\)?\s*[-→:]\s*\(?([2iI]{2})\)?/.test(qAnswer) ||
             !qAnswer ||
@@ -665,18 +696,16 @@ A student took three test tubes A, B, and C containing clean iron nails. In tube
           qAnswer = answers.join(", ");
         } else {
           // Fallback if no pairs could be extracted from text or explanation
-          const fallbackPairs = [
-            { left: "(A) Fundamental principle", right: "Underlying mathematical formulation" },
-            { left: "(B) Operational theorem", right: "Boundary conditions and validity" },
-            { left: "(C) Empirical relationship", right: "Quantitative correlation in syllabus unit" },
-            { left: "(D) Application model", right: "Concrete analytical outcome" },
-          ];
+          const fallbackPairs = supplementPool.slice(0, targetPairCount).map((p, idx) => ({
+            left: `(${letters[idx] ?? idx + 1}) ${p.left}`,
+            right: p.right,
+          }));
           const deranged = derangeMatchColumnPairs(fallbackPairs);
-          const col1Lines = fallbackPairs.map((p, idx) => `(${letters[idx]}) ${p.left}`);
+          const col1Lines = fallbackPairs.map((p, idx) => `(${letters[idx] ?? idx + 1}) ${cleanMatchItem(p.left)}`);
           const col2Items = deranged.map((p) => cleanMatchItem(p.right));
           const answers = fallbackPairs.map((p, idx) => {
             const optIdx = col2Items.indexOf(cleanMatchItem(p.right));
-            return `(${letters[idx]})-${romans[optIdx] ?? `(${optIdx + 1})`}`;
+            return `(${letters[idx] ?? idx + 1})-${romans[optIdx] ?? `(${optIdx + 1})`}`;
           });
           const instr = getMatchColumnInstruction(qText);
           qText = `${instr}\nColumn I:\n${col1Lines.join("\n")}`;
@@ -1163,15 +1192,34 @@ JSON Array Output Schema:
       qOptions = col2Items;
       qAnswer = answers.join(", ");
     } else if (callResult.data.length === 1) {
-      const pairs = parseMatchColumnPairs(qOptions, qText);
-      const isDirectMatch =
-        /^\s*\(?[Aa]\)?\s*[-→:]\s*\(?([1iI])\)?\s*,\s*\(?[Bb]\)?\s*[-→:]\s*\(?([2iI]{2})\)?/.test(qAnswer) ||
-        !qAnswer ||
-        qAnswer.toLowerCase().includes("direct");
-      if (pairs.length > 1 && isDirectMatch) {
-        const letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
-        const romans = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
-        const deranged = derangeMatchColumnPairs(pairs);
+      let pairs = parseMatchColumnPairs(qOptions, qText, primaryQ.explanation);
+      if (pairs.length === 0) {
+        pairs = extractMatchPairsFromExplanation(primaryQ.explanation);
+      }
+      if (pairs.length === 0 && qText) {
+        pairs = extractMatchPairsFromExplanation(qText);
+      }
+      const letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
+      const romans = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
+
+      if (pairs.length > 0) {
+        if (pairs.length < slots.length) {
+          for (let idx = pairs.length; idx < slots.length; idx++) {
+            const s = slots[idx];
+            pairs.push({
+              left: `(${letters[idx] ?? idx + 1}) Concept of ${s?.chapterTitle ?? `Unit ${idx + 1}`}`,
+              right: `Key mechanism and definition of ${s?.chapterTitle ?? `Unit ${idx + 1}`}`,
+            });
+          }
+        } else if (pairs.length > slots.length) {
+          pairs = pairs.slice(0, slots.length);
+        }
+
+        const isDirectMatch =
+          /^\s*\(?[Aa]\)?\s*[-→:]\s*\(?([1iI])\)?\s*,\s*\(?[Bb]\)?\s*[-→:]\s*\(?([2iI]{2})\)?/.test(qAnswer) ||
+          !qAnswer ||
+          qAnswer.toLowerCase().includes("direct");
+        const deranged = isDirectMatch && pairs.length > 1 ? derangeMatchColumnPairs(pairs) : pairs;
         const col1Lines = pairs.map((p, idx) => `(${letters[idx] ?? idx + 1}) ${cleanMatchItem(p.left)}`);
         const col2Items = deranged.map((p) => cleanMatchItem(p.right));
         const answers = pairs.map((p, idx) => {

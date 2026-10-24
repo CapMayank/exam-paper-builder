@@ -1498,14 +1498,14 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
             const st = progress.sections.find((x) => x.id === s.id)!;
             const effectiveUnits = items.reduce((sum, it) => {
               if (it.question.type === "MATCH_COLUMN" && s.type === "MATCH_COLUMN" && s.count > 1 && s.marksEach === 1) {
-                const pairs = parseMatchColumnPairs(it.question.options, it.question.text);
+                const pairs = parseMatchColumnPairs(it.question.options, it.question.text, (it.question as any).explanation);
                 return sum + (pairs.length > 0 ? Math.min(pairs.length, s.count) : s.count);
               }
               return sum + 1;
             }, 0);
             const placedSectionMarks = items.reduce((sum, it) => {
               if (it.question.type === "MATCH_COLUMN" && s.type === "MATCH_COLUMN" && s.count > 1 && s.marksEach === 1) {
-                const pairs = parseMatchColumnPairs(it.question.options, it.question.text);
+                const pairs = parseMatchColumnPairs(it.question.options, it.question.text, (it.question as any).explanation);
                 return sum + (pairs.length > 0 ? Math.min(pairs.length, s.count) : s.count) * s.marksEach;
               }
               const subTotal = it.question.subparts && it.question.subparts.length > 0
@@ -1561,7 +1561,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                         }`}
                       >
                         {items.length === 1 && s.type === "MATCH_COLUMN"
-                          ? `1 question (${parseMatchColumnPairs(items[0].question.options, items[0].question.text).length || s.count} pairs)`
+                          ? `1 question (${parseMatchColumnPairs(items[0].question.options, items[0].question.text, (items[0].question as any).explanation).length || s.count} pairs)`
                           : items.length === 1 && effectiveUnits > 1
                           ? `1 question (${effectiveUnits} subparts)`
                           : s.type === "MATCH_COLUMN" && items.length === 0
@@ -1657,7 +1657,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                         : (() => {
                             const secMarksTotal = items.reduce((sum, it) => {
                               if (it.question.type === "MATCH_COLUMN" && s.type === "MATCH_COLUMN" && s.count > 1 && s.marksEach === 1) {
-                                const pairs = parseMatchColumnPairs(it.question.options, it.question.text);
+                                const pairs = parseMatchColumnPairs(it.question.options, it.question.text, (it.question as any).explanation);
                                 return sum + (pairs.length > 0 ? Math.min(pairs.length, s.count) : s.count) * s.marksEach;
                               }
                               const subTotal = it.question.subparts && it.question.subparts.length > 0
@@ -1709,7 +1709,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
 
                         const isMatchQ = it.question.type === "MATCH_COLUMN" || s.type === "MATCH_COLUMN";
                         const matchCount = isMatchQ
-                          ? (parseMatchColumnPairs(it.question.options, it.question.text).length || s.count)
+                          ? (parseMatchColumnPairs(it.question.options, it.question.text, (it.question as any).explanation).length || s.count)
                           : 0;
                         const subpartsMarks = it.question.subparts && it.question.subparts.length > 0
                           ? it.question.subparts.reduce((sum, sp) => sum + (sp.marks || 1), 0)

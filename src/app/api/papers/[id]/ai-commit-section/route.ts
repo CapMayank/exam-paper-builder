@@ -41,7 +41,7 @@ export const POST = route(async (req, { id }, user) => {
       // Serialize MATCH_COLUMN pairs into self-contained "Left::Right" option strings
       let processedOptions = Array.isArray(q.options) ? q.options : [];
       if (isMatch) {
-        const pairs = parseMatchColumnPairs(processedOptions, q.text);
+        const pairs = parseMatchColumnPairs(processedOptions, q.text, q.explanation);
         if (pairs.length > 0 && pairs.some((p) => p.left && p.right)) {
           processedOptions = pairs.map((p) => serializeMatchColumnPair(p.left, p.right));
         }

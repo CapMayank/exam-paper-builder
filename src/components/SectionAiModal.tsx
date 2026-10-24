@@ -64,7 +64,7 @@ export function SectionAiModal({
 
   const placedUnits = sectionItems.reduce((sum, it) => {
     if (isMultiUnitMatch) {
-      const pairs = parseMatchColumnPairs(it.question.options, it.question.text);
+      const pairs = parseMatchColumnPairs(it.question.options, it.question.text, (it.question as any).explanation);
       return sum + (pairs.length > 0 ? Math.min(pairs.length, section.count) : section.count);
     }
     return sum + 1;
@@ -205,7 +205,7 @@ export function SectionAiModal({
         const isMatch = q.type === "MATCH_COLUMN" || section!.type === "MATCH_COLUMN";
         let opts = q.options || [];
         if (isMatch) {
-          const pairs = parseMatchColumnPairs(opts, q.text);
+          const pairs = parseMatchColumnPairs(opts, q.text, q.explanation);
           if (pairs.length > 0 && pairs.some((p) => p.left && p.right)) {
             opts = pairs.map((p) => serializeMatchColumnPair(p.left, p.right));
           }
@@ -547,7 +547,7 @@ export function SectionAiModal({
 
                     {/* MATCH_COLUMN Two-Column Layout */}
                     {(q.type === "MATCH_COLUMN" || section.type === "MATCH_COLUMN") && q.options && q.options.length > 0 && (() => {
-                      const pairs = parseMatchColumnPairs(q.options, q.text);
+                      const pairs = parseMatchColumnPairs(q.options, q.text, q.explanation);
                       if (pairs.length === 0) return null;
                       const letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
                       const romans = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];

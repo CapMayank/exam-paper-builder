@@ -478,7 +478,7 @@ export function toPlacedItems(
           opts = Array.isArray(p) ? p : [];
         } catch {}
       }
-      matchCount = parseMatchColumnPairs(opts, i.question.text).length;
+      matchCount = parseMatchColumnPairs(opts, i.question.text, (i.question as any).explanation).length;
     }
     const subparts =
       Array.isArray(i.question.subparts) && i.question.subparts.length > 0
