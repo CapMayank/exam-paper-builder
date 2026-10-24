@@ -649,14 +649,14 @@ describe("Challenger M3.1 Suite 9: Empirical Findings & Boundary Exploration", (
     // Headers only cover Option A-D
     expect(csv).toContain("Option A");
     expect(csv).toContain("Option D");
-    expect(csv).not.toContain("Option E");
-    expect(csv).not.toContain("Option F");
+    expect(csv).toContain("Option E");
+    expect(csv).toContain("Option F");
 
-    // Options 5 and 6 are truncated
+    // Options 5 and 6 are now preserved
     expect(csv).toContain("Helium");
     expect(csv).toContain("Krypton");
-    expect(csv).not.toContain("Xenon");
-    expect(csv).not.toContain("Radon");
+    expect(csv).toContain("Xenon");
+    expect(csv).toContain("Radon");
   });
 
   it("proves pipe-delimited subpart parsing collides with LaTeX absolute value pipes", () => {

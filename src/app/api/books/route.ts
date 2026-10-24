@@ -6,7 +6,10 @@ import { bookSchema } from "@/lib/schemas";
 export const GET = route(async (req) => {
   const url = new URL(req.url);
   const session = url.searchParams.get("session");
-  const where = session && session !== "ALL" ? { academicSession: session.replace(/-/g, "–") } : undefined;
+  const where =
+    session && session !== "ALL"
+      ? { academicSession: { in: [session.replace(/[–—]/g, "-"), session.replace(/-/g, "–")] } }
+      : undefined;
   return prisma.book.findMany({
     where,
     orderBy: [{ className: "asc" }, { subject: "asc" }, { title: "asc" }],

@@ -1,3 +1,4 @@
+import { cleanOptionText, normalizeMcqAnswer } from "./constants";
 import { parseSubparts, subpartsTotalMarks, type SubPart } from "./types";
 
 export const LETTERS = "ABCDEF";
@@ -26,32 +27,29 @@ export function permuteMcqOptions(
     return { options: options ?? [], answer: currentAnswer };
   }
 
-  const trimmed = (currentAnswer || "").trim();
-  const strippedLetter = trimmed
-    .replace(/^(?:option|opt|ans|answer)\s*[:.-]?\s*/i, "")
-    .replace(/^[\(\[\{]+|[\)\]\}\.:]+$/g, "")
-    .trim()
-    .toUpperCase();
-  const currentIdx = strippedLetter.length === 1 ? LETTERS.indexOf(strippedLetter) : -1;
+  const normalized = normalizeMcqAnswer(currentAnswer, options);
   let targetOptionValue: string | null = null;
 
-  if (currentIdx >= 0 && currentIdx < options.length) {
-    targetOptionValue = options[currentIdx];
-  } else {
-    // Value match
-    const foundIdx = options.findIndex((o) => o.trim().toLowerCase() === trimmed.toLowerCase());
+  if (normalized.letter) {
+    const idx = LETTERS.indexOf(normalized.letter);
+    if (idx >= 0 && idx < options.length) {
+      targetOptionValue = options[idx];
+    }
+  }
+
+  if (targetOptionValue === null && normalized.optionText) {
+    const targetClean = cleanOptionText(normalized.optionText).trim().toLowerCase();
+    const foundIdx = options.findIndex((o) => cleanOptionText(o).trim().toLowerCase() === targetClean);
     if (foundIdx >= 0) {
       targetOptionValue = options[foundIdx];
-    } else {
-      // Number string match (1-based or 0-based)
-      const num = parseInt(strippedLetter, 10);
-      if (!isNaN(num)) {
-        if (num >= 1 && num <= options.length) {
-          targetOptionValue = options[num - 1];
-        } else if (num >= 0 && num < options.length) {
-          targetOptionValue = options[num];
-        }
-      }
+    }
+  }
+
+  if (targetOptionValue === null) {
+    const trimmed = (currentAnswer || "").trim().toLowerCase();
+    const foundIdx = options.findIndex((o) => o.trim().toLowerCase() === trimmed);
+    if (foundIdx >= 0) {
+      targetOptionValue = options[foundIdx];
     }
   }
 

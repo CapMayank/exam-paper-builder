@@ -451,7 +451,9 @@ export function diagnosePaperImplications(
 
 /** Map raw paper items or DTO items to normalized PlacedItem representation for blueprint calculation */
 export function toPlacedItems(
-  sections: { id: string; count: number; marksEach: number; type?: string }[],
+  blueprintOrSections:
+    | { sections: { id: string; count: number; marksEach: number; type?: string }[] }
+    | { id: string; count: number; marksEach: number; type?: string }[],
   items: {
     sectionId: string;
     question: {
@@ -465,6 +467,9 @@ export function toPlacedItems(
     };
   }[],
 ): PlacedItem[] {
+  const sections = Array.isArray(blueprintOrSections)
+    ? blueprintOrSections
+    : blueprintOrSections?.sections || [];
   return items.map((i) => {
     const isMatch = i.question.type === "MATCH_COLUMN";
     let matchCount = 0;
@@ -489,7 +494,7 @@ export function toPlacedItems(
     const secMarksEach = sec?.marksEach ?? 1;
     const secCount = sec?.count ?? 1;
     const secIsMatch = sec?.type === "MATCH_COLUMN";
-    const isMultiUnitMatch = isMatch && secIsMatch && secCount > 1 && secMarksEach === 1;
+    const isMultiUnitMatch = isMatch && secIsMatch && secCount > 1;
 
     const matchMarks = isMatch
       ? (isMultiUnitMatch

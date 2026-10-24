@@ -64,7 +64,11 @@ export const PUT = route(async (req, { id }, user) => {
             data: {
               paperId: pId,
               name: `Auto-Archive: Blueprint Section Sync (${items.length} item(s))`,
-              snapshotJson: JSON.stringify(items),
+              snapshotJson: JSON.stringify({
+                paperId: pId,
+                items,
+                timestamp: new Date().toISOString(),
+              }),
               createdById: user.id,
             },
           });

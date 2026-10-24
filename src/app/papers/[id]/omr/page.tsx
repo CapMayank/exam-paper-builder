@@ -38,6 +38,7 @@ export default function OmrSheetPage({ params }: PageProps<"/papers/[id]/omr">) 
       itemId?: string;
       sectionTitle: string;
       type: string;
+      optionCount?: number;
     }[] = [];
 
     let numCount = 0;
@@ -88,6 +89,7 @@ export default function OmrSheetPage({ params }: PageProps<"/papers/[id]/omr">) 
                 itemId: `${it.id}-sp-${spIdx}`,
                 sectionTitle: s.title,
                 type: "MCQ",
+                optionCount: Array.isArray(sp.options) ? sp.options.length : 4,
               });
             });
           } else if (isMcqLikeType(it.question.type) || isMcqLikeType(s.type)) {
@@ -97,6 +99,7 @@ export default function OmrSheetPage({ params }: PageProps<"/papers/[id]/omr">) 
               itemId: it.id,
               sectionTitle: s.title,
               type: it.question.type || s.type,
+              optionCount: Array.isArray(it.question.options) ? it.question.options.length : 4,
             });
           }
         }
@@ -466,14 +469,16 @@ export default function OmrSheetPage({ params }: PageProps<"/papers/[id]/omr">) 
                               {display}
                             </span>
                             <div className="flex gap-1.5">
-                              {["A", "B", "C", "D"].map((opt) => (
-                                <span
-                                  key={opt}
-                                  className="flex h-4 w-4 items-center justify-center rounded-full border border-slate-900 bg-white text-[9px] font-bold text-slate-800"
-                                >
-                                  {opt}
-                                </span>
-                              ))}
+                              {["A", "B", "C", "D", "E", "F"]
+                                .slice(0, Math.min(6, Math.max(4, (qItem as any).optionCount ?? 4)))
+                                .map((opt) => (
+                                  <span
+                                    key={opt}
+                                    className="flex h-4 w-4 items-center justify-center rounded-full border border-slate-900 bg-white text-[9px] font-bold text-slate-800"
+                                  >
+                                    {opt}
+                                  </span>
+                                ))}
                             </div>
                           </div>
                         );

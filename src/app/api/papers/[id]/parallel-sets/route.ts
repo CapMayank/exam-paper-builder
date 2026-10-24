@@ -8,6 +8,7 @@ import {
 } from "@/lib/multiset";
 import { loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
+import { parseSubparts } from "@/lib/types";
 
 export const parallelSetsSchema = z.object({
   sets: z.array(z.string().trim().min(1)).min(1, "Specify at least one target set"),
@@ -161,6 +162,7 @@ export const POST = route(async (req, params, user) => {
                   spaceMm: q.spaceMm,
                   showGrid: q.showGrid,
                   subpartsJson: JSON.stringify({
+                    items: parseSubparts(q.subpartsJson),
                     _forkedFrom: q.id,
                     _paperSet: formattedSet,
                     _paperId: createdPaper.id,
@@ -194,6 +196,7 @@ export const POST = route(async (req, params, user) => {
                     spaceMm: orQ.spaceMm,
                     showGrid: orQ.showGrid,
                     subpartsJson: JSON.stringify({
+                      items: parseSubparts(orQ.subpartsJson),
                       _forkedFrom: orQ.id,
                       _paperSet: formattedSet,
                       _paperId: createdPaper.id,

@@ -8,7 +8,10 @@ import { DEFAULT_ACADEMIC_SESSION } from "@/lib/constants";
 export const GET = route(async (req) => {
   const url = new URL(req.url);
   const session = url.searchParams.get("session");
-  const where = session && session !== "ALL" ? { academicSession: session.replace(/-/g, "–") } : undefined;
+  const where =
+    session && session !== "ALL"
+      ? { academicSession: { in: [session.replace(/[–—]/g, "-"), session.replace(/-/g, "–")] } }
+      : undefined;
   return prisma.blueprint.findMany({ where, orderBy: { createdAt: "desc" }, include: blueprintInclude });
 });
 

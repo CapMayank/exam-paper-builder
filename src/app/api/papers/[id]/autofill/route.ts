@@ -1,7 +1,7 @@
 import { HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { autoFillPaper } from "@/lib/autofill";
-import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
+import { assertCanModifyPaper, loadPaperView, toPlacedItems } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { parseSubparts, subpartsTotalMarks } from "@/lib/types";
 
@@ -71,11 +71,7 @@ export const POST = route(async (req, { id }, user) => {
       sections: paper.blueprint.sections,
       chapters: paper.blueprint.chapters.map((c) => ({ chapterId: c.chapterId, marks: c.marks })),
     },
-    paper.items.map((i) => ({
-      sectionId: i.sectionId,
-      chapterId: i.question.chapterId,
-      questionId: i.question.id,
-    })),
+    toPlacedItems(paper.blueprint.sections, paper.items),
     candidatePool,
     orQuestionIds,
     { targetSectionId, preferredDifficulty },

@@ -1719,7 +1719,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                           : subpartsMarks > 0
                           ? subpartsMarks
                           : s.marksEach;
-                        const targetSlotMarksForQ = isMatchQ && s.count > 1 && s.marksEach === 1
+                        const targetSlotMarksForQ = isMatchQ && s.count > 1
                           ? s.count * s.marksEach
                           : s.marksEach;
                         const isQuestionMarksMismatch = questionTotalMarks !== targetSlotMarksForQ;

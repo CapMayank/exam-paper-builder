@@ -83,7 +83,7 @@ export function QuestionPicker({
     [paper.blueprint],
   );
 
-  const isMultiUnitMatch = section.type === "MATCH_COLUMN" && section.count > 1 && section.marksEach === 1;
+  const isMultiUnitMatch = section.type === "MATCH_COLUMN" && section.count > 1;
   const targetSlotMarks = isMultiUnitMatch ? section.count * section.marksEach : section.marksEach;
 
   const placed = useMemo(

@@ -28,8 +28,25 @@ export const POST = route(async (req, { id }, user) => {
   const section = paper.blueprint.sections.find((s) => s.id === sectionId);
   if (!section) throw new HttpError(404, "Section not found in blueprint");
 
-  // Determine starting position in section
+  // Determine starting position and verify section capacity
   const existingSectionItems = paper.items.filter((i) => i.sectionId === sectionId);
+  const remainingCapacity = section.count - existingSectionItems.length;
+  if (remainingCapacity <= 0) {
+    throw new HttpError(400, `Section "${section.title}" is already full (${section.count}/${section.count}).`);
+  }
+  if (questions.length > remainingCapacity) {
+    throw new HttpError(
+      400,
+      `Cannot commit ${questions.length} question(s); section "${section.title}" only has room for ${remainingCapacity} more question(s).`
+    );
+  }
+
+  const validChapterIds = new Set(paper.blueprint.chapters.map((c) => c.chapterId));
+  const fallbackChapterId = paper.blueprint.chapters[0]?.chapterId;
+  if (!fallbackChapterId) {
+    throw new HttpError(400, "Blueprint has no associated chapters. Add chapters to the blueprint first.");
+  }
+
   let nextPos = existingSectionItems.reduce((max, i) => Math.max(max, i.position), -1) + 1;
 
   // Persist questions and link to paper
@@ -53,10 +70,10 @@ export const POST = route(async (req, { id }, user) => {
         normalizedSubparts = normalizeSubpartMarks(normalizedSubparts, section.marksEach);
       }
 
-      const chapterId =
-        q.chapterId && q.chapterId.trim()
-          ? q.chapterId.trim()
-          : paper.blueprint.chapters[0]?.chapterId || "";
+      let chapterId = q.chapterId && q.chapterId.trim() ? q.chapterId.trim() : fallbackChapterId;
+      if (!validChapterIds.has(chapterId)) {
+        chapterId = fallbackChapterId;
+      }
 
       // 1. Create question in the question bank
       const createdQuestion = await tx.question.create({

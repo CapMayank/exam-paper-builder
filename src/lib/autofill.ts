@@ -205,7 +205,11 @@ export function autoFillPaper(
     for (const slot of sortedSlots) {
       const pool = candidatesByType.get(slot.type) ?? [];
       const valid = pool
-        .filter((c) => !chosenQuestionIds.has(c.id) && (chapterRemaining.get(c.chapterId) ?? 0) >= slot.marksEach)
+        .filter((c) => {
+          if (chosenQuestionIds.has(c.id)) return false;
+          if (c.subpartsMarks !== undefined && c.subpartsMarks !== slot.marksEach) return false;
+          return (chapterRemaining.get(c.chapterId) ?? 0) >= slot.marksEach;
+        })
         .sort((a, b) => (chapterRemaining.get(b.chapterId) ?? 0) - (chapterRemaining.get(a.chapterId) ?? 0));
 
       if (valid.length > 0) {

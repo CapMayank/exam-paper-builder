@@ -75,7 +75,7 @@ export const PATCH = route(async (req, { id, itemId }, user) => {
     }
 
     const isTargetMatch = item.section.type === "MATCH_COLUMN";
-    const isMultiUnitMatch = isTargetMatch && item.section.count > 1 && item.section.marksEach === 1;
+    const isMultiUnitMatch = isTargetMatch && item.section.count > 1;
     let matchPairsCount = 0;
     if (isTargetMatch) {
       try {

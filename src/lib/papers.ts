@@ -152,7 +152,7 @@ export async function loadPaperView(id: string) {
       const secMarksEach = sec?.marksEach ?? 1;
       const secCount = sec?.count ?? 1;
       const secIsMatch = sec?.type === "MATCH_COLUMN";
-      const isMultiUnitMatch = isMatch && secIsMatch && secCount > 1 && secMarksEach === 1;
+      const isMultiUnitMatch = isMatch && secIsMatch && secCount > 1;
 
       const matchMarks = isMatch
         ? (isMultiUnitMatch

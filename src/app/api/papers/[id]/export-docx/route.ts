@@ -553,7 +553,7 @@ export async function buildPaperDocx(
         try {
           const imgBuf = fs.readFileSync(path.join(UPLOAD_DIR, q.imagePath));
           const ext = path.extname(q.imagePath).toLowerCase().replace(".", "");
-          if (["png", "jpg", "jpeg"].includes(ext)) {
+          if (["png", "jpg", "jpeg", "gif"].includes(ext)) {
             paragraphs.push(
               new Paragraph({
                 alignment: AlignmentType.CENTER,
@@ -563,6 +563,22 @@ export async function buildPaperDocx(
                     data: imgBuf,
                     transformation: { width: 340, height: 210 },
                     type: ext === "jpg" ? "jpeg" : (ext as any),
+                  }),
+                ],
+              }),
+            );
+          } else if (ext === "svg") {
+            paragraphs.push(
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { before: 40, after: 60 },
+                children: [
+                  new TextRun({
+                    text: `[Diagram Attached: ${path.basename(q.imagePath)}]`,
+                    italics: true,
+                    size: 18,
+                    color: "64748B",
+                    font: "Times New Roman",
                   }),
                 ],
               }),
@@ -742,7 +758,7 @@ export async function buildPaperDocx(
           try {
             const imgBuf = fs.readFileSync(path.join(UPLOAD_DIR, orQ.imagePath));
             const ext = path.extname(orQ.imagePath).toLowerCase().replace(".", "");
-            if (["png", "jpg", "jpeg"].includes(ext)) {
+            if (["png", "jpg", "jpeg", "gif"].includes(ext)) {
               paragraphs.push(
                 new Paragraph({
                   alignment: AlignmentType.CENTER,
@@ -752,6 +768,22 @@ export async function buildPaperDocx(
                       data: imgBuf,
                       transformation: { width: 340, height: 210 },
                       type: ext === "jpg" ? "jpeg" : (ext as any),
+                    }),
+                  ],
+                }),
+              );
+            } else if (ext === "svg") {
+              paragraphs.push(
+                new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  spacing: { before: 40, after: 60 },
+                  children: [
+                    new TextRun({
+                      text: `[Diagram Attached: ${path.basename(orQ.imagePath)}]`,
+                      italics: true,
+                      size: 18,
+                      color: "64748B",
+                      font: "Times New Roman",
                     }),
                   ],
                 }),

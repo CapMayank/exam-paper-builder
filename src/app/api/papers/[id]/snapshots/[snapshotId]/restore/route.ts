@@ -19,16 +19,23 @@ export const POST = route(async (_req, params, user) => {
   });
   if (!snapshot) throw new HttpError(404, "Snapshot not found");
 
-  let payload: PaperSnapshotPayload;
+  let rawParsed: any;
   try {
-    payload = JSON.parse(snapshot.snapshotJson);
+    rawParsed = JSON.parse(snapshot.snapshotJson);
   } catch {
     throw new HttpError(400, "Corrupted snapshot payload.");
   }
 
+  // Support both standard PaperSnapshotPayload ({ items: [...] }) and legacy/auto-archive top-level arrays ([...])
+  const itemsList: any[] = Array.isArray(rawParsed)
+    ? rawParsed
+    : Array.isArray(rawParsed?.items)
+    ? rawParsed.items
+    : [];
+
   // Verify that questions in snapshot still exist
   const questionIds = new Set<string>();
-  payload.items?.forEach((it) => {
+  itemsList.forEach((it) => {
     if (it.questionId) questionIds.add(it.questionId);
     if (it.orQuestionId) questionIds.add(it.orQuestionId);
   });
@@ -40,7 +47,11 @@ export const POST = route(async (_req, params, user) => {
   const existingSet = new Set(existingQuestions.map((q) => q.id));
 
   // Filter items whose main question still exists
-  const validItems = (payload.items || []).filter((it) => existingSet.has(it.questionId));
+  const validItems = itemsList.filter((it) => existingSet.has(it.questionId));
+
+  if (itemsList.length > 0 && validItems.length === 0) {
+    throw new HttpError(409, "None of the questions in this snapshot exist in the question bank anymore.");
+  }
 
   await prisma.$transaction(async (tx) => {
     // 1. Delete all current placements

@@ -54,7 +54,7 @@ model Book {
   title           String
   subject         String
   className       String // e.g. "Class 8"
-  academicSession String      @default("2025-26")
+  academicSession String      @default("2025–26")
   createdAt       DateTime    @default(now())
   chapters        Chapter[]
   questions       Question[]
@@ -77,7 +77,7 @@ model Blueprint {
   id              String             @id @default(cuid())
   name            String
   bookId          String
-  academicSession String             @default("2025-26")
+  academicSession String             @default("2025–26")
   examType        String // QUARTERLY | HALF_YEARLY | ANNUAL
   durationMin     Int
   subjectCode     String             @default("")

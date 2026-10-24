@@ -35,7 +35,7 @@ export const POST = route(async (req, { id }, user) => {
   }
 
   const isTargetMatch = targetSection.type === "MATCH_COLUMN";
-  const isMultiUnitMatch = isTargetMatch && targetSection.count > 1 && targetSection.marksEach === 1;
+  const isMultiUnitMatch = isTargetMatch && targetSection.count > 1;
   let matchPairsCount = 0;
   if (isTargetMatch) {
     try {

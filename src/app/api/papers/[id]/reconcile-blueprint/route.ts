@@ -3,6 +3,7 @@ import { recordAudit } from "@/lib/audit";
 import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { reconcileBlueprintQuestions } from "@/lib/reconcileBlueprint";
+import { parseSubparts } from "@/lib/types";
 
 export const POST = route(async (_req, { id }, user) => {
   const paper = await loadPaperView(id);
@@ -48,15 +49,12 @@ export const POST = route(async (_req, { id }, user) => {
       for (const r of reconciliation.reassignments) {
         // Always fork a paper-specific question variant with the adjusted chapter so the master bank remains uncorrupted
         const orig = await tx.question.findUniqueOrThrow({ where: { id: r.questionId } });
-        let forkedSubparts = { _forkedFrom: orig.id, _reconciledToChapter: r.toChapterId };
-        try {
-          if (orig.subpartsJson) {
-            const parsed = JSON.parse(orig.subpartsJson);
-            if (typeof parsed === "object" && !Array.isArray(parsed)) {
-              forkedSubparts = { ...parsed, ...forkedSubparts };
-            }
-          }
-        } catch {}
+        const origSubparts = parseSubparts(orig.subpartsJson);
+        const forkedSubparts = {
+          items: origSubparts,
+          _forkedFrom: orig.id,
+          _reconciledToChapter: r.toChapterId,
+        };
 
         const forked = await tx.question.create({
           data: {

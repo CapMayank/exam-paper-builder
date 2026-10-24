@@ -140,7 +140,7 @@ export const questionSchema = z
     difficulty: z.enum(DIFFICULTIES).default("MEDIUM"),
     imagePath: z
       .string()
-      .regex(/^[a-f0-9-]{36}\.(png|jpg|jpeg|webp|gif)$/)
+      .regex(/^[a-f0-9-]{36}\.(png|jpg|jpeg|webp|gif|svg)$/)
       .nullable()
       .default(null),
     spaceMm: z.number().int().min(0).max(250).default(0),

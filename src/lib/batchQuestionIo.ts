@@ -1003,6 +1003,8 @@ export function exportQuestionsToCsv(questions: QuestionDto[], _bookTitle?: stri
     "Option B",
     "Option C",
     "Option D",
+    "Option E",
+    "Option F",
     "Answer",
     "Subparts",
     "Difficulty",
@@ -1015,6 +1017,8 @@ export function exportQuestionsToCsv(questions: QuestionDto[], _bookTitle?: stri
     const optB = q.options[1] ?? "";
     const optC = q.options[2] ?? "";
     const optD = q.options[3] ?? "";
+    const optE = q.options[4] ?? "";
+    const optF = q.options[5] ?? "";
     const subpartsStr = q.subparts && q.subparts.length > 0 ? JSON.stringify(q.subparts) : "";
 
     return [
@@ -1026,6 +1030,8 @@ export function exportQuestionsToCsv(questions: QuestionDto[], _bookTitle?: stri
       optB,
       optC,
       optD,
+      optE,
+      optF,
       q.answer,
       subpartsStr,
       q.difficulty,

@@ -217,8 +217,21 @@ export function parseSubparts(json?: unknown): SubPart[] {
   if (!json) return [];
   try {
     const parsed = typeof json === "string" ? JSON.parse(json) : json;
-    if (!Array.isArray(parsed)) return [];
-    return parsed
+    let list: any[] = [];
+    if (Array.isArray(parsed)) {
+      list = parsed;
+    } else if (parsed && typeof parsed === "object") {
+      if (Array.isArray((parsed as any).items)) {
+        list = (parsed as any).items;
+      } else if (Array.isArray((parsed as any).subparts)) {
+        list = (parsed as any).subparts;
+      } else {
+        return [];
+      }
+    } else {
+      return [];
+    }
+    return list
       .filter((sp) => Boolean(sp && typeof sp === "object"))
       .map((sp, idx) => {
         const item: SubPart = {
@@ -274,9 +287,6 @@ export function normalizeSubpartMarks<T extends { marks: number }>(
   const n = subparts.length;
 
   let valid = [...subparts];
-  if (target < n) {
-    valid = valid.slice(0, target);
-  }
 
   const currentTotal = subpartsTotalMarks(valid);
   if (currentTotal === target) return valid;
@@ -304,9 +314,6 @@ export function normalizeSubpartMarks<T extends { marks: number }>(
       const dec = Math.min(toReduce, reducible);
       result[i].marks -= dec;
       toReduce -= dec;
-    }
-    if (toReduce > 0) {
-      return result.slice(0, Math.max(1, target));
     }
     return result;
   }

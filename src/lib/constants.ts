@@ -518,10 +518,10 @@ export function normalizeMcqAnswer(
     }
   }
 
-  // Check if answer starts with a choice prefix like "(b) \text{cry}1\text{Ab}" or "(b) cry1Ab" or "b) cry1Ab"
+  // Check if answer starts with a choice prefix like "(b) \text{cry}1\text{Ab}" or "(b) cry1Ab" or "b) cry1Ab" or "Option C: cry1Ab"
   const prefixMatch =
-    trimmed.match(/^[\s\u200B]*\(([a-zA-Z0-9])\)\s*(.*)$/) ||
-    trimmed.match(/^[\s\u200B]*([a-zA-Z0-9])[.)\]:-]\s+(.*)$/);
+    cleaned.match(/^[\s\u200B]*\(([a-zA-Z0-9])\)\s*(.*)$/) ||
+    cleaned.match(/^[\s\u200B]*([a-zA-Z0-9])[.)\]:-]\s*(.*)$/);
   if (prefixMatch) {
     const candidateLetter = prefixMatch[1].toUpperCase();
     const idx = MCQ_LETTERS.indexOf(candidateLetter);
@@ -593,15 +593,34 @@ export const NUMBERING_STYLE_LABEL: Record<NumberingStyle, string> = {
 export const DEFAULT_NUMBERING_STYLE: NumberingStyle = "CONTINUOUS";
 
 export function formatQuestionNumber(
-  num: number,
-  numberingStyle?: string | null,
-  sectionLetter?: string,
-  sectionIndex?: number,
+  arg0: number | string,
+  arg1?: string | number | null,
+  arg2?: string,
+  arg3?: number,
 ): string {
-  if (numberingStyle === "PREFIXED") return `Q.${num}`;
-  if (numberingStyle === "SECTION_RELATIVE" && sectionLetter) {
-    const sIdx = sectionIndex != null ? (sectionIndex === 0 ? 1 : sectionIndex) : num;
-    return `${sectionLetter}${sIdx}.`;
+  let num: number;
+  let style: string;
+  let secLetter: string | undefined;
+  let secIdx: number | undefined;
+
+  if (typeof arg0 === "string" && (typeof arg1 === "number" || arg1 === undefined)) {
+    // layout.ts style signature: (style, globalIdx, sectionLetter, sectionIdx)
+    style = arg0;
+    num = (arg1 ?? 0) + 1;
+    secLetter = arg2;
+    secIdx = arg3 !== undefined ? arg3 + 1 : num;
+  } else {
+    // constants.ts style signature: (num, numberingStyle, sectionLetter, sectionIndex)
+    num = typeof arg0 === "number" ? (arg0 === 0 ? 1 : arg0) : 1;
+    style = (arg1 as string) || "CONTINUOUS";
+    secLetter = arg2;
+    secIdx = arg3 != null ? (arg3 === 0 ? 1 : arg3) : num;
+  }
+
+  if (style === "PREFIXED") return `Q.${num}`;
+  if (style === "SECTION_RELATIVE" && secLetter) {
+    const s = secIdx != null ? secIdx : num;
+    return `${secLetter}${s}.`;
   }
   return `${num}.`;
 }
