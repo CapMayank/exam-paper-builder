@@ -97,6 +97,24 @@ export function AIPaperGeneratorModal({
       .then((res) => {
         if (!mounted) return;
         setPlan(res.plan);
+        const sub = (res.plan.subject || "").toLowerCase();
+        const bTitle = (res.plan.bookTitle || "").toLowerCase();
+        const pTitle = (res.plan.title || "").toLowerCase();
+        const devanagariRegex = /[\u0900-\u097F]/;
+        if (
+          sub.includes("hindi") ||
+          sub.includes("हिंदी") ||
+          sub.includes("हिन्दी") ||
+          sub.includes("sanskrit") ||
+          sub.includes("संस्कृत") ||
+          bTitle.includes("hindi") ||
+          bTitle.includes("हिंदी") ||
+          devanagariRegex.test(sub) ||
+          devanagariRegex.test(pTitle) ||
+          devanagariRegex.test(bTitle)
+        ) {
+          setLanguage("hi");
+        }
       })
       .catch((err) => {
         if (!mounted) return;

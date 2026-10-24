@@ -2,11 +2,18 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { QuestionView } from "@/components/QuestionView";
+import { MathText } from "@/components/MathText";
 import { imageUrl } from "@/lib/client";
 import {
+  cleanQuestionStatement,
   DEFAULT_SCHOOL_LOGO,
   DEFAULT_SCHOOL_NAME,
+  detectPaperLanguage,
   EXAM_TYPE_LABEL,
+  formatExerciseFormula,
+  formatMarksLabel,
+  getQuestionTypeLabel,
+  getSharedInstruction,
   isBookletLayout,
   isPrePrimaryClass,
   parseMatchColumnPairs,
@@ -16,6 +23,8 @@ import {
 import { WorkbookHeader } from "@/lib/kindergarten/components/WorkbookHeader";
 import { formatQuestionNumber, imposeBooklet, imposeTwoUpCut, paginate } from "@/lib/layout";
 import type { PaperData } from "@/lib/types";
+
+const LETTERS = "ABCDEFGHIJ";
 
 type Block = {
   key: string;
@@ -47,6 +56,8 @@ function extractSectionLetter(title: string, fallbackIndex: number): string {
 
 function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSignatures?: boolean): Block[] {
   const { blueprint } = paper;
+  const paperLang = detectPaperLanguage(paper, paper.items);
+  const isHindi = paperLang === "hi";
   const total = paper.progress.totalMarks;
   const examType = resolvePaperExamType(paper);
   const examHeading = `${EXAM_TYPE_LABEL[examType]} Examination`;
@@ -240,12 +251,16 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div style={{ display: "flex", alignItems: "center", flex: 1, minWidth: 0, marginRight: "3mm" }}>
-                    <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>Class &amp; Section:&nbsp;</span>
+                    <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>
+                      {isHindi ? "कक्षा व वर्ग:" : paperLang === "bilingual" ? "Class & Sec / कक्षा:" : "Class & Section:"}&nbsp;
+                    </span>
                     <span style={{ display: "inline-block", width: "24mm", borderBottom: "1px solid #000" }}>&nbsp;</span>
                   </div>
                   {effectiveShowSignatures && (
                     <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
-                      <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>Invigilator Sign:&nbsp;</span>
+                      <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>
+                        {isHindi ? "निरीक्षक हस्ताक्षर:" : paperLang === "bilingual" ? "Invig. Sign / हस्ताक्षर:" : "Invigilator Sign:"}&nbsp;
+                      </span>
                       <span style={{ display: "inline-block", width: "24mm", borderBottom: "1px solid #000" }}>&nbsp;</span>
                     </div>
                   )}
@@ -254,15 +269,21 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
             ) : (
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1.5mm" }}>
                 <div style={{ display: "flex", alignItems: "center", flex: "1 1 50mm" }}>
-                  <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>Student Name:&nbsp;</span>
+                  <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>
+                    {isHindi ? "विद्यार्थी का नाम:" : paperLang === "bilingual" ? "Student Name / नाम:" : "Student Name:"}&nbsp;
+                  </span>
                   <span style={{ display: "inline-block", flex: 1, borderBottom: "1px solid #000" }}>&nbsp;</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
-                  <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>Class &amp; Sec:&nbsp;</span>
+                  <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>
+                    {isHindi ? "कक्षा व वर्ग:" : paperLang === "bilingual" ? "Class / कक्षा:" : "Class & Sec:"}&nbsp;
+                  </span>
                   <span style={{ display: "inline-block", width: "16mm", borderBottom: "1px solid #000" }}>&nbsp;</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "1.5mm", flexShrink: 0 }}>
-                  <span style={{ fontWeight: 700 }}>Roll No:</span>
+                  <span style={{ fontWeight: 700 }}>
+                    {isHindi ? "अनुक्रमांक:" : paperLang === "bilingual" ? "Roll No / रोल नं:" : "Roll No:"}
+                  </span>
                   <span style={{ display: "inline-flex", gap: "1.5px" }}>
                     {[0, 1, 2, 3, 4, 5, 6].map((i) => (
                       <span
@@ -280,7 +301,9 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
                 </div>
                 {effectiveShowSignatures && (
                   <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
-                    <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>Invigilator Sign:&nbsp;</span>
+                    <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>
+                      {isHindi ? "निरीक्षक हस्ताक्षर:" : paperLang === "bilingual" ? "Invig. Sign / हस्ताक्षर:" : "Invigilator Sign:"}&nbsp;
+                    </span>
                     <span style={{ display: "inline-block", width: "20mm", borderBottom: "1px solid #000" }}>&nbsp;</span>
                   </div>
                 )}
@@ -303,7 +326,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
             }}
           >
             <div style={{ fontWeight: 700, textDecoration: "underline", marginBottom: "0.5mm", color: "#0f172a" }}>
-              General Instructions / सामान्य निर्देश:
+              {isHindi ? "सामान्य निर्देश:" : paperLang === "bilingual" ? "General Instructions / सामान्य निर्देश:" : "General Instructions:"}
             </div>
             <div style={{ whiteSpace: "pre-line", color: "#334155" }}>{paper.generalInstructions}</div>
           </div>
@@ -340,6 +363,12 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
       const groupMarks = allInGroup.reduce((sum, x) => sum + x.count * x.marksEach, 0);
       const groupCount = allInGroup.reduce((sum, x) => sum + x.count, 0);
 
+      const groupRightLabel = isHindi
+        ? `${groupCount} प्रश्न · ${groupMarks} अंक`
+        : paperLang === "bilingual"
+        ? `${groupCount} Questions / प्रश्न · ${groupMarks} Marks / अंक`
+        : `${groupCount} Questions · ${groupMarks} Marks`;
+
       blocks.push({
         key: `sec-main-${s.id}`,
         keepWithNext: true,
@@ -358,7 +387,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
             >
               <span>{s.title}</span>
               <span style={{ fontWeight: 600, fontSize: isA5 ? "9pt" : "9.5pt" }}>
-                {groupCount} Questions · {groupMarks} Marks
+                {groupRightLabel}
               </span>
             </div>
             {s.instructions && (
@@ -373,6 +402,16 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
 
     // If section has multiple question types, render a clean sub-heading for this question type!
     if (hasMultipleTypes) {
+      const typeLabel = getQuestionTypeLabel(s.type, paperLang);
+      const typeFormula =
+        s.type === "MATCH_COLUMN"
+          ? isHindi
+            ? `1 प्रश्न (${s.count} जोड़ियाँ) × ${s.marksEach} अंक = ${s.count * s.marksEach} अंक`
+            : `1 question (${s.count} pairs) × ${s.marksEach}m = ${s.count * s.marksEach}m`
+          : isHindi
+          ? `${s.count} प्रश्न × ${s.marksEach} अंक = ${s.count * s.marksEach} अंक`
+          : `${s.count} question(s) × ${s.marksEach} mark(s) = ${s.count * s.marksEach}m`;
+
       blocks.push({
         key: `sec-sub-${s.id}`,
         keepWithNext: true,
@@ -390,112 +429,208 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
               margin: isA5 ? "1mm 0 1.5mm" : "1.5mm 0 2mm",
             }}
           >
-            <span>{QUESTION_TYPE_LABEL[s.type as keyof typeof QUESTION_TYPE_LABEL] || s.type}</span>
-            <span>
-              {s.type === "MATCH_COLUMN"
-                ? `1 question (${s.count} pairs) × ${s.marksEach}m = ${s.count * s.marksEach}m`
-                : `${s.count} question(s) × ${s.marksEach} mark(s) = ${s.count * s.marksEach}m`}
-            </span>
+            <span>{typeLabel}</span>
+            <span>{typeFormula}</span>
           </div>
         ),
       });
     }
 
-    for (const it of paper.items.filter((item) => item.sectionId === s.id)) {
-      const currentN = n;
-      const numberLabel = formatQuestionNumber(
+    const sectionItems = paper.items.filter((item) => item.sectionId === s.id);
+    const isGroupedObjective =
+      (s.type === "TRUE_FALSE" || s.type === "FILL_BLANK") && sectionItems.length > 1;
+
+    if (isGroupedObjective) {
+      const exerciseN = n;
+      const exerciseLabel = formatQuestionNumber(
         paper.numberingStyle || "CONTINUOUS",
-        currentN,
+        exerciseN,
         sectionLetter,
         sectionRelativeCounter
       );
       n += 1;
       sectionRelativeCounter += 1;
 
-      const subparts = it.question.subparts;
-      const canDecompose = !isPrePrimary && !it.orQuestion && subparts && subparts.length > 1;
-      const isMatch = s.type === "MATCH_COLUMN" || it.question.type === "MATCH_COLUMN";
-      const matchPairCount = isMatch
-        ? (parseMatchColumnPairs(it.question.options, it.question.text, (it.question as any).explanation).length || s.count)
-        : 0;
-      const subpartsMarks = subparts && subparts.length > 0 ? subparts.reduce((sum, sp) => sum + (sp.marks || 1), 0) : 0;
-      const totalQuestionMarks = isMatch
-        ? (s.count === 1 ? s.marksEach : Math.min(matchPairCount * s.marksEach, s.count * s.marksEach))
-        : subpartsMarks > 0
-        ? subpartsMarks
-        : s.marksEach;
+      const sharedInstruction = s.instructions?.trim()
+        ? s.instructions.trim()
+        : getSharedInstruction(s.type, paperLang);
+      const formulaText = formatExerciseFormula(sectionItems.length, s.marksEach, paperLang);
 
-      if (canDecompose) {
-        // Long passage stems (> 200 chars) are substantial content and do not need to be forced
-        // onto the same page as subpart 0; short prompt stems (<= 200 chars) keep keepWithNext: true.
-        const isLongStem = (it.question.text || "").length > 200;
+      blocks.push({
+        key: `exercise-head-${s.id}`,
+        keepWithNext: true,
+        groupId: `exercise-${s.id}`,
+        node: (
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              fontWeight: 700,
+              marginBottom: isA5 ? "1.5mm" : "2mm",
+              paddingTop: isA5 ? "1mm" : "1.5mm",
+            }}
+          >
+            <div style={{ flex: 1, minWidth: 0, paddingRight: "3mm" }}>
+              <span style={{ marginRight: "2mm", fontWeight: 700 }}>
+                {exerciseLabel.endsWith(".") ? exerciseLabel : `${exerciseLabel}.`}
+              </span>
+              <span>{sharedInstruction}</span>
+            </div>
+            <span
+              style={{
+                fontWeight: 700,
+                whiteSpace: "nowrap",
+                color: "#334155",
+                fontSize: isA5 ? "9pt" : "9.5pt",
+              }}
+            >
+              {formulaText}
+            </span>
+          </div>
+        ),
+      });
+
+      sectionItems.forEach((it, itemIdx) => {
+        const isLastItem = itemIdx === sectionItems.length - 1;
+        const subLabel = `(${LETTERS[itemIdx]?.toLowerCase() ?? itemIdx + 1})`;
         blocks.push({
-          key: `${it.id}-stem`,
-          keepWithNext: !isLongStem,
+          key: it.id,
+          keepWithNext: itemIdx === 0,
           forceBreakBefore: Boolean(it.pageBreakBefore),
-          groupId: it.id,
-          render: () => (
-            <div style={{ paddingBottom: isA5 ? "1.5mm" : "2.5mm" }}>
-              <QuestionView
-                q={it.question}
-                number={currentN}
-                numberLabel={numberLabel}
-                marks={totalQuestionMarks}
-                marksStyle={paper.marksStyle || "RIGHT_COLUMN"}
-                compact={isEffectiveCompact}
-                renderMode="STEM_ONLY"
-                isA5={isA5}
-              />
+          groupId: `exercise-${s.id}`,
+          node: (
+            <div
+              style={{
+                display: "flex",
+                gap: "2.5mm",
+                alignItems: "flex-start",
+                paddingLeft: isA5 ? "4mm" : "5mm",
+                paddingBottom: isLastItem ? questionBottomPadding : isA5 ? "1.5mm" : "2mm",
+              }}
+            >
+              <span style={{ fontWeight: 600, minWidth: isA5 ? "5.5mm" : "6.5mm" }}>{subLabel}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight: isA5 ? 1.35 : 1.45 }}>
+                  <MathText text={cleanQuestionStatement(it.question.text, s.type)} />
+                </div>
+                {it.question.imagePath && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={imageUrl(it.question.imagePath)}
+                    alt=""
+                    style={{
+                      display: "block",
+                      marginTop: "2mm",
+                      maxWidth: "100%",
+                      maxHeight: isA5 ? "50mm" : "70mm",
+                      objectFit: "contain",
+                    }}
+                  />
+                )}
+              </div>
             </div>
           ),
         });
+      });
+    } else {
+      for (const it of sectionItems) {
+        const currentN = n;
+        const numberLabel = formatQuestionNumber(
+          paper.numberingStyle || "CONTINUOUS",
+          currentN,
+          sectionLetter,
+          sectionRelativeCounter
+        );
+        n += 1;
+        sectionRelativeCounter += 1;
 
-        // 2. Individual subparts: can cleanly break across page boundaries
-        subparts.forEach((_, spIdx) => {
-          const isLastSubpart = spIdx === subparts.length - 1;
+        const subparts = it.question.subparts;
+        const canDecompose = !isPrePrimary && !it.orQuestion && subparts && subparts.length > 1;
+        const isMatch = s.type === "MATCH_COLUMN" || it.question.type === "MATCH_COLUMN";
+        const matchPairCount = isMatch
+          ? (parseMatchColumnPairs(it.question.options, it.question.text, (it.question as any).explanation).length || s.count)
+          : 0;
+        const subpartsMarks = subparts && subparts.length > 0 ? subparts.reduce((sum, sp) => sum + (sp.marks || 1), 0) : 0;
+        const totalQuestionMarks = isMatch
+          ? (s.count === 1 ? s.marksEach : Math.min(matchPairCount * s.marksEach, s.count * s.marksEach))
+          : subpartsMarks > 0
+          ? subpartsMarks
+          : s.marksEach;
+
+        if (canDecompose) {
+          // Passage stem keepWithNext: true ensures stems are never detached from first subpart
           blocks.push({
-            key: `${it.id}-sp-${spIdx}`,
-            keepWithNext: false,
+            key: `${it.id}-stem`,
+            keepWithNext: true,
+            forceBreakBefore: Boolean(it.pageBreakBefore),
             groupId: it.id,
-            render: ({ isContinuation }) => (
-              <div style={{ paddingBottom: isLastSubpart ? questionBottomPadding : isA5 ? "1.5mm" : "2.5mm" }}>
+            render: () => (
+              <div style={{ paddingBottom: isA5 ? "1.5mm" : "2.5mm" }}>
                 <QuestionView
                   q={it.question}
                   number={currentN}
                   numberLabel={numberLabel}
-                  marks={s.marksEach}
+                  marks={totalQuestionMarks}
                   marksStyle={paper.marksStyle || "RIGHT_COLUMN"}
                   compact={isEffectiveCompact}
-                  renderMode="SUBPART_ONLY"
-                  subpartIndex={spIdx}
-                  isContinuation={isContinuation}
+                  renderMode="STEM_ONLY"
                   isA5={isA5}
+                  lang={paperLang}
                 />
               </div>
             ),
           });
-        });
-      } else {
-        blocks.push({
-          key: it.id,
-          keepWithNext: false,
-          forceBreakBefore: Boolean(it.pageBreakBefore),
-          groupId: it.id,
-          render: () => (
-            <div style={{ paddingBottom: questionBottomPadding }}>
-              <QuestionView
-                q={it.question}
-                orQuestion={it.orQuestion}
-                number={currentN}
-                numberLabel={numberLabel}
-                marks={totalQuestionMarks}
-                marksStyle={paper.marksStyle || "RIGHT_COLUMN"}
-                compact={isEffectiveCompact}
-                isA5={isA5}
-              />
-            </div>
-          ),
-        });
+
+          // 2. Individual subparts: can cleanly break across page boundaries
+          subparts.forEach((_, spIdx) => {
+            const isLastSubpart = spIdx === subparts.length - 1;
+            blocks.push({
+              key: `${it.id}-sp-${spIdx}`,
+              keepWithNext: false,
+              groupId: it.id,
+              render: ({ isContinuation }) => (
+                <div style={{ paddingBottom: isLastSubpart ? questionBottomPadding : isA5 ? "1.5mm" : "2.5mm" }}>
+                  <QuestionView
+                    q={it.question}
+                    number={currentN}
+                    numberLabel={numberLabel}
+                    marks={s.marksEach}
+                    marksStyle={paper.marksStyle || "RIGHT_COLUMN"}
+                    compact={isEffectiveCompact}
+                    renderMode="SUBPART_ONLY"
+                    subpartIndex={spIdx}
+                    isContinuation={isContinuation}
+                    isA5={isA5}
+                    lang={paperLang}
+                  />
+                </div>
+              ),
+            });
+          });
+        } else {
+          blocks.push({
+            key: it.id,
+            keepWithNext: false,
+            forceBreakBefore: Boolean(it.pageBreakBefore),
+            groupId: it.id,
+            render: () => (
+              <div style={{ paddingBottom: questionBottomPadding }}>
+                <QuestionView
+                  q={it.question}
+                  orQuestion={it.orQuestion}
+                  number={currentN}
+                  numberLabel={numberLabel}
+                  marks={totalQuestionMarks}
+                  marksStyle={paper.marksStyle || "RIGHT_COLUMN"}
+                  compact={isEffectiveCompact}
+                  isA5={isA5}
+                  lang={paperLang}
+                />
+              </div>
+            ),
+          });
+        }
       }
     }
   }

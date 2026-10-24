@@ -11,6 +11,7 @@ export type PlacedItem = {
   chapterId: string;
   marks?: number;
   subpartsCount?: number;
+  questionId?: string;
 };
 
 export type QuestionTypeItem = {
@@ -456,7 +457,9 @@ export function toPlacedItems(
     | { id: string; count: number; marksEach: number; type?: string }[],
   items: {
     sectionId: string;
+    questionId?: string;
     question: {
+      id?: string;
       chapterId: string;
       type: string;
       text: string;
@@ -510,6 +513,7 @@ export function toPlacedItems(
       chapterId: i.question.chapterId,
       marks: effectiveMarks,
       subpartsCount: effectiveUnits,
+      questionId: i.questionId || i.question.id || undefined,
     };
   });
 }

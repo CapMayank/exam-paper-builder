@@ -2,6 +2,7 @@ import "server-only";
 import {
   cleanMatchItem,
   cleanOptionText,
+  cleanQuestionStatement,
   derangeMatchColumnPairs,
   extractMatchPairsFromExplanation,
   getMatchColumnInstruction,
@@ -633,8 +634,20 @@ A student took three test tubes A, B, and C containing clean iron nails. In tube
       const qType = normalizeQuestionType(item.type || type);
       const isMatch = qType === "MATCH_COLUMN";
       let options = Array.isArray(item.options) ? item.options.map((o) => cleanOptionText(String(o).trim())) : [];
-      let qText = repairLatex(String(item.text || "").trim());
+      let qText = repairLatex(cleanQuestionStatement(String(item.text || "").trim(), qType));
       let qAnswer = isMcqLikeType(qType) ? cleanOptionText(item.answer || "") : repairLatex(String(item.answer || "").trim());
+
+      if (qType === "TRUE_FALSE") {
+        if (language === "hi") {
+          options = ["सत्य", "असत्य"];
+          if (/true|सत्य|सही/i.test(qAnswer)) qAnswer = "सत्य";
+          else if (/false|असत्य|गलत/i.test(qAnswer)) qAnswer = "असत्य";
+        } else if (language === "bilingual") {
+          options = ["सत्य / True", "असत्य / False"];
+        } else {
+          options = ["True", "False"];
+        }
+      }
 
       // If MATCH_COLUMN, ensure robust pair extraction, column formatting, and derangement
       if (isMatch) {
@@ -1272,25 +1285,38 @@ JSON Array Output Schema:
 
     const qType = normalizeQuestionType(rawQ.type || normalizedType);
     const rawText = typeof rawQ.text === "string" && rawQ.text.trim() ? rawQ.text.trim() : `Question regarding ${slot.chapterTitle}`;
-    const qText = repairLatex(rawText);
-    const qOptions = Array.isArray(rawQ.options) ? rawQ.options.map((o: unknown) => cleanOptionText(String(o).trim())) : [];
+    const qText = repairLatex(cleanQuestionStatement(rawText, qType));
+    let qOptions = Array.isArray(rawQ.options) ? rawQ.options.map((o: unknown) => cleanOptionText(String(o).trim())) : [];
+    if (qType === "TRUE_FALSE") {
+      if (language === "hi") {
+        qOptions = ["सत्य", "असत्य"];
+      } else if (language === "bilingual") {
+        qOptions = ["सत्य / True", "असत्य / False"];
+      } else {
+        qOptions = ["True", "False"];
+      }
+    }
     const targetSlotMarks = slot.marks || marksEach;
     const rawSubparts = Array.isArray(rawQ.subparts)
       ? rawQ.subparts.map((sp: any, spIdx: number) => ({
           label: String(sp.label || `(${spIdx + 1})`),
-          text: repairLatex(String(sp.text || "")),
+          text: repairLatex(cleanQuestionStatement(String(sp.text || ""))),
           marks: Number(sp.marks) || 1,
           options: Array.isArray(sp.options) ? sp.options.map((o: unknown) => cleanOptionText(String(o).trim())) : undefined,
           answer: sp.answer ? (isMcqLikeType(qType) ? cleanOptionText(String(sp.answer)) : repairLatex(String(sp.answer))) : undefined,
         }))
       : [];
     const qSubparts = rawSubparts.length > 0 ? normalizeSubpartMarks(rawSubparts, targetSlotMarks) : [];
-    const qAnswer =
+    let qAnswer =
       typeof rawQ.answer === "string"
         ? isMcqLikeType(qType)
           ? cleanOptionText(rawQ.answer)
           : repairLatex(rawQ.answer)
         : "Refer to standard model answer.";
+    if (qType === "TRUE_FALSE" && language === "hi") {
+      if (/true|सत्य|सही/i.test(qAnswer)) qAnswer = "सत्य";
+      else if (/false|असत्य|गलत/i.test(qAnswer)) qAnswer = "असत्य";
+    }
     const qDiff = ["EASY", "MEDIUM", "HARD"].includes(rawQ.difficulty) ? rawQ.difficulty : "MEDIUM";
     const figurePrompt = typeof rawQ.figurePrompt === "string" && rawQ.figurePrompt.trim() ? rawQ.figurePrompt.trim() : undefined;
 

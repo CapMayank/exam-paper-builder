@@ -17,6 +17,7 @@ import { api } from "@/lib/client";
 import {
   cleanMatchItem,
   cleanOptionText,
+  detectPaperLanguage,
   getMatchColumnInstruction,
   parseMatchColumnPairs,
   QUESTION_TYPE_LABEL,
@@ -41,7 +42,9 @@ export function SectionAiModal({
   onCommitted,
 }: SectionAiModalProps) {
   const [difficulty, setDifficulty] = useState<"BALANCED" | "EASY" | "MEDIUM" | "HARD">("BALANCED");
-  const [language, setLanguage] = useState<"en" | "hi">("en");
+  const [language, setLanguage] = useState<"en" | "hi">(() =>
+    detectPaperLanguage(paper, paper.items) === "hi" ? "hi" : "en"
+  );
   const [chapterMode, setChapterMode] = useState<"auto" | "specific">("auto");
   const [selectedChapterId, setSelectedChapterId] = useState<string>("");
   const [questionCount, setQuestionCount] = useState<number>(1);
@@ -128,13 +131,15 @@ export function SectionAiModal({
       setGeneratedQuestions([]);
       setError(null);
       setQuestionCount(Math.max(1, remainingQuestions));
+      const paperLang = detectPaperLanguage(paper, paper.items);
+      setLanguage(paperLang === "hi" ? "hi" : "en");
       if (availableChapters.length > 0) {
         // Default to chapter with highest remaining deficit
         const topDeficit = [...chapterQuotas].sort((a, b) => b.remainingMarks - a.remainingMarks)[0];
         setSelectedChapterId(topDeficit?.id || availableChapters[0].id);
       }
     }
-  }, [isOpen, section, remainingQuestions, availableChapters, chapterQuotas]);
+  }, [isOpen, section, remainingQuestions, availableChapters, chapterQuotas, paper]);
 
   if (!isOpen || !section) return null;
 

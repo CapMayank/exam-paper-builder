@@ -27,6 +27,7 @@ export const POST = route(async (_req, params, user) => {
   }
 
   // Support both standard PaperSnapshotPayload ({ items: [...] }) and legacy/auto-archive top-level arrays ([...])
+  const payload = typeof rawParsed === "object" && rawParsed !== null && !Array.isArray(rawParsed) ? rawParsed : {};
   const itemsList: any[] = Array.isArray(rawParsed)
     ? rawParsed
     : Array.isArray(rawParsed?.items)

@@ -54,6 +54,7 @@ import {
   ACADEMIC_SESSIONS,
   DEFAULT_SCHOOL_LOGO,
   DEFAULT_SCHOOL_NAME,
+  detectPaperLanguage,
   EXAM_TYPES,
   EXAM_TYPE_LABEL,
   inferExamTypeFromText,
@@ -1778,6 +1779,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                 numberLabel={numberLabel}
                                 marks={questionTotalMarks}
                                 marksStyle={paper.marksStyle || "RIGHT_COLUMN"}
+                                lang={paper ? detectPaperLanguage(paper, paper.items) : "en"}
                               />
                             </div>
 

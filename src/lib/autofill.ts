@@ -52,7 +52,7 @@ function getItemMarks(item: PlacedItem, secMarksEach: number): number {
  */
 export function autoFillPaper(
   bp: BlueprintDef,
-  currentItems: (PlacedItem & { questionId: string })[],
+  currentItems: (PlacedItem & { questionId?: string })[],
   candidatePool: CandidateQuestion[],
   excludedQuestionIds: string[] | { targetSectionId?: string; preferredDifficulty?: string } = [],
   options?: {
@@ -64,7 +64,7 @@ export function autoFillPaper(
   const actualOptions = Array.isArray(excludedQuestionIds) ? options : excludedQuestionIds;
   const sectionById = new Map(bp.sections.map((s) => [s.id, s]));
   const usedQuestionIds = new Set([
-    ...currentItems.map((i) => i.questionId),
+    ...currentItems.map((i) => i.questionId).filter((id): id is string => Boolean(id)),
     ...actualExcluded,
   ]);
 

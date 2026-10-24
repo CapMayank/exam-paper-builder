@@ -55,6 +55,212 @@ export const QUESTION_TYPE_LABEL: Record<QuestionType, string> = {
   KDG_SEQUENCE_CHAIN: "Missing Sequence Chain (Caterpillar/Train)",
 };
 
+export const QUESTION_TYPE_LABEL_HI: Record<string, string> = {
+  MCQ: "सही विकल्प चुनिए",
+  ASSERTION_REASON: "अभिकथन एवं तर्क",
+  TRUE_FALSE: "सत्य / असत्य",
+  FILL_BLANK: "रिक्त स्थानों की पूर्ति",
+  MATCH_COLUMN: "सही जोड़ी मिलाइए",
+  VERY_SHORT: "अति लघु उत्तरीय प्रश्न (एक शब्द / एक वाक्य)",
+  SHORT: "लघु उत्तरीय प्रश्न",
+  LONG: "दीर्घ उत्तरीय प्रश्न",
+  CASE_STUDY: "केस आधारित / बहु-भागीय प्रश्न",
+  UNSEEN_PASSAGE: "अपठित गद्यांश-काव्यांश",
+  REFERENCE_CONTEXT: "सन्दर्भ-प्रसंग व्याख्या",
+  WRITING_SKILL: "रचनात्मक लेखन (पत्र, निबंध, सूचना)",
+  GRAMMAR: "व्याकरण (निर्देशानुसार)",
+  DRAW: "चित्रांकन / आरेख",
+  MAP_WORK: "मानचित्र कार्य",
+};
+
+export const QUESTION_TYPE_LABEL_BILINGUAL: Record<string, string> = {
+  MCQ: "Multiple Choice / सही विकल्प चुनिए",
+  ASSERTION_REASON: "Assertion & Reason (अभिकथन एवं तर्क)",
+  TRUE_FALSE: "True / False (सत्य / असत्य)",
+  FILL_BLANK: "Fill in the blank (रिक्त स्थान पूर्ति)",
+  MATCH_COLUMN: "Match the column (सही जोड़ी मिलाइए)",
+  VERY_SHORT: "Very short / One word (अति लघु / एक वाक्य)",
+  SHORT: "Short Answer (लघु उत्तरीय प्रश्न)",
+  LONG: "Long Answer (दीर्घ उत्तरीय प्रश्न)",
+  CASE_STUDY: "Case Study / केस आधारित प्रश्न",
+  UNSEEN_PASSAGE: "Unseen passage / अपठित गद्यांश-काव्यांश",
+  REFERENCE_CONTEXT: "Reference to context / सन्दर्भ-प्रसंग व्याख्या",
+  WRITING_SKILL: "Writing skill / रचनात्मक लेखन",
+  GRAMMAR: "Grammar / व्याकरण",
+  DRAW: "Draw / diagram",
+  MAP_WORK: "Map work / मानचित्र कार्य",
+};
+
+export function getQuestionTypeLabel(
+  type?: string | null,
+  lang: "hi" | "en" | "bilingual" = "en"
+): string {
+  if (!type) return "";
+  if (lang === "hi") {
+    return QUESTION_TYPE_LABEL_HI[type] || QUESTION_TYPE_LABEL[type as QuestionType] || type;
+  }
+  if (lang === "bilingual") {
+    return QUESTION_TYPE_LABEL_BILINGUAL[type] || QUESTION_TYPE_LABEL[type as QuestionType] || type;
+  }
+  return QUESTION_TYPE_LABEL[type as QuestionType] || type;
+}
+
+export function detectPaperLanguage(
+  paper?: {
+    title?: string | null;
+    language?: string | null;
+    blueprint?: {
+      book?: { subject?: string | null; title?: string | null } | null;
+    } | null;
+  } | null,
+  items?: Array<{ question?: { text?: string | null; options?: string[] } | null }> | null
+): "hi" | "en" | "bilingual" {
+  if (paper?.language === "hi" || paper?.language === "bilingual") {
+    return paper.language;
+  }
+  const subject = (paper?.blueprint?.book?.subject || "").toLowerCase();
+  const bookTitle = (paper?.blueprint?.book?.title || "").toLowerCase();
+
+  if (
+    subject.includes("hindi") ||
+    subject.includes("हिंदी") ||
+    subject.includes("हिन्दी") ||
+    subject.includes("sanskrit") ||
+    subject.includes("संस्कृत") ||
+    bookTitle.includes("hindi") ||
+    bookTitle.includes("हिंदी") ||
+    bookTitle.includes("हिन्दी")
+  ) {
+    return "hi";
+  }
+
+  const devanagariRegex = /[\u0900-\u097F]/;
+  if (devanagariRegex.test(paper?.title || "") || devanagariRegex.test(paper?.blueprint?.book?.subject || "")) {
+    return "hi";
+  }
+
+  if (items && items.length > 0) {
+    let hindiCount = 0;
+    for (const it of items) {
+      if (it?.question?.text && devanagariRegex.test(it.question.text)) {
+        hindiCount++;
+      }
+    }
+    if (hindiCount > items.length * 0.4) {
+      return "hi";
+    }
+  }
+
+  return "en";
+}
+
+export function getSharedInstruction(
+  type?: string | null,
+  lang: "hi" | "en" | "bilingual" = "en"
+): string {
+  if (!type) return "";
+  if (type === "TRUE_FALSE") {
+    if (lang === "hi") return "निम्नलिखित कथनों को पढ़कर सही या गलत (सत्य / असत्य) लिखिए:";
+    if (lang === "bilingual") return "निम्नलिखित कथनों को पढ़कर सत्य या असत्य लिखिए / State whether the following statements are True or False:";
+    return "State whether the following statements are True or False:";
+  }
+  if (type === "FILL_BLANK") {
+    if (lang === "hi") return "निम्नलिखित रिक्त स्थानों की पूर्ति कीजिए:";
+    if (lang === "bilingual") return "रिक्त स्थानों की पूर्ति कीजिए / Fill in the blanks with appropriate words:";
+    return "Fill in the blanks with appropriate words:";
+  }
+  if (type === "MCQ") {
+    if (lang === "hi") return "सही विकल्प चुनकर लिखिए:";
+    if (lang === "bilingual") return "सही विकल्प चुनकर लिखिए / Choose and write the correct option:";
+    return "Choose and write the correct option:";
+  }
+  if (type === "MATCH_COLUMN") {
+    if (lang === "hi") return "स्तम्भ 'अ' का स्तम्भ 'ब' से सही मिलान कीजिए:";
+    if (lang === "bilingual") return "स्तम्भ 'अ' का स्तम्भ 'ब' से सही मिलान कीजिए / Match items in Column A with Column B:";
+    return "Match the items in Column A with Column B:";
+  }
+  if (type === "ASSERTION_REASON") {
+    if (lang === "hi") return "दिए गए अभिकथन (A) एवं तर्क (R) को ध्यानपूर्वक पढ़कर सही विकल्प का चयन कीजिए:";
+    if (lang === "bilingual") return "दिए गए अभिकथन एवं तर्क को पढ़कर सही विकल्प चुनिए / Read Assertion (A) and Reason (R) and choose the correct option:";
+    return "Read the given Assertion (A) and Reason (R) carefully and select the correct option:";
+  }
+  return "";
+}
+
+export function cleanQuestionStatement(text?: string | null, type?: string | null): string {
+  if (!text) return "";
+  let cleaned = text.trim();
+
+  // Strip leading question number prefixes like (a), a., 1., (1), i., (i)
+  cleaned = cleaned.replace(/^[\s\u200B]*(\([A-Za-z0-9ivxIVX\u0900-\u097F]{1,6}\)|(?:[A-Za-z]|\d{1,2}|[ivxIVX]{1,4}|[\u0900-\u097F]{1,2})\s*[.)\]:-])\s*/, "");
+
+  if (type === "TRUE_FALSE") {
+    // English True/False prefixes
+    cleaned = cleaned
+      .replace(/^(?:state\s+whether\s+(?:the\s+following\s+)?statement\s+is\s+true\s+or\s+false\s*[:.-]?\s*)/i, "")
+      .replace(/^(?:state\s+whether\s+(?:the\s+given\s+)?statement\s+is\s+true\s+or\s+false\s*[:.-]?\s*)/i, "")
+      .replace(/^(?:state\s+whether\s+true\s+or\s+false\s*[:.-]?\s*)/i, "")
+      .replace(/^(?:true\s+or\s+false\s*[:.-]?\s*)/i, "")
+      .replace(/^(?:is\s+the\s+following\s+statement\s+true\s+or\s+false\s*\??\s*[:.-]?\s*)/i, "")
+      // Hindi True/False prefixes
+      .replace(/^(?:बताइए\s+कि\s+निम्नलिखित\s+कथन\s+सत्य\s+है\s+या\s+असत्य\s*[:.-]?\s*)/i, "")
+      .replace(/^(?:कथन\s+सत्य\s+है\s+या\s+असत्य\s*(?:लिखिए|बताइए)?\s*[:.-]?\s*)/i, "")
+      .replace(/^(?:निम्नलिखित\s+कथनों\s+में\s+से\s+सत्य\s+या\s+असत्य\s*[:.-]?\s*)/i, "")
+      .replace(/^(?:सत्य\s*\/\s*असत्य\s*[:.-]?\s*)/i, "")
+      .replace(/^(?:सही\s*\/\s*गलत\s*[:.-]?\s*)/i, "");
+  } else if (type === "FILL_BLANK") {
+    // English Fill in the Blanks prefixes
+    cleaned = cleaned
+      .replace(/^(?:fill\s+in\s+the\s+blanks?(?:\s+with\s+appropriate\s+words?)?\s*[:.-]?\s*)/i, "")
+      .replace(/^(?:fill\s+the\s+blanks?\s*[:.-]?\s*)/i, "")
+      // Hindi Fill in the Blanks prefixes
+      .replace(/^(?:रिक्त\s+स्थान(?:ों)?\s+की\s+पूर्ति\s+कीजिए\s*[:.-]?\s*)/i, "")
+      .replace(/^(?:उचित\s+शब्द\s+द्वारा\s+रिक्त\s+स्थान\s+भरिए\s*[:.-]?\s*)/i, "");
+
+    // Normalize blank lines: 3 or more underscores into standard 8 underscores
+    cleaned = cleaned.replace(/_{3,}/g, "________");
+  } else if (type === "MCQ") {
+    cleaned = cleaned
+      .replace(/^(?:choose\s+the\s+correct\s+option\s*[:.-]?\s*)/i, "")
+      .replace(/^(?:select\s+the\s+correct\s+answer\s*[:.-]?\s*)/i, "")
+      .replace(/^(?:सही\s+विकल्प\s+चुनिए\s*[:.-]?\s*)/i, "")
+      .replace(/^(?:सही\s+विकल्प\s+चुनकर\s+लिखिए\s*[:.-]?\s*)/i, "");
+  }
+
+  return cleaned.trim();
+}
+
+export function formatMarksLabel(marks: number, lang: "hi" | "en" | "bilingual" = "en"): string {
+  if (lang === "hi") {
+    return `[${marks} अंक]`;
+  }
+  if (lang === "bilingual") {
+    return `[${marks} ${marks === 1 ? "Mark" : "Marks"} / अंक]`;
+  }
+  return `[${marks} ${marks === 1 ? "Mark" : "Marks"}]`;
+}
+
+export function formatExerciseFormula(count: number, marksEach: number, lang: "hi" | "en" | "bilingual" = "en"): string {
+  const total = count * marksEach;
+  if (lang === "hi") {
+    return `(${count} × ${marksEach} = ${total} अंक)`;
+  }
+  if (lang === "bilingual") {
+    return `(${count} × ${marksEach} = ${total} Marks / अंक)`;
+  }
+  return `(${count} × ${marksEach} = ${total} Marks)`;
+}
+
+export function getColumnLabels(lang: "hi" | "en" | "bilingual" = "en"): { colA: string; colB: string } {
+  if (lang === "hi") {
+    return { colA: "स्तम्भ 'अ'", colB: "स्तम्भ 'ब'" };
+  }
+  if (lang === "bilingual") {
+    return { colA: "स्तम्भ 'अ' (Column A)", colB: "स्तम्भ 'ब' (Column B)" };
+  }
+  return { colA: "Column A", colB: "Column B" };
+}
+
 export function isKindergartenType(type?: string | null): boolean {
   if (!type) return false;
   return (

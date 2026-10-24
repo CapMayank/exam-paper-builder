@@ -2,6 +2,8 @@ import { imageUrl } from "@/lib/client";
 import {
   cleanMatchItem,
   cleanOptionText,
+  formatMarksLabel,
+  getColumnLabels,
   getMatchColumnInstruction,
   isKindergartenType,
   isMcqLikeType,
@@ -33,6 +35,7 @@ function SingleQuestionBody({
   subpartIndex,
   isContinuation,
   isA5,
+  lang,
 }: {
   q: QuestionDto;
   number?: number;
@@ -44,6 +47,7 @@ function SingleQuestionBody({
   subpartIndex?: number;
   isContinuation?: boolean;
   isA5?: boolean;
+  lang?: "hi" | "en" | "bilingual";
 }) {
   const displayLabel = numberLabel ?? (number !== undefined ? `${number}.` : undefined);
   const optFontSize = isA5 ? "9.5pt" : "10pt";
@@ -52,6 +56,10 @@ function SingleQuestionBody({
   const metaFontSize = isA5 ? "8.5pt" : "9pt";
   const subpartMarginLeft = isA5 ? "6mm" : "7mm";
   const lineHeight = isA5 ? 1.35 : 1.45;
+
+  const hasHindi = /[\u0900-\u097F]/.test(q.text) || q.options.some((o) => /[\u0900-\u097F]/.test(o));
+  const effectiveLang: "hi" | "en" | "bilingual" = lang ?? (hasHindi ? "hi" : "en");
+  const colLabels = getColumnLabels(effectiveLang);
 
   if (renderMode === "SUBPART_ONLY") {
     const sp = q.subparts && subpartIndex !== undefined ? q.subparts[subpartIndex] : null;
@@ -108,7 +116,7 @@ function SingleQuestionBody({
             )}
             {showAnswer && sp.answer && (
               <div style={{ marginTop: "1mm", fontSize: isA5 ? "7.5pt" : "0.85em", color: "#166534" }}>
-                <span style={{ fontWeight: 600 }}>Answer:</span> <MathText text={sp.answer} />
+                <span style={{ fontWeight: 600 }}>{lang === "hi" ? "उत्तर:" : "Answer:"}</span> <MathText text={sp.answer} />
               </div>
             )}
           </div>
@@ -122,7 +130,7 @@ function SingleQuestionBody({
                 color: "#475569",
               }}
             >
-              [{sp.marks} Mark{sp.marks > 1 ? "s" : ""}]
+              {formatMarksLabel(sp.marks, lang ?? (hasHindi ? "hi" : "en"))}
             </div>
           )}
         </div>
@@ -161,7 +169,6 @@ function SingleQuestionBody({
   const normalizedMcq = isMcq ? normalizeMcqAnswer(q.answer, q.options) : null;
   const matchPairs = q.type === "MATCH_COLUMN" ? parseMatchColumnPairs(q.options, q.text, (q as any).explanation) : [];
   const stemText = q.type === "MATCH_COLUMN" && matchPairs.length > 0 ? getMatchColumnInstruction(q.text) : q.text;
-  const hasHindi = /[\u0900-\u097F]/.test(q.text) || q.options.some((o) => /[\u0900-\u097F]/.test(o));
 
   return (
     <div>
@@ -176,7 +183,7 @@ function SingleQuestionBody({
             <MathText text={stemText} />
             {marks !== undefined && marksStyle === "INLINE" && (
               <span style={{ fontWeight: 700, fontSize: marksFontSize, marginLeft: "2mm", whiteSpace: "nowrap", color: "#334155" }}>
-                [{marks} {marks === 1 ? "Mark" : "Marks"}]
+                {formatMarksLabel(marks, effectiveLang)}
               </span>
             )}
           </div>
@@ -218,10 +225,10 @@ function SingleQuestionBody({
                       fontWeight: 700,
                     }}
                   >
-                    {hasHindi ? "स्तम्भ 'अ' (Column A)" : "Column A"}
+                    {colLabels.colA}
                   </th>
                   <th style={{ textAlign: "left", padding: isA5 ? "0.8mm 2mm" : "1.2mm 2.5mm", width: "50%", fontWeight: 700 }}>
-                    {hasHindi ? "स्तम्भ 'ब' (Column B)" : "Column B"}
+                    {colLabels.colB}
                   </th>
                 </tr>
               </thead>
@@ -247,7 +254,11 @@ function SingleQuestionBody({
           )}
           {q.type === "TRUE_FALSE" && (
             <div style={{ marginTop: "1.5mm", fontStyle: "italic", fontSize: metaFontSize }}>
-              {hasHindi ? "(सही / गलत — True / False)" : "(True / False)"}
+              {effectiveLang === "hi"
+                ? "(सत्य / असत्य)"
+                : effectiveLang === "bilingual"
+                ? "(सही / गलत — True / False)"
+                : "(True / False)"}
             </div>
           )}
           {renderMode !== "STEM_ONLY" && q.subparts && q.subparts.length > 0 && (
@@ -343,6 +354,7 @@ export function QuestionView({
   subpartIndex,
   isContinuation,
   isA5,
+  lang,
 }: {
   q: QuestionDto;
   orQuestion?: QuestionDto | null;
@@ -356,6 +368,7 @@ export function QuestionView({
   subpartIndex?: number;
   isContinuation?: boolean;
   isA5?: boolean;
+  lang?: "hi" | "en" | "bilingual";
 }) {
   if (renderMode === "SUBPART_ONLY") {
     return (
@@ -371,6 +384,7 @@ export function QuestionView({
           subpartIndex={subpartIndex}
           isContinuation={isContinuation}
           isA5={isA5}
+          lang={lang}
         />
       </div>
     );
@@ -386,6 +400,10 @@ export function QuestionView({
     orQuestion?.type === "MAP_WORK";
   const hasLabel = numberLabel !== undefined || number !== undefined;
 
+  const hasHindi = /[\u0900-\u097F]/.test(q.text) || (orQuestion && /[\u0900-\u097F]/.test(orQuestion.text));
+  const effectiveLang: "hi" | "en" | "bilingual" = lang ?? (hasHindi ? "hi" : "en");
+  const orSeparator = effectiveLang === "hi" ? "— अथवा —" : effectiveLang === "bilingual" ? "— OR / अथवा —" : "— OR —";
+
   return (
     <div style={{ breakInside: "avoid", pageBreakInside: "avoid" }}>
       <SingleQuestionBody
@@ -397,6 +415,7 @@ export function QuestionView({
         showAnswer={showAnswer}
         renderMode={renderMode}
         isA5={isA5}
+        lang={lang}
       />
 
       {orQuestion && (
@@ -411,9 +430,9 @@ export function QuestionView({
               color: "#333",
             }}
           >
-            — OR / अथवा —
+            {orSeparator}
           </div>
-          <SingleQuestionBody q={orQuestion} showAnswer={showAnswer} marksStyle={marksStyle} isA5={isA5} />
+          <SingleQuestionBody q={orQuestion} showAnswer={showAnswer} marksStyle={marksStyle} isA5={isA5} lang={lang} />
         </div>
       )}
 

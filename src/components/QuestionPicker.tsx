@@ -11,6 +11,7 @@ import { api } from "@/lib/client";
 import {
   cleanMatchItem,
   cleanOptionText,
+  detectPaperLanguage,
   DIFFICULTIES,
   getMatchColumnInstruction,
   isKindergartenType,
@@ -67,7 +68,7 @@ export function QuestionPicker({
   const [aiChapterId, setAiChapterId] = useState<string>("");
   const [aiDifficulty, setAiDifficulty] = useState<"EASY" | "MEDIUM" | "HARD">("MEDIUM");
   const [aiCognitiveLevel, setAiCognitiveLevel] = useState<string>("APPLYING");
-  const [aiLanguage, setAiLanguage] = useState<"en" | "hi" | "bilingual">("en");
+  const [aiLanguage, setAiLanguage] = useState<"en" | "hi" | "bilingual">(() => detectPaperLanguage(paper, paper.items));
   const [aiTopicContext, setAiTopicContext] = useState<string>("");
   const [aiBusy, setAiBusy] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);

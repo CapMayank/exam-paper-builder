@@ -203,6 +203,8 @@ describe("Audit Defect Fixes Regression Test Suite (DEF-01 to DEF-15)", () => {
           showGrid: false,
           chapter: { id: "c1", number: 5, title: "Periodic Table" } as any,
           subparts: [],
+          imagePath: null,
+          createdAt: new Date().toISOString(),
         },
       ];
 

@@ -1,23 +1,23 @@
 # Graph Report - exam-paper-builder  (2026-10-24)
 
 ## Corpus Check
-- 243 files · ~348,049 words
+- 244 files · ~351,041 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 6 file(s) not represented in the graph (top: (none) 3, .prisma 1, .ico 1)
 
 ## Summary
-- 1463 nodes · 5338 edges · 62 communities (58 shown, 4 thin omitted)
+- 1473 nodes · 5400 edges · 57 communities (53 shown, 4 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 46 edges (avg confidence: 0.88)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `a00ee79a`
+- Built from commit: `684bb6ee`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - kindergarten/types.ts
-- diagram-search.ts
+- register/route.ts
 - paperImport.ts
 - batchQuestionIo.ts
 - FigureStudio.tsx
@@ -31,7 +31,7 @@
 - time
 - classes/route.ts
 - BlueprintImportModal.tsx
-- BlueprintEditorPage
+- blueprints/[id]/page.tsx
 - gemini.ts
 - logic.test.ts
 - HttpError
@@ -39,11 +39,11 @@
 - render.ts
 - devDependencies
 - hitTest
-- blueprints/page.tsx
-- api
+- classes/page.tsx
+- api.ts
 - AppShell.tsx
-- lib/types.ts
-- exam-cell/page.tsx
+- ErrorBanner
+- books/page.tsx
 - PaperSheets.tsx
 - compilerOptions
 - dependencies
@@ -55,28 +55,23 @@
 - api.ts
 - studio.test.ts
 - text.ts
-- blueprint.ts
-- print-logistics.ts
-- ui.tsx
+- audit-paper/route.ts
+- lib/types.ts
 - math.ts
-- m1-rbac-adversarial-stress.test.ts
+- body
 - export-docx/route.ts
-- blueprintExport.ts
 - eslint.config.mjs
-- teacher-audit-fixes.test.ts
-- BlueprintImportModal
 - README.md
 - toQuestionDto
 - AGENTS.md
 - deploy.sh
-- papers/[id]/page.tsx
+- api
 - parseMatchColumnPairs
 - constants.ts
-- papers/[id]/page.tsx
+- blueprints/page.tsx
 - blueprints/[id]/page.tsx
-- Project: Sarvodaya School Examination Portal — Production Business Logic
 - seed-kindergarten.mjs
-- PaperBuilderPage
+- papers/[id]/page.tsx
 
 ## God Nodes (most connected - your core abstractions)
 1. `HttpError` - 129 edges
@@ -105,23 +100,23 @@
 ## Import Cycles
 - None detected.
 
-## Communities (62 total, 4 thin omitted)
+## Communities (57 total, 4 thin omitted)
 
 ### Community 0 - "kindergarten/types.ts"
-Cohesion: 0.06
-Nodes (50): attach(), uploadImage(), CircleTargetEditor(), circleTargetPlugin, CircleTargetPrint(), CountItemsEditor(), countItemsPlugin, CountItemsPrint() (+42 more)
+Cohesion: 0.07
+Nodes (48): react, CircleTargetEditor(), circleTargetPlugin, CircleTargetPrint(), CountItemsEditor(), countItemsPlugin, CountItemsPrint(), numberGridPlugin (+40 more)
 
-### Community 1 - "diagram-search.ts"
-Cohesion: 0.08
-Nodes (28): prisma, UPLOAD_DIR, GET, POST, POST, GET, TYPE_BY_EXT, EXT_BY_TYPE (+20 more)
+### Community 1 - "register/route.ts"
+Cohesion: 0.24
+Nodes (11): POST, POST, codeMatches(), POST, endSession(), parseRawSessionCookie(), secret(), sessionUserId() (+3 more)
 
 ### Community 2 - "paperImport.ts"
-Cohesion: 0.15
-Nodes (26): POST, inferExamTypeFromText(), BlueprintSectionCandidate, ChapterVerificationResult, getQuestionTypeTier(), ImportedPaperQuestion, ImportedPaperSection, ImportedPaperSubpart (+18 more)
+Cohesion: 0.11
+Nodes (32): POST, AIBlueprintModalProps, PaperImportModal(), PaperImportModalProps, inferExamTypeFromText(), resolvePaperExamType(), BlueprintSectionCandidate, ChapterVerificationResult (+24 more)
 
 ### Community 3 - "batchQuestionIo.ts"
-Cohesion: 0.06
-Nodes (59): RFC-4180, assert(), runServerChecks(), MultiSetGeneratorModal(), QuestionDuplicateModalProps, BatchImportError, BatchImportOptions, BatchImportReport (+51 more)
+Cohesion: 0.07
+Nodes (52): RFC-4180, assert(), runServerChecks(), MultiSetGeneratorModal(), QuestionDuplicateModalProps, BatchImportError, BatchImportOptions, BatchImportReport (+44 more)
 
 ### Community 4 - "FigureStudio.tsx"
 Cohesion: 0.08
@@ -136,56 +131,56 @@ Cohesion: 0.15
 Nodes (12): name, private, version, prisma, react-dom, tailwindcss, @tailwindcss/turbopack, @types/katex (+4 more)
 
 ### Community 7 - "schemas.ts"
-Cohesion: 0.07
-Nodes (30): server-only, POST, GET, POST, GET, POST, GET, PATCH (+22 more)
+Cohesion: 0.09
+Nodes (24): AuditAction, addItemSchema, changePasswordSchema, classSectionInputSchema, classSubjectSchema, combineBooksSchema, editPaperItemSchema, loginSchema (+16 more)
 
 ### Community 8 - "dto.ts"
-Cohesion: 0.14
-Nodes (26): @prisma/client, DEFAULT_MARKS_STYLE, DEFAULT_NUMBERING_STYLE, DEFAULT_PRINT_DENSITY, MARKS_STYLES, MarksStyle, NUMBERING_STYLES, PRINT_DENSITIES (+18 more)
+Cohesion: 0.15
+Nodes (24): @prisma/client, DEFAULT_MARKS_STYLE, DEFAULT_NUMBERING_STYLE, DEFAULT_PRINT_DENSITY, MARKS_STYLES, NUMBERING_STYLES, PRINT_DENSITIES, QUESTION_TYPES (+16 more)
 
 ### Community 9 - "syllabusImport.ts"
 Cohesion: 0.11
-Nodes (29): POST, openBookDialog(), EditableChapter, SyllabusImportModal(), handleAiScan(), handleImport(), STANDARD_CURRICULUM_PRESETS, rolloverBlueprintsSchema (+21 more)
+Nodes (34): POST, openBookDialog(), EditableBook, EditableChapter, ImportFormat, SAMPLE_JSON, SyllabusImportModal(), handleAiScan() (+26 more)
 
 ### Community 10 - "vitest"
-Cohesion: 0.27
-Nodes (13): M3 (Question Exhaustion Tagging), vitest, CATEGORY_STYLES, CompactExamTagInfo, CurrentPaperContext, ExamCategory, findFreshnessConflicts(), isExhaustedUsage() (+5 more)
+Cohesion: 0.15
+Nodes (20): Architecture, Code Layout, Interface Contracts, M1 (RBAC & Ownership), M3 (Question Exhaustion Tagging), Milestones, Project: Sarvodaya School Examination Portal — Production Business Logic, vitest (+12 more)
 
 ### Community 11 - "prisma.ts"
-Cohesion: 0.13
-Nodes (39): auditSchema, POST, POST, POST, POST, POST, POST, POST (+31 more)
+Cohesion: 0.23
+Nodes (22): POST, POST, POST, POST, DELETE, editableItem(), PATCH, PUT (+14 more)
 
 ### Community 12 - "time"
 Cohesion: 0.18
 Nodes (20): generate_session_cookie(), run_e2e_tests(), generate_session_cookie(), run_visual_verification(), generate_session_cookie(), run_flow_test(), generate_session_cookie(), run_complete_board_flow() (+12 more)
 
 ### Community 13 - "classes/route.ts"
-Cohesion: 0.24
-Nodes (18): POST, GET, POST, PATCH, GET, POST, postClassUnionSchema, ensureClassAndSubject() (+10 more)
+Cohesion: 0.35
+Nodes (14): PATCH, GET, POST, postClassUnionSchema, ensureClassAndSubject(), normalizeAcademicSession(), normalizeSectionDetails(), syncClassesFromBooks() (+6 more)
 
 ### Community 14 - "BlueprintImportModal.tsx"
-Cohesion: 0.22
-Nodes (17): BlueprintImportModalProps, BlueprintImportData, BlueprintImportResult, ImportedChapterQuota, ImportedSection, matchChaptersToBook(), normalizeExamType(), normalizeQuestionType() (+9 more)
+Cohesion: 0.16
+Nodes (20): BlueprintImportModal(), copyExample(), downloadSampleFile(), getTemplateContent(), BlueprintImportModalProps, BlueprintImportData, BlueprintImportResult, ImportedChapterQuota (+12 more)
 
-### Community 15 - "BlueprintEditorPage"
-Cohesion: 0.17
-Nodes (10): BlueprintEditorPage(), addQuestionTypeToGroup(), addSectionGroup(), moveSectionGroup(), removeSectionGroup(), save(), newQuestionType(), newSectionGroup() (+2 more)
+### Community 15 - "blueprints/[id]/page.tsx"
+Cohesion: 0.10
+Nodes (33): BlueprintEditorPage(), addQuestionTypeToGroup(), addSectionGroup(), handleImportedBlueprint(), moveSectionGroup(), removeSectionGroup(), save(), newQuestionType() (+25 more)
 
 ### Community 16 - "gemini.ts"
-Cohesion: 0.09
-Nodes (30): improveSchema, POST, parseSchema, POST, figureSchema, POST, GET, getMaxPaperDiagramBudget() (+22 more)
+Cohesion: 0.05
+Nodes (55): prisma, UPLOAD_DIR, improveSchema, POST, parseSchema, POST, figureSchema, POST (+47 more)
 
 ### Community 17 - "logic.test.ts"
-Cohesion: 0.20
-Nodes (12): autoFillPaper(), solve(), AutoFillResult, CandidateQuestion, getItemMarks(), getItemUnits(), Slot, BlueprintDef (+4 more)
+Cohesion: 0.17
+Nodes (15): autoFillPaper(), solve(), AutoFillResult, CandidateQuestion, getItemMarks(), getItemUnits(), Slot, BlueprintDef (+7 more)
 
 ### Community 18 - "HttpError"
-Cohesion: 0.08
-Nodes (48): bcryptjs, zod, generateSchema, POST, parseBlueprintSchema, POST, GET, POST (+40 more)
+Cohesion: 0.12
+Nodes (20): parseBlueprintSchema, POST, GET, POST, DELETE, GET, PATCH, DELETE (+12 more)
 
 ### Community 19 - "QuestionForm.tsx"
-Cohesion: 0.12
-Nodes (32): OmrSheetPage(), getMarksRubric(), QuestionSolutionItem(), SolutionsPage(), DiagramSearchModal(), DiagramSearchModalProps, DEFAULT_ASSERTION_OPTIONS_EN, DEFAULT_ASSERTION_OPTIONS_HI (+24 more)
+Cohesion: 0.15
+Nodes (15): AIQuestionImproverModal(), MathToolbar(), DEFAULT_ASSERTION_OPTIONS_EN, DEFAULT_ASSERTION_OPTIONS_HI, DEFAULT_SPACE, getDefaultSubpartsForType(), getSubpartLabel(), QuestionForm() (+7 more)
 
 ### Community 20 - "render.ts"
 Cohesion: 0.19
@@ -199,29 +194,29 @@ Nodes (12): devDependencies, eslint, eslint-config-next, prisma, tailwindcss, @t
 Cohesion: 0.13
 Nodes (24): axesLayout(), boxToWorld(), clamp(), constrainAngle(), deg(), dist(), distToPolyline(), distToSeg() (+16 more)
 
-### Community 23 - "blueprints/page.tsx"
-Cohesion: 0.10
-Nodes (35): BlueprintsPage(), subjectMatches(), BooksPage(), removeBook(), removeChapter(), run(), saveBook(), saveChapter() (+27 more)
+### Community 23 - "classes/page.tsx"
+Cohesion: 0.11
+Nodes (24): ClassesHierarchyPage(), addMissingStandardSubjects(), addSectionToClass(), deleteClass(), deleteSubject(), removeSectionFromClass(), saveClass(), saveSubject() (+16 more)
 
-### Community 24 - "api"
-Cohesion: 0.09
-Nodes (31): ClassesHierarchyPage(), addMissingStandardSubjects(), addSectionToClass(), deleteClass(), deleteSubject(), removeSectionFromClass(), saveClass(), saveSubject() (+23 more)
+### Community 24 - "api.ts"
+Cohesion: 0.10
+Nodes (33): zod, POST, generateSchema, GET, POST, GET, POST, DELETE (+25 more)
 
 ### Community 25 - "AppShell.tsx"
-Cohesion: 0.14
-Nodes (14): AppLayout(), LoginPage(), submit(), AcademicSessionSelector(), handleAddCustom(), AppShell(), signOut(), UserCard() (+6 more)
-
-### Community 26 - "lib/types.ts"
-Cohesion: 0.15
-Nodes (12): SessionSlot, TimetableStatus, UserRole, AuditLogEntry, BlueprintData, ClassSubjectDto, ExamTimetableItem, PaperSnapshot (+4 more)
-
-### Community 27 - "exam-cell/page.tsx"
 Cohesion: 0.16
-Nodes (24): M1 (RBAC & Ownership), UsersAdminPage(), remove(), ExamCellPage(), getSectionsForClass(), Tab, DashboardPage(), Data (+16 more)
+Nodes (15): AppLayout(), AcademicSessionSelector(), handleAddCustom(), AppShell(), signOut(), isActive(), NAV, NavList() (+7 more)
+
+### Community 26 - "ErrorBanner"
+Cohesion: 0.31
+Nodes (9): UsersAdminPage(), ErrorBanner(), SuccessBanner(), DetailedProfile, UserProfileModal(), USER_ROLE_LABEL, USER_ROLES, UserRole (+1 more)
+
+### Community 27 - "books/page.tsx"
+Cohesion: 0.15
+Nodes (22): nextConfig, next, BooksPage(), removeBook(), removeChapter(), run(), saveBook(), saveChapter() (+14 more)
 
 ### Community 28 - "PaperSheets.tsx"
-Cohesion: 0.22
-Nodes (15): PrintPage(), BlankPage(), Block, buildBlocks(), extractSectionLetter(), Page(), PaperSheets(), renderBlock() (+7 more)
+Cohesion: 0.27
+Nodes (11): PrintPage(), BlankPage(), Block, Page(), PaperSheets(), renderBlock(), SheetsInfo, isBookletLayout() (+3 more)
 
 ### Community 29 - "compilerOptions"
 Cohesion: 0.11
@@ -236,24 +231,24 @@ Cohesion: 0.20
 Nodes (7): katex, deva, heading, metadata, noto, ui, viewport
 
 ### Community 32 - "subpartsTotalMarks"
-Cohesion: 0.22
-Nodes (7): getEffectiveQuestionMarks(), ReassignmentResult, ReconcileBlueprintOutput, reconcileBlueprintQuestions(), ReconcileChapterInput, ReconcileItemInput, ReconcileSectionInput
+Cohesion: 0.21
+Nodes (7): POST, ReassignmentResult, ReconcileBlueprintOutput, reconcileBlueprintQuestions(), ReconcileChapterInput, ReconcileItemInput, ReconcileSectionInput
 
 ### Community 33 - "scripts"
 Cohesion: 0.29
 Nodes (7): scripts, build, dev, lint, seed, start, test
 
 ### Community 34 - "paperAutogen.ts"
-Cohesion: 0.40
-Nodes (4): PaperAutogenInput, PaperAutogenPlan, PaperAutogenSectionPlan, PaperAutogenSlot
+Cohesion: 0.38
+Nodes (5): PaperAutogenInput, PaperAutogenPlan, PaperAutogenSectionPlan, PaperAutogenSlot, planPaperSlotAssignments()
 
 ### Community 35 - "e2e.mjs"
 Cohesion: 0.14
 Nodes (14): add(), call(), fd, forkedItem, itemToReplace, mk(), notImg, origQ (+6 more)
 
 ### Community 36 - "api.ts"
-Cohesion: 0.28
-Nodes (11): DELETE, GET, PUT, GET, POST, diagnosePaperImplications(), assertBlueprintValid(), blueprintInclude (+3 more)
+Cohesion: 0.20
+Nodes (15): server-only, DELETE, GET, PUT, GET, POST, diagnosePaperImplications(), assertBlueprintValid() (+7 more)
 
 ### Community 37 - "studio.test.ts"
 Cohesion: 0.18
@@ -263,101 +258,81 @@ Nodes (12): rotateAround(), snapPoint(), crc32(), crcTable, embedSceneInPng(), e
 Cohesion: 0.17
 Nodes (13): textBoxSize(), cssVar(), fontCss(), fontStack(), layoutText(), Measurer, measureWidth(), setMeasurer() (+5 more)
 
-### Community 39 - "blueprint.ts"
-Cohesion: 0.17
-Nodes (13): handleImportedBlueprint(), ChapterQuota, DiagnosticItem, flattenSectionGroups(), getItemMarks(), getItemUnits(), groupSectionsFromFlat(), PaperImplication (+5 more)
+### Community 39 - "audit-paper/route.ts"
+Cohesion: 0.67
+Nodes (3): auditSchema, POST, auditPaperWithGemini()
 
-### Community 40 - "print-logistics.ts"
-Cohesion: 0.33
-Nodes (9): calculatePrintLogistics(), calculateSheetsPerCopy(), distributeSetsEvenly(), generatePackagingSlips(), getSectionsForClass(), PrintLogisticsMetrics, SectionPackagingSlip, ClassSectionInput (+1 more)
-
-### Community 41 - "ui.tsx"
+### Community 40 - "lib/types.ts"
 Cohesion: 0.12
-Nodes (16): COMMON_FORMULA_SNIPPETS, FormulaSnippet, InstructionPreset, STANDARD_INSTRUCTION_PRESETS, SubjectWorkspaceDrawerProps, ConfirmContext, ConfirmOptions, FALLBACK_TOAST (+8 more)
+Nodes (26): M2 (Section Enrollment & Print Logistics), getSectionsForClass(), Tab, PaperImplication, SessionSlot, TimetableStatus, calculatePrintLogistics(), calculateSheetsPerCopy() (+18 more)
 
 ### Community 42 - "math.ts"
 Cohesion: 0.21
 Nodes (16): splitOutsideMath(), cleanLatexToUnicode(), convertNaturalMathToTex(), ExtractedTableResult, extractTableFromText(), findMatchingBrace(), INLINE_PATTERNS, INLINE_REGEX (+8 more)
 
-### Community 43 - "m1-rbac-adversarial-stress.test.ts"
-Cohesion: 0.20
-Nodes (14): Feature Inventory, POST, DELETE, DELETE, PATCH, PUT, DELETE, PATCH (+6 more)
+### Community 43 - "body"
+Cohesion: 0.11
+Nodes (23): bcryptjs, POST, POST, POST, GET, POST, DELETE, POST (+15 more)
 
 ### Community 44 - "export-docx/route.ts"
-Cohesion: 0.39
-Nodes (10): docx, buildPaperDocx(), GET, renderQuestionOptions(), renderQuestionTextWithTable(), renderSubpartsDocx(), formatQuestionNumber(), DocxTextStyle (+2 more)
-
-### Community 45 - "blueprintExport.ts"
-Cohesion: 0.44
-Nodes (8): BlueprintJsonModal(), BlueprintJsonModalProps, BlueprintWithExportRelations, downloadBlueprintJson(), exportBlueprintToJsonObject(), exportBlueprintToJsonString(), ExportedBlueprintJson, getBlueprintJsonFilename()
+Cohesion: 0.23
+Nodes (19): docx, buildPaperDocx(), GET, renderQuestionOptions(), renderQuestionTextWithTable(), renderSubpartsDocx(), buildBlocks(), extractSectionLetter() (+11 more)
 
 ### Community 46 - "eslint.config.mjs"
 Cohesion: 0.50
 Nodes (3): eslintConfig, eslint, eslint-config-next
-
-### Community 47 - "teacher-audit-fixes.test.ts"
-Cohesion: 0.33
-Nodes (5): PaperPreflightModal(), PaperPreflightModalProps, PreflightIssue, PreflightReport, validatePaperPreflight()
-
-### Community 48 - "BlueprintImportModal"
-Cohesion: 0.47
-Nodes (4): BlueprintImportModal(), copyExample(), downloadSampleFile(), getTemplateContent()
 
 ### Community 49 - "README.md"
 Cohesion: 0.50
 Nodes (3): Deploy on Vercel, Getting Started, Learn More
 
 ### Community 50 - "toQuestionDto"
-Cohesion: 0.15
-Nodes (13): GET, GET, bulkRequestSchema, legacyBulkSchema, modernBulkSchema, POST, GET, GET (+5 more)
+Cohesion: 0.20
+Nodes (13): Feature Inventory, GET, GET, DELETE, GET, PATCH, PUT, GET (+5 more)
 
-### Community 54 - "papers/[id]/page.tsx"
-Cohesion: 0.07
-Nodes (27): AIPaperAuditModal(), AIPaperAuditModalProps, AIPaperGeneratorModalProps, AIQuestionGeneratorModal(), AIQuestionGeneratorModalProps, GeneratedQuestionPayload, TabMode, AIQuestionImproverModal() (+19 more)
+### Community 54 - "api"
+Cohesion: 0.05
+Nodes (51): lucide-react, QuestionExportModal(), QuestionImportModal(), handleFileChange(), validateContent(), QuestionsPage(), handleBulkDelete(), handleBulkUpdateDifficulty() (+43 more)
 
 ### Community 55 - "parseMatchColumnPairs"
-Cohesion: 0.25
-Nodes (19): AIPaperGeneratorModal(), QuestionPicker(), add(), handleAcceptAiQuestion(), handleEditAiQuestion(), SectionAiModal(), handleCommit(), cleanMatchItem() (+11 more)
+Cohesion: 0.14
+Nodes (34): getMarksRubric(), QuestionSolutionItem(), SolutionsPage(), MathText(), submit(), QuestionPicker(), add(), handleAcceptAiQuestion() (+26 more)
 
 ### Community 56 - "constants.ts"
-Cohesion: 0.12
-Nodes (16): AcademicSession, DerangedMatchColumnResult, KINDERGARTEN_QUESTION_TYPES, MARKS_STYLE_LABEL, NUMBERING_STYLE_LABEL, PRINT_DENSITY_LABEL, SCHOOL_DISPLAY_NAME, SCHOOL_ESTABLISHED (+8 more)
+Cohesion: 0.08
+Nodes (25): AcademicSession, DerangedMatchColumnResult, KINDERGARTEN_QUESTION_TYPES, Layout, MARKS_STYLE_LABEL, MatchColumnPair, MAX_OPTIONS, MIN_OPTIONS (+17 more)
 
-### Community 57 - "papers/[id]/page.tsx"
-Cohesion: 0.10
-Nodes (31): nextConfig, lucide-react, next, react, Filter, AcademicSessionSelectorProps, AIBlueprintModalProps, ChapterDraft (+23 more)
+### Community 57 - "blueprints/page.tsx"
+Cohesion: 0.12
+Nodes (22): BlueprintsPage(), remove(), subjectMatches(), Filter, PapersPage(), handleBatchDelete(), handleBatchFinalize(), remove() (+14 more)
 
 ### Community 59 - "blueprints/[id]/page.tsx"
-Cohesion: 0.42
-Nodes (6): BlueprintTemplateModal(), BlueprintTemplateModalProps, QUESTION_TYPE_LABEL, BlueprintTemplate, BlueprintTemplateSectionGroup, STANDARD_BLUEPRINT_TEMPLATES
+Cohesion: 0.43
+Nodes (5): BlueprintTemplateModal(), BlueprintTemplateModalProps, BlueprintTemplate, BlueprintTemplateSectionGroup, STANDARD_BLUEPRINT_TEMPLATES
 
-### Community 60 - "Project: Sarvodaya School Examination Portal — Production Business Logic"
-Cohesion: 0.25
-Nodes (7): Architecture, Code Layout, Interface Contracts, M2 (Section Enrollment & Print Logistics), Milestones, Project: Sarvodaya School Examination Portal — Production Business Logic, SectionDetail
-
-### Community 62 - "PaperBuilderPage"
-Cohesion: 0.18
-Nodes (3): Bar(), PaperBuilderPage(), handleAutofill()
+### Community 62 - "papers/[id]/page.tsx"
+Cohesion: 0.09
+Nodes (29): Bar(), PaperBuilderPage(), handleAutofill(), OmrSheetPage(), AIPaperGeneratorModal(), AIPaperGeneratorModalProps, DiagramSearchModal(), DiagramSearchModalProps (+21 more)
 
 ## Knowledge Gaps
 - **9 isolated node(s):** `@tailwindcss/turbopack`, `@types/katex`, `@types/node`, `@types/react`, `@types/react-dom` (+4 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 381 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 383 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **4 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `react` connect `papers/[id]/page.tsx` to `kindergarten/types.ts`, `FigureStudio.tsx`, `package.json`, `exam-cell/page.tsx`, `ui.tsx`, `blueprintExport.ts`, `BlueprintImportModal.tsx`, `teacher-audit-fixes.test.ts`, `QuestionForm.tsx`, `parseMatchColumnPairs`, `papers/[id]/page.tsx`, `blueprints/page.tsx`, `api`, `AppShell.tsx`, `blueprints/[id]/page.tsx`, `PaperSheets.tsx`?**
-  _High betweenness centrality (0.085) - this node is a cross-community bridge._
+- **Why does `react` connect `kindergarten/types.ts` to `paperImport.ts`, `FigureStudio.tsx`, `package.json`, `lib/types.ts`, `blueprints/[id]/page.tsx`, `syllabusImport.ts`, `BlueprintImportModal.tsx`, `blueprints/[id]/page.tsx`, `QuestionForm.tsx`, `AppShell.tsx`, `parseMatchColumnPairs`, `api`, `classes/page.tsx`, `blueprints/page.tsx`, `ErrorBanner`, `books/page.tsx`, `PaperSheets.tsx`, `papers/[id]/page.tsx`?**
+  _High betweenness centrality (0.079) - this node is a cross-community bridge._
 - **What connects `@tailwindcss/turbopack`, `@types/katex`, `@types/node` to the rest of the system?**
   _9 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `kindergarten/types.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.06354642313546423 - nodes in this community are weakly interconnected._
-- **Why does `api()` connect `api` to `exam-cell/page.tsx`, `syllabusImport.ts`, `BlueprintImportModal.tsx`, `BlueprintEditorPage`, `BlueprintImportModal`, `QuestionForm.tsx`, `AppShell.tsx`, `parseMatchColumnPairs`, `papers/[id]/page.tsx`, `blueprints/page.tsx`, `papers/[id]/page.tsx`, `blueprints/[id]/page.tsx`, `PaperSheets.tsx`, `PaperBuilderPage`?**
-  _High betweenness centrality (0.051) - this node is a cross-community bridge._
-- **Should `diagram-search.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.08350951374207188 - nodes in this community are weakly interconnected._
-- **Why does `lucide-react` connect `papers/[id]/page.tsx` to `kindergarten/types.ts`, `FigureStudio.tsx`, `package.json`, `exam-cell/page.tsx`, `ui.tsx`, `vitest`, `blueprintExport.ts`, `BlueprintImportModal.tsx`, `teacher-audit-fixes.test.ts`, `QuestionForm.tsx`, `parseMatchColumnPairs`, `papers/[id]/page.tsx`, `blueprints/page.tsx`, `api`, `AppShell.tsx`, `blueprints/[id]/page.tsx`?**
-  _High betweenness centrality (0.050) - this node is a cross-community bridge._
+  _Cohesion score 0.07002012072434607 - nodes in this community are weakly interconnected._
+- **Why does `lucide-react` connect `api` to `kindergarten/types.ts`, `paperImport.ts`, `FigureStudio.tsx`, `package.json`, `syllabusImport.ts`, `vitest`, `BlueprintImportModal.tsx`, `blueprints/[id]/page.tsx`, `QuestionForm.tsx`, `classes/page.tsx`, `AppShell.tsx`, `ErrorBanner`, `books/page.tsx`, `PaperSheets.tsx`, `lib/types.ts`, `parseMatchColumnPairs`, `blueprints/page.tsx`, `blueprints/[id]/page.tsx`, `papers/[id]/page.tsx`?**
+  _High betweenness centrality (0.048) - this node is a cross-community bridge._
+- **Should `paperImport.ts` be split into smaller, more focused modules?**
+  _Cohesion score 0.10963455149501661 - nodes in this community are weakly interconnected._
+- **Why does `vitest` connect `vitest` to `paperImport.ts`, `batchQuestionIo.ts`, `package.json`, `schemas.ts`, `dto.ts`, `syllabusImport.ts`, `prisma.ts`, `classes/route.ts`, `BlueprintImportModal.tsx`, `blueprints/[id]/page.tsx`, `gemini.ts`, `logic.test.ts`, `HttpError`, `QuestionForm.tsx`, `subpartsTotalMarks`, `paperAutogen.ts`, `studio.test.ts`, `lib/types.ts`, `math.ts`, `body`, `export-docx/route.ts`, `parseMatchColumnPairs`, `blueprints/[id]/page.tsx`?**
+  _High betweenness centrality (0.044) - this node is a cross-community bridge._
 - **Should `batchQuestionIo.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.05765765765765766 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.06558118498417007 - nodes in this community are weakly interconnected._

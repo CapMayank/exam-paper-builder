@@ -22,10 +22,17 @@ import { extractTableFromText } from "@/lib/math";
 import {
   cleanMatchItem,
   cleanOptionText,
+  cleanQuestionStatement,
   DEFAULT_SCHOOL_NAME,
+  detectPaperLanguage,
   EXAM_TYPE_LABEL,
+  formatExerciseFormula,
+  formatMarksLabel,
   formatQuestionNumber,
+  getColumnLabels,
   getMatchColumnInstruction,
+  getQuestionTypeLabel,
+  getSharedInstruction,
   isMcqLikeType,
   parseMatchColumnPairs,
   QUESTION_TYPE_LABEL,
@@ -148,7 +155,9 @@ function renderQuestionTextWithTable(
   isMatch: boolean,
   pageBreakBefore: boolean,
   paragraphs: (Paragraph | Table)[],
+  lang: "hi" | "en" | "bilingual" = "en",
 ) {
+  const marksText = `  ${formatMarksLabel(qTotalMarks, lang)}`;
   const tableData = !isMatch ? extractTableFromText(qText) : null;
   if (tableData && tableData.table) {
     paragraphs.push(
@@ -158,7 +167,7 @@ function renderQuestionTextWithTable(
         children: [
           new TextRun({ text: `${qLabel}  `, bold: true, font: "Times New Roman" }),
           ...formatMathTextRuns(tableData.prefixText, { font: "Times New Roman" }),
-          new TextRun({ text: `  [${qTotalMarks} Mark${qTotalMarks > 1 ? "s" : ""}]`, bold: true, font: "Times New Roman" }),
+          new TextRun({ text: marksText, bold: true, font: "Times New Roman" }),
         ],
       }),
     );
@@ -229,7 +238,7 @@ function renderQuestionTextWithTable(
         children: [
           new TextRun({ text: `${qLabel}  `, bold: true, font: "Times New Roman" }),
           ...formatMathTextRuns(qText, { font: "Times New Roman" }),
-          new TextRun({ text: `  [${qTotalMarks} Mark${qTotalMarks > 1 ? "s" : ""}]`, bold: true, font: "Times New Roman" }),
+          new TextRun({ text: marksText, bold: true, font: "Times New Roman" }),
         ],
       }),
     );
@@ -262,6 +271,10 @@ export async function buildPaperDocx(
   });
 
   if (!paper) throw new HttpError(404, "Paper not found");
+
+  const paperLang = detectPaperLanguage(paper, paper.items);
+  const isHindi = paperLang === "hi";
+  const colLabels = getColumnLabels(paperLang);
 
   const totalMarks = paper.blueprint.sections.reduce((sum, s) => sum + s.count * s.marksEach, 0);
   const examType = resolvePaperExamType(paper);
@@ -412,7 +425,18 @@ export async function buildPaperDocx(
     paragraphs.push(
       new Paragraph({
         spacing: { before: 200, after: 60 },
-        children: [new TextRun({ text: "General Instructions:", bold: true, italics: true, font: "Times New Roman" })],
+        children: [
+          new TextRun({
+            text: isHindi
+              ? "सामान्य निर्देश:"
+              : paperLang === "bilingual"
+              ? "General Instructions / सामान्य निर्देश:"
+              : "General Instructions:",
+            bold: true,
+            italics: true,
+            font: "Times New Roman",
+          }),
+        ],
       }),
       new Paragraph({
         spacing: { after: 200 },
@@ -456,6 +480,12 @@ export async function buildPaperDocx(
       const groupCount = allInGroup.reduce((sum, s) => sum + s.count, 0);
       const groupMarks = allInGroup.reduce((sum, s) => sum + s.count * s.marksEach, 0);
 
+      const groupRightLabel = isHindi
+        ? `${groupCount} प्रश्न · ${groupMarks} अंक`
+        : paperLang === "bilingual"
+        ? `${groupCount} Questions / प्रश्न · ${groupMarks} Marks / अंक`
+        : `${groupCount} Questions · ${groupMarks} Marks`;
+
       paragraphs.push(
         new Paragraph({
           alignment: AlignmentType.CENTER,
@@ -469,7 +499,7 @@ export async function buildPaperDocx(
               font: "Times New Roman",
             }),
             new TextRun({
-              text: ` (${groupCount} Questions · ${groupMarks} Marks)`,
+              text: ` (${groupRightLabel})`,
               bold: true,
               font: "Times New Roman",
             }),
@@ -480,13 +510,15 @@ export async function buildPaperDocx(
 
     // Sub-heading for specific question type within grouped section
     if (hasMultipleTypes) {
+      const typeLabel = getQuestionTypeLabel(section.type, paperLang);
+      const typeMarksSuffix = isHindi ? "अंक" : "Marks";
       paragraphs.push(
         new Paragraph({
           alignment: AlignmentType.CENTER,
           spacing: { before: 120, after: 100 },
           children: [
             new TextRun({
-              text: `[${QUESTION_TYPE_LABEL[section.type as keyof typeof QUESTION_TYPE_LABEL] || section.type} · ${section.count} × ${section.marksEach} = ${section.count * section.marksEach} Marks]`,
+              text: `[${typeLabel} · ${section.count} × ${section.marksEach} = ${section.count * section.marksEach} ${typeMarksSuffix}]`,
               bold: true,
               italics: true,
               size: 20, // 10pt
@@ -515,7 +547,63 @@ export async function buildPaperDocx(
     }
 
     // Render questions in section
-    for (const item of items) {
+    const isGroupedObjective = (section.type === "TRUE_FALSE" || section.type === "FILL_BLANK") && items.length > 1;
+
+    if (isGroupedObjective) {
+      const qNum = globalQNum++;
+      const currentSecRelNum = sectionRelativeNum++;
+      const qLabel = formatQuestionNumber(qNum, paper.numberingStyle, sectionLetter, currentSecRelNum);
+      const sharedInstruction = section.instructions?.trim()
+        ? section.instructions.trim()
+        : getSharedInstruction(section.type, paperLang);
+      const exerciseFormula = formatExerciseFormula(items.length, section.marksEach, paperLang);
+
+      paragraphs.push(
+        new Paragraph({
+          spacing: { before: 120, after: 60 },
+          children: [
+            new TextRun({ text: `${qLabel}  `, bold: true, font: "Times New Roman" }),
+            new TextRun({ text: `${sharedInstruction} `, bold: true, font: "Times New Roman" }),
+            new TextRun({ text: ` ${exerciseFormula}`, bold: true, font: "Times New Roman" }),
+          ],
+        }),
+      );
+
+      const LETTERS = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"];
+      items.forEach((item, itemIdx) => {
+        const subLabel = `(${LETTERS[itemIdx] ?? itemIdx + 1})`;
+        const cleanedStem = cleanQuestionStatement(item.question.text, section.type);
+
+        paragraphs.push(
+          new Paragraph({
+            indent: { left: 720 },
+            spacing: { before: 30, after: 30 },
+            children: [
+              new TextRun({ text: `${subLabel}  `, bold: true, font: "Times New Roman" }),
+              ...formatMathTextRuns(cleanedStem, { font: "Times New Roman" }),
+            ],
+          }),
+        );
+
+        if (isMarkingScheme && item.question.answer) {
+          paragraphs.push(
+            new Paragraph({
+              indent: { left: 1080 },
+              spacing: { before: 20, after: 40 },
+              children: [
+                new TextRun({
+                  text: `${isHindi ? "उत्तर: " : "Answer: "}${item.question.answer}`,
+                  italics: true,
+                  color: "0B6623",
+                  font: "Times New Roman",
+                }),
+              ],
+            }),
+          );
+        }
+      });
+    } else {
+      for (const item of items) {
       const q = item.question;
       const qNum = globalQNum++;
       const currentSecRelNum = sectionRelativeNum++;
@@ -546,6 +634,7 @@ export async function buildPaperDocx(
         isMatch,
         Boolean((item as any).pageBreakBefore),
         paragraphs,
+        paperLang,
       );
 
       // Embedded diagram image if present
@@ -603,14 +692,17 @@ export async function buildPaperDocx(
 
       // True / False indicator
       if (q.type === "TRUE_FALSE") {
-        const hasHindi = /[\u0900-\u097F]/.test(q.text);
         paragraphs.push(
           new Paragraph({
             indent: { left: 720 },
             spacing: { before: 20, after: 40 },
             children: [
               new TextRun({
-                text: hasHindi ? "(सही / गलत — True / False)" : "(True / False)",
+                text: isHindi
+                  ? "(सत्य / असत्य)"
+                  : paperLang === "bilingual"
+                  ? "(सही / गलत — True / False)"
+                  : "(True / False)",
                 italics: true,
                 size: 18, // 9pt
                 color: "475569",
@@ -639,7 +731,7 @@ export async function buildPaperDocx(
                         width: { size: 50, type: WidthType.PERCENTAGE },
                         children: [
                           new Paragraph({
-                            children: [new TextRun({ text: "Column A (स्तम्भ 'अ')", bold: true, font: "Times New Roman" })],
+                            children: [new TextRun({ text: colLabels.colA, bold: true, font: "Times New Roman" })],
                           }),
                         ],
                       }),
@@ -647,7 +739,7 @@ export async function buildPaperDocx(
                         width: { size: 50, type: WidthType.PERCENTAGE },
                         children: [
                           new Paragraph({
-                            children: [new TextRun({ text: "Column B (स्तम्भ 'ब')", bold: true, font: "Times New Roman" })],
+                            children: [new TextRun({ text: colLabels.colB, bold: true, font: "Times New Roman" })],
                           }),
                         ],
                       }),
@@ -704,7 +796,11 @@ export async function buildPaperDocx(
             spacing: { before: 40, after: 80 },
             children: [
               new TextRun({
-                text: "Model Answer / Scheme: ",
+                text: isHindi
+                  ? "उत्तर प्रारूप / अंक योजना: "
+                  : paperLang === "bilingual"
+                  ? "Model Answer / उत्तर प्रारूप: "
+                  : "Model Answer / Scheme: ",
                 bold: true,
                 color: "0B6623",
                 font: "Times New Roman",
@@ -735,22 +831,34 @@ export async function buildPaperDocx(
           : section.marksEach;
         const orQText = isOrMatch ? getMatchColumnInstruction(orQ.text) : orQ.text;
 
+        const orLabel = isHindi
+          ? `${qLabel} (अथवा)`
+          : paperLang === "bilingual"
+          ? `${qLabel} (OR / अथवा)`
+          : `${qLabel} (OR)`;
+
         paragraphs.push(
           new Paragraph({
             alignment: AlignmentType.CENTER,
             spacing: { before: 80, after: 80 },
             children: [
-              new TextRun({ text: "— OR —", bold: true, italics: true, font: "Times New Roman" }),
+              new TextRun({
+                text: isHindi ? "— अथवा —" : paperLang === "bilingual" ? "— OR / अथवा —" : "— OR —",
+                bold: true,
+                italics: true,
+                font: "Times New Roman",
+              }),
             ],
           }),
         );
         renderQuestionTextWithTable(
-          `${qLabel} (OR)`,
+          orLabel,
           orQText,
           orTotalMarks,
           isOrMatch,
           false,
           paragraphs,
+          paperLang,
         );
 
         // Embedded diagram image for OR question if present
@@ -808,14 +916,17 @@ export async function buildPaperDocx(
 
         // True / False indicator for OR question
         if (orQ.type === "TRUE_FALSE") {
-          const hasHindi = /[\u0900-\u097F]/.test(orQ.text);
           paragraphs.push(
             new Paragraph({
               indent: { left: 720 },
               spacing: { before: 20, after: 40 },
               children: [
                 new TextRun({
-                  text: hasHindi ? "(सही / गलत — True / False)" : "(True / False)",
+                  text: isHindi
+                    ? "(सत्य / असत्य)"
+                    : paperLang === "bilingual"
+                    ? "(सही / गलत — True / False)"
+                    : "(True / False)",
                   italics: true,
                   size: 18, // 9pt
                   color: "475569",
@@ -844,7 +955,7 @@ export async function buildPaperDocx(
                           width: { size: 50, type: WidthType.PERCENTAGE },
                           children: [
                             new Paragraph({
-                              children: [new TextRun({ text: "Column A (स्तम्भ 'अ')", bold: true, font: "Times New Roman" })],
+                              children: [new TextRun({ text: colLabels.colA, bold: true, font: "Times New Roman" })],
                             }),
                           ],
                         }),
@@ -852,7 +963,7 @@ export async function buildPaperDocx(
                           width: { size: 50, type: WidthType.PERCENTAGE },
                           children: [
                             new Paragraph({
-                              children: [new TextRun({ text: "Column B (स्तम्भ 'ब')", bold: true, font: "Times New Roman" })],
+                              children: [new TextRun({ text: colLabels.colB, bold: true, font: "Times New Roman" })],
                             }),
                           ],
                         }),
@@ -909,7 +1020,11 @@ export async function buildPaperDocx(
               spacing: { before: 40, after: 80 },
               children: [
                 new TextRun({
-                  text: "Model Answer / Scheme: ",
+                  text: isHindi
+                    ? "उत्तर प्रारूप / अंक योजना: "
+                    : paperLang === "bilingual"
+                    ? "Model Answer / उत्तर प्रारूप: "
+                    : "Model Answer / Scheme: ",
                   bold: true,
                   color: "0B6623",
                   font: "Times New Roman",
@@ -943,6 +1058,7 @@ export async function buildPaperDocx(
       }
     }
   }
+}
 
   const doc = new Document({
     sections: [
