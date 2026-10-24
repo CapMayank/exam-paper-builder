@@ -261,6 +261,57 @@ export function validateSubPartsSum(
   return subpartsTotalMarks(subparts) === expectedTotalMarks;
 }
 
+/**
+ * Deterministically balances subpart marks to guarantee that their sum
+ * exactly equals expectedTotalMarks. Preserves minimum 1 mark per subpart.
+ */
+export function normalizeSubpartMarks<T extends { marks: number }>(
+  subparts: T[],
+  expectedTotalMarks: number,
+): T[] {
+  if (!Array.isArray(subparts) || subparts.length === 0 || !expectedTotalMarks || expectedTotalMarks <= 0) return subparts;
+  const target = Math.max(1, Math.round(expectedTotalMarks || 1));
+  const n = subparts.length;
+
+  let valid = [...subparts];
+  if (target < n) {
+    valid = valid.slice(0, target);
+  }
+
+  const currentTotal = subpartsTotalMarks(valid);
+  if (currentTotal === target) return valid;
+
+  if (currentTotal <= 0) {
+    const base = Math.floor(target / valid.length);
+    const rem = target % valid.length;
+    return valid.map((sp, idx) => ({
+      ...sp,
+      marks: Math.max(1, base + (idx === valid.length - 1 ? rem : 0)),
+    }));
+  }
+
+  const diff = target - currentTotal;
+  if (diff > 0) {
+    const lastIdx = valid.length - 1;
+    return valid.map((sp, idx) =>
+      idx === lastIdx ? { ...sp, marks: sp.marks + diff } : { ...sp, marks: Math.max(1, sp.marks) },
+    );
+  } else {
+    let toReduce = -diff;
+    const result = valid.map((sp) => ({ ...sp, marks: Math.max(1, sp.marks) }));
+    for (let i = result.length - 1; i >= 0 && toReduce > 0; i--) {
+      const reducible = result[i].marks - 1;
+      const dec = Math.min(toReduce, reducible);
+      result[i].marks -= dec;
+      toReduce -= dec;
+    }
+    if (toReduce > 0) {
+      return result.slice(0, Math.max(1, target));
+    }
+    return result;
+  }
+}
+
 export type UserData = {
   id: string;
   name: string;

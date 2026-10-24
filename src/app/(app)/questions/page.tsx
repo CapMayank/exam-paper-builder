@@ -1002,7 +1002,7 @@ export default function QuestionsPage() {
                 ? filters.chapterId
                 : targetBook?.chapters[0]?.id) ||
               "";
-            const mappedType = (q.type === "ASSERTION_REASON" ? "MCQ" : q.type) as QuestionType;
+            const mappedType = (q.type || "MCQ") as QuestionType;
 
             setEditing({
               id: "",

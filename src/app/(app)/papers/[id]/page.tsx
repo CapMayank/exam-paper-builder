@@ -1497,12 +1497,11 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
             const items = paper.items.filter((i) => i.sectionId === s.id);
             const st = progress.sections.find((x) => x.id === s.id)!;
             const effectiveUnits = items.reduce((sum, it) => {
-              if (it.question.type === "MATCH_COLUMN" || s.type === "MATCH_COLUMN") {
+              if (it.question.type === "MATCH_COLUMN" && s.type === "MATCH_COLUMN" && s.count > 1 && s.marksEach === 1) {
                 const pairs = parseMatchColumnPairs(it.question.options, it.question.text);
-                return sum + (s.count === 1 ? 1 : (pairs.length > 0 ? Math.min(pairs.length, s.count) : s.count));
+                return sum + (pairs.length > 0 ? Math.min(pairs.length, s.count) : s.count);
               }
-              const subLen = it.question.subparts?.length || 0;
-              return sum + (subLen > 1 && s.count >= subLen ? subLen : 1);
+              return sum + 1;
             }, 0);
             const isOverfilled = effectiveUnits > s.count;
             const isSectionFull = effectiveUnits === s.count;
@@ -1608,7 +1607,19 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                     <span>
                       {items.length === 0
                         ? "No questions added yet."
-                        : `${items.length} question(s) placed (${items.length * s.marksEach} marks).`}
+                        : (() => {
+                            const secMarksTotal = items.reduce((sum, it) => {
+                              if (it.question.type === "MATCH_COLUMN" && s.type === "MATCH_COLUMN" && s.count > 1 && s.marksEach === 1) {
+                                const pairs = parseMatchColumnPairs(it.question.options, it.question.text);
+                                return sum + (pairs.length > 0 ? Math.min(pairs.length, s.count) : s.count) * s.marksEach;
+                              }
+                              const subTotal = it.question.subparts && it.question.subparts.length > 0
+                                ? it.question.subparts.reduce((subSum, sp) => subSum + (sp.marks || 1), 0)
+                                : 0;
+                              return sum + (subTotal > 0 ? subTotal : s.marksEach);
+                            }, 0);
+                            return `${items.length} question(s) placed (${secMarksTotal} marks).`;
+                          })()}
                     </span>
                     <button
                       type="button"

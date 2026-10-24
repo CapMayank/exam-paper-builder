@@ -5,6 +5,7 @@ export type CandidateQuestion = {
   chapterId: string;
   type: string;
   difficulty?: string;
+  subpartsMarks?: number;
 };
 
 export type AutoFillResult = {
@@ -146,6 +147,8 @@ export function autoFillPaper(
     // Filter valid candidates for this slot
     const validCandidates = pool.filter((c) => {
       if (chosenQuestionIds.has(c.id)) return false;
+      // If the candidate has explicit subpart marks, they must strictly match the slot marks
+      if (c.subpartsMarks !== undefined && c.subpartsMarks !== slot.marksEach) return false;
       const rem = chapterRemaining.get(c.chapterId) ?? 0;
       return rem >= slot.marksEach;
     });

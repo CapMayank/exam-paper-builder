@@ -3,6 +3,7 @@ import { recordAudit } from "@/lib/audit";
 import { autoFillPaper } from "@/lib/autofill";
 import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
+import { parseSubparts, subpartsTotalMarks } from "@/lib/types";
 
 /**
  * 1-Click Smart Auto-Fill:
@@ -43,10 +44,22 @@ export const POST = route(async (req, { id }, user) => {
     };
   }
 
-  // Fetch all available questions for this book
+  // Fetch all available questions for this book including subparts
   const bankQuestions = await prisma.question.findMany({
     where: { bookId: paper.blueprint.bookId },
-    select: { id: true, chapterId: true, type: true, difficulty: true },
+    select: { id: true, chapterId: true, type: true, difficulty: true, subpartsJson: true },
+  });
+
+  const candidatePool = bankQuestions.map((q) => {
+    const sps = parseSubparts(q.subpartsJson);
+    const subMarks = subpartsTotalMarks(sps);
+    return {
+      id: q.id,
+      chapterId: q.chapterId,
+      type: q.type,
+      difficulty: q.difficulty,
+      subpartsMarks: subMarks > 0 ? subMarks : undefined,
+    };
   });
 
   const orQuestionIds = paper.items
@@ -63,7 +76,7 @@ export const POST = route(async (req, { id }, user) => {
       chapterId: i.question.chapterId,
       questionId: i.question.id,
     })),
-    bankQuestions,
+    candidatePool,
     orQuestionIds,
     { targetSectionId, preferredDifficulty },
   );

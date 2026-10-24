@@ -1,8 +1,10 @@
 import { HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
+import { parseMatchColumnPairs, serializeMatchColumnPair } from "@/lib/constants";
 import type { GeneratedPaperQuestion } from "@/lib/gemini";
 import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
+import { normalizeSubpartMarks } from "@/lib/types";
 
 export const POST = route(async (req, { id }, user) => {
   const paper = await loadPaperView(id);
@@ -33,15 +35,38 @@ export const POST = route(async (req, { id }, user) => {
   // Persist questions and link to paper
   await prisma.$transaction(async (tx) => {
     for (const q of questions) {
+      const qType = q.type || section.type;
+      const isMatch = qType === "MATCH_COLUMN" || section.type === "MATCH_COLUMN";
+
+      // Serialize MATCH_COLUMN pairs into self-contained "Left::Right" option strings
+      let processedOptions = Array.isArray(q.options) ? q.options : [];
+      if (isMatch) {
+        const pairs = parseMatchColumnPairs(processedOptions, q.text);
+        if (pairs.length > 0 && pairs.some((p) => p.left && p.right)) {
+          processedOptions = pairs.map((p) => serializeMatchColumnPair(p.left, p.right));
+        }
+      }
+
+      // Balance subpart marks so that their sum strictly equals the section marks
+      let normalizedSubparts = Array.isArray(q.subparts) ? q.subparts : [];
+      if (normalizedSubparts.length > 0) {
+        normalizedSubparts = normalizeSubpartMarks(normalizedSubparts, section.marksEach);
+      }
+
+      const chapterId =
+        q.chapterId && q.chapterId.trim()
+          ? q.chapterId.trim()
+          : paper.blueprint.chapters[0]?.chapterId || "";
+
       // 1. Create question in the question bank
       const createdQuestion = await tx.question.create({
         data: {
           bookId: paper.blueprint.bookId,
-          chapterId: q.chapterId,
-          type: q.type,
+          chapterId,
+          type: qType,
           text: q.text,
-          optionsJson: JSON.stringify(q.options || []),
-          subpartsJson: JSON.stringify(q.subparts || []),
+          optionsJson: JSON.stringify(processedOptions),
+          subpartsJson: JSON.stringify(normalizedSubparts),
           answer: q.answer || "",
           difficulty: q.difficulty || "MEDIUM",
           imagePath: q.imagePath || null,

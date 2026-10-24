@@ -140,13 +140,18 @@ export function toPlacedItems(
     const sec = sections.find((s) => s.id === i.sectionId);
     const secMarksEach = sec?.marksEach ?? 1;
     const secCount = sec?.count ?? 1;
+    const secIsMatch = (sec as any)?.type === "MATCH_COLUMN";
+    const isMultiUnitMatch = isMatch && secIsMatch && secCount > 1 && secMarksEach === 1;
+
     const matchMarks = isMatch
-      ? (secCount === 1 ? secMarksEach : Math.min((matchCount || secCount) * secMarksEach, secCount * secMarksEach))
+      ? (isMultiUnitMatch
+          ? Math.min(matchCount || secCount, secCount) * secMarksEach
+          : secMarksEach)
       : 0;
-    const effectiveMarks = isMatch ? matchMarks : (submarks > 0 ? submarks : undefined);
-    const effectiveUnits = isMatch
-      ? (secCount === 1 ? 1 : (matchCount > 0 ? Math.min(matchCount, secCount) : undefined))
-      : (subparts.length > 0 ? subparts.length : undefined);
+    const effectiveMarks = isMatch ? matchMarks : (submarks > 0 ? submarks : secMarksEach);
+    const effectiveUnits = isMultiUnitMatch
+      ? Math.min(matchCount > 0 ? matchCount : secCount, secCount)
+      : undefined;
     return {
       sectionId: i.sectionId,
       chapterId: i.question.chapterId,
@@ -194,13 +199,18 @@ export async function loadPaperView(id: string) {
       const sec = blueprint.sections.find((s) => s.id === i.sectionId);
       const secMarksEach = sec?.marksEach ?? 1;
       const secCount = sec?.count ?? 1;
+      const secIsMatch = sec?.type === "MATCH_COLUMN";
+      const isMultiUnitMatch = isMatch && secIsMatch && secCount > 1 && secMarksEach === 1;
+
       const matchMarks = isMatch
-        ? (secCount === 1 ? secMarksEach : Math.min((matchCount || secCount) * secMarksEach, secCount * secMarksEach))
+        ? (isMultiUnitMatch
+            ? Math.min(matchCount || secCount, secCount) * secMarksEach
+            : secMarksEach)
         : 0;
-      const effectiveMarks = isMatch ? matchMarks : (submarks > 0 ? submarks : undefined);
-      const effectiveUnits = isMatch
-        ? (secCount === 1 ? 1 : (matchCount > 0 ? Math.min(matchCount, secCount) : undefined))
-        : (subparts.length > 0 ? subparts.length : undefined);
+      const effectiveMarks = isMatch ? matchMarks : (submarks > 0 ? submarks : secMarksEach);
+      const effectiveUnits = isMultiUnitMatch
+        ? Math.min(matchCount > 0 ? matchCount : secCount, secCount)
+        : undefined;
       return {
         id: i.id,
         sectionId: i.sectionId,

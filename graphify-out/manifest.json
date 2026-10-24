@@ -96,9 +96,9 @@
     "semantic_hash": ""
   },
   "src/app/(app)/papers/[id]/page.tsx": {
-    "mtime": 1792788399.2257745,
-    "seen": 1792788902.9761164,
-    "ast_hash": "e3ee8141f02d9f83ae93949bbad37c9c",
+    "mtime": 1792820946.4249618,
+    "seen": 1792821706.1951902,
+    "ast_hash": "54995feacff6c63cbae2354cd4fd7386",
     "semantic_hash": ""
   },
   "src/app/(app)/papers/page.tsx": {
@@ -108,9 +108,9 @@
     "semantic_hash": ""
   },
   "src/app/(app)/questions/page.tsx": {
-    "mtime": 1792762583.517096,
-    "seen": 1792763617.7547061,
-    "ast_hash": "82be1bdb4802beef37dd2a2aaeadec69",
+    "mtime": 1792821012.1006887,
+    "seen": 1792821706.1951902,
+    "ast_hash": "a289b9e898cdfa4514a027613e31ceb3",
     "semantic_hash": ""
   },
   "src/app/api/academic-rollover/route.ts": {
@@ -312,9 +312,9 @@
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/ai-commit-section/route.ts": {
-    "mtime": 1792699737.5249689,
-    "seen": 1792699869.3490603,
-    "ast_hash": "ab548ee587d4db86d861a8be28c512f7",
+    "mtime": 1792820772.2880375,
+    "seen": 1792821706.1951902,
+    "ast_hash": "b2054e59bed49309e502cca6e26b3710",
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/ai-generate-section/route.ts": {
@@ -330,9 +330,9 @@
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/autofill/route.ts": {
-    "mtime": 1792756614.5241349,
-    "seen": 1792758426.3637133,
-    "ast_hash": "801b5fa5c1a6a652e0db2626841c9e49",
+    "mtime": 1792821000.7829409,
+    "seen": 1792821706.1951902,
+    "ast_hash": "0759b41554a901f3eee6306d318ae27e",
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/clear-questions/route.ts": {
@@ -606,9 +606,9 @@
     "semantic_hash": ""
   },
   "src/components/QuestionPicker.tsx": {
-    "mtime": 1792790774.2118328,
-    "seen": 1792790865.3914664,
-    "ast_hash": "de32af741849ff1be60ecd7705538960",
+    "mtime": 1792820894.3087554,
+    "seen": 1792821706.1951902,
+    "ast_hash": "10503b50e78d35f0699b8dd51e0d9a56",
     "semantic_hash": ""
   },
   "src/components/QuestionUsageHistory.tsx": {
@@ -732,9 +732,9 @@
     "semantic_hash": ""
   },
   "src/lib/autofill.ts": {
-    "mtime": 1792758216.0412958,
-    "seen": 1792758426.3637133,
-    "ast_hash": "72cbb7de5842ac0199dce04522e01cc0",
+    "mtime": 1792820978.5053363,
+    "seen": 1792821706.1951902,
+    "ast_hash": "c50d8af5dcb6a6b6408662620691e8b0",
     "semantic_hash": ""
   },
   "src/lib/batchQuestionIo.ts": {
@@ -870,9 +870,9 @@
     "semantic_hash": ""
   },
   "src/lib/gemini.ts": {
-    "mtime": 1792790759.6702862,
-    "seen": 1792790865.3914664,
-    "ast_hash": "a501cf4483bdc59255b2e174dc4fd57a",
+    "mtime": 1792820744.5367646,
+    "seen": 1792821706.1951902,
+    "ast_hash": "8baf7391bca9eecd6dfa048c81dd4f24",
     "semantic_hash": ""
   },
   "src/lib/kindergarten.test.ts": {
@@ -1104,9 +1104,9 @@
     "semantic_hash": ""
   },
   "src/lib/papers.ts": {
-    "mtime": 1792771299.4905005,
-    "seen": 1792771648.8017602,
-    "ast_hash": "32ba091cd49956bf5b22b4a855923cb4",
+    "mtime": 1792820923.8355422,
+    "seen": 1792821706.1951902,
+    "ast_hash": "161cf307b3905acc129ea90656439b69",
     "semantic_hash": ""
   },
   "src/lib/print-logistics.test.ts": {
@@ -1194,9 +1194,9 @@
     "semantic_hash": ""
   },
   "src/lib/types.ts": {
-    "mtime": 1792790719.322619,
-    "seen": 1792790865.3914664,
-    "ast_hash": "f1547deff0d6be2e28981f4169ae6aac",
+    "mtime": 1792821252.861842,
+    "seen": 1792821706.1951902,
+    "ast_hash": "d25853d2fdc12a13f30b2d815d93e5b9",
     "semantic_hash": ""
   },
   "src/lib/uploads.ts": {
@@ -1398,9 +1398,9 @@
     "semantic_hash": ""
   },
   "src/components/SectionAiModal.tsx": {
-    "mtime": 1792749642.8837698,
-    "seen": 1792749847.4533799,
-    "ast_hash": "68bb44f6533334b133f3a7a438e1414d",
+    "mtime": 1792820827.4131389,
+    "seen": 1792821706.1951902,
+    "ast_hash": "bf239dc6b75081c1520493da961a3989",
     "semantic_hash": ""
   },
   "src/lib/preflight.ts": {
@@ -1485,6 +1485,12 @@
     "mtime": 1792788754.1932518,
     "seen": 1792788902.9761164,
     "ast_hash": "5ef0f99d82e44e4064ad2cf2c72092bd",
+    "semantic_hash": ""
+  },
+  "src/lib/ai-fill-replace-marks.test.ts": {
+    "mtime": 1792821610.0582125,
+    "seen": 1792821706.1951902,
+    "ast_hash": "11149fa555e8a9b99e08e055b966568c",
     "semantic_hash": ""
   }
 }

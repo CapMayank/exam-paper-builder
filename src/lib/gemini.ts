@@ -17,6 +17,8 @@ import {
 } from "./diagram-search";
 import { normalizeQuestionType } from "./paperImport";
 import { ensureLanguageNonChapterUnits } from "./syllabusImport";
+import { repairLatex } from "./math";
+import { normalizeSubpartMarks } from "./types";
 
 export interface GeminiCallResult<T> {
   success: boolean;
@@ -565,20 +567,60 @@ A student took three test tubes A, B, and C containing clean iron nails. In tube
   });
 
   if (callResult.success && Array.isArray(callResult.data)) {
-    callResult.data = callResult.data.map((item) => ({
-      ...item,
-      options: Array.isArray(item.options) ? item.options.map((o) => cleanOptionText(String(o).trim())) : [],
-      answer: isMcqLikeType(item.type) ? cleanOptionText(item.answer || "") : String(item.answer || "").trim(),
-      subparts: Array.isArray(item.subparts)
+    callResult.data = callResult.data.map((item) => {
+      const qType = normalizeQuestionType(item.type || type);
+      const isMatch = qType === "MATCH_COLUMN";
+      let options = Array.isArray(item.options) ? item.options.map((o) => cleanOptionText(String(o).trim())) : [];
+      let qText = repairLatex(String(item.text || "").trim());
+      let qAnswer = isMcqLikeType(qType) ? cleanOptionText(item.answer || "") : repairLatex(String(item.answer || "").trim());
+
+      // If MATCH_COLUMN, ensure derangement
+      if (isMatch) {
+        const pairs = parseMatchColumnPairs(options, qText);
+        const isDirectMatch =
+          /^\s*\(?[Aa]\)?\s*[-→:]\s*\(?([1iI])\)?\s*,\s*\(?[Bb]\)?\s*[-→:]\s*\(?([2iI]{2})\)?/.test(qAnswer) ||
+          !qAnswer ||
+          qAnswer.toLowerCase().includes("direct");
+        if (pairs.length > 1 && isDirectMatch) {
+          const letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
+          const romans = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
+          const deranged = derangeMatchColumnPairs(pairs);
+          const col1Lines = pairs.map((p, idx) => `(${letters[idx] ?? idx + 1}) ${cleanMatchItem(p.left)}`);
+          const col2Items = deranged.map((p) => cleanMatchItem(p.right));
+          const answers = pairs.map((p, idx) => {
+            const optIdx = col2Items.indexOf(cleanMatchItem(p.right));
+            return `(${letters[idx] ?? idx + 1})-${romans[optIdx] ?? `(${optIdx + 1})`}`;
+          });
+          const instr = getMatchColumnInstruction(qText);
+          qText = `${instr}\nColumn I:\n${col1Lines.join("\n")}`;
+          options = col2Items;
+          qAnswer = answers.join(", ");
+        }
+      }
+
+      // Parse and normalize subparts so their marks strictly sum to the requested question marks
+      const rawSubparts = Array.isArray(item.subparts)
         ? item.subparts.map((sp, spIdx) => ({
             label: String(sp.label || `(${spIdx + 1})`),
-            text: String(sp.text || ""),
+            text: repairLatex(String(sp.text || "")),
             marks: Number(sp.marks) || 1,
             options: Array.isArray(sp.options) ? sp.options.map((o) => cleanOptionText(String(o).trim())) : undefined,
-            answer: sp.answer ? (isMcqLikeType(item.type) ? cleanOptionText(String(sp.answer)) : String(sp.answer)) : "",
+            answer: sp.answer ? (isMcqLikeType(qType) ? cleanOptionText(String(sp.answer)) : repairLatex(String(sp.answer))) : "",
           }))
-        : [],
-    }));
+        : [];
+
+      const normalizedSubparts = rawSubparts.length > 0 ? normalizeSubpartMarks(rawSubparts, marks) : [];
+
+      return {
+        ...item,
+        type: qType,
+        text: qText,
+        options,
+        answer: qAnswer,
+        marks,
+        subparts: normalizedSubparts,
+      };
+    });
   }
 
   return callResult;
@@ -1094,22 +1136,25 @@ JSON Array Output Schema:
     const rawQ = callResult.data[i] || {};
 
     const qType = normalizeQuestionType(rawQ.type || normalizedType);
-    const qText = typeof rawQ.text === "string" && rawQ.text.trim() ? rawQ.text.trim() : `Question regarding ${slot.chapterTitle}`;
+    const rawText = typeof rawQ.text === "string" && rawQ.text.trim() ? rawQ.text.trim() : `Question regarding ${slot.chapterTitle}`;
+    const qText = repairLatex(rawText);
     const qOptions = Array.isArray(rawQ.options) ? rawQ.options.map((o: unknown) => cleanOptionText(String(o).trim())) : [];
-    const qSubparts = Array.isArray(rawQ.subparts)
+    const targetSlotMarks = slot.marks || marksEach;
+    const rawSubparts = Array.isArray(rawQ.subparts)
       ? rawQ.subparts.map((sp: any, spIdx: number) => ({
           label: String(sp.label || `(${spIdx + 1})`),
-          text: String(sp.text || ""),
+          text: repairLatex(String(sp.text || "")),
           marks: Number(sp.marks) || 1,
           options: Array.isArray(sp.options) ? sp.options.map((o: unknown) => cleanOptionText(String(o).trim())) : undefined,
-          answer: sp.answer ? (isMcqLikeType(qType) ? cleanOptionText(String(sp.answer)) : String(sp.answer)) : undefined,
+          answer: sp.answer ? (isMcqLikeType(qType) ? cleanOptionText(String(sp.answer)) : repairLatex(String(sp.answer))) : undefined,
         }))
       : [];
+    const qSubparts = rawSubparts.length > 0 ? normalizeSubpartMarks(rawSubparts, targetSlotMarks) : [];
     const qAnswer =
       typeof rawQ.answer === "string"
         ? isMcqLikeType(qType)
           ? cleanOptionText(rawQ.answer)
-          : rawQ.answer
+          : repairLatex(rawQ.answer)
         : "Refer to standard model answer.";
     const qDiff = ["EASY", "MEDIUM", "HARD"].includes(rawQ.difficulty) ? rawQ.difficulty : "MEDIUM";
     const figurePrompt = typeof rawQ.figurePrompt === "string" && rawQ.figurePrompt.trim() ? rawQ.figurePrompt.trim() : undefined;

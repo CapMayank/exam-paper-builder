@@ -14,9 +14,16 @@ import {
 } from "lucide-react";
 import { MathText } from "@/components/MathText";
 import { api } from "@/lib/client";
-import { QUESTION_TYPE_LABEL } from "@/lib/constants";
+import {
+  cleanMatchItem,
+  cleanOptionText,
+  getMatchColumnInstruction,
+  parseMatchColumnPairs,
+  QUESTION_TYPE_LABEL,
+  serializeMatchColumnPair,
+} from "@/lib/constants";
 import type { GeneratedPaperQuestion } from "@/lib/gemini";
-import type { PaperData, Section } from "@/lib/types";
+import { type PaperData, type Section, subpartsTotalMarks } from "@/lib/types";
 
 interface SectionAiModalProps {
   isOpen: boolean;
@@ -133,6 +140,21 @@ export function SectionAiModal({
     setCommitting(true);
 
     try {
+      const processedQuestions = generatedQuestions.map((q) => {
+        const isMatch = q.type === "MATCH_COLUMN" || section!.type === "MATCH_COLUMN";
+        let opts = q.options || [];
+        if (isMatch) {
+          const pairs = parseMatchColumnPairs(opts, q.text);
+          if (pairs.length > 0 && pairs.some((p) => p.left && p.right)) {
+            opts = pairs.map((p) => serializeMatchColumnPair(p.left, p.right));
+          }
+        }
+        return {
+          ...q,
+          options: opts,
+        };
+      });
+
       const res = await api<{
         success: boolean;
         addedCount: number;
@@ -141,7 +163,7 @@ export function SectionAiModal({
         method: "POST",
         body: JSON.stringify({
           sectionId: section!.id,
-          questions: generatedQuestions,
+          questions: processedQuestions,
         }),
       });
 
@@ -346,21 +368,68 @@ export function SectionAiModal({
                     key={idx}
                     className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs text-xs space-y-2"
                   >
+                    {/* Question Header & Marks */}
                     <div className="flex items-center justify-between text-[11px] text-slate-500">
                       <span className="font-bold text-slate-700">Question {idx + 1}</span>
                       <div className="flex items-center gap-2">
                         <span className="rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-600">
                           {q.difficulty}
                         </span>
-                        <span className="font-semibold text-slate-700">{section.marksEach} Mark(s)</span>
+                        <span className="font-semibold text-slate-700">
+                          {q.subparts && q.subparts.length > 0
+                            ? `${subpartsTotalMarks(q.subparts)} Mark(s)`
+                            : `${section.marksEach} Mark(s)`}
+                        </span>
                       </div>
                     </div>
 
+                    {/* Question Prompt */}
                     <div className="font-medium text-slate-900 leading-relaxed">
-                      <MathText text={q.text} />
+                      <MathText
+                        text={
+                          q.type === "MATCH_COLUMN" || section.type === "MATCH_COLUMN"
+                            ? getMatchColumnInstruction(q.text)
+                            : q.text
+                        }
+                      />
                     </div>
 
-                    {q.options && q.options.length > 0 && (
+                    {/* MATCH_COLUMN Two-Column Layout */}
+                    {(q.type === "MATCH_COLUMN" || section.type === "MATCH_COLUMN") && q.options && q.options.length > 0 && (() => {
+                      const pairs = parseMatchColumnPairs(q.options, q.text);
+                      if (pairs.length === 0) return null;
+                      const letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
+                      const romans = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
+                      return (
+                        <div className="my-2 overflow-hidden rounded-lg border border-slate-200">
+                          <div className="grid grid-cols-2 bg-slate-100 px-3 py-1.5 font-semibold text-slate-700 border-b border-slate-200 text-[11px]">
+                            <span>Column A (स्तम्भ &apos;अ&apos;)</span>
+                            <span>Column B (स्तम्भ &apos;ब&apos;)</span>
+                          </div>
+                          <div className="divide-y divide-slate-100 bg-white">
+                            {pairs.map((p, pIdx) => (
+                              <div key={pIdx} className="grid grid-cols-2 px-3 py-1.5 text-slate-700 text-[11px]">
+                                <div className="flex items-start gap-1.5 pr-2">
+                                  <span className="font-bold text-slate-400 font-mono text-[10px]">
+                                    ({letters[pIdx] ?? pIdx + 1})
+                                  </span>
+                                  <MathText text={cleanMatchItem(p.left)} />
+                                </div>
+                                <div className="flex items-start gap-1.5 pl-2 border-l border-slate-100">
+                                  <span className="font-bold text-slate-400 font-mono text-[10px]">
+                                    {romans[pIdx] ?? `(${pIdx + 1})`}
+                                  </span>
+                                  <MathText text={cleanMatchItem(p.right)} />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Standard MCQ / Option Layout */}
+                    {q.type !== "MATCH_COLUMN" && section.type !== "MATCH_COLUMN" && q.options && q.options.length > 0 && (
                       <div className="grid grid-cols-2 gap-1.5 pl-2 pt-1">
                         {q.options.map((opt, oIdx) => (
                           <div key={oIdx} className="text-slate-600 text-[11px]">
@@ -373,7 +442,46 @@ export function SectionAiModal({
                       </div>
                     )}
 
-                    {q.answer && (
+                    {/* Subparts Layout (Case Study / Multi-part / Unseen Passage) */}
+                    {q.subparts && q.subparts.length > 0 && (
+                      <div className="mt-2 space-y-1.5 border-t border-slate-100 pt-2">
+                        <div className="font-semibold text-slate-700 text-[11px]">
+                          Sub-questions ({q.subparts.length}):
+                        </div>
+                        {q.subparts.map((sp, sIdx) => (
+                          <div key={sIdx} className="rounded-md bg-slate-50 p-2 text-[11px] space-y-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-start gap-1.5 font-medium text-slate-800">
+                                <span className="font-bold text-indigo-600 font-mono">{sp.label || `(${sIdx + 1})`}</span>
+                                <MathText text={sp.text} />
+                              </div>
+                              <span className="shrink-0 rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700">
+                                {sp.marks} mark{sp.marks > 1 ? "s" : ""}
+                              </span>
+                            </div>
+                            {sp.options && sp.options.length > 0 && (
+                              <div className="grid grid-cols-2 gap-1 pl-4 pt-0.5 text-slate-600">
+                                {sp.options.map((opt, oIdx) => (
+                                  <div key={oIdx}>
+                                    <span className="font-medium mr-1">({String.fromCharCode(97 + oIdx)})</span>
+                                    <MathText text={opt} />
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {sp.answer && (
+                              <div className="text-[10px] text-emerald-800 font-medium pl-4">
+                                <span className="font-bold">Ans: </span>
+                                <MathText text={sp.answer} />
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Overall Model Answer */}
+                    {q.answer && (!q.subparts || q.subparts.length === 0) && (
                       <div className="rounded-lg bg-emerald-50/70 p-2 text-[11px] text-emerald-900 border border-emerald-100">
                         <span className="font-semibold text-emerald-950">Model Answer: </span>
                         <MathText text={q.answer} />

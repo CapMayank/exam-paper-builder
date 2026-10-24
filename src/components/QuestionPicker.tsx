@@ -17,7 +17,7 @@ import {
   QUESTION_TYPE_LABEL,
   serializeMatchColumnPair,
 } from "@/lib/constants";
-import { type Book, type PaperData, type QuestionDto, type Section, subpartsTotalMarks } from "@/lib/types";
+import { type Book, type PaperData, type QuestionDto, type Section, subpartsTotalMarks, normalizeSubpartMarks } from "@/lib/types";
 import { MathText } from "./MathText";
 import type { GeneratedQuestionItem } from "@/lib/gemini";
 
@@ -243,6 +243,11 @@ export function QuestionPicker({
       const headers: Record<string, string> = {};
       if (customKey) headers["x-gemini-api-key"] = customKey;
 
+      const targetSlotMarks =
+        section.type === "MATCH_COLUMN" && section.count > 1 && section.marksEach === 1
+          ? section.count * section.marksEach
+          : section.marksEach;
+
       const res = await api<{
         success: boolean;
         isMock: boolean;
@@ -256,7 +261,7 @@ export function QuestionPicker({
           className: paper.blueprint.book.className,
           subject: paper.blueprint.book.subject,
           type: section.type,
-          marks: section.marksEach,
+          marks: targetSlotMarks,
           difficulty: aiDifficulty,
           cognitiveLevel: aiCognitiveLevel,
           language: aiLanguage,
@@ -302,19 +307,22 @@ export function QuestionPicker({
         }
       }
 
+      const rawSubparts = (aiGenerated.subparts || []).map((sp, idx) => ({
+        label: sp.label || `(${idx + 1})`,
+        text: sp.text,
+        marks: Number(sp.marks) || 1,
+        answer: sp.answer || "",
+        options: Array.isArray(sp.options) && sp.options.length > 0 ? sp.options.map((o: string) => cleanOptionText(String(o))) : undefined,
+      }));
+      const normalizedSubparts = rawSubparts.length > 0 ? normalizeSubpartMarks(rawSubparts, section.marksEach) : [];
+
       const payload = {
         bookId: paper.blueprint.bookId,
         chapterId: aiChapterId,
         type: section.type,
         text: aiGenerated.text,
         options: processedOptions,
-        subparts: (aiGenerated.subparts || []).map((sp, idx) => ({
-          label: sp.label || `(${idx + 1})`,
-          text: sp.text,
-          marks: sp.marks || 1,
-          answer: sp.answer || "",
-          options: Array.isArray(sp.options) && sp.options.length > 0 ? sp.options.map((o: string) => cleanOptionText(String(o))) : undefined,
-        })),
+        subparts: normalizedSubparts,
         answer: aiGenerated.answer || "",
         difficulty: aiDifficulty,
         spaceMm: section.type === "LONG" ? 60 : section.type === "SHORT" ? 20 : 0,
@@ -346,6 +354,15 @@ export function QuestionPicker({
       }
     }
 
+    const rawSubparts = (aiGenerated.subparts || []).map((sp, idx) => ({
+      label: sp.label || `(${idx + 1})`,
+      text: sp.text,
+      marks: Number(sp.marks) || 1,
+      answer: sp.answer || "",
+      options: Array.isArray(sp.options) && sp.options.length > 0 ? sp.options.map((o: string) => cleanOptionText(String(o))) : undefined,
+    }));
+    const normalizedSubparts = rawSubparts.length > 0 ? normalizeSubpartMarks(rawSubparts, section.marksEach) : [];
+
     const dummyDto: QuestionDto = {
       id: "",
       bookId: paper.blueprint.bookId,
@@ -353,13 +370,7 @@ export function QuestionPicker({
       type: section.type,
       text: aiGenerated.text,
       options: processedOptions,
-      subparts: (aiGenerated.subparts || []).map((sp, idx) => ({
-        label: sp.label || `(${idx + 1})`,
-        text: sp.text,
-        marks: sp.marks || 1,
-        answer: sp.answer || "",
-        options: Array.isArray(sp.options) && sp.options.length > 0 ? sp.options.map((o: string) => cleanOptionText(String(o))) : undefined,
-      })),
+      subparts: normalizedSubparts,
       answer: aiGenerated.answer || "",
       difficulty: aiDifficulty,
       imagePath: null,
@@ -844,7 +855,9 @@ export function QuestionPicker({
                       <span className="badge font-bold">{aiGenerated.difficulty}</span>
                       <span className="badge badge-indigo font-bold">{aiGenerated.cognitiveLevel}</span>
                       <span className="badge badge-emerald font-bold">
-                        {section.marksEach} Mark{section.marksEach > 1 ? "s" : ""}
+                        {aiGenerated.subparts && aiGenerated.subparts.length > 0
+                          ? `${subpartsTotalMarks(aiGenerated.subparts)} Mark(s)`
+                          : `${section.marksEach} Mark${section.marksEach > 1 ? "s" : ""}`}
                       </span>
                     </div>
                   </div>
