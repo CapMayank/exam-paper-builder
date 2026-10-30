@@ -498,9 +498,9 @@
     "semantic_hash": ""
   },
   "src/components/AIPaperGeneratorModal.tsx": {
-    "mtime": 1793341393.109536,
-    "seen": 1793341462.1109204,
-    "ast_hash": "93c68c74467268786ab51b083e62e1d9",
+    "mtime": 1793362122.8822353,
+    "seen": 1793362159.4074142,
+    "ast_hash": "92d45d34e46a9ef79d4912c1f11ac4e9",
     "semantic_hash": ""
   },
   "src/components/AIQuestionGeneratorModal.tsx": {

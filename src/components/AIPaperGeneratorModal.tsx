@@ -78,7 +78,7 @@ export function AIPaperGeneratorModal({
   const [sectionStage, setSectionStage] = useState<1 | 2 | 3>(1);
   const [currentActivity, setCurrentActivity] = useState<string>("");
   const [generatedQuestions, setGeneratedQuestions] = useState<
-    (GeneratedPaperQuestion & { imagePath?: string; sectionTitle: string })[]
+    (GeneratedPaperQuestion & { imagePath?: string; sectionTitle: string; slotsFilled?: number })[]
   >([]);
   const [expandedAnswers, setExpandedAnswers] = useState<Set<number>>(new Set());
   const [latestPaper, setLatestPaper] = useState<PaperData | null>(null);
@@ -111,9 +111,9 @@ export function AIPaperGeneratorModal({
       .then((res) => {
         if (!mounted) return;
         setPlan(res.plan);
-        const sub = (res.plan.subject || "").toLowerCase();
-        const bTitle = (res.plan.bookTitle || "").toLowerCase();
-        const pTitle = (res.plan.title || "").toLowerCase();
+        const sub = (res.plan.subject || "").split("/")[0].trim().toLowerCase();
+        const bTitle = (res.plan.bookTitle || "").split("/")[0].trim().toLowerCase();
+        const pTitle = (res.plan.title || "").split("/")[0].trim().toLowerCase();
         const devanagariRegex = /[\u0900-\u097F]/;
         if (
           sub.includes("hindi") ||
@@ -128,6 +128,8 @@ export function AIPaperGeneratorModal({
           devanagariRegex.test(bTitle)
         ) {
           setLanguage("hi");
+        } else {
+          setLanguage("en");
         }
       })
       .catch((err) => {
@@ -225,7 +227,11 @@ export function AIPaperGeneratorModal({
       return;
     }
 
-    let accumulatedQuestions: (GeneratedPaperQuestion & { imagePath?: string; sectionTitle: string })[] = [];
+    let accumulatedQuestions: (GeneratedPaperQuestion & {
+      imagePath?: string;
+      sectionTitle: string;
+      slotsFilled?: number;
+    })[] = [];
     let updatedPaperRef: PaperData | null = null;
     const totalMarks = plan?.totalMarksNeeded || 70;
     const maxPaperDiagrams = getMaxPaperDiagramBudget(totalMarks);
@@ -357,18 +363,26 @@ export function AIPaperGeneratorModal({
         updatedPaperRef = commitRes.paper;
         setLatestPaper(commitRes.paper);
 
-        // Append to live feed
+        // Append to live feed (a combined MATCH_COLUMN question fulfills all slots in its section)
         const enriched = questions.map((q) => ({
           ...q,
           sectionTitle: sec.sectionTitle,
+          slotsFilled:
+            sec.sectionType === "MATCH_COLUMN" || q.type === "MATCH_COLUMN"
+              ? Math.max(1, sec.slots.length)
+              : 1,
         }));
         accumulatedQuestions = [...accumulatedQuestions, ...enriched];
         setGeneratedQuestions(accumulatedQuestions);
       }
 
       if (!abortRef.current && !signal.aborted) {
+        const totalFilledSlots = accumulatedQuestions.reduce(
+          (sum, q) => sum + (q.slotsFilled || 1),
+          0
+        );
         setStatus("done");
-        toast.success(`Successfully generated ${accumulatedQuestions.length} questions!`);
+        toast.success(`Successfully generated ${totalFilledSlots} question slots!`);
         if (updatedPaperRef) {
           onPaperUpdated(updatedPaperRef);
         }
@@ -391,6 +405,13 @@ export function AIPaperGeneratorModal({
   const pendingSections = plan?.sections.filter((s) => s.slots.length > 0) || [];
   const totalSlotsToGenerate = plan?.totalQuestionsNeeded || 0;
   const totalMarksToGenerate = plan?.totalMarksNeeded || 0;
+  const completedSlotsCount = generatedQuestions.reduce(
+    (sum, q) =>
+      sum +
+      (q.slotsFilled ||
+        (q.type === "MATCH_COLUMN" ? Math.max(1, q.options?.length || 1) : 1)),
+    0
+  );
 
   const modalFooter =
     status === "config" ? (
@@ -439,7 +460,7 @@ export function AIPaperGeneratorModal({
       <>
         <div className="text-xs font-semibold text-emerald-700 flex items-center gap-1.5">
           <CheckCircle2 size={16} />
-          Paper generation complete ({generatedQuestions.length} questions placed)
+          Paper generation complete ({completedSlotsCount} / {totalSlotsToGenerate} Qs placed)
         </div>
         <button
           type="button"
@@ -732,7 +753,7 @@ export function AIPaperGeneratorModal({
                     </span>
                   </div>
                   <span className="text-xs font-bold font-mono text-indigo-700">
-                    {generatedQuestions.length} / {totalSlotsToGenerate} Qs
+                    {completedSlotsCount} / {totalSlotsToGenerate} Qs
                   </span>
                 </div>
 
@@ -741,7 +762,7 @@ export function AIPaperGeneratorModal({
                   <div
                     className="h-full bg-indigo-600 transition-all duration-300 rounded-full"
                     style={{
-                      width: `${(generatedQuestions.length / Math.max(1, totalSlotsToGenerate)) * 100}%`,
+                      width: `${Math.min(100, (completedSlotsCount / Math.max(1, totalSlotsToGenerate)) * 100)}%`,
                     }}
                   />
                 </div>
