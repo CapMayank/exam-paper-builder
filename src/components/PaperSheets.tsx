@@ -16,6 +16,7 @@ import {
   getSharedInstruction,
   isBookletLayout,
   isPrePrimaryClass,
+  isSubpartQuestionType,
   parseMatchColumnPairs,
   QUESTION_TYPE_LABEL,
   resolvePaperExamType,
@@ -578,7 +579,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
         n += 1;
         sectionRelativeCounter += 1;
 
-        const subparts = it.question.subparts;
+        const subparts = isSubpartQuestionType(it.question.type) ? it.question.subparts : [];
         const canDecompose = !isPrePrimary && !it.orQuestion && subparts && subparts.length > 1;
         const isMatch = s.type === "MATCH_COLUMN" || it.question.type === "MATCH_COLUMN";
         const matchPairCount = isMatch

@@ -1,6 +1,6 @@
 import { HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
-import { parseMatchColumnPairs, serializeMatchColumnPair } from "@/lib/constants";
+import { isSubpartQuestionType, parseMatchColumnPairs, serializeMatchColumnPair } from "@/lib/constants";
 import { buildAndValidateGenerationContract } from "@/lib/curriculumContract";
 import type { GeneratedPaperQuestion } from "@/lib/gemini";
 import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
@@ -134,8 +134,8 @@ export const POST = route(async (req, { id }, user) => {
         }
       }
 
-      // Balance subpart marks so that their sum strictly equals the section marks
-      let normalizedSubparts = Array.isArray(q.subparts) ? q.subparts : [];
+      // Balance subpart marks ONLY for passage/case-study question types
+      let normalizedSubparts = isSubpartQuestionType(qType) && Array.isArray(q.subparts) ? q.subparts : [];
       if (normalizedSubparts.length > 0) {
         normalizedSubparts = normalizeSubpartMarks(normalizedSubparts, section.marksEach);
       }

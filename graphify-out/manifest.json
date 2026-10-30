@@ -96,9 +96,9 @@
     "semantic_hash": ""
   },
   "src/app/(app)/papers/[id]/page.tsx": {
-    "mtime": 1793340635.7884746,
-    "seen": 1793340694.0657105,
-    "ast_hash": "f1ee6fed103bffe25d6b196e2bb6fa1e",
+    "mtime": 1793363485.6152964,
+    "seen": 1793363797.3504226,
+    "ast_hash": "024f6c8c3d23a731df90705e14232eb9",
     "semantic_hash": ""
   },
   "src/app/(app)/papers/page.tsx": {
@@ -312,9 +312,9 @@
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/ai-commit-section/route.ts": {
-    "mtime": 1793358303.5761511,
-    "seen": 1793359664.5001688,
-    "ast_hash": "b8ceb6def4e158372bcbe723aa0bf650",
+    "mtime": 1793363416.3041582,
+    "seen": 1793363797.3504226,
+    "ast_hash": "af340fdf9eef4ef069180f30362d8474",
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/ai-generate-section/route.ts": {
@@ -348,9 +348,9 @@
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/export-docx/route.ts": {
-    "mtime": 1793358675.500009,
-    "seen": 1793359664.5001688,
-    "ast_hash": "e7abb7db9d77453a72b821a6fc71432e",
+    "mtime": 1793363493.354933,
+    "seen": 1793363797.3504226,
+    "ast_hash": "0e5e4e5a24642b9eadd9e9a34de86db1",
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/import-questions/route.ts": {
@@ -498,9 +498,9 @@
     "semantic_hash": ""
   },
   "src/components/AIPaperGeneratorModal.tsx": {
-    "mtime": 1793362122.8822353,
-    "seen": 1793362159.4074142,
-    "ast_hash": "92d45d34e46a9ef79d4912c1f11ac4e9",
+    "mtime": 1793363546.7909126,
+    "seen": 1793363797.3504226,
+    "ast_hash": "5800bf9c45aff478aa16e9d8b1e4968d",
     "semantic_hash": ""
   },
   "src/components/AIQuestionGeneratorModal.tsx": {
@@ -594,9 +594,9 @@
     "semantic_hash": ""
   },
   "src/components/PaperSheets.tsx": {
-    "mtime": 1793358608.1488173,
-    "seen": 1793359664.5001688,
-    "ast_hash": "5e243600b6fb3f67ad00f0793cdf5d7c",
+    "mtime": 1793363450.4214888,
+    "seen": 1793363797.3504226,
+    "ast_hash": "3e18bfd738e1fefda4917e549ad48106",
     "semantic_hash": ""
   },
   "src/components/QuestionForm.tsx": {
@@ -618,9 +618,9 @@
     "semantic_hash": ""
   },
   "src/components/QuestionView.tsx": {
-    "mtime": 1792841756.1800065,
-    "seen": 1792842358.6189234,
-    "ast_hash": "123bce84b5bf03b8ffe73580a0a3625b",
+    "mtime": 1793363421.082184,
+    "seen": 1793363797.3504226,
+    "ast_hash": "7872063d9214becdc2e9c37fba5676d8",
     "semantic_hash": ""
   },
   "src/components/SyllabusImportModal.tsx": {
@@ -852,9 +852,9 @@
     "semantic_hash": ""
   },
   "src/lib/dto.ts": {
-    "mtime": 1793350346.4167702,
-    "seen": 1793350664.6064894,
-    "ast_hash": "c026e9e96da1de247832a290c6853876",
+    "mtime": 1793363411.5776303,
+    "seen": 1793363797.3504226,
+    "ast_hash": "f41ea1305234693a58d429eca2c19b70",
     "semantic_hash": ""
   },
   "src/lib/format.ts": {
@@ -870,9 +870,9 @@
     "semantic_hash": ""
   },
   "src/lib/gemini.ts": {
-    "mtime": 1793361862.725039,
-    "seen": 1793361939.9784682,
-    "ast_hash": "685ddcf91e1609c0d5ec04f44edc7098",
+    "mtime": 1793363335.009524,
+    "seen": 1793363797.3504226,
+    "ast_hash": "6bebbada73c3ec951a93d5ecf061edca",
     "semantic_hash": ""
   },
   "src/lib/kindergarten.test.ts": {
@@ -1068,9 +1068,9 @@
     "semantic_hash": ""
   },
   "src/lib/math.ts": {
-    "mtime": 1793357929.5311108,
-    "seen": 1793359664.5001688,
-    "ast_hash": "067c8506048f6560294f8325c7f569c2",
+    "mtime": 1793363638.3255386,
+    "seen": 1793363797.3504226,
+    "ast_hash": "e72c7a1df01fb723331e9db93a5f2566",
     "semantic_hash": ""
   },
   "src/lib/multiset.ts": {
@@ -1398,9 +1398,9 @@
     "semantic_hash": ""
   },
   "src/components/SectionAiModal.tsx": {
-    "mtime": 1793358331.8410988,
-    "seen": 1793359664.5001688,
-    "ast_hash": "651069bb8d14305d815912b7bafcb235",
+    "mtime": 1793363595.8841524,
+    "seen": 1793363797.3504226,
+    "ast_hash": "f71a1eb549f6360b1be40e2e0ba3deb3",
     "semantic_hash": ""
   },
   "src/lib/preflight.ts": {
@@ -1548,15 +1548,15 @@
     "semantic_hash": ""
   },
   "src/lib/mpbse-class12-math-regression.test.ts": {
-    "mtime": 1793361902.546413,
-    "seen": 1793361939.9784682,
-    "ast_hash": "bba85e44e05ebb69542a360a31614dc8",
+    "mtime": 1793363745.2112982,
+    "seen": 1793363797.3504226,
+    "ast_hash": "ca36bfdb98d321b9713c23d616b6aeb9",
     "semantic_hash": ""
   },
   "src/lib/questionValidator.ts": {
-    "mtime": 1793359296.347219,
-    "seen": 1793359664.5001688,
-    "ast_hash": "645e675cf4a2f737366eec74f2dde6bd",
+    "mtime": 1793363676.975675,
+    "seen": 1793363797.3504226,
+    "ast_hash": "a8d42a79f02da20e39bc80a6ef3e391f",
     "semantic_hash": ""
   }
 }

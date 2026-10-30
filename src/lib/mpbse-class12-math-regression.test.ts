@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { detectPaperLanguage } from "./constants";
+import { toQuestionDto } from "./dto";
 import {
   buildAndValidateGenerationContract,
   cleanChapterTitleForLookup,
@@ -615,6 +616,94 @@ describe("MPBSE Class 12 Mathematics Regression & Subject Integrity Suite", () =
         }
       } finally {
         fetchSpy.mockRestore();
+      }
+    });
+
+    it("strips spurious subparts from MCQ responses when live Gemini returns a subpart on an MCQ", async () => {
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      text: JSON.stringify([
+                        {
+                          slotIndex: 0,
+                          chapterNumber: 9,
+                          chapterTitle: "Differential Equations",
+                          type: "MCQ",
+                          text: "What is the degree of the differential equation $(d^2y/dx^2)^3 + (dy/dx)^2 + \\sin(dy/dx) + 1 = 0$?",
+                          options: ["3", "2", "Not defined", "1"],
+                          subparts: [
+                            { label: "(i)", text: "Determine the degree", marks: 1, answer: "Not defined" },
+                          ],
+                          answer: "Not defined",
+                          difficulty: "MEDIUM",
+                          cognitiveLevel: "UNDERSTANDING",
+                          explanation: "The equation is not a polynomial in derivatives because of sin(dy/dx).",
+                        },
+                      ]),
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      try {
+        const res = await generatePaperSectionWithGemini({
+          className: "Class 12",
+          subject: "Mathematics",
+          sectionTitle: "Section A",
+          sectionType: "MCQ",
+          marksEach: 1,
+          language: "en",
+          difficulty: "BALANCED",
+          apiKey: "AIzaSyFakeKeyForSubpartStripTest",
+          slots: [
+            { slotIndex: 0, chapterId: "ch-9", chapterNumber: 9, chapterTitle: "Differential Equations", marks: 1 },
+          ],
+        });
+
+        expect(res.success).toBe(true);
+        expect(res.data).toHaveLength(1);
+        expect(res.data[0].subparts).toEqual([]);
+      } finally {
+        fetchSpy.mockRestore();
+      }
+    });
+
+    it("strips legacy spurious subpartsJson from MCQ/SHORT questions in toQuestionDto and renders bare (0, \\pi) as KaTeX math", () => {
+      const dto = toQuestionDto({
+        id: "q-mcq-spurious",
+        bookId: "b1",
+        chapterId: "c1",
+        type: "MCQ",
+        text: "The principal value branch of $\\cos^{-1}(x)$ is:",
+        optionsJson: JSON.stringify(["$[-\\pi/2, \\pi/2]$", "$(0, \\pi)$", "$[0, \\pi]$", "$(-\\pi/2, \\pi/2)$"]),
+        subpartsJson: JSON.stringify([{ label: "(i)", text: "Identify the principal value branch", marks: 1 }]),
+        answer: "$[0, \\pi]$",
+        difficulty: "EASY",
+        imagePath: null,
+        spaceMm: 0,
+        showGrid: false,
+        createdById: "u1",
+        createdAt: new Date(),
+      });
+
+      expect(dto.subparts).toEqual([]);
+
+      // Verify bare (0, \pi) without $...$ is detected and rendered as KaTeX math
+      const segments = parseMathSegments("(0, \\pi)");
+      expect(segments).toHaveLength(1);
+      expect(segments[0].type).toBe("math");
+      if (segments[0].type === "math") {
+        expect(segments[0].html).toContain("π");
       }
     });
   });

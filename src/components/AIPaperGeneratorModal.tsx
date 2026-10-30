@@ -32,6 +32,7 @@ import {
   cleanMatchItem,
   cleanOptionText,
   getMatchColumnInstruction,
+  isSubpartQuestionType,
   parseMatchColumnPairs,
   QUESTION_TYPE_LABEL,
   type QuestionType,
@@ -291,13 +292,16 @@ export function AIPaperGeneratorModal({
         // Ensure displayed subpart mark allocations in the preview feed match the calculated values before commit
         const rawQuestions = genRes.questions || [];
         const questions = rawQuestions.map((q) => {
-          if (q.subparts && q.subparts.length > 0) {
+          if (isSubpartQuestionType(q.type) && q.subparts && q.subparts.length > 0) {
             return {
               ...q,
               subparts: normalizeSubpartMarks(q.subparts, sec.marksEach),
             };
           }
-          return q;
+          return {
+            ...q,
+            subparts: [],
+          };
         });
 
         const hasDiagrams = questions.some(
@@ -880,7 +884,7 @@ export function AIPaperGeneratorModal({
                                 const matchPairs =
                                   isMatch && q.options ? parseMatchColumnPairs(q.options, q.text, q.explanation) : [];
                                 const subpartsTotal =
-                                  q.subparts && q.subparts.length > 0
+                                  isSubpartQuestionType(q.type) && q.subparts && q.subparts.length > 0
                                     ? q.subparts.reduce((sum, sp) => sum + (Number(sp.marks) || 0), 0)
                                     : 0;
                                 const totalM =
@@ -986,7 +990,7 @@ export function AIPaperGeneratorModal({
                           )}
 
                           {/* Subparts if Case Study */}
-                          {q.subparts && q.subparts.length > 0 && (
+                          {isSubpartQuestionType(q.type) && q.subparts && q.subparts.length > 0 && (
                             <div className="space-y-1 pt-1 border-t border-slate-100 text-xs">
                               {q.subparts.map((sp, spIdx) => (
                                 <div key={spIdx} className="text-[11px] text-slate-700 flex items-start gap-1">

@@ -515,6 +515,8 @@ export function validateGeneratedQuestion(
   if (opts?.existingNormalizedTexts) {
     const norm = text
       .toLowerCase()
+      .replace(/\$+/g, "")
+      .replace(/[.,?!:;]+$/g, "")
       .replace(/\s+/g, " ")
       .trim();
     if (norm.length > 15 && opts.existingNormalizedTexts.has(norm)) {
@@ -544,7 +546,14 @@ export function validateGeneratedSection(
 ): SectionValidationResult {
   const seenTexts = new Set<string>(
     existingPaperQuestionTexts
-      .map((t) => (t || "").toLowerCase().replace(/\s+/g, " ").trim())
+      .map((t) =>
+        (t || "")
+          .toLowerCase()
+          .replace(/\$+/g, "")
+          .replace(/[.,?!:;]+$/g, "")
+          .replace(/\s+/g, " ")
+          .trim(),
+      )
       .filter((t) => t.length > 15),
   );
 
@@ -611,7 +620,12 @@ export function validateGeneratedSection(
     allIssues.push(...res.issues);
 
     if (res.valid) {
-      const norm = (q.text || "").toLowerCase().replace(/\s+/g, " ").trim();
+      const norm = (q.text || "")
+        .toLowerCase()
+        .replace(/\$+/g, "")
+        .replace(/[.,?!:;]+$/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
       if (norm.length > 15) seenTexts.add(norm);
       acceptedQuestions.push(q);
     } else {

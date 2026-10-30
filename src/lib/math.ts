@@ -29,7 +29,9 @@ const INLINE_PATTERNS = [
   // 4. Caret exponent: e^x, e^(-x), y^(3/2), (x+1)^2, 10^5, 2^n
   /(?:[a-zA-Z0-9\)\}]+|\([^\)]+\))\^(?:\([^\)]+\)|-?[a-zA-Z0-9]+)/,
   // 5. Unicode powers: x², (y')²
-  /(?:[a-zA-Z0-9\)\}]+|\([^\)]+\))[²³⁴⁵⁶⁷⁸⁹⁰⁺⁻]+/
+  /(?:[a-zA-Z0-9\)\}]+|\([^\)]+\))[²³⁴⁵⁶⁷⁸⁹⁰⁺⁻]+/,
+  // 6. Bare LaTeX macro or interval containing LaTeX macro outside $...$: e.g. (0, \pi), [-\pi/2, \pi/2], \vec{a}, \pi, \theta
+  /(?:[\(\[]\s*-?\s*(?:[0-9]+|\\(?:pi|infty|theta|alpha|beta))\s*(?:\/[0-9]+)?\s*,\s*-?\s*(?:[0-9]+|\\(?:pi|infty|theta|alpha|beta))\s*(?:\/[0-9]+)?\s*[\)\]]|\\(?:pi|theta|alpha|beta|gamma|delta|Delta|lambda|mu|sigma|Sigma|omega|Omega|phi|Phi|infty|vec|hat|bar|overline|pm|mp|times|div|leq?|geq?|neq?|approx|equiv|in|notin|subset|subseteq|cup|cap|emptyset|therefore|because|angle|parallel|perp|triangle)(?:\b|\{[^{}]*\}))/
 ];
 
 const INLINE_REGEX = new RegExp(INLINE_PATTERNS.map((p) => `(${p.source})`).join("|"), "g");
@@ -73,7 +75,7 @@ export function convertNaturalMathToTex(raw: string): string {
   tex = tex.replace(/([\w\)\}])\^([a-zA-Z0-9\-+]+)/g, "$1^{$2}");
 
   // 6. Common functions in math: sin, cos, tan, sec, csc, cot, log, ln
-  tex = tex.replace(/\b(sin|cos|tan|sec|csc|cot|log|ln)\b(?!\s*\{)/g, "\\$1 ");
+  tex = tex.replace(/(?<!\\)\b(sin|cos|tan|sec|csc|cot|log|ln)\b(?!\s*\{)/g, "\\$1 ");
 
   // 7. Differentials at end or before closing bracket: dx, dy, dt, dz
   tex = tex.replace(/(\s+)d([a-zA-Z])(?=\s*$|[\),\]])/g, " \\, d$2");
@@ -476,7 +478,7 @@ export function isEntirelyMath(str: string): boolean {
     trimmed.includes("⁻¹") ||
     trimmed.includes("²") ||
     trimmed.includes("³") ||
-    /\\(frac|sqrt|alpha|beta|gamma|theta|lambda|pm|times|div|le|ge|ne|leq|geq|neq|rightarrow|to|Delta|int|sum|prod)\b/.test(trimmed) ||
+    /\\(frac|sqrt|alpha|beta|gamma|theta|lambda|pi|infty|vec|hat|bar|overline|dot|ddot|sigma|Sigma|omega|Omega|phi|Phi|mu|rho|tau|epsilon|in|notin|subset|subseteq|cup|cap|emptyset|angle|parallel|perp|triangle|cdot|circ|degree|sin|cos|tan|cot|sec|csc|log|ln|det|lim|pm|times|div|le|ge|ne|leq|geq|neq|rightarrow|to|Delta|int|sum|prod)\b/.test(trimmed) ||
     /f'?\(x\)/.test(trimmed) ||
     /dy\/dx/.test(trimmed) ||
     /\b(sin|cos|tan|sec|log)\b/.test(trimmed) ||

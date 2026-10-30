@@ -34,6 +34,7 @@ import {
   getQuestionTypeLabel,
   getSharedInstruction,
   isMcqLikeType,
+  isSubpartQuestionType,
   parseMatchColumnPairs,
   QUESTION_TYPE_LABEL,
   resolvePaperExamType,
@@ -650,7 +651,7 @@ export async function buildPaperDocx(
           matchCount = parseMatchColumnPairs(opts, q.text, (q as any).explanation).length;
         } catch {}
       }
-      const parsedSubparts = parseSubparts(q.subpartsJson);
+      const parsedSubparts = isSubpartQuestionType(q.type) ? parseSubparts(q.subpartsJson) : [];
       const subpartsMarks = subpartsTotalMarks(parsedSubparts);
       const qTotalMarks = isMatch
         ? (section.count === 1 ? section.marksEach : Math.min(matchCount * section.marksEach, section.count * section.marksEach))
@@ -854,7 +855,7 @@ export async function buildPaperDocx(
             orMatchCount = parseMatchColumnPairs(opts, orQ.text, (orQ as any).explanation).length;
           } catch {}
         }
-        const parsedOrSubparts = parseSubparts(orQ.subpartsJson);
+        const parsedOrSubparts = isSubpartQuestionType(orQ.type) ? parseSubparts(orQ.subpartsJson) : [];
         const orSubpartsMarks = subpartsTotalMarks(parsedOrSubparts);
         const orTotalMarks = isOrMatch
           ? (section.count === 1 ? section.marksEach : Math.min(orMatchCount * section.marksEach, section.count * section.marksEach))

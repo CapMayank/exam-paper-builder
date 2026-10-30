@@ -1,5 +1,6 @@
 import type { Chapter, Question } from "@prisma/client";
 import {
+  isSubpartQuestionType,
   MARKS_STYLES,
   NUMBERING_STYLES,
   PRINT_DENSITIES,
@@ -122,7 +123,11 @@ export function toQuestionDto(
   }
 
   let subparts: SubPart[] = [];
-  if ("subpartsJson" in q && typeof (q as { subpartsJson?: string | null }).subpartsJson === "string") {
+  if (
+    isSubpartQuestionType(q.type) &&
+    "subpartsJson" in q &&
+    typeof (q as { subpartsJson?: string | null }).subpartsJson === "string"
+  ) {
     subparts = parseSubparts((q as { subpartsJson?: string | null }).subpartsJson);
   }
 

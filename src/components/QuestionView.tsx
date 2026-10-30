@@ -7,6 +7,7 @@ import {
   getMatchColumnInstruction,
   isKindergartenType,
   isMcqLikeType,
+  isSubpartQuestionType,
   normalizeMcqAnswer,
   parseMatchColumnPairs,
   type MarksStyle,
@@ -261,7 +262,7 @@ function SingleQuestionBody({
                 : "(True / False)"}
             </div>
           )}
-          {renderMode !== "STEM_ONLY" && q.subparts && q.subparts.length > 0 && (
+          {renderMode !== "STEM_ONLY" && isSubpartQuestionType(q.type) && q.subparts && q.subparts.length > 0 && (
             <div style={{ marginTop: "2mm", display: "flex", flexDirection: "column", gap: isA5 ? "1.5mm" : "2.5mm" }}>
               {q.subparts.map((sp, idx) => (
                 <div

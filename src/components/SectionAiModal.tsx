@@ -19,6 +19,7 @@ import {
   cleanOptionText,
   detectPaperLanguage,
   getMatchColumnInstruction,
+  isSubpartQuestionType,
   parseMatchColumnPairs,
   QUESTION_TYPE_LABEL,
   serializeMatchColumnPair,
@@ -510,7 +511,7 @@ export function SectionAiModal({
                   </span>
                   <span className="rounded-md bg-indigo-50 border border-indigo-200/60 px-2 py-0.5 text-[11px] font-bold text-indigo-700">
                     {generatedQuestions.reduce((sum, q) => {
-                      if (q.subparts && q.subparts.length > 0) return sum + subpartsTotalMarks(q.subparts);
+                      if (isSubpartQuestionType(q.type || section.type) && q.subparts && q.subparts.length > 0) return sum + subpartsTotalMarks(q.subparts);
                       return sum + targetSlotMarks;
                     }, 0)} Marks Total
                   </span>
@@ -545,7 +546,7 @@ export function SectionAiModal({
                           {q.difficulty}
                         </span>
                         <span className="rounded bg-indigo-50 border border-indigo-200/60 px-2 py-0.5 font-bold text-indigo-700">
-                          {q.subparts && q.subparts.length > 0
+                          {isSubpartQuestionType(q.type || section.type) && q.subparts && q.subparts.length > 0
                             ? `${subpartsTotalMarks(q.subparts)} Mark(s)`
                             : isMultiUnitMatch
                             ? `${targetSlotMarks} Marks (${section.count} Pairs)`
@@ -614,7 +615,7 @@ export function SectionAiModal({
                     )}
 
                     {/* Subparts Layout (Case Study / Multi-part / Unseen Passage) */}
-                    {q.subparts && q.subparts.length > 0 && (
+                    {isSubpartQuestionType(q.type || section.type) && q.subparts && q.subparts.length > 0 && (
                       <div className="mt-2 space-y-1.5 border-t border-slate-100 pt-2">
                         <div className="font-semibold text-slate-700 text-[11px]">
                           Sub-questions ({q.subparts.length}):

@@ -8,6 +8,7 @@ import {
   getMatchColumnInstruction,
   isKindergartenType,
   isMcqLikeType,
+  isSubpartQuestionType,
   parseMatchColumnPairs,
   QUESTION_TYPES,
 } from "./constants";
@@ -381,16 +382,23 @@ Strict requirements:
 5. For FILL_BLANK: Provide question text containing one or more blanks indicated by "________" (at least 8 underscores). Options should be empty []. The answer should be the exact word(s) or value filling the blank.
 6. For TRUE_FALSE: Provide a clear declarative statement. Options should be ["True", "False"] (or ["सत्य", "असत्य"] for Hindi). Answer must be "True" or "False" (or Hindi equivalent).
 7. Use standard LaTeX math $...$ for any mathematical expressions, formulas, chemical reactions, or units.
+8. Subparts rule: ${
+    isSubpartQuestionType(normalizedType)
+      ? `Provide 3-4 graded subparts in "subparts" whose marks sum strictly to ${marks}.`
+      : `For ${normalizedType} questions, "subparts" MUST BE an empty array [] (never add subparts to ${normalizedType}).`
+  }
 
 Return a JSON array strictly matching this TypeScript structure:
 [
   {
     "type": "${normalizedType}",
     "text": "Question text...",
-    "options": ["Option A", "Option B", "Option C", "Option D"],
-    "subparts": [
-      { "label": "(i)", "text": "Subpart text", "marks": 1, "answer": "Answer" }
-    ],
+    "options": ${isMcqLikeType(normalizedType) ? '["Option A", "Option B", "Option C", "Option D"]' : "[]"},
+    "subparts": ${
+      isSubpartQuestionType(normalizedType)
+        ? '[\n      { "label": "(i)", "text": "Subpart text", "marks": 1, "answer": "Answer" }\n    ]'
+        : "[]"
+    },
     "answer": "Detailed model answer / step marking scheme",
     "marks": ${marks},
     "difficulty": "${difficulty}",
@@ -570,9 +578,9 @@ Return a JSON array strictly matching this TypeScript structure:
     callResult.data = callResult.data.map((item) => {
       const qType = normalizeQuestionType(item.type || type);
       const isMatch = qType === "MATCH_COLUMN";
-      let options = Array.isArray(item.options) ? item.options.map((o) => cleanOptionText(String(o).trim())) : [];
+      let options = Array.isArray(item.options) ? item.options.map((o) => repairLatex(cleanOptionText(String(o).trim()))) : [];
       let qText = repairLatex(cleanQuestionStatement(String(item.text || "").trim(), qType));
-      let qAnswer = isMcqLikeType(qType) ? cleanOptionText(item.answer || "") : repairLatex(String(item.answer || "").trim());
+      let qAnswer = isMcqLikeType(qType) ? repairLatex(cleanOptionText(item.answer || "")) : repairLatex(String(item.answer || "").trim());
 
       if (qType === "TRUE_FALSE") {
         if (language === "hi") {
@@ -647,16 +655,17 @@ Return a JSON array strictly matching this TypeScript structure:
         }
       }
 
-      // Parse and normalize subparts so their marks strictly sum to the requested question marks
-      const rawSubparts = Array.isArray(item.subparts)
-        ? item.subparts.map((sp, spIdx) => ({
-            label: String(sp.label || `(${spIdx + 1})`),
-            text: repairLatex(String(sp.text || "")),
-            marks: Number(sp.marks) || 1,
-            options: Array.isArray(sp.options) ? sp.options.map((o) => cleanOptionText(String(o).trim())) : undefined,
-            answer: sp.answer ? (isMcqLikeType(qType) ? cleanOptionText(String(sp.answer)) : repairLatex(String(sp.answer))) : "",
-          }))
-        : [];
+      // Parse and normalize subparts ONLY for passage/case-study question types
+      const rawSubparts =
+        isSubpartQuestionType(qType) && Array.isArray(item.subparts)
+          ? item.subparts.map((sp, spIdx) => ({
+              label: String(sp.label || `(${spIdx + 1})`),
+              text: repairLatex(String(sp.text || "")),
+              marks: Number(sp.marks) || 1,
+              options: Array.isArray(sp.options) ? sp.options.map((o) => repairLatex(cleanOptionText(String(o).trim()))) : undefined,
+              answer: sp.answer ? (isMcqLikeType(qType) ? repairLatex(cleanOptionText(String(sp.answer))) : repairLatex(String(sp.answer))) : "",
+            }))
+          : [];
 
       const normalizedSubparts = rawSubparts.length > 0 ? normalizeSubpartMarks(rawSubparts, marks) : [];
 
@@ -947,6 +956,20 @@ ${
 
 Assigned Chapter Targets for each question slot:
 ${slotsDescription}
+${
+  existingQuestionTexts && existingQuestionTexts.length > 0
+    ? `\nALREADY-PLACED QUESTIONS IN THIS PAPER (STRICTLY FORBIDDEN TO REPEAT, REUSE, OR ASK THE SAME PROBLEM TEMPLATE):\n${existingQuestionTexts
+        .slice(-40)
+        .map((t, idx) => `${idx + 1}. ${t.replace(/\s+/g, " ").trim().slice(0, 200)}`)
+        .join("\n")}\nCRITICAL: Every question you generate in this section MUST test a DIFFERENT topic/sub-concept or problem type than the questions listed above. Never repeat the same question or merely change numbers in an already-asked question.\n`
+    : ""
+}
+SUBPARTS RULE:
+${
+  isSubpartQuestionType(normalizedType)
+    ? `- Every ${normalizedType} item MUST include 3-4 graded "subparts" whose marks sum strictly to ${marksEach}.`
+    : `- For ${normalizedType} questions, "subparts" MUST BE an empty array [] (NEVER add subparts to ${normalizedType} questions).`
+}
 
 JSON Array Output Schema:
 [
@@ -956,10 +979,12 @@ JSON Array Output Schema:
     "chapterTitle": "Chapter Name",
     "type": "${normalizedType}",
     "text": "Question text...",
-    "options": ["A", "B", "C", "D"],
-    "subparts": [
-      { "label": "(i)", "text": "Subpart question", "marks": 1, "answer": "Model answer" }
-    ],
+    "options": ${isMcqLikeType(normalizedType) ? '["A", "B", "C", "D"]' : "[]"},
+    "subparts": ${
+      isSubpartQuestionType(normalizedType)
+        ? '[\n      { "label": "(i)", "text": "Subpart question", "marks": 1, "answer": "Model answer" }\n    ]'
+        : "[]"
+    },
     "answer": "Detailed model answer and marking scheme breakdown",
     "difficulty": "EASY" | "MEDIUM" | "HARD",
     "cognitiveLevel": "REMEMBERING" | "UNDERSTANDING" | "APPLYING" | "ANALYZING" | "EVALUATING",
@@ -1100,7 +1125,7 @@ JSON Array Output Schema:
       const rawText = typeof rawQ.text === "string" ? rawQ.text.trim() : "";
       const qText = repairLatex(cleanQuestionStatement(rawText, qType));
       let qOptions = Array.isArray(rawQ.options)
-        ? rawQ.options.map((o: unknown) => cleanOptionText(String(o).trim()))
+        ? rawQ.options.map((o: unknown) => repairLatex(cleanOptionText(String(o).trim())))
         : [];
       if (qType === "TRUE_FALSE") {
         if (language === "hi") {
@@ -1112,26 +1137,27 @@ JSON Array Output Schema:
         }
       }
       const targetSlotMarks = slot.marks || marksEach;
-      const rawSubparts = Array.isArray(rawQ.subparts)
-        ? rawQ.subparts.map((sp: any, spIdx: number) => ({
-            label: String(sp.label || `(${spIdx + 1})`),
-            text: repairLatex(cleanQuestionStatement(String(sp.text || ""))),
-            marks: Number(sp.marks) || 1,
-            options: Array.isArray(sp.options)
-              ? sp.options.map((o: unknown) => cleanOptionText(String(o).trim()))
-              : undefined,
-            answer: sp.answer
-              ? isMcqLikeType(qType)
-                ? cleanOptionText(String(sp.answer))
-                : repairLatex(String(sp.answer))
-              : undefined,
-          }))
-        : [];
+      const rawSubparts =
+        isSubpartQuestionType(qType) && Array.isArray(rawQ.subparts)
+          ? rawQ.subparts.map((sp: any, spIdx: number) => ({
+              label: String(sp.label || `(${spIdx + 1})`),
+              text: repairLatex(cleanQuestionStatement(String(sp.text || ""))),
+              marks: Number(sp.marks) || 1,
+              options: Array.isArray(sp.options)
+                ? sp.options.map((o: unknown) => repairLatex(cleanOptionText(String(o).trim())))
+                : undefined,
+              answer: sp.answer
+                ? isMcqLikeType(qType)
+                  ? repairLatex(cleanOptionText(String(sp.answer)))
+                  : repairLatex(String(sp.answer))
+                : undefined,
+            }))
+          : [];
       const qSubparts = rawSubparts.length > 0 ? normalizeSubpartMarks(rawSubparts, targetSlotMarks) : [];
       let qAnswer =
         typeof rawQ.answer === "string"
           ? isMcqLikeType(qType)
-            ? cleanOptionText(rawQ.answer)
+            ? repairLatex(cleanOptionText(rawQ.answer))
             : repairLatex(rawQ.answer)
           : "";
       if (qType === "TRUE_FALSE" && language === "hi") {

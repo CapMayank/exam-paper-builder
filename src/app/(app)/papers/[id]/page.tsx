@@ -58,6 +58,7 @@ import {
   EXAM_TYPES,
   EXAM_TYPE_LABEL,
   inferExamTypeFromText,
+  isSubpartQuestionType,
   LAYOUTS,
   LAYOUT_LABEL,
   MARKS_STYLES,
@@ -1575,7 +1576,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                 const pairs = parseMatchColumnPairs(it.question.options, it.question.text, (it.question as any).explanation);
                 return sum + (pairs.length > 0 ? Math.min(pairs.length, s.count) : s.count) * s.marksEach;
               }
-              const subTotal = it.question.subparts && it.question.subparts.length > 0
+              const subTotal = isSubpartQuestionType(it.question.type) && it.question.subparts && it.question.subparts.length > 0
                 ? it.question.subparts.reduce((subSum, sp) => subSum + (sp.marks || 1), 0)
                 : 0;
               return sum + (subTotal > 0 ? subTotal : s.marksEach);
@@ -1778,7 +1779,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                         const matchCount = isMatchQ
                           ? (parseMatchColumnPairs(it.question.options, it.question.text, (it.question as any).explanation).length || s.count)
                           : 0;
-                        const subpartsMarks = it.question.subparts && it.question.subparts.length > 0
+                        const subpartsMarks = isSubpartQuestionType(it.question.type) && it.question.subparts && it.question.subparts.length > 0
                           ? it.question.subparts.reduce((sum, sp) => sum + (sp.marks || 1), 0)
                           : 0;
                         const questionTotalMarks = isMatchQ
@@ -1882,7 +1883,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                 )}
                                 <span className="badge font-bold !bg-indigo-50 !text-indigo-700 border border-indigo-200">
                                   {questionTotalMarks} Mark{questionTotalMarks > 1 ? "s" : ""}
-                                  {it.question.subparts && it.question.subparts.length > 0 && ` (${it.question.subparts.length} parts)`}
+                                  {isSubpartQuestionType(it.question.type) && it.question.subparts && it.question.subparts.length > 0 && ` (${it.question.subparts.length} parts)`}
                                 </span>
                                 <span className="badge font-semibold !bg-slate-100 !text-slate-700 border border-slate-200">{it.question.difficulty}</span>
                                 <span className="badge !bg-slate-100 text-slate-700 font-medium border border-slate-200">
