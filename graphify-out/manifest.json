@@ -318,9 +318,9 @@
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/ai-generate-section/route.ts": {
-    "mtime": 1793358297.7754626,
-    "seen": 1793359664.5001688,
-    "ast_hash": "a0bb3f01d9e0f04d0e6320fc0ff425dc",
+    "mtime": 1793361302.06844,
+    "seen": 1793361366.024053,
+    "ast_hash": "36d6b118f2911fd0812198bec8542d14",
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/ai-plan/route.ts": {
@@ -804,9 +804,9 @@
     "semantic_hash": ""
   },
   "src/lib/constants.ts": {
-    "mtime": 1793358366.101165,
-    "seen": 1793359664.5001688,
-    "ast_hash": "e464a4aa5b0b14fe28c73c022a04ba79",
+    "mtime": 1793361307.4085004,
+    "seen": 1793361366.024053,
+    "ast_hash": "00b0f3b06a4cdfa991ee81a4ee71a917",
     "semantic_hash": ""
   },
   "src/lib/curriculumPresets.ts": {
@@ -1536,9 +1536,9 @@
     "semantic_hash": ""
   },
   "src/lib/curriculumContract.ts": {
-    "mtime": 1793359476.3284838,
-    "seen": 1793359664.5001688,
-    "ast_hash": "00ed123be94b31f619ca3a5879189f49",
+    "mtime": 1793361304.8042614,
+    "seen": 1793361366.024053,
+    "ast_hash": "5098aa8cb5fc9f93a9d6f942f0a97e76",
     "semantic_hash": ""
   },
   "src/lib/generationObservability.ts": {

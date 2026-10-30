@@ -45,7 +45,7 @@ export const POST = route(async (req, { id }, user) => {
     slots: slots as GeneratePaperSectionSlot[],
     schoolName: paper.schoolName,
     blueprintName: paper.blueprint.name,
-    academicSession: paper.academicSession || paper.blueprint.academicSession || paper.blueprint.book.academicSession,
+    academicSession: paper.academicSession || paper.blueprint.academicSession,
     examType: paper.examType || paper.blueprint.examType,
     bookId: paper.blueprint.bookId,
     subjectCode: paper.subjectCode || paper.blueprint.subjectCode,

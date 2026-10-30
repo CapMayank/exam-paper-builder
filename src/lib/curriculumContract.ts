@@ -173,6 +173,8 @@ export function detectEducationBoard(params: {
   schoolName?: string | null;
   blueprintName?: string | null;
   className?: string | null;
+  subject?: string | null;
+  subjectCode?: string | null;
   sectionTitles?: string[];
   sectionInstructions?: string[];
 }): SupportedBoard {

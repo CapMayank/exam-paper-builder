@@ -109,8 +109,10 @@ export function detectPaperLanguage(
   paper?: {
     title?: string | null;
     language?: string | null;
+    generalInstructions?: string | null;
     blueprint?: {
       book?: { subject?: string | null; title?: string | null } | null;
+      sections?: Array<{ title?: string | null; instructions?: string | null }> | null;
     } | null;
   } | null,
   items?: Array<{ question?: { text?: string | null; options?: string[] } | null }> | null
