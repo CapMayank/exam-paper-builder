@@ -18,7 +18,7 @@ import {
   resolvePaperExamType,
 } from "@/lib/constants";
 import { subpartsTotalMarks } from "@/lib/types";
-import { formatQuestionNumber } from "@/lib/layout";
+import { computeDisplayedPaperNumbering, formatQuestionNumber } from "@/lib/layout";
 import type { PaperData, QuestionDto } from "@/lib/types";
 
 function getMarksRubric(marks: number, type: string) {
@@ -59,6 +59,11 @@ export default function SolutionsPage({ params }: PageProps<"/papers/[id]/soluti
       : paper.schoolLogo || DEFAULT_SCHOOL_LOGO;
 
   // Flatten questions with numbering matching paper numbering style
+  const displayedNumbering = computeDisplayedPaperNumbering(
+    blueprint.sections,
+    paper.items,
+    paper.numberingStyle || "CONTINUOUS"
+  );
   const allNumberedItems: {
     number: number;
     label: string;
@@ -88,7 +93,7 @@ export default function SolutionsPage({ params }: PageProps<"/papers/[id]/soluti
     const items = paper.items.filter((item) => item.sectionId === s.id);
     for (const it of items) {
       const globalIdx = numCount;
-      const numberLabel = formatQuestionNumber(
+      const fallbackLabel = formatQuestionNumber(
         paper.numberingStyle || "CONTINUOUS",
         globalIdx,
         sectionLetter,
@@ -96,6 +101,10 @@ export default function SolutionsPage({ params }: PageProps<"/papers/[id]/soluti
       );
       numCount++;
       sectionRelativeCounter++;
+
+      const itemNum = displayedNumbering.itemNumbers[it.id];
+      const numberLabel = itemNum?.displayLabel || fallbackLabel;
+      const questionNum = itemNum?.questionNumber || numCount;
 
       const isMatch = s.type === "MATCH_COLUMN" || it.question.type === "MATCH_COLUMN";
       const matchPairCount = isMatch
@@ -109,7 +118,7 @@ export default function SolutionsPage({ params }: PageProps<"/papers/[id]/soluti
         : s.marksEach;
 
       allNumberedItems.push({
-        number: numCount,
+        number: questionNum,
         label: numberLabel,
         itemId: it.id,
         sectionTitle: s.title,

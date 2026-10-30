@@ -126,7 +126,7 @@ export function imposeBooklet(realPages: number): Sheet[] {
   return sheets;
 }
 
-import type { NumberingStyle } from "./constants";
+import { getSharedInstruction, type NumberingStyle } from "./constants";
 
 
 export { NumberingStyle };
@@ -148,4 +148,230 @@ export function formatQuestionNumber(
       return `${globalIdx + 1}`;
   }
 }
+
+export interface DisplayedItemNumber {
+  questionNumber: number;
+  displayLabel: string;
+  subLabel?: string;
+  isGroupedSubItem: boolean;
+}
+
+export interface DisplayedSectionRange {
+  sectionId: string;
+  startQ: number;
+  endQ: number;
+  displayedCount: number;
+  rawItemCount: number;
+  groupStartQ: number;
+  groupEndQ: number;
+  groupDisplayedCount: number;
+  groupRawItemCount: number;
+}
+
+export interface DisplayedPaperNumbering {
+  totalDisplayedQuestions: number;
+  totalRawItems: number;
+  hasGroupedSubItems: boolean;
+  sectionRanges: Record<string, DisplayedSectionRange>;
+  itemNumbers: Record<string, DisplayedItemNumber>;
+}
+
+/**
+ * Computes consistent displayed question numbers across sections and items,
+ * accounting for grouped objective exercises (TRUE_FALSE and FILL_BLANK with >1 item)
+ * which occupy 1 top-level question number with (a), (b), ... sub-items.
+ */
+export function computeDisplayedPaperNumbering(
+  sections: Array<{ id: string; title: string; type: string; order?: number }>,
+  items: Array<{ id: string; sectionId?: string | null; position?: number; question?: { type?: string } }>,
+  numberingStyle: NumberingStyle = "CONTINUOUS"
+): DisplayedPaperNumbering {
+  const sortedSections = [...sections].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const itemNumbers: Record<string, DisplayedItemNumber> = {};
+  const rawSectionRanges: Array<{
+    sectionId: string;
+    title: string;
+    startQ: number;
+    endQ: number;
+    displayedCount: number;
+    rawItemCount: number;
+  }> = [];
+
+  let globalCounter = 0;
+
+  if (sortedSections.length > 0) {
+    sortedSections.forEach((sec, sIdx) => {
+      const sItems = items
+        .filter((it) => it.sectionId === sec.id)
+        .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+      const sLetter =
+        sec.title.match(/Section\s+([A-Z])/i)?.[1]?.toUpperCase() ||
+        String.fromCharCode(65 + sIdx);
+
+      const isGroupedObjective =
+        (sec.type === "TRUE_FALSE" || sec.type === "FILL_BLANK") && sItems.length > 1;
+
+      if (sItems.length === 0) {
+        rawSectionRanges.push({
+          sectionId: sec.id,
+          title: sec.title.trim(),
+          startQ: globalCounter + 1,
+          endQ: globalCounter,
+          displayedCount: 0,
+          rawItemCount: 0,
+        });
+        return;
+      }
+
+      if (isGroupedObjective) {
+        const qIdx = globalCounter++;
+        const qLabel = formatQuestionNumber(numberingStyle, qIdx, sLetter, 0);
+        sItems.forEach((item, localIdx) => {
+          const subLetter = String.fromCharCode(97 + localIdx);
+          itemNumbers[item.id] = {
+            questionNumber: qIdx + 1,
+            displayLabel: `${qLabel} (${subLetter})`,
+            subLabel: `(${subLetter})`,
+            isGroupedSubItem: true,
+          };
+        });
+        rawSectionRanges.push({
+          sectionId: sec.id,
+          title: sec.title.trim(),
+          startQ: qIdx + 1,
+          endQ: qIdx + 1,
+          displayedCount: 1,
+          rawItemCount: sItems.length,
+        });
+      } else {
+        const startQ = globalCounter + 1;
+        sItems.forEach((item, localIdx) => {
+          const qIdx = globalCounter++;
+          const qLabel = formatQuestionNumber(numberingStyle, qIdx, sLetter, localIdx);
+          itemNumbers[item.id] = {
+            questionNumber: qIdx + 1,
+            displayLabel: qLabel,
+            isGroupedSubItem: false,
+          };
+        });
+        rawSectionRanges.push({
+          sectionId: sec.id,
+          title: sec.title.trim(),
+          startQ,
+          endQ: globalCounter,
+          displayedCount: sItems.length,
+          rawItemCount: sItems.length,
+        });
+      }
+    });
+  } else {
+    const sortedItems = [...items].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+    sortedItems.forEach((item, localIdx) => {
+      const qIdx = globalCounter++;
+      const qLabel = formatQuestionNumber(numberingStyle, qIdx, "A", localIdx);
+      itemNumbers[item.id] = {
+        questionNumber: qIdx + 1,
+        displayLabel: qLabel,
+        isGroupedSubItem: false,
+      };
+    });
+  }
+
+  // Group contiguous sections sharing the same title (e.g. multiple sub-sections under "Section A")
+  const sectionRanges: Record<string, DisplayedSectionRange> = {};
+  let i = 0;
+  while (i < rawSectionRanges.length) {
+    let j = i;
+    while (
+      j + 1 < rawSectionRanges.length &&
+      rawSectionRanges[j + 1].title.toLowerCase() === rawSectionRanges[i].title.toLowerCase()
+    ) {
+      j++;
+    }
+    const groupSlice = rawSectionRanges.slice(i, j + 1);
+    const nonEmptySlice = groupSlice.filter((r) => r.displayedCount > 0);
+    const groupStartQ = nonEmptySlice.length > 0 ? nonEmptySlice[0].startQ : groupSlice[0].startQ;
+    const groupEndQ =
+      nonEmptySlice.length > 0 ? nonEmptySlice[nonEmptySlice.length - 1].endQ : groupSlice[0].endQ;
+    const groupDisplayedCount = groupSlice.reduce((sum, r) => sum + r.displayedCount, 0);
+    const groupRawItemCount = groupSlice.reduce((sum, r) => sum + r.rawItemCount, 0);
+
+    for (const r of groupSlice) {
+      sectionRanges[r.sectionId] = {
+        sectionId: r.sectionId,
+        startQ: r.startQ,
+        endQ: r.endQ,
+        displayedCount: r.displayedCount,
+        rawItemCount: r.rawItemCount,
+        groupStartQ,
+        groupEndQ,
+        groupDisplayedCount,
+        groupRawItemCount,
+      };
+    }
+    i = j + 1;
+  }
+
+  return {
+    totalDisplayedQuestions: globalCounter,
+    totalRawItems: items.length,
+    hasGroupedSubItems: globalCounter !== items.length,
+    sectionRanges,
+    itemNumbers,
+  };
+}
+
+/**
+ * Reconciles hardcoded "Question Nos. X to Y" ranges inside section instructions
+ * with the actual displayed question range [startQ, endQ] so section headers never
+ * contradict displayed question numbering.
+ */
+export function reconcileSectionGroupInstruction(
+  instruction: string | null | undefined,
+  startQ: number,
+  endQ: number
+): string {
+  if (!instruction) return "";
+  if (startQ <= 0 || endQ < startQ) return instruction;
+
+  let updated = instruction;
+  // Replace English "Question Nos. X to Y" or "Question No. X to Y" or "Questions X to Y"
+  updated = updated.replace(
+    /\b(Questions?\s*(?:Nos?\.?)?\s*)\d+\s*(?:to|[-–])\s*\d+/gi,
+    `$1${startQ} to ${endQ}`
+  );
+  // Replace Hindi "प्रश्न क्रमांक X से Y"
+  updated = updated.replace(
+    /(प्रश्‍?न\s*क्रमांक\s*)\d+\s*से\s*\d+/g,
+    `$1${startQ} से ${endQ}`
+  );
+  return updated;
+}
+
+/**
+ * Resolves the prompt shown on a grouped objective exercise (TRUE_FALSE or FILL_BLANK).
+ * Prevents a multi-section overview instruction (such as "Question Nos. 1 to 5: Total 32 objective-type questions...")
+ * from being repeated as the individual exercise prompt for Q7 (FILL_BLANK) or Q8 (TRUE_FALSE).
+ */
+export function resolveGroupedExerciseInstruction(
+  sectionInstruction: string | null | undefined,
+  sectionType: string,
+  hasMultipleTypes: boolean,
+  paperLang: "hi" | "en" | "bilingual" = "en"
+): string {
+  const shared = getSharedInstruction(sectionType, paperLang);
+  const trimmed = (sectionInstruction || "").trim();
+  if (!trimmed) return shared;
+
+  const looksLikeSectionWideOverview =
+    /\b(?:questions?\s*(?:nos?\.?)?\s*\d+\s*(?:to|[-–])\s*\d+|total\s+\d+\s+objective[- ]type|प्रश्‍?न\s*क्रमांक\s*\d+\s*से\s*\d+)/i.test(
+      trimmed
+    );
+
+  if (hasMultipleTypes || looksLikeSectionWideOverview) {
+    return shared || trimmed;
+  }
+  return trimmed;
+}
+
 

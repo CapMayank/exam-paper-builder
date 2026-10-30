@@ -21,7 +21,16 @@ import {
   resolvePaperExamType,
 } from "@/lib/constants";
 import { WorkbookHeader } from "@/lib/kindergarten/components/WorkbookHeader";
-import { formatQuestionNumber, imposeBooklet, imposeTwoUpCut, paginate } from "@/lib/layout";
+import {
+  computeDisplayedPaperNumbering,
+  formatQuestionNumber,
+  imposeBooklet,
+  imposeTwoUpCut,
+  paginate,
+  reconcileSectionGroupInstruction,
+  resolveGroupedExerciseInstruction,
+} from "@/lib/layout";
+import { resolveBoardAndSubjectCode } from "@/lib/curriculumContract";
 import type { PaperData } from "@/lib/types";
 
 const LETTERS = "ABCDEFGHIJ";
@@ -62,6 +71,21 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
   const examType = resolvePaperExamType(paper);
   const examHeading = `${EXAM_TYPE_LABEL[examType]} Examination`;
   const sessionText = paper.academicSession || blueprint.academicSession || "2025–26";
+  const numbering = computeDisplayedPaperNumbering(
+    blueprint.sections,
+    paper.items,
+    paper.numberingStyle || "CONTINUOUS"
+  );
+  const resolvedBoardSubject = resolveBoardAndSubjectCode({
+    subject: blueprint.book.subject,
+    className: blueprint.book.className,
+    explicitSubjectCode: paper.subjectCode || blueprint.subjectCode,
+    schoolName: paper.schoolName,
+    blueprintName: blueprint.name,
+    academicSession: sessionText,
+  });
+  const effectiveSubjectCode =
+    resolvedBoardSubject.subjectCode || paper.subjectCode || blueprint.subjectCode;
   const blocks: Block[] = [];
 
   const isEffectiveCompact = compact || paper.printDensity === "COMPACT";
@@ -119,7 +143,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
         >
           <div>
             <span style={{ fontWeight: 600 }}>Total Questions: </span>
-            <strong>{paper.items.length}</strong>
+            <strong>{numbering.totalDisplayedQuestions}</strong>
           </div>
           {paper.paperSet && (
             <div
@@ -136,10 +160,10 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
                 : `SET ${paper.paperSet.toUpperCase()}`}
             </div>
           )}
-          {(paper.subjectCode || blueprint.subjectCode) && (
+          {effectiveSubjectCode && (
             <div>
               <span style={{ fontWeight: 600 }}>Subject Code: </span>
-              <strong>{paper.subjectCode || blueprint.subjectCode}</strong>
+              <strong>{effectiveSubjectCode}</strong>
             </div>
           )}
         </div>
@@ -362,6 +386,12 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
       );
       const groupMarks = allInGroup.reduce((sum, x) => sum + x.count * x.marksEach, 0);
       const groupCount = allInGroup.reduce((sum, x) => sum + x.count, 0);
+      const secRange = numbering.sectionRanges[s.id];
+      const reconciledMainInstruction = reconcileSectionGroupInstruction(
+        s.instructions,
+        secRange?.groupStartQ ?? 0,
+        secRange?.groupEndQ ?? 0
+      );
 
       const groupRightLabel = isHindi
         ? `${groupCount} प्रश्न · ${groupMarks} अंक`
@@ -390,9 +420,9 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
                 {groupRightLabel}
               </span>
             </div>
-            {s.instructions && (
+            {reconciledMainInstruction && (
               <div style={{ fontStyle: "italic", marginTop: "0.8mm", fontSize: "8.5pt", color: "#334155" }}>
-                {s.instructions}
+                {reconciledMainInstruction}
               </div>
             )}
           </div>
@@ -451,9 +481,12 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
       n += 1;
       sectionRelativeCounter += 1;
 
-      const sharedInstruction = s.instructions?.trim()
-        ? s.instructions.trim()
-        : getSharedInstruction(s.type, paperLang);
+      const sharedInstruction = resolveGroupedExerciseInstruction(
+        s.instructions,
+        s.type,
+        hasMultipleTypes,
+        paperLang
+      );
       const formulaText = formatExerciseFormula(sectionItems.length, s.marksEach, paperLang);
 
       blocks.push({

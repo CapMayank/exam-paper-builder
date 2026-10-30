@@ -251,4 +251,31 @@ describe("AI Paper Generation API Pipeline", () => {
       data: { status: "DRAFT" },
     });
   });
+
+  it("5. Rejects committing contaminated/generic fallback questions into a paper with 422", async () => {
+    const fakeReq = new Request("http://localhost/api/papers/p/ai-commit-section", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sectionId: section2Id,
+        questions: [
+          {
+            slotIndex: 0,
+            chapterId: ch1Id,
+            chapterNumber: 1,
+            chapterTitle: "Sexual Reproduction in Flowering Plants",
+            type: "SHORT",
+            text: "Examine the fundamental principles of Sexual Reproduction in Flowering Plants. Describe the core mechanisms and their biological/scientific significance in standard board curriculum context.",
+            options: [],
+            subparts: [],
+            answer: "Key Concept: Sexual Reproduction principle and definition.",
+            difficulty: "MEDIUM",
+          },
+        ],
+      }),
+    });
+
+    const res = await commitSection(fakeReq, { params: Promise.resolve({ id: paperId }) });
+    expect(res.status).toBe(422);
+  });
 });

@@ -11,6 +11,7 @@ import { EmptyState, ErrorBanner, Field, ListSkeleton, Modal, PageHeader, Spinne
 import { normalizeSession, useAcademicSession } from "@/lib/academicSession";
 import { api } from "@/lib/client";
 import { ACADEMIC_SESSIONS, DEFAULT_ACADEMIC_SESSION, DEFAULT_SCHOOL_NAME, EXAM_TYPE_LABEL, LAYOUTS, LAYOUT_LABEL, sortClassNames, type ExamType } from "@/lib/constants";
+import { resolveBoardAndSubjectCode } from "@/lib/curriculumContract";
 import type { Blueprint, PaperData, PaperListItem } from "@/lib/types";
 
 const SCHOOL_KEY = "epb:schoolName";
@@ -47,7 +48,7 @@ export default function PapersPage() {
     schoolName: DEFAULT_SCHOOL_NAME,
     examDate: "",
     paperSet: "SET A",
-    subjectCode: "041",
+    subjectCode: "",
     academicSession: DEFAULT_ACADEMIC_SESSION,
     generalInstructions: "",
   });
@@ -101,14 +102,25 @@ export default function PapersPage() {
     setModalSubjectFilter(defaultBp?.book.subject || subjectFilter);
     setForm((f) => {
       const initialTitle = f.title.trim() || (defaultBp ? `${defaultBp.name} (SET A)` : "");
+      const schoolName = f.schoolName || localStorage.getItem(SCHOOL_KEY) || DEFAULT_SCHOOL_NAME;
+      const resolvedCode = defaultBp
+        ? resolveBoardAndSubjectCode({
+            subject: defaultBp.book.subject,
+            className: defaultBp.book.className,
+            explicitSubjectCode: defaultBp.subjectCode || f.subjectCode,
+            schoolName,
+            blueprintName: defaultBp.name,
+            academicSession: currentSession || DEFAULT_ACADEMIC_SESSION,
+          }).subjectCode
+        : f.subjectCode;
       return {
         ...f,
         title: initialTitle,
         blueprintId: defaultBp?.id || "",
         examType: (defaultBp?.examType as ExamType) || "ANNUAL",
-        schoolName: f.schoolName || localStorage.getItem(SCHOOL_KEY) || DEFAULT_SCHOOL_NAME,
+        schoolName,
         paperSet: f.paperSet || "SET A",
-        subjectCode: defaultBp?.subjectCode || f.subjectCode || "041",
+        subjectCode: resolvedCode || defaultBp?.subjectCode || "",
         academicSession: currentSession || DEFAULT_ACADEMIC_SESSION,
       };
     });
@@ -654,12 +666,22 @@ export default function PapersPage() {
                       setModalSubjectFilter("ALL");
                       const matching = blueprints.filter((b) => nextCls === "ALL" || b.book.className === nextCls);
                       if (matching[0]) {
-                        setForm((f) => ({
-                          ...f,
-                          blueprintId: matching[0].id,
-                          examType: (matching[0].examType as ExamType) || f.examType,
-                          subjectCode: matching[0].subjectCode || f.subjectCode,
-                        }));
+                        setForm((f) => {
+                          const resolved = resolveBoardAndSubjectCode({
+                            subject: matching[0].book.subject,
+                            className: matching[0].book.className,
+                            explicitSubjectCode: matching[0].subjectCode,
+                            schoolName: f.schoolName,
+                            blueprintName: matching[0].name,
+                            academicSession: f.academicSession,
+                          });
+                          return {
+                            ...f,
+                            blueprintId: matching[0].id,
+                            examType: (matching[0].examType as ExamType) || f.examType,
+                            subjectCode: resolved.subjectCode || matching[0].subjectCode || f.subjectCode,
+                          };
+                        });
                       }
                     }}
                   >
@@ -684,12 +706,22 @@ export default function PapersPage() {
                           (nextSubj === "ALL" || b.book.subject === nextSubj),
                       );
                       if (matching[0]) {
-                        setForm((f) => ({
-                          ...f,
-                          blueprintId: matching[0].id,
-                          examType: (matching[0].examType as ExamType) || f.examType,
-                          subjectCode: matching[0].subjectCode || f.subjectCode,
-                        }));
+                        setForm((f) => {
+                          const resolved = resolveBoardAndSubjectCode({
+                            subject: matching[0].book.subject,
+                            className: matching[0].book.className,
+                            explicitSubjectCode: matching[0].subjectCode,
+                            schoolName: f.schoolName,
+                            blueprintName: matching[0].name,
+                            academicSession: f.academicSession,
+                          });
+                          return {
+                            ...f,
+                            blueprintId: matching[0].id,
+                            examType: (matching[0].examType as ExamType) || f.examType,
+                            subjectCode: resolved.subjectCode || matching[0].subjectCode || f.subjectCode,
+                          };
+                        });
                       }
                     }}
                   >
@@ -712,11 +744,23 @@ export default function PapersPage() {
                     onChange={(e) => {
                       const nextBp = blueprints.find((b) => b.id === e.target.value);
                       const shouldUpdateTitle = !form.title.trim() || blueprints.some((b) => b.name === form.title.trim() || form.title.startsWith(b.name));
+                      const resolved = nextBp
+                        ? resolveBoardAndSubjectCode({
+                            subject: nextBp.book.subject,
+                            className: nextBp.book.className,
+                            explicitSubjectCode: nextBp.subjectCode,
+                            schoolName: form.schoolName,
+                            blueprintName: nextBp.name,
+                            academicSession: form.academicSession,
+                          })
+                        : null;
                       setForm({
                         ...form,
                         blueprintId: e.target.value,
                         examType: (nextBp?.examType as ExamType) || "ANNUAL",
-                        ...(nextBp?.subjectCode ? { subjectCode: nextBp.subjectCode } : {}),
+                        ...(resolved?.subjectCode || nextBp?.subjectCode
+                          ? { subjectCode: resolved?.subjectCode || nextBp?.subjectCode || "" }
+                          : {}),
                         ...(nextBp && shouldUpdateTitle ? { title: `${nextBp.name} (${form.paperSet || "SET A"})` } : {}),
                       });
                     }}

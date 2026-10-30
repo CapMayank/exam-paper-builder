@@ -3,6 +3,7 @@ import { recordAudit } from "@/lib/audit";
 import { autoFillPaper } from "@/lib/autofill";
 import { assertCanModifyPaper, loadPaperView, toPlacedItems } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
+import { isQuestionContaminated } from "@/lib/questionValidator";
 import { parseSubparts, subpartsTotalMarks } from "@/lib/types";
 
 /**
@@ -44,13 +45,38 @@ export const POST = route(async (req, { id }, user) => {
     };
   }
 
-  // Fetch all available questions for this book including subparts
+  // Fetch all available questions for this book including subparts and text/options for subject integrity filtering
   const bankQuestions = await prisma.question.findMany({
     where: { bookId: paper.blueprint.bookId },
-    select: { id: true, chapterId: true, type: true, difficulty: true, subpartsJson: true },
+    select: {
+      id: true,
+      chapterId: true,
+      type: true,
+      difficulty: true,
+      text: true,
+      optionsJson: true,
+      subpartsJson: true,
+      answer: true,
+      explanation: true,
+    },
   });
 
-  const candidatePool = bankQuestions.map((q) => {
+  const validBankQuestions = bankQuestions.filter(
+    (q) =>
+      !isQuestionContaminated(
+        {
+          text: q.text,
+          options: q.optionsJson,
+          subparts: q.subpartsJson as any,
+          answer: q.answer,
+          explanation: q.explanation,
+        },
+        paper.blueprint.book.subject,
+        paper.blueprint.book.className,
+      ).contaminated,
+  );
+
+  const candidatePool = validBankQuestions.map((q) => {
     const sps = parseSubparts(q.subpartsJson);
     const subMarks = subpartsTotalMarks(sps);
     return {

@@ -28,6 +28,9 @@ export const POST = route(async (req, { id }, user) => {
     throw new HttpError(400, "Slots array is required and must not be empty.");
   }
 
+  const validBookChapterIds = new Set(paper.blueprint.chapters.map((c) => c.chapterId));
+  const existingQuestionTexts = paper.items.map((i) => i.question.text);
+
   const res = await generatePaperSectionWithGemini({
     className: paper.blueprint.book.className,
     subject: paper.blueprint.book.subject,
@@ -40,16 +43,27 @@ export const POST = route(async (req, { id }, user) => {
     teacherFocus,
     generateDiagrams: Boolean(generateDiagrams),
     slots: slots as GeneratePaperSectionSlot[],
+    schoolName: paper.schoolName,
+    blueprintName: paper.blueprint.name,
+    academicSession: paper.academicSession || paper.blueprint.academicSession || paper.blueprint.book.academicSession,
+    examType: paper.examType || paper.blueprint.examType,
+    bookId: paper.blueprint.bookId,
+    subjectCode: paper.subjectCode || paper.blueprint.subjectCode,
+    validBookChapterIds,
+    existingQuestionTexts,
     apiKey: customKey || req.headers.get("x-gemini-api-key") || (user as any)?.apiKey || null,
   });
 
   if (!res.success) {
-    throw new HttpError(500, res.error || "Failed to generate questions for section.");
+    throw new HttpError(422, res.error || "Failed to generate valid curriculum-grounded questions for section.");
   }
 
   return {
     success: true,
     isMock: res.isMock,
     questions: res.data,
+    trace: res.trace,
+    contract: res.contract,
+    validationIssues: res.validationIssues,
   };
 });

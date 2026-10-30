@@ -2,6 +2,7 @@ import { body, HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { paperStatus } from "@/lib/blueprint";
 import { resolvePaperExamType } from "@/lib/constants";
+import { resolveBoardAndSubjectCode } from "@/lib/curriculumContract";
 import { loadPaperView, toPlacedItems } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { paperCreateSchema } from "@/lib/schemas";
@@ -65,7 +66,17 @@ export const GET = route(async () => {
 
 export const POST = route(async (req, _params, user) => {
   const input = await body(req, paperCreateSchema);
-  const bp = await prisma.blueprint.findUnique({ where: { id: input.blueprintId }, select: { id: true, examType: true } });
+  const bp = await prisma.blueprint.findUnique({
+    where: { id: input.blueprintId },
+    select: {
+      id: true,
+      name: true,
+      examType: true,
+      subjectCode: true,
+      academicSession: true,
+      book: { select: { subject: true, className: true } },
+    },
+  });
   if (!bp) {
     throw new HttpError(400, "Blueprint not found");
   }
@@ -74,9 +85,18 @@ export const POST = route(async (req, _params, user) => {
     title: input.title,
     blueprint: bp,
   });
+  const resolvedBoardSubject = resolveBoardAndSubjectCode({
+    subject: bp.book.subject,
+    className: bp.book.className,
+    explicitSubjectCode: input.subjectCode || bp.subjectCode,
+    schoolName: input.schoolName,
+    blueprintName: bp.name,
+    academicSession: input.academicSession || bp.academicSession,
+  });
   const paper = await prisma.paper.create({
     data: {
       ...input,
+      subjectCode: resolvedBoardSubject.subjectCode || input.subjectCode || bp.subjectCode || undefined,
       examType: resolvedExamType,
       createdById: user.id,
     },

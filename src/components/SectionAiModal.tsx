@@ -170,12 +170,20 @@ export function SectionAiModal({
         }
       }
 
+      const customKey =
+        typeof window !== "undefined"
+          ? localStorage.getItem("exam_gemini_api_key") || ""
+          : "";
+      const headers: Record<string, string> = {};
+      if (customKey) headers["x-gemini-api-key"] = customKey;
+
       const res = await api<{
         success: boolean;
         isMock?: boolean;
         questions: GeneratedPaperQuestion[];
       }>(`/api/papers/${paper.id}/ai-generate-section`, {
         method: "POST",
+        headers,
         body: JSON.stringify({
           sectionTitle: section.title,
           sectionType: section.type,
@@ -184,7 +192,14 @@ export function SectionAiModal({
           difficulty,
           teacherFocus,
           generateDiagrams,
-          slots,
+          slots: slots.map((s, idx) => ({
+            slotIndex: idx,
+            chapterId: s.chapterId,
+            chapterNumber: idx + 1,
+            chapterTitle: s.chapterTitle,
+            marks: s.marks,
+          })),
+          customKey: customKey || undefined,
         }),
       });
 

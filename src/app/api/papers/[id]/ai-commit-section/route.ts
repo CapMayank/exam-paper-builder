@@ -1,9 +1,11 @@
 import { HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { parseMatchColumnPairs, serializeMatchColumnPair } from "@/lib/constants";
+import { buildAndValidateGenerationContract } from "@/lib/curriculumContract";
 import type { GeneratedPaperQuestion } from "@/lib/gemini";
 import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
+import { isQuestionContaminated, validateGeneratedQuestion } from "@/lib/questionValidator";
 import { normalizeSubpartMarks } from "@/lib/types";
 
 export const POST = route(async (req, { id }, user) => {
@@ -45,6 +47,74 @@ export const POST = route(async (req, { id }, user) => {
   const fallbackChapterId = paper.blueprint.chapters[0]?.chapterId;
   if (!fallbackChapterId) {
     throw new HttpError(400, "Blueprint has no associated chapters. Add chapters to the blueprint first.");
+  }
+
+  // Enforce Subject & Curriculum Validation Gate before committing to paper or Question Bank
+  const contractRes = buildAndValidateGenerationContract({
+    schoolName: paper.schoolName,
+    blueprintName: paper.blueprint.name,
+    className: paper.blueprint.book.className,
+    academicSession: paper.academicSession || paper.blueprint.academicSession,
+    examType: paper.examType || paper.blueprint.examType,
+    bookId: paper.blueprint.bookId,
+    subject: paper.blueprint.book.subject,
+    subjectCode: paper.subjectCode || paper.blueprint.subjectCode,
+    sectionTitle: section.title,
+    questionType: section.type,
+    marksEach: section.marksEach,
+    slots: questions.map((q, idx) => {
+      const ch =
+        paper.blueprint.chapters.find((c) => c.chapterId === q.chapterId)?.chapter ||
+        paper.blueprint.chapters[0]?.chapter;
+      return {
+        slotIndex: typeof q.slotIndex === "number" ? q.slotIndex : idx,
+        chapterId: ch?.id || fallbackChapterId,
+        chapterNumber: ch?.number || q.chapterNumber || idx + 1,
+        chapterTitle: q.chapterTitle || ch?.title || "Syllabus Chapter",
+        marks: section.marksEach,
+      };
+    }),
+  });
+
+  if (!contractRes.valid || !contractRes.contract) {
+    throw new HttpError(422, `Invalid generation contract: ${contractRes.errors.join(" ")}`);
+  }
+
+  for (let i = 0; i < questions.length; i++) {
+    const q = questions[i];
+    const contam = isQuestionContaminated(
+      {
+        text: q.text,
+        options: q.options,
+        subparts: q.subparts as any,
+        answer: q.answer,
+        explanation: q.explanation,
+        chapterTitle: q.chapterTitle,
+      },
+      paper.blueprint.book.subject,
+      paper.blueprint.book.className,
+    );
+    if (contam.contaminated) {
+      throw new HttpError(
+        422,
+        `Question ${i + 1} rejected by Subject Integrity Gate: ${contam.reason}`,
+      );
+    }
+
+    const valRes = validateGeneratedQuestion(
+      {
+        ...q,
+        type: q.type || section.type,
+      } as any,
+      contractRes.contract,
+      { slotIndex: i },
+    );
+    if (!valRes.valid) {
+      throw new HttpError(
+        422,
+        `Question ${i + 1} failed quality validation: ${valRes.issues.map((iss) => iss.message).join("; ")}`,
+      );
+    }
   }
 
   let nextPos = existingSectionItems.reduce((max, i) => Math.max(max, i.position), -1) + 1;

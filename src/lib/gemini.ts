@@ -17,9 +17,24 @@ import {
   isSubjectChapterVisual,
   saveDiagramToUploads,
 } from "./diagram-search";
+import {
+  buildAndValidateGenerationContract,
+  cleanChapterTitleForLookup,
+  generateCurriculumGroundedSectionQuestions,
+  getChapterCurriculumSpec,
+  type GenerationContract,
+} from "./curriculumContract";
+import {
+  createGenerationJobTrace,
+  type GenerationJobTrace,
+} from "./generationObservability";
+import {
+  validateGeneratedSection,
+  type QuestionValidationIssue,
+} from "./questionValidator";
 import { normalizeQuestionType } from "./paperImport";
 import { ensureLanguageNonChapterUnits } from "./syllabusImport";
-import { repairLatex } from "./math";
+import { parseGeminiJsonWithLatexSafety, repairLatex } from "./math";
 import { normalizeSubpartMarks } from "./types";
 
 export interface GeminiCallResult<T> {
@@ -28,6 +43,10 @@ export interface GeminiCallResult<T> {
   data: T;
   rawResponse?: string;
   error?: string;
+  modelUsed?: string;
+  trace?: GenerationJobTrace;
+  contract?: GenerationContract;
+  validationIssues?: QuestionValidationIssue[];
 }
 
 export function getGeminiApiKey(customKey?: string | null): string | null {
@@ -46,8 +65,8 @@ export type GeminiContentPart =
   | { inlineData: { mimeType: string; data: string } };
 
 /**
- * Low-level caller for Google Gemini API (Gemini 1.5 Flash / 2.0 Flash)
- * using standard HTTPS fetch.
+ * Low-level caller for Google Gemini API (Gemini 2.5 Pro / 2.5 Flash)
+ * using standard HTTPS fetch with LaTeX-safe JSON parsing.
  */
 export async function callGeminiApi<T>(
   prompt: string | GeminiContentPart[],
@@ -57,45 +76,44 @@ export async function callGeminiApi<T>(
     apiKey?: string | null;
     model?: string;
     mockFallback?: () => T;
+    allowFallbackOnApiFailure?: boolean;
   } = {},
 ): Promise<GeminiCallResult<T>> {
   const apiKey = getGeminiApiKey(opts.apiKey);
 
-  // If no API key is provided, return intelligent mock response
+  // If no API key is configured, use curriculum-grounded offline generator if provided
   if (!apiKey) {
     if (opts.mockFallback) {
       return {
         success: true,
         isMock: true,
+        modelUsed: "offline-curriculum-engine",
         data: opts.mockFallback(),
       };
     }
     return {
       success: false,
       isMock: true,
-      error: "No Gemini API key configured. Provide an API key or use demo templates.",
+      error: "No Gemini API key configured.",
       data: null as unknown as T,
     };
   }
 
-  // Model priority: configured model or gemini-2.5-pro / gemini-2.5-flash, with automatic fallback
+  // Model priority: configured model or gemini-2.5-pro / gemini-2.5-flash (deprecated 404 1.5 models removed)
   const chosenModel = opts.model || process.env.GEMINI_MODEL;
   const isPro = Boolean(chosenModel?.includes("pro"));
   const fallbackList = isPro
     ? [
         chosenModel!,
         "gemini-2.5-pro",
-        "gemini-1.5-pro",
         "gemini-2.5-flash",
         "gemini-2.0-flash",
-        "gemini-1.5-flash",
         "gemini-flash-lite-latest",
       ]
     : [
         chosenModel || "gemini-2.5-flash",
         "gemini-2.5-flash",
         "gemini-2.0-flash",
-        "gemini-1.5-flash",
         "gemini-flash-lite-latest",
         "gemini-flash-latest",
       ];
@@ -145,17 +163,11 @@ export async function callGeminiApi<T>(
         json.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
       if (opts.json) {
-        // Clean possible markdown code fence ```json ... ```
-        const cleaned = candidateText
-          .replace(/^```json\s*/i, "")
-          .replace(/^```\s*/, "")
-          .replace(/```\s*$/, "")
-          .trim();
-
-        const parsedData = JSON.parse(cleaned) as T;
+        const parsedData = parseGeminiJsonWithLatexSafety<T>(candidateText);
         return {
           success: true,
           isMock: false,
+          modelUsed: model,
           data: parsedData,
           rawResponse: candidateText,
         };
@@ -164,28 +176,31 @@ export async function callGeminiApi<T>(
       return {
         success: true,
         isMock: false,
+        modelUsed: model,
         data: candidateText as unknown as T,
         rawResponse: candidateText,
       };
     } catch (err: any) {
-      console.warn(`Gemini API Model ${model} fetch failed:`, err?.message || err);
+      lastErrorText = err?.message || String(err);
+      console.warn(`Gemini API Model ${model} fetch/parse failed:`, lastErrorText);
     }
   }
 
-  // If all models failed or encountered quota/demand spikes, use graceful fallback if available
-  if (opts.mockFallback) {
+  // Only allow fallback on live API failure when explicitly opted in by non-question utilities
+  if (opts.allowFallbackOnApiFailure && opts.mockFallback) {
     return {
       success: true,
       isMock: true,
+      modelUsed: "offline-fallback",
       data: opts.mockFallback(),
-      error: `Gemini API returned status ${lastStatus || 500}. Switched to offline demo fallback.`,
+      error: `Gemini API returned status ${lastStatus || 500}.`,
     };
   }
 
   return {
     success: false,
     isMock: false,
-    error: `Gemini API Error (${lastStatus}): ${lastErrorText || "All model endpoints unavailable"}`,
+    error: `Gemini API Error (${lastStatus || "PARSE_OR_NETWORK"}): ${lastErrorText || "All model endpoints unavailable"}`,
     data: null as unknown as T,
   };
 }
@@ -217,15 +232,72 @@ export async function generateQuestionsWithGemini(params: {
   language: "en" | "hi" | "bilingual";
   count: number;
   topicContext?: string;
+  board?: string | null;
+  academicSession?: string | null;
+  subjectCode?: string | null;
   apiKey?: string | null;
 }): Promise<GeminiCallResult<GeneratedQuestionItem[]>> {
-  const { chapter, className, subject, type, marks, difficulty, cognitiveLevel, language, count, topicContext, apiKey } = params;
-
-  const systemPrompt = `You are a strict, experienced CBSE and Indian School Board Senior Examiner and Curriculum Expert.
-Your task is to generate high-standard examination questions strictly aligned with NCERT curriculum, Bloom's Taxonomy, and official CBSE blueprinted patterns.
-Output format: JSON array of question objects only. No conversational wrapper.`;
+  const {
+    chapter,
+    className,
+    subject,
+    type,
+    marks,
+    difficulty,
+    cognitiveLevel,
+    language,
+    count,
+    topicContext,
+    board,
+    academicSession,
+    subjectCode,
+    apiKey,
+  } = params;
 
   const normalizedType = normalizeQuestionType(type);
+  const effectiveCount = Math.max(1, count || 1);
+  const contractRes = buildAndValidateGenerationContract({
+    board,
+    className,
+    academicSession,
+    subject,
+    subjectCode,
+    questionType: normalizedType,
+    marksEach: marks || 1,
+    difficulty,
+    language,
+    requiredCount: effectiveCount,
+    slots: Array.from({ length: effectiveCount }, (_, i) => ({
+      slotIndex: i,
+      chapterId: `ch_${i + 1}`,
+      chapterNumber: i + 1,
+      chapterTitle: chapter || "Syllabus Chapter",
+      marks: marks || 1,
+    })),
+  });
+
+  if (!contractRes.valid || !contractRes.contract) {
+    return {
+      success: false,
+      isMock: false,
+      error: contractRes.errors.join(" "),
+      data: [],
+    };
+  }
+
+  const contract = contractRes.contract;
+  const chapterSpec = contract.slots[0].curriculumSpec;
+
+  const systemPrompt = `You are a strict, experienced ${contract.boardDisplayName} Senior Examiner and ${contract.canonicalSubject} Curriculum Specialist.
+Your task is to generate authentic, mathematically/scientifically rigorous examination questions strictly aligned with the ${contract.className} ${contract.canonicalSubject} syllabus (${contract.academicSession}, Subject Code: ${contract.subjectCode}).
+STRICT DOMAIN ISOLATION:
+- Generate questions ONLY for ${contract.canonicalSubject} (Chapter: "${chapter}").
+- Allowed syllabus topics: ${chapterSpec.includedTopics.join("; ")}
+${chapterSpec.deletedTopics.length > 0 ? `- Deleted/Excluded topics (DO NOT ASK): ${chapterSpec.deletedTopics.join("; ")}` : ""}
+${contract.forbiddenCrossSubjectDomains.length > 0 ? `- FORBIDDEN cross-subject domains (NEVER include): ${contract.forbiddenCrossSubjectDomains.join("; ")}` : ""}
+- NEVER output generic placeholder templates or cross-subject content.
+Output format: JSON array of question objects only. No conversational wrapper.`;
+
   const isMatchColumn = normalizedType === "MATCH_COLUMN";
   const letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
   const romans = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
@@ -234,10 +306,12 @@ Output format: JSON array of question objects only. No conversational wrapper.`;
   const targetRomans = romans.slice(0, pairCount);
 
   const userPrompt = isMatchColumn
-    ? `Generate ${count} distinct board-aligned Match the Columns question(s) with the following specifications:
+    ? `Generate ${effectiveCount} distinct board-aligned Match the Columns question(s) with the following specifications:
+- Board: ${contract.boardDisplayName} (${contract.academicSession})
 - Class: ${className}
-- Subject: ${subject}
+- Subject: ${contract.canonicalSubject} (Code: ${contract.subjectCode})
 - Chapter: ${chapter}
+- Allowed Topics: ${chapterSpec.includedTopics.join("; ")}
 - Question Type: MATCH_COLUMN
 - Marks: ${marks} marks each (containing exactly ${pairCount} matching pairs)
 - Difficulty: ${difficulty}
@@ -250,24 +324,17 @@ CRITICAL MATCH_COLUMN STRUCTURE REQUIREMENTS:
    - The opening instruction line (e.g. "Match the items in Column I with their correct evaluated forms in Column II:")
    - Followed by "Column I:" on its own line
    - Followed by EXACTLY ${pairCount} Column I items labeled ${targetLetters.map((l) => `(${l})`).join(", ")} on separate lines.
-   Example:
-   "Match the items in Column I with their correct corresponding forms in Column II:\nColumn I:\n${targetLetters.map((l, i) => `(${l}) Concept ${i + 1}`).join("\n")}"
-
 2. The "options" array MUST contain EXACTLY the ${pairCount} corresponding Column II matching items/expressions (shuffled/deranged relative to Column I).
    DO NOT leave "options" empty!
-   Example:
-   ${JSON.stringify(targetLetters.map((_, i) => `Definition / result ${i + 1}`), null, 2)}
-
 3. The "answer" field MUST specify the correct pairing for all ${pairCount} items:
    Example: "${targetLetters.map((l, i) => `(${l})-${targetRomans[(i + 1) % pairCount]}`).join(", ")}"
-
 4. Use standard LaTeX math $...$ for any mathematical expressions, integrals, equations, fractions, or symbols.
 
 Return a JSON array strictly matching this TypeScript structure:
 [
   {
     "type": "MATCH_COLUMN",
-    "text": "Match the items in Column I with Column II:\nColumn I:\n${targetLetters.map((l, i) => `(${l}) Concept ${i + 1}`).join("\n")}",
+    "text": "Match the items in Column I with Column II:\\nColumn I:\\n${targetLetters.map((l, i) => `(${l}) Concept ${i + 1}`).join("\\n")}",
     "options": ${JSON.stringify(targetLetters.map((_, i) => `Definition / result for ${letters[(i + 1) % pairCount]} (shuffled)`), null, 4)},
     "subparts": [],
     "answer": "${targetLetters.map((l, i) => `(${l})-${targetRomans[(i + 1) % pairCount]}`).join(", ")}",
@@ -277,11 +344,13 @@ Return a JSON array strictly matching this TypeScript structure:
     "explanation": "Step-by-step evaluation showing why each pairing is correct."
   }
 ]`
-    : `Generate ${count} distinct board-aligned question(s) with the following specifications:
+    : `Generate ${effectiveCount} distinct board-aligned question(s) with the following specifications:
+- Board: ${contract.boardDisplayName} (${contract.academicSession})
 - Class: ${className}
-- Subject: ${subject}
+- Subject: ${contract.canonicalSubject} (Code: ${contract.subjectCode})
 - Chapter: ${chapter}
-- Question Type: ${type} (Options: MCQ, SHORT, LONG, CASE_STUDY, ASSERTION_REASON, NUMERICAL, FILL_BLANK, TRUE_FALSE, MATCH_COLUMN)
+- Allowed Topics: ${chapterSpec.includedTopics.join("; ")}
+- Question Type: ${normalizedType}
 - Marks: ${marks} marks each
 - Difficulty: ${difficulty}
 - Cognitive Level: ${cognitiveLevel || "APPLYING"}
@@ -289,28 +358,27 @@ Return a JSON array strictly matching this TypeScript structure:
 ${topicContext ? `- Specific Topic / Context Focus: ${topicContext}` : ""}
 
 Strict requirements:
-1. For MCQ: Provide exactly 4 distinct options with one correct answer. Make distractors conceptually plausible based on common student misconceptions.
-2. For ASSERTION_REASON: Provide Assertion (A) and Reason (R), and standard 4 CBSE options:
-   (a) Both A and R are true and R is the correct explanation of A
-   (b) Both A and R are true but R is not the correct explanation of A
-   (c) A is true but R is false
-   (d) A is false but R is true
-3. For CASE_STUDY: Provide a real-world scenario/passage, followed by 3-4 subparts with label (e.g. "(i)", "(ii)", "(iii)"), question text, marks distribution totaling ${marks} marks, and answers.
-4. For SHORT, LONG, NUMERICAL: Provide step-wise model answer and marking scheme breakdown.
-5. For FILL_BLANK: Provide question text containing one or more blanks indicated by "________" (at least 8 underscores). Options should be empty []. The answer should be the exact word(s) filling the blank.
+1. For MCQ: Provide exactly 4 distinct options with one correct answer. Make distractors conceptually plausible based on common student misconceptions in ${contract.canonicalSubject}.
+2. For ASSERTION_REASON: Provide Assertion (A) and Reason (R), and standard 4 options:
+   (a) Both (A) and (R) are true and (R) is the correct explanation of (A).
+   (b) Both (A) and (R) are true, but (R) is not the correct explanation of (A).
+   (c) (A) is true, but (R) is false.
+   (d) (A) is false, but (R) is true.
+3. For CASE_STUDY: Provide a domain-authentic ${contract.canonicalSubject} scenario/passage for "${chapter}", followed by 3-4 subparts with label (e.g. "(i)", "(ii)", "(iii)"), question text, marks distribution totaling ${marks} marks, and answers.
+4. For VERY_SHORT, SHORT, LONG, NUMERICAL: Provide step-wise model answer and marking scheme breakdown.
+5. For FILL_BLANK: Provide question text containing one or more blanks indicated by "________" (at least 8 underscores). Options should be empty []. The answer should be the exact word(s) or value filling the blank.
 6. For TRUE_FALSE: Provide a clear declarative statement. Options should be ["True", "False"] (or ["सत्य", "असत्य"] for Hindi). Answer must be "True" or "False" (or Hindi equivalent).
-7. For MATCH_COLUMN: Set text with instructions and Column I items labeled (${targetLetters.map((l) => `(${l})`).join(", ")}). Set options to the ${pairCount} corresponding Column II items. Set answer to the full pairing string (e.g. "${targetLetters.map((l, i) => `(${l})-${targetRomans[(i + 1) % pairCount]}`).join(", ")}").
-8. Use standard LaTeX math $...$ for any mathematical expressions, formulas, chemical reactions, or units.
+7. Use standard LaTeX math $...$ for any mathematical expressions, formulas, chemical reactions, or units.
 
 Return a JSON array strictly matching this TypeScript structure:
 [
   {
-    "type": "${type}",
+    "type": "${normalizedType}",
     "text": "Question text...",
-    "options": ["Option A", "Option B", "Option C", "Option D"], // 4 for MCQ/ASSERTION_REASON, 2 for TRUE_FALSE, empty [] for subjective
+    "options": ["Option A", "Option B", "Option C", "Option D"],
     "subparts": [
       { "label": "(i)", "text": "Subpart text", "marks": 1, "answer": "Answer" }
-    ], // for case study only, empty [] for others
+    ],
     "answer": "Detailed model answer / step marking scheme",
     "marks": ${marks},
     "difficulty": "${difficulty}",
@@ -441,195 +509,52 @@ Return a JSON array strictly matching this TypeScript structure:
       }
     }
 
-    if (type === "MCQ") {
-      return [
-        {
-          type: "MCQ",
-          text: `Which of the following observations indicates a chemical change during the reaction of aqueous lead nitrate with potassium iodide? ${
-            language === "bilingual" ? "(निम्नलिखित में से कौन सा प्रेक्षण लेड नाइट्रेट और पोटैशियम आयोडाइड की अभिक्रिया में रासायनिक परिवर्तन को दर्शाता है?)" : ""
-          }`,
-          options: [
-            "Formation of a yellow precipitate of $\\text{PbI}_2$",
-            "Evolution of pungent brown gas",
-            "Dissolution of the test tube glass",
-            "Change of liquid temperature to freezing point",
-          ],
-          subparts: [],
-          answer: "Formation of a yellow precipitate of $\\text{PbI}_2$",
-          marks: 1,
-          difficulty: "MEDIUM",
-          cognitiveLevel: "UNDERSTANDING",
-          explanation: "Lead nitrate reacts with potassium iodide to precipitate bright yellow lead iodide: $\\text{Pb(NO}_3)_2 + 2\\text{KI} \\rightarrow \\text{PbI}_2\\downarrow + 2\\text{KNO}_3$.",
-        },
-      ];
-    }
-
-    if (type === "ASSERTION_REASON") {
-      return [
-        {
-          type: "ASSERTION_REASON",
-          text: `Given below are two statements labeled as Assertion (A) and Reason (R):
-Assertion (A): Silver chloride turns grey in sunlight.
-Reason (R): Decomposition of silver chloride into silver and chlorine occurs by light. ${
-            language === "bilingual" ? "\n(अभिकथन (A): सिल्वर क्लोराइड सूर्य के प्रकाश में धूसर हो जाता है।\nकारण (R): प्रकाश द्वारा सिल्वर क्लोराइड का अपघटन सिल्वर और क्लोरीन में होता है।)" : ""
-          }`,
-          options: [
-            "Both (A) and (R) are true, and (R) is the correct explanation of (A).",
-            "Both (A) and (R) are true, but (R) is not the correct explanation of (A).",
-            "(A) is true, but (R) is false.",
-            "(A) is false, but (R) is true.",
-          ],
-          subparts: [],
-          answer: "Both (A) and (R) are true, and (R) is the correct explanation of (A).",
-          marks: 1,
-          difficulty: "MEDIUM",
-          cognitiveLevel: "ANALYZING",
-          explanation: "Photolytic decomposition: $2\\text{AgCl}(s) \\xrightarrow{\\text{sunlight}} 2\\text{Ag}(s) + \\text{Cl}_2(g)$. Grey silver metal is formed.",
-        },
-      ];
-    }
-
-    if (type === "CASE_STUDY") {
-      return [
-        {
-          type: "CASE_STUDY",
-          text: `Read the following passage and answer the questions that follow:
-A student took three test tubes A, B, and C containing clean iron nails. In tube A, nails were immersed in boiled distilled water covered with oil. In tube B, anhydrous calcium chloride was kept. In tube C, nails were half-immersed in tap water exposed to air. After five days, rusting was observed only in tube C.`,
-          options: [],
-          subparts: [
-            {
-              label: "(i)",
-              text: "State the essential conditions required for the rusting of iron.",
-              marks: 1,
-              answer: "Both moisture (water) and air (oxygen) are simultaneously required for rusting.",
-            },
-            {
-              label: "(ii)",
-              text: "Why was boiled distilled water with an oil layer used in test tube A?",
-              marks: 1,
-              answer: "Boiling removes dissolved air/oxygen from water, and the oil layer prevents atmospheric oxygen from re-dissolving.",
-            },
-            {
-              label: "(iii)",
-              text: "Write the chemical formula of rust and state one industrial method to prevent it on large iron bridges.",
-              marks: 2,
-              answer: "Hydrated ferric oxide $\\text{Fe}_2\\text{O}_3 \\cdot x\\text{H}_2\\text{O}$ [1 mark]. Galvanisation (coating with zinc) or sacrificial anode protection [1 mark].",
-            },
-          ],
-          answer: "Refer to subpart answers above (total 4 marks).",
-          marks: 4,
-          difficulty: "HARD",
-          cognitiveLevel: "ANALYZING",
-          explanation: "CBSE Case study testing controlled experimental observation on corrosion.",
-        },
-      ];
-    }
-
-    if (type === "FILL_BLANK") {
-      return [
-        {
-          type: "FILL_BLANK",
-          text: `The process of depositing a protective layer of zinc on iron to prevent corrosion is called ________. ${
-            language === "bilingual" ? "(लोहे को जंग से सुरक्षित रखने के लिए उस पर जस्ते की परत चढ़ाने की प्रक्रिया को ________ कहा जाता है।)" : ""
-          }`,
-          options: [],
-          subparts: [],
-          answer: "Galvanisation (गैल्वनीकरण)",
-          marks: marks || 1,
-          difficulty: "EASY",
-          cognitiveLevel: "REMEMBERING",
-          explanation: "Galvanisation creates both a physical barrier and sacrificial anodic protection against rusting.",
-        },
-      ];
-    }
-
-    if (type === "TRUE_FALSE") {
-      return [
-        {
-          type: "TRUE_FALSE",
-          text: `Corrosion of iron is an irreversible electrochemical oxidation that requires the simultaneous presence of oxygen and moisture. ${
-            language === "bilingual" ? "(लोहे में जंग लगना एक अनुत्क्रमणीय विद्युत-रासायनिक ऑक्सीकरण है जिसके लिए ऑक्सीजन और नमी दोनों की एक साथ उपस्थिति आवश्यक है।)" : ""
-          }`,
-          options: language === "hi" ? ["सत्य", "असत्य"] : ["True", "False"],
-          subparts: [],
-          answer: language === "hi" ? "सत्य" : "True",
-          marks: marks || 1,
-          difficulty: "EASY",
-          cognitiveLevel: "UNDERSTANDING",
-          explanation: "Both oxygen and moisture are indispensable reactants for the formation of hydrated ferric oxide.",
-        },
-      ];
-    }
-
-    if (type === "MATCH_COLUMN") {
-      const pool = [
-        { left: "Primary factor", right: "Metabolic activation pathway" },
-        { left: "Secondary regulator", right: "Structural stability and conformation" },
-        { left: "Catalytic center", right: "Substrate binding site" },
-        { left: "Feedback inhibitor", right: "Allosteric control regulation" },
-        { left: "Allosteric effector", right: "Conformational transition trigger" },
-        { left: "Coenzyme component", right: "Transient electron carrier" },
-        { left: "Kinetic modulator", right: "Activation energy reduction" },
-        { left: "Competitive analog", right: "Active site blockading" },
-        { left: "Membrane transducer", right: "Signal cascade propagation" },
-        { left: "Macromolecular scaffold", right: "Supramolecular complex assembly" },
-      ];
-      const basePairs = pool.slice(0, pairCount).map((p, idx) => ({
-        left: `(${letters[idx] ?? idx + 1}) ${p.left}`,
-        right: p.right,
-      }));
-      const deranged = derangeMatchColumnPairs(basePairs);
-      const options = deranged.map((p) => p.right);
-      const mapping = basePairs
-        .map((bp, i) => {
-          const optIdx = options.indexOf(bp.right);
-          const letter = letters[i] ?? String.fromCharCode(65 + i);
-          return `(${letter})-${romans[optIdx] ?? `(${optIdx + 1})`}`;
-        })
-        .join(", ");
-
-      return [
-        {
-          type: "MATCH_COLUMN",
-          text: `Match the items in Column I with their corresponding features in Column II:\nColumn I:\n${basePairs.map((bp) => bp.left).join("\n")}`,
-          options,
-          subparts: [],
-          answer: mapping,
-          marks: marks || pairCount,
-          difficulty: (difficulty as any) || "MEDIUM",
-          cognitiveLevel: (cognitiveLevel as any) || "UNDERSTANDING",
-          explanation: "Curriculum standard match the column exercise.",
-        },
-      ];
-    }
-
-    // Default Short/Long
-    return [
-      {
-        type: type,
-        text: `State the balanced chemical equation for the reaction that takes place when quicklime is added to water. Name the type of reaction and state the temperature change observed. ${
-          language === "bilingual" ? "(जब बिना बुझे चूने में जल मिलाया जाता है तो होने वाली अभिक्रिया का संतुलित समीकरण लिखिए। इस अभिक्रिया का प्रकार तथा तापमान परिवर्तन बताइए।)" : ""
-        }`,
-        options: [],
-        subparts: [],
-        answer: `1. Balanced Equation: $\\text{CaO}(s) + \\text{H}_2\\text{O}(l) \\rightarrow \\text{Ca(OH)}_2(aq) + \\text{Heat}$ [1 mark]
-2. Type of Reaction: Combination reaction and Exothermic reaction [1 mark]
-3. Observation: The container becomes vigorously hot due to the release of large heat [1 mark]`,
-        marks: marks || 3,
-        difficulty: "MEDIUM",
-        cognitiveLevel: "UNDERSTANDING",
-        explanation: "Exothermic synthesis of slaked lime.",
-      },
-    ];
+    const grounded = generateCurriculumGroundedSectionQuestions(contract);
+    return grounded.map((g) => ({
+      type: g.type,
+      text: g.text,
+      options: g.options,
+      subparts: g.subparts.map((sp) => ({
+        label: sp.label,
+        text: sp.text,
+        marks: sp.marks,
+        answer: sp.answer || "",
+        options: sp.options,
+      })),
+      answer: g.answer,
+      marks: marks || 1,
+      difficulty: g.difficulty,
+      cognitiveLevel: (g.cognitiveLevel as any) || "UNDERSTANDING",
+      explanation: g.explanation,
+    }));
   };
 
   const callResult = await callGeminiApi<GeneratedQuestionItem[]>(userPrompt, systemPrompt, {
     json: true,
     apiKey,
     mockFallback: fallbackQuestions,
+    allowFallbackOnApiFailure: false,
   });
 
   if (callResult.success && Array.isArray(callResult.data)) {
+    const cleanCh = cleanChapterTitleForLookup(chapter || "Syllabus Chapter");
+    const chapterSupplementPairs: Array<{ left: string; right: string }> = [
+      ...chapterSpec.sampleMatchPairs,
+      ...chapterSpec.includedTopics.map((t, i) => ({
+        left: `${cleanCh}: ${t.split(":")[0].trim()}`,
+        right:
+          chapterSpec.keyFormulasOrConcepts[i % chapterSpec.keyFormulasOrConcepts.length] ||
+          `Verified relation in ${cleanCh} (${i + 1})`,
+      })),
+    ];
+    while (chapterSupplementPairs.length < 10) {
+      const idx = chapterSupplementPairs.length + 1;
+      chapterSupplementPairs.push({
+        left: `${cleanCh} theorem (${idx})`,
+        right: `${chapterSpec.keyFormulasOrConcepts[0] || `Verified result in ${cleanCh}`} (${idx})`,
+      });
+    }
+
     callResult.data = callResult.data.map((item) => {
       const qType = normalizeQuestionType(item.type || type);
       const isMatch = qType === "MATCH_COLUMN";
@@ -659,28 +584,12 @@ A student took three test tubes A, B, and C containing clean iron nails. In tube
           pairs = extractMatchPairsFromExplanation(qText);
         }
 
-        const letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
-        const romans = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
         const targetPairCount = marks <= 1 ? 4 : Math.min(10, marks);
 
-        const supplementPool = [
-          { left: "Fundamental principle", right: "Underlying mathematical formulation" },
-          { left: "Operational theorem", right: "Boundary conditions and validity" },
-          { left: "Empirical relationship", right: "Quantitative correlation in syllabus unit" },
-          { left: "Application model", right: "Concrete analytical outcome" },
-          { left: "Thermodynamic parameter", right: "State function equilibrium criteria" },
-          { left: "Dynamic variable", right: "Rate constant and kinetic trajectory" },
-          { left: "Constitutive relation", right: "Material property tensor response" },
-          { left: "Conservation metric", right: "Invariance under coordinate transformation" },
-          { left: "Spectroscopic signature", right: "Quantized energy level transition" },
-          { left: "Asymptotic limit", right: "Singularity resolution behavior" },
-        ];
-
         if (pairs.length > 0) {
-          // If Gemini output fewer pairs than targetPairCount, supplement missing pairs
           if (pairs.length < targetPairCount) {
             for (let idx = pairs.length; idx < targetPairCount; idx++) {
-              const sup = supplementPool[idx] ?? { left: `Property ${idx + 1}`, right: `Definition ${idx + 1}` };
+              const sup = chapterSupplementPairs[idx % chapterSupplementPairs.length];
               pairs.push({
                 left: `(${letters[idx] ?? idx + 1}) ${sup.left}`,
                 right: sup.right,
@@ -708,8 +617,7 @@ A student took three test tubes A, B, and C containing clean iron nails. In tube
           options = col2Items;
           qAnswer = answers.join(", ");
         } else {
-          // Fallback if no pairs could be extracted from text or explanation
-          const fallbackPairs = supplementPool.slice(0, targetPairCount).map((p, idx) => ({
+          const fallbackPairs = chapterSupplementPairs.slice(0, targetPairCount).map((p, idx) => ({
             left: `(${letters[idx] ?? idx + 1}) ${p.left}`,
             right: p.right,
           }));
@@ -750,6 +658,34 @@ A student took three test tubes A, B, and C containing clean iron nails. In tube
         subparts: normalizedSubparts,
       };
     });
+
+    if (!isKindergartenType(normalizedType)) {
+      const validation = validateGeneratedSection(callResult.data, contract);
+      const trace = createGenerationJobTrace({
+        contract,
+        modelUsed: callResult.modelUsed || "gemini-2.5-flash",
+        isOfflineCurriculumMode: callResult.isMock,
+        retryCount: 0,
+        acceptedCount: validation.acceptedQuestions.length,
+        rejectedCount: validation.rejectedSlotIndices.length,
+        validationIssues: validation.issues,
+      });
+      callResult.trace = trace;
+      callResult.contract = contract;
+      callResult.validationIssues = validation.issues;
+
+      if (!validation.valid) {
+        return {
+          success: false,
+          isMock: callResult.isMock,
+          error: `Generated question failed subject/curriculum validation: ${validation.issues.map((i) => i.message).join("; ")}`,
+          data: validation.acceptedQuestions as GeneratedQuestionItem[],
+          trace,
+          contract,
+          validationIssues: validation.issues,
+        };
+      }
+    }
   }
 
   return callResult;
@@ -780,6 +716,15 @@ export interface GeneratePaperSectionInput {
   teacherFocus?: string;
   generateDiagrams?: boolean;
   slots: GeneratePaperSectionSlot[];
+  board?: string | null;
+  schoolName?: string | null;
+  blueprintName?: string | null;
+  academicSession?: string | null;
+  examType?: string | null;
+  bookId?: string | null;
+  subjectCode?: string | null;
+  validBookChapterIds?: Set<string>;
+  existingQuestionTexts?: string[];
   apiKey?: string | null;
 }
 
@@ -822,68 +767,114 @@ export async function generatePaperSectionWithGemini(
     teacherFocus,
     generateDiagrams,
     slots,
+    board,
+    schoolName,
+    blueprintName,
+    academicSession,
+    examType,
+    bookId,
+    subjectCode,
+    validBookChapterIds,
+    existingQuestionTexts,
     apiKey,
   } = params;
 
   const normalizedType = normalizeQuestionType(sectionType);
+  const contractRes = buildAndValidateGenerationContract({
+    board,
+    schoolName,
+    blueprintName,
+    className,
+    academicSession,
+    examType,
+    bookId,
+    subject,
+    subjectCode,
+    sectionTitle,
+    questionType: normalizedType,
+    marksEach,
+    difficulty,
+    language,
+    requiredCount: normalizedType === "MATCH_COLUMN" ? 1 : slots?.length || 0,
+    slots,
+    validBookChapterIds,
+  });
+
+  if (!contractRes.valid || !contractRes.contract) {
+    return {
+      success: false,
+      isMock: false,
+      error: contractRes.errors.join(" "),
+      data: [],
+    };
+  }
+
+  const contract = contractRes.contract;
 
   // Check section and chapter visual eligibility
-  const sectionEligible = isSectionVisuallyEligible(normalizedType, subject);
+  const sectionEligible = isSectionVisuallyEligible(normalizedType, contract.rawSubject);
   const visualSlotIndices = slots
-    .map((s, idx) => (isSubjectChapterVisual(subject, s.chapterTitle, normalizedType) ? idx : -1))
+    .map((s, idx) => (isSubjectChapterVisual(contract.rawSubject, s.chapterTitle, normalizedType) ? idx : -1))
     .filter((idx) => idx !== -1);
   const effectiveGenerateDiagrams = Boolean(
-    generateDiagrams && sectionEligible && visualSlotIndices.length > 0
+    generateDiagrams && sectionEligible && visualSlotIndices.length > 0,
   );
 
-  const systemPrompt = `You are an elite, senior board examiner, question paper setter, and curriculum specialist (CBSE, ICSE, and Indian State Boards).
-Your objective is to generate rigorous, authentic, high-standard examination questions for a specific section of a formal board examination paper.
+  const systemPrompt = `You are an elite, senior board examiner, question paper setter, and ${contract.canonicalSubject} curriculum specialist for ${contract.boardDisplayName}.
+Your objective is to generate rigorous, authentic, high-standard ${contract.canonicalSubject} examination questions for ${contract.className} (Session: ${contract.academicSession}, Syllabus: ${contract.syllabusVersion}, Subject Code: ${contract.subjectCode}).
 
-STRICT CURRICULUM & BOARD STANDARDS:
-1. All questions must align directly with NCERT / prescribed national curriculum standards and syllabus topics.
-2. Maintain precise technical terminology, standard units, and unambiguous phrasing.
-3. For Multiple Choice Questions (MCQ): Provide exactly 4 options. Distractors MUST be plausible based on typical misconceptions; never include trivial throwaways.
-4. For Assertion-Reason (ASSERTION_REASON): Provide Assertion (A) and Reason (R), and use standard 4 CBSE options:
-   (a) Both A and R are true and R is the correct explanation of A
-   (b) Both A and R are true but R is not the correct explanation of A
-   (c) A is true but R is false
-   (d) A is false but R is true
-5. For Match the Columns (MATCH_COLUMN): Generate EXACTLY 1 combined question containing all matching pairs across the section slots. Clearly list Column I items in 'text' and Column II items in 'options', with correct pairings in 'answer'.
-6. For Case Study (CASE_STUDY): Provide a concise real-world scenario/passage, followed by labeled subparts ((i), (ii), etc.) whose marks sum up exactly to ${marksEach}.
-7. For subjective questions (VERY_SHORT, SHORT, LONG): Provide a detailed step-wise model answer and marking scheme breakdown.
-8. LaTeX Math: Enclose all mathematical expressions, chemical equations, symbols, and formulas in standard LaTeX $...$ delimiters.
-9. Vector Diagram Prompt (Figure Studio): If diagram generation is enabled and a question naturally involves a visual diagram (such as ray optics, electric circuit, organ/tissue structure, Punnett square, geometric shape, or chart), provide a concise description in "figurePrompt". If no diagram is needed, leave "figurePrompt" as null.
-10. Return ONLY a valid JSON array of question objects. No markdown wrapping or conversational commentary.`;
+STRICT CURRICULUM & DOMAIN INTEGRITY CONTRACT:
+1. Every question, option, distractor, and model answer MUST strictly belong to ${contract.canonicalSubject} (${contract.className}) and the exact chapter assigned to its slot.
+${contract.forbiddenCrossSubjectDomains.length > 0 ? `2. FORBIDDEN CROSS-SUBJECT DOMAINS (NEVER generate): ${contract.forbiddenCrossSubjectDomains.join("; ")}.` : "2. Never include content from unrelated subjects."}
+3. Never use generic templates such as "Examine the fundamental principles of [Chapter]" or "Which of the following statements is correct regarding the core process in [Chapter]?".
+4. For Multiple Choice Questions (MCQ): Provide exactly 4 distinct options. The 'answer' field MUST exactly match the text of the correct option.
+5. For Assertion-Reason (ASSERTION_REASON): Provide Assertion (A) and Reason (R), and use the 4 standard options:
+   - Both (A) and (R) are true and (R) is the correct explanation of (A).
+   - Both (A) and (R) are true, but (R) is not the correct explanation of (A).
+   - (A) is true, but (R) is false.
+   - (A) is false, but (R) is true.
+6. For Match the Columns (MATCH_COLUMN): Generate EXACTLY 1 combined question containing all matching pairs across the section slots. Clearly list Column I items in 'text' and Column II items in 'options', with correct pairings in 'answer'.
+7. For Case Study / Passage (CASE_STUDY, UNSEEN_PASSAGE, REFERENCE_CONTEXT): Provide a domain-authentic scenario/passage, followed by labeled subparts ((i), (ii), etc.) whose marks sum up exactly to ${marksEach}.
+8. For subjective questions (VERY_SHORT, SHORT, LONG, NUMERICAL): Provide a detailed step-wise model answer and marking scheme breakdown.
+9. LaTeX Math: Enclose all mathematical expressions, equations, symbols, and formulas in standard LaTeX $...$ delimiters.
+10. Vector Diagram Prompt (Figure Studio): If diagram generation is enabled and a question naturally involves a visual diagram, provide a concise description in "figurePrompt". Otherwise leave "figurePrompt" as null.
+11. Return ONLY a valid JSON array of question objects. No markdown wrapping or conversational commentary.`;
 
-  const slotsDescription = slots
-    .map(
-      (s, idx) =>
-        `Question ${idx + 1} (Slot ${s.slotIndex}): Chapter ${s.chapterNumber} - "${s.chapterTitle}" (${s.marks} marks)${
-          s.topicFocus ? ` [Topic Focus: ${s.topicFocus}]` : ""
-        }`,
-    )
+  const slotsDescription = contract.slots
+    .map((s, idx) => {
+      const origSlot = slots[idx];
+      const allowed = s.curriculumSpec.includedTopics.join("; ");
+      const deleted =
+        s.curriculumSpec.deletedTopics.length > 0
+          ? ` | Excluded/Deleted Topics: ${s.curriculumSpec.deletedTopics.join("; ")}`
+          : "";
+      return `Question ${idx + 1} (Slot ${s.slotIndex}): Chapter ${s.chapterNumber} - "${s.chapterTitle}" (${s.marks} marks) | Allowed Topics: ${allowed}${deleted}${
+        origSlot?.topicFocus ? ` | Topic Focus: ${origSlot.topicFocus}` : ""
+      }`;
+    })
     .join("\n");
 
   const isMatchSection = normalizedType === "MATCH_COLUMN";
 
-  const userPrompt = isMatchSection
+  const baseUserPrompt = isMatchSection
     ? `Generate EXACTLY 1 combined Match the Columns question containing all ${slots.length} matching pairs for the following exam section:
+- Board: ${contract.boardDisplayName} (${contract.academicSession})
 - Class: ${className}
-- Subject: ${subject}
+- Subject: ${contract.canonicalSubject} (Subject Code: ${contract.subjectCode})
 - Section Title: ${sectionTitle}
 - Section Question Type: MATCH_COLUMN
 - Total Marks: ${slots.length * marksEach} (${slots.length} pairs × ${marksEach} mark each)
 - Language: ${
-    language === "bilingual"
-      ? "Bilingual (English with Hindi translation in parentheses)"
-      : language === "hi"
-      ? "Hindi (Devanagari script)"
-      : "English"
-  }
+        language === "bilingual"
+          ? "Bilingual (English with Hindi translation in parentheses)"
+          : language === "hi"
+          ? "Hindi (Devanagari script)"
+          : "English"
+      }
 - Instructions:
   1. Return a JSON array containing EXACTLY ONE question object.
-  2. The 'text' field must contain the instruction prompt followed by the list of ${slots.length} Column I items labeled (A), (B), (C), etc., derived from the assigned chapters.
-  3. The 'options' array must contain the corresponding ${slots.length} Column II matching items/definitions.
+  2. The 'text' field must contain the instruction prompt followed by the list of ${slots.length} Column I items labeled (A), (B), (C), etc., derived from the assigned ${contract.canonicalSubject} chapters.
+  3. The 'options' array must contain the corresponding ${slots.length} Column II matching items/expressions.
   4. The 'answer' field must specify all correct pairings (e.g. '(A)-(ii), (B)-(i), (C)-(iv), (D)-(iii)').
 
 Assigned Chapter Targets for each matching pair:
@@ -905,39 +896,39 @@ JSON Array Output Schema:
     "explanation": "Rationale for pairings"
   }
 ]`
-    : `Generate ${slots.length} distinct, high-standard question(s) for the following exam section:
+    : `Generate ${slots.length} distinct, high-standard ${contract.canonicalSubject} question(s) for the following exam section:
+- Board: ${contract.boardDisplayName} (${contract.academicSession})
 - Class: ${className}
-- Subject: ${subject}
+- Subject: ${contract.canonicalSubject} (Subject Code: ${contract.subjectCode})
 - Section Title: ${sectionTitle}
 - Section Question Type: ${normalizedType}
 - Marks Per Question: ${marksEach}
 - Language: ${
-    language === "bilingual"
-      ? "Bilingual (English with Hindi translation in parentheses)"
-      : language === "hi"
-      ? "Hindi (Devanagari script)"
-      : "English"
-  }
+        language === "bilingual"
+          ? "Bilingual (English with Hindi translation in parentheses)"
+          : language === "hi"
+          ? "Hindi (Devanagari script)"
+          : "English"
+      }
 - Difficulty Policy: ${
-    difficulty === "BALANCED"
-      ? "Balanced mix: ~30% Easy, ~50% Medium, ~20% Hard"
-      : difficulty
-  }
+        difficulty === "BALANCED"
+          ? "Balanced mix: ~30% Easy, ~50% Medium, ~20% Hard"
+          : difficulty
+      }
 ${teacherFocus ? `- Teacher Specific Instructions / Focus: ${teacherFocus}` : ""}
 - Diagram Generation: ${
-    effectiveGenerateDiagrams
-      ? "Enabled (strictly follow board standards: at most ONE question in the section may have a diagram; only if the question concept cannot be answered without visual input)"
-      : "Disabled (this section is non-visual or contains no visual syllabus topics)"
-  }
+        effectiveGenerateDiagrams
+          ? "Enabled (strictly follow board standards: at most ONE question in the section may have a diagram; only if the question concept cannot be answered without visual input)"
+          : "Disabled (this section is non-visual or contains no visual syllabus topics)"
+      }
 
 ${
   effectiveGenerateDiagrams
     ? `CRITICAL DIAGRAM INSTRUCTIONS:
 - Board examinations have very few diagrams (at most ONE in this entire section).
-- ONLY provide 'figurePrompt' if the question concept CANNOT be answered without visual input (e.g. geometric figure with lettered vertices, circuit with specific meter readings, anatomical callouts to identify, or visual stimulus in English).
+- ONLY provide 'figurePrompt' if the question concept CANNOT be answered without visual input.
 - NEVER attach a diagram to a standard question that can be answered from text alone.
-- If a question does not strictly require a diagram, 'figurePrompt' MUST BE null.
-- The diagram must specifically depict the exact subject of the question (e.g. flower for flower question, human reproductive system for human reproduction).`
+- If a question does not strictly require a diagram, 'figurePrompt' MUST BE null.`
     : `DIAGRAM INSTRUCTIONS:
 - No diagrams should be included in this section. 'figurePrompt' MUST BE null for all questions.`
 }
@@ -953,10 +944,10 @@ JSON Array Output Schema:
     "chapterTitle": "Chapter Name",
     "type": "${normalizedType}",
     "text": "Question text...",
-    "options": ["A", "B", "C", "D"], // exactly 4 for MCQ/ASSERTION_REASON, empty [] for subjective
+    "options": ["A", "B", "C", "D"],
     "subparts": [
       { "label": "(i)", "text": "Subpart question", "marks": 1, "answer": "Model answer" }
-    ], // for CASE_STUDY, empty [] for others
+    ],
     "answer": "Detailed model answer and marking scheme breakdown",
     "difficulty": "EASY" | "MEDIUM" | "HARD",
     "cognitiveLevel": "REMEMBERING" | "UNDERSTANDING" | "APPLYING" | "ANALYZING" | "EVALUATING",
@@ -966,465 +957,388 @@ JSON Array Output Schema:
 ]`;
 
   const fallbackQuestions = (): GeneratedPaperQuestion[] => {
+    const grounded = generateCurriculumGroundedSectionQuestions(contract, {
+      generateDiagrams: effectiveGenerateDiagrams,
+      existingQuestionTexts: existingQuestionTexts || [],
+    });
+    return grounded.map((g) => ({
+      slotIndex: g.slotIndex,
+      chapterId: g.chapterId,
+      chapterNumber: g.chapterNumber,
+      chapterTitle: g.chapterTitle,
+      type: g.type,
+      text: g.text,
+      options: g.options,
+      subparts: g.subparts,
+      answer: g.answer,
+      difficulty: g.difficulty,
+      cognitiveLevel: g.cognitiveLevel,
+      explanation: g.explanation,
+      figurePrompt: g.figurePrompt,
+    }));
+  };
+
+  const normalizeRawSectionData = async (
+    rawArray: GeneratedPaperQuestion[],
+  ): Promise<GeneratedPaperQuestion[]> => {
     if (normalizedType === "MATCH_COLUMN") {
+      const primaryQ = rawArray[0] || ({} as GeneratedPaperQuestion);
+      let qText = typeof primaryQ.text === "string" && primaryQ.text.trim() ? primaryQ.text.trim() : "";
+      let qOptions = Array.isArray(primaryQ.options) ? primaryQ.options.map((o: unknown) => String(o).trim()) : [];
+      let qAnswer = typeof primaryQ.answer === "string" ? primaryQ.answer : "";
       const letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
       const romans = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
-      const rawPairs = slots.map((s, idx) => ({
-        left: `(${letters[idx] ?? idx + 1}) Concept of ${s.chapterTitle}`,
-        right: `Key mechanism and definition of ${s.chapterTitle}`,
-      }));
-      const deranged = derangeMatchColumnPairs(rawPairs);
-      const col1Lines = rawPairs.map((p) => p.left);
-      const col2Items = deranged.map((d) => d.right);
-      const answerPairs = rawPairs
-        .map((p, idx) => {
+
+      if (rawArray.length > 1) {
+        const rawPairs = rawArray.map((item, idx) => {
+          const itemText = typeof item.text === "string" ? item.text.replace(/^Match.*?:\s*/i, "").trim() : `Item ${idx + 1}`;
+          const itemOpt =
+            Array.isArray(item.options) && item.options.length > 0
+              ? String(item.options[0]).trim()
+              : item.answer || `Relation ${idx + 1}`;
+          return {
+            left: `(${letters[idx] ?? idx + 1}) ${itemText}`,
+            right: itemOpt,
+          };
+        });
+
+        const deranged = derangeMatchColumnPairs(rawPairs);
+        const col1Items = rawPairs.map((p) => p.left);
+        const col2Items = deranged.map((p) => p.right);
+        const answers = rawPairs.map((p, idx) => {
           const optIdx = col2Items.indexOf(p.right);
           return `(${letters[idx] ?? idx + 1})-${romans[optIdx] ?? `(${optIdx + 1})`}`;
-        })
-        .join(", ");
+        });
 
+        qText = `Match the items in Column I with Column II:\nColumn I:\n${col1Items.join("\n")}`;
+        qOptions = col2Items;
+        qAnswer = answers.join(", ");
+      } else if (rawArray.length === 1) {
+        let pairs = parseMatchColumnPairs(qOptions, qText, primaryQ.explanation);
+        if (pairs.length === 0) {
+          pairs = extractMatchPairsFromExplanation(primaryQ.explanation);
+        }
+        if (pairs.length === 0 && qText) {
+          pairs = extractMatchPairsFromExplanation(qText);
+        }
+
+        if (pairs.length > 0) {
+          if (pairs.length < contract.slots.length) {
+            for (let idx = pairs.length; idx < contract.slots.length; idx++) {
+              const s = contract.slots[idx];
+              const cleanCh = cleanChapterTitleForLookup(s.chapterTitle);
+              const samplePair = s.curriculumSpec.sampleMatchPairs[0] || {
+                left: `${cleanCh}: ${s.curriculumSpec.includedTopics[0] || "Core relation"}`,
+                right: s.curriculumSpec.keyFormulasOrConcepts[0] || `Verified formula in ${cleanCh}`,
+              };
+              pairs.push({
+                left: `(${letters[idx] ?? idx + 1}) ${samplePair.left}`,
+                right: samplePair.right,
+              });
+            }
+          } else if (pairs.length > contract.slots.length) {
+            pairs = pairs.slice(0, contract.slots.length);
+          }
+
+          const isDirectMatch =
+            /^\s*\(?[Aa]\)?\s*[-→:]\s*\(?([1iI])\)?\s*,\s*\(?[Bb]\)?\s*[-→:]\s*\(?([2iI]{2})\)?/.test(qAnswer) ||
+            !qAnswer ||
+            qAnswer.toLowerCase().includes("direct");
+          const deranged = isDirectMatch && pairs.length > 1 ? derangeMatchColumnPairs(pairs) : pairs;
+          const col1Lines = pairs.map((p, idx) => `(${letters[idx] ?? idx + 1}) ${cleanMatchItem(p.left)}`);
+          const col2Items = deranged.map((p) => cleanMatchItem(p.right));
+          const answers = pairs.map((p, idx) => {
+            const optIdx = col2Items.indexOf(cleanMatchItem(p.right));
+            return `(${letters[idx] ?? idx + 1})-${romans[optIdx] ?? `(${optIdx + 1})`}`;
+          });
+          const instr = getMatchColumnInstruction(qText);
+          qText = `${instr}\nColumn I:\n${col1Lines.join("\n")}`;
+          qOptions = col2Items;
+          qAnswer = answers.join(", ");
+        }
+      }
+
+      const firstSlot = contract.slots[0];
       return [
         {
-          slotIndex: slots[0]?.slotIndex ?? 0,
-          chapterId: slots[0]?.chapterId ?? "",
-          chapterNumber: slots[0]?.chapterNumber ?? 1,
-          chapterTitle: slots[0]?.chapterTitle ?? "Syllabus Topics",
+          slotIndex: firstSlot.slotIndex,
+          chapterId: firstSlot.chapterId,
+          chapterNumber: firstSlot.chapterNumber,
+          chapterTitle: firstSlot.chapterTitle,
           type: "MATCH_COLUMN",
-          text: `Match the items in Column I with their corresponding concepts in Column II:\nColumn I:\n${col1Lines.join("\n")}`,
-          options: col2Items,
+          text: qText,
+          options: qOptions,
           subparts: [],
-          answer: answerPairs,
-          difficulty: "MEDIUM",
-          cognitiveLevel: "UNDERSTANDING",
-          explanation: "Standard curriculum matching exercise across syllabus topics.",
+          answer: qAnswer,
+          difficulty: ["EASY", "MEDIUM", "HARD"].includes(primaryQ.difficulty) ? primaryQ.difficulty : "MEDIUM",
+          cognitiveLevel: primaryQ.cognitiveLevel || "UNDERSTANDING",
+          explanation: primaryQ.explanation || `Curriculum matching exercise across ${contract.canonicalSubject} chapters.`,
         },
       ];
     }
 
-    return slots.map((slot, idx) => {
-      const isMcq = normalizedType === "MCQ";
-      const isAssertionReason = normalizedType === "ASSERTION_REASON";
-      const isTrueFalse = normalizedType === "TRUE_FALSE";
-      const isFillBlank = normalizedType === "FILL_BLANK";
-      const isMatch = normalizedType === "MATCH_COLUMN";
-      const isCaseStudy = normalizedType === "CASE_STUDY";
+    const normalizedQuestions: GeneratedPaperQuestion[] = [];
+    let sectionDiagramCount = 0;
 
-      let text = `Examine the fundamental principles of ${slot.chapterTitle}. Describe the core mechanisms and their biological/scientific significance in standard board curriculum context.`;
-      let options: string[] = [];
-      let subparts: Array<{ label: string; text: string; marks: number; answer?: string }> = [];
-      let answer = `Model Answer:\n1. Definition and core principles [${Math.max(1, Math.floor(slot.marks / 2))} marks]\n2. Application and critical observations [${Math.ceil(slot.marks / 2)} marks]`;
-      let figurePrompt: string | undefined = undefined;
+    for (let i = 0; i < contract.slots.length; i++) {
+      const slot = contract.slots[i];
+      const rawQ = rawArray[i] || ({} as GeneratedPaperQuestion);
 
-      if (isMcq) {
-        text = `Which of the following statements is correct regarding the core process in ${slot.chapterTitle}?`;
-        options = [
-          `It operates under regulated physiological pathways in optimal conditions`,
-          `It proceeds without any energy investment or enzymatic involvement`,
-          `It only occurs in non-living abiotic systems`,
-          `It inhibits all associated cellular metabolism`,
-        ];
-        answer = "Option A";
-      } else if (isAssertionReason) {
-        text = `Assertion (A): Process X in ${slot.chapterTitle} requires specific regulatory conditions.\nReason (R): Regulatory mechanisms maintain homeostatic equilibrium during cellular activity.`;
-        options = [
-          "(a) Both A and R are true and R is the correct explanation of A",
-          "(b) Both A and R are true but R is not the correct explanation of A",
-          "(c) A is true but R is false",
-          "(d) A is false but R is true",
-        ];
-        answer = "(a) Both A and R are true and R is the correct explanation of A";
-      } else if (isTrueFalse) {
-        text = `In ${slot.chapterTitle}, the primary mechanism proceeds unidirectionally under standard physiological conditions.`;
-        options = ["True", "False"];
-        answer = "True";
-      } else if (isFillBlank) {
-        text = `In the study of ${slot.chapterTitle}, the primary process responsible for physiological regulation is known as ________.`;
-        options = [];
-        answer = "Homeostasis";
-      } else if (isMatch) {
-        const rawPairs = [
-          { left: "(A) Primary factor", right: "Metabolic activation" },
-          { left: "(B) Secondary regulator", right: "Structural stability" },
-        ];
-        const deranged = derangeMatchColumnPairs(rawPairs);
-        const col2 = deranged.map((d) => d.right);
-        const romans = ["(i)", "(ii)"];
-        const answers = rawPairs
-          .map((p, i) => `(${String.fromCharCode(65 + i)})-${romans[col2.indexOf(p.right)] || "(1)"}`)
-          .join(", ");
-        text = `Match the items in Column I with their corresponding features in Column II:\nColumn I:\n(A) Primary factor\n(B) Secondary regulator`;
-        options = col2;
-        answer = answers;
-      } else if (isCaseStudy) {
-        text = `Read the following excerpt and answer the questions:\nIn a laboratory study of ${slot.chapterTitle}, researchers observed the response of biological specimens to varying external stimuli over a 72-hour period.`;
-        subparts = [
-          { label: "(i)", text: "Identify the primary independent variable in this experiment.", marks: 1, answer: "External stimuli concentration." },
-          { label: "(ii)", text: "State two key observations recorded during the study.", marks: 1, answer: "Rate variation and phenotypic stability." },
-          { label: "(iii)", text: "Explain the biochemical rationale for the observed response.", marks: Math.max(1, slot.marks - 2), answer: "Enzymatic kinetics and molecular equilibrium." },
-        ];
-        answer = "Complete case study evaluation based on subparts.";
-      }
-
-      // If diagram generation is requested, apply strict board exam discipline:
-      // At most 1 question in the section gets a diagram, and ONLY if chapter is genuinely visual.
-      const isSlotVisual =
-        effectiveGenerateDiagrams &&
-        visualSlotIndices.length > 0 &&
-        idx === visualSlotIndices[0];
-
-      if (isSlotVisual) {
-        const isLang =
-          subject.toLowerCase().includes("english") ||
-          subject.toLowerCase().includes("hindi") ||
-          subject.toLowerCase().includes("sanskrit") ||
-          subject.toLowerCase().includes("language") ||
-          normalizedType === "WRITING_SKILL";
-        const isBio = subject.toLowerCase().includes("bio");
-        const isPhys = subject.toLowerCase().includes("phys") || subject.toLowerCase().includes("sci");
-        const isMath = subject.toLowerCase().includes("math");
-
-        if (isLang) {
-          text = `Look at the visual stimulus given below regarding environmental conservation and write a coherent paragraph/article in 100-120 words. Highlight key measures to reduce pollution and conserve natural resources.`;
-          answer = `Model Answer / Marking Scheme:\n1. Title & Format [1 mark]\n2. Content & Integration of Visual Input [2 marks]\n3. Organization & Expression [1 mark]\n4. Accuracy & Grammar [1 mark]`;
-          figurePrompt = `Visual stimulus infographic showing environmental conservation with tree plantation, water drop, and recycling badge`;
-        } else if (isBio) {
-          const chLower = slot.chapterTitle.toLowerCase();
-          if (chLower.includes("flower") || chLower.includes("flowering") || chLower.includes("sexual reproduction in plant")) {
-            text = `In the given diagram showing the longitudinal section (L.S.) of a flower, identify labeled parts (A) and (B) and choose the correct option:`;
-            options = [
-              "(A) Stigma, (B) Anther",
-              "(A) Ovary, (B) Petal",
-              "(A) Sepal, (B) Filament",
-              "(A) Style, (B) Stamen",
-            ];
-            answer = "(A) Stigma, (B) Anther";
-            figurePrompt = `Longitudinal section of a flower with labeled leader lines pointing to parts (A) Stigma and (B) Anther`;
-          } else if (chLower.includes("human reproduction") || chLower.includes("reproductive system")) {
-            text = `In the given schematic diagram of the human female reproductive system, identify labeled parts (A) and (B):`;
-            options = [
-              "(A) Ovary, (B) Oviduct (Fallopian Tube)",
-              "(A) Uterus, (B) Cervix",
-              "(A) Vagina, (B) Ovary",
-              "(A) Endometrium, (B) Fimbriae",
-            ];
-            answer = "(A) Ovary, (B) Oviduct (Fallopian Tube)";
-            figurePrompt = `Human female reproductive system diagram with leader lines pointing to parts (A) Ovary and (B) Oviduct`;
-          } else if (chLower.includes("inherit") || chLower.includes("gene") || chLower.includes("mendel")) {
-            text = `Study the given Punnett square representing a monohybrid cross. Determine the genotypic ratio of the F2 generation and calculate the percentage of heterozygous tall offspring.`;
-            answer = `Model Answer:\n1. Genotypic ratio is 1 TT : 2 Tt : 1 tt [1 mark]\n2. Phenotypic ratio is 3 Tall : 1 Dwarf [1 mark]\n3. Percentage of heterozygous tall (Tt) offspring = 50% [${Math.max(1, slot.marks - 2)} marks]`;
-            figurePrompt = `Punnett square for monohybrid cross showing parental gametes T, t and F2 offspring TT, Tt, Tt, tt with genotypic and phenotypic ratios`;
-          } else if (chLower.includes("eco") || chLower.includes("populat") || chLower.includes("biodivers")) {
-            text = `Refer to the ecological trophic pyramid shown below. Identify the trophic level having maximum available energy and explain Lindeman's 10% energy transfer rule.`;
-            answer = `Model Answer:\n1. Primary producers have maximum available energy (10,000 J) [1 mark]\n2. According to Lindeman's 10% rule, only 10% of energy is transferred to the next trophic level while 90% is lost as metabolic heat [${Math.max(1, slot.marks - 1)} marks]`;
-            figurePrompt = `Ecological trophic pyramid of energy with 4 levels: primary producers (10,000 J), primary consumers (1,000 J), secondary consumers (100 J), and tertiary consumers (10 J)`;
-          } else {
-            text = `In the given diagram of a plant cell structure, identify labeled parts (A) and (B):`;
-            options = [
-              "(A) Cell wall, (B) Central vacuole",
-              "(A) Cell membrane, (B) Mitochondria",
-              "(A) Chloroplast, (B) Ribosome",
-              "(A) Nucleus, (B) Endoplasmic reticulum",
-            ];
-            answer = "(A) Cell wall, (B) Central vacuole";
-            figurePrompt = `Diagram of plant cell structure with labeled leader lines pointing to parts (A) cell wall and (B) central vacuole`;
-          }
-        } else if (isPhys) {
-          text = `In the circuit diagram shown below, calculate the total equivalent resistance of the combination and the current reading on ammeter (A).`;
-          answer = `Model Answer:\n1. Equivalent resistance calculation: $R_{eq} = R_1 + R_2$ [${Math.max(1, Math.floor(slot.marks / 2))} marks]\n2. Current reading: $I = V / R_{eq}$ [${Math.ceil(slot.marks / 2)} marks]`;
-          figurePrompt = `Circuit diagram with voltmeter across resistor R, ammeter in series, rheostat, switch and battery`;
-        } else if (isMath) {
-          text = `In the given right triangle ABC, right-angled at B with $AB = 6\\text{ cm}$ and $BC = 8\\text{ cm}$, determine the value of $\\sin A$ and $\\cos C$.`;
-          answer = `Model Answer:\n1. Hypotenuse $AC = \\sqrt{6^2 + 8^2} = 10\\text{ cm}$ [1 mark]\n2. $\\sin A = 8/10 = 4/5$ [1 mark]\n3. $\\cos C = 8/10 = 4/5$ [${Math.max(1, slot.marks - 2)} marks]`;
-          figurePrompt = `Right triangle ABC with right angle at B, AB = 6 cm, BC = 8 cm, AC = 10 cm`;
+      const qType = normalizeQuestionType(rawQ.type || normalizedType);
+      const rawText = typeof rawQ.text === "string" ? rawQ.text.trim() : "";
+      const qText = repairLatex(cleanQuestionStatement(rawText, qType));
+      let qOptions = Array.isArray(rawQ.options)
+        ? rawQ.options.map((o: unknown) => cleanOptionText(String(o).trim()))
+        : [];
+      if (qType === "TRUE_FALSE") {
+        if (language === "hi") {
+          qOptions = ["सत्य", "असत्य"];
+        } else if (language === "bilingual") {
+          qOptions = ["सत्य / True", "असत्य / False"];
+        } else {
+          qOptions = ["True", "False"];
         }
       }
+      const targetSlotMarks = slot.marks || marksEach;
+      const rawSubparts = Array.isArray(rawQ.subparts)
+        ? rawQ.subparts.map((sp: any, spIdx: number) => ({
+            label: String(sp.label || `(${spIdx + 1})`),
+            text: repairLatex(cleanQuestionStatement(String(sp.text || ""))),
+            marks: Number(sp.marks) || 1,
+            options: Array.isArray(sp.options)
+              ? sp.options.map((o: unknown) => cleanOptionText(String(o).trim()))
+              : undefined,
+            answer: sp.answer
+              ? isMcqLikeType(qType)
+                ? cleanOptionText(String(sp.answer))
+                : repairLatex(String(sp.answer))
+              : undefined,
+          }))
+        : [];
+      const qSubparts = rawSubparts.length > 0 ? normalizeSubpartMarks(rawSubparts, targetSlotMarks) : [];
+      let qAnswer =
+        typeof rawQ.answer === "string"
+          ? isMcqLikeType(qType)
+            ? cleanOptionText(rawQ.answer)
+            : repairLatex(rawQ.answer)
+          : "";
+      if (qType === "TRUE_FALSE" && language === "hi") {
+        if (/true|सत्य|सही/i.test(qAnswer)) qAnswer = "सत्य";
+        else if (/false|असत्य|गलत/i.test(qAnswer)) qAnswer = "असत्य";
+      }
+      const qDiff = ["EASY", "MEDIUM", "HARD"].includes(rawQ.difficulty) ? rawQ.difficulty : "MEDIUM";
+      const figurePrompt =
+        typeof rawQ.figurePrompt === "string" && rawQ.figurePrompt.trim()
+          ? rawQ.figurePrompt.trim()
+          : undefined;
 
-      return {
+      const questionItem: GeneratedPaperQuestion = {
         slotIndex: slot.slotIndex,
         chapterId: slot.chapterId,
         chapterNumber: slot.chapterNumber,
         chapterTitle: slot.chapterTitle,
-        type: normalizedType,
-        text,
-        options,
-        subparts,
-        answer,
-        difficulty: idx % 3 === 0 ? "EASY" : idx % 3 === 1 ? "MEDIUM" : "HARD",
-        cognitiveLevel: "APPLYING",
-        explanation: `Curriculum standard question for Chapter ${slot.chapterNumber}: ${slot.chapterTitle}`,
+        type: qType,
+        text: qText,
+        options: qOptions,
+        subparts: qSubparts,
+        answer: qAnswer,
+        difficulty: qDiff as "EASY" | "MEDIUM" | "HARD",
+        cognitiveLevel: rawQ.cognitiveLevel || "APPLYING",
+        explanation: rawQ.explanation,
         figurePrompt,
       };
-    });
+
+      const textLower = qText.toLowerCase();
+      const explicitlyNeedsDiagram =
+        textLower.includes("diagram") ||
+        textLower.includes("figure") ||
+        textLower.includes("shown below") ||
+        textLower.includes("given below") ||
+        textLower.includes("labeled part") ||
+        textLower.includes("marked as") ||
+        textLower.includes("refer to") ||
+        textLower.includes("study the") ||
+        textLower.includes("observe the") ||
+        textLower.includes("visual stimulus") ||
+        textLower.includes("visual input");
+
+      const slotIsVisual = isSubjectChapterVisual(contract.rawSubject, slot.chapterTitle, normalizedType);
+      const allowDiagram = Boolean(
+        effectiveGenerateDiagrams &&
+          figurePrompt &&
+          slotIsVisual &&
+          explicitlyNeedsDiagram &&
+          sectionDiagramCount === 0,
+      );
+
+      if (!allowDiagram || !figurePrompt) {
+        questionItem.figurePrompt = undefined;
+        questionItem.imagePath = undefined;
+        questionItem.figureDoc = undefined;
+      } else {
+        try {
+          const eligibleCandidates = isGeminiConfigured(apiKey)
+            ? await findEligibleDiagrams({
+                query: figurePrompt,
+                subject: contract.rawSubject,
+                chapter: slot.chapterTitle,
+                questionText: questionItem.text,
+              })
+            : [];
+
+          const bestMatch = eligibleCandidates.find(
+            (c) =>
+              c.eligibility.eligible &&
+              c.eligibility.status !== "OFF_TOPIC" &&
+              c.eligibility.score >= 75,
+          );
+
+          if (bestMatch) {
+            try {
+              const savedName = await saveDiagramToUploads({
+                svgContent: bestMatch.svgContent,
+                downloadUrl: bestMatch.downloadUrl,
+              });
+              questionItem.imagePath = savedName;
+              questionItem.diagramSource = bestMatch.source;
+              sectionDiagramCount++;
+            } catch (saveErr) {
+              console.warn("Failed to save eligible online diagram to uploads:", saveErr);
+            }
+          }
+
+          if (!questionItem.imagePath) {
+            const figRes = await promptToFigureSceneWithGemini({
+              prompt: figurePrompt,
+              subject: contract.rawSubject,
+              apiKey,
+            });
+            if (figRes.success && figRes.data) {
+              questionItem.figureDoc = {
+                summary: figRes.data.summary,
+                canvasWidth: figRes.data.canvasWidth || 640,
+                canvasHeight: figRes.data.canvasHeight || 360,
+                objects: normalizeFigureObjects(
+                  figRes.data.objects,
+                  figRes.data.canvasWidth,
+                  figRes.data.canvasHeight,
+                ),
+              };
+              sectionDiagramCount++;
+            }
+          }
+        } catch (figErr) {
+          console.warn("Figure generation error for question:", figErr);
+        }
+      }
+
+      normalizedQuestions.push(questionItem);
+    }
+
+    return normalizedQuestions;
   };
 
-  const callResult = await callGeminiApi<GeneratedPaperQuestion[]>(userPrompt, systemPrompt, {
-    json: true,
-    apiKey,
-    model: model || "gemini-2.5-pro",
-    mockFallback: fallbackQuestions,
-  });
+  const MAX_VALIDATION_RETRIES = 2;
+  let retryCount = 0;
+  let activePrompt = baseUserPrompt;
+  let lastValidationIssues: QuestionValidationIssue[] = [];
+  let lastAccepted: GeneratedPaperQuestion[] = [];
+  let lastIsMock = false;
+  let lastModelUsed = model || "gemini-2.5-pro";
 
-  if (!callResult.success || !Array.isArray(callResult.data)) {
-    return {
-      success: false,
-      isMock: callResult.isMock,
-      error: callResult.error || "Failed to generate valid question array from AI model.",
-      data: [],
-    };
-  }
+  for (let attempt = 0; attempt <= MAX_VALIDATION_RETRIES; attempt++) {
+    const callResult = await callGeminiApi<GeneratedPaperQuestion[]>(activePrompt, systemPrompt, {
+      json: true,
+      apiKey,
+      model: model || "gemini-2.5-pro",
+      mockFallback: fallbackQuestions,
+      allowFallbackOnApiFailure: false,
+    });
 
-  // Handle Match the Columns: Guarantee exactly ONE question containing all pairs across the section slots
-  if (normalizedType === "MATCH_COLUMN") {
-    const primaryQ = callResult.data[0] || {};
-    let qText = typeof primaryQ.text === "string" && primaryQ.text.trim() ? primaryQ.text.trim() : "";
-    let qOptions = Array.isArray(primaryQ.options) ? primaryQ.options.map((o: unknown) => String(o).trim()) : [];
-    let qAnswer = typeof primaryQ.answer === "string" ? primaryQ.answer : "";
+    lastIsMock = callResult.isMock;
+    lastModelUsed = callResult.modelUsed || lastModelUsed;
 
-    // If the model returned multiple questions (1 per slot) instead of 1 combined question, collapse them
-    if (callResult.data.length > 1) {
-      const letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
-      const romans = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
-      const rawPairs = callResult.data.map((item, idx) => {
-        const itemText = typeof item.text === "string" ? item.text.replace(/^Match.*?:\s*/i, "").trim() : `Item ${idx + 1}`;
-        const itemOpt = Array.isArray(item.options) && item.options.length > 0 ? String(item.options[0]).trim() : (item.answer || `Feature ${idx + 1}`);
-        return {
-          left: `(${letters[idx] ?? idx + 1}) ${itemText}`,
-          right: itemOpt,
-        };
+    if (!callResult.success || !Array.isArray(callResult.data)) {
+      const trace = createGenerationJobTrace({
+        contract,
+        modelUsed: lastModelUsed,
+        isOfflineCurriculumMode: callResult.isMock,
+        retryCount: attempt,
+        acceptedCount: 0,
+        rejectedCount: contract.slots.length,
+        validationIssues: lastValidationIssues,
       });
-
-      const deranged = derangeMatchColumnPairs(rawPairs);
-      const col1Items = rawPairs.map((p) => p.left);
-      const col2Items = deranged.map((p) => p.right);
-      const answers = rawPairs.map((p, idx) => {
-        const optIdx = col2Items.indexOf(p.right);
-        return `(${letters[idx] ?? idx + 1})-${romans[optIdx] ?? `(${optIdx + 1})`}`;
-      });
-
-      qText = `Match the items in Column I with Column II:\nColumn I:\n${col1Items.join("\n")}`;
-      qOptions = col2Items;
-      qAnswer = answers.join(", ");
-    } else if (callResult.data.length === 1) {
-      let pairs = parseMatchColumnPairs(qOptions, qText, primaryQ.explanation);
-      if (pairs.length === 0) {
-        pairs = extractMatchPairsFromExplanation(primaryQ.explanation);
-      }
-      if (pairs.length === 0 && qText) {
-        pairs = extractMatchPairsFromExplanation(qText);
-      }
-      const letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
-      const romans = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
-
-      if (pairs.length > 0) {
-        if (pairs.length < slots.length) {
-          for (let idx = pairs.length; idx < slots.length; idx++) {
-            const s = slots[idx];
-            pairs.push({
-              left: `(${letters[idx] ?? idx + 1}) Concept of ${s?.chapterTitle ?? `Unit ${idx + 1}`}`,
-              right: `Key mechanism and definition of ${s?.chapterTitle ?? `Unit ${idx + 1}`}`,
-            });
-          }
-        } else if (pairs.length > slots.length) {
-          pairs = pairs.slice(0, slots.length);
-        }
-
-        const isDirectMatch =
-          /^\s*\(?[Aa]\)?\s*[-→:]\s*\(?([1iI])\)?\s*,\s*\(?[Bb]\)?\s*[-→:]\s*\(?([2iI]{2})\)?/.test(qAnswer) ||
-          !qAnswer ||
-          qAnswer.toLowerCase().includes("direct");
-        const deranged = isDirectMatch && pairs.length > 1 ? derangeMatchColumnPairs(pairs) : pairs;
-        const col1Lines = pairs.map((p, idx) => `(${letters[idx] ?? idx + 1}) ${cleanMatchItem(p.left)}`);
-        const col2Items = deranged.map((p) => cleanMatchItem(p.right));
-        const answers = pairs.map((p, idx) => {
-          const optIdx = col2Items.indexOf(cleanMatchItem(p.right));
-          return `(${letters[idx] ?? idx + 1})-${romans[optIdx] ?? `(${optIdx + 1})`}`;
-        });
-        const instr = getMatchColumnInstruction(qText);
-        qText = `${instr}\nColumn I:\n${col1Lines.join("\n")}`;
-        qOptions = col2Items;
-        qAnswer = answers.join(", ");
-      }
-    }
-    if (!qText || qOptions.length === 0) {
-      const fb = fallbackQuestions()[0];
-      qText = fb.text;
-      qOptions = fb.options;
-      qAnswer = fb.answer;
+      return {
+        success: false,
+        isMock: callResult.isMock,
+        error: callResult.error || "Failed to generate valid question array from AI model.",
+        data: [],
+        trace,
+        contract,
+      };
     }
 
-    const firstSlot = slots[0];
-    const singleMatchQ: GeneratedPaperQuestion = {
-      slotIndex: firstSlot.slotIndex,
-      chapterId: firstSlot.chapterId,
-      chapterNumber: firstSlot.chapterNumber,
-      chapterTitle: firstSlot.chapterTitle,
-      type: "MATCH_COLUMN",
-      text: qText,
-      options: qOptions,
-      subparts: [],
-      answer: qAnswer,
-      difficulty: ["EASY", "MEDIUM", "HARD"].includes(primaryQ.difficulty) ? primaryQ.difficulty : "MEDIUM",
-      cognitiveLevel: primaryQ.cognitiveLevel || "UNDERSTANDING",
-      explanation: primaryQ.explanation || "Curriculum matching exercise across syllabus topics.",
-    };
-
-    return {
-      success: true,
-      isMock: callResult.isMock,
-      data: [singleMatchQ],
-    };
-  }
-
-  // Normalize questions and guarantee correct slot and chapter mapping
-  const normalizedQuestions: GeneratedPaperQuestion[] = [];
-  let sectionDiagramCount = 0;
-
-  for (let i = 0; i < slots.length; i++) {
-    const slot = slots[i];
-    const rawQ = callResult.data[i] || {};
-
-    const qType = normalizeQuestionType(rawQ.type || normalizedType);
-    const rawText = typeof rawQ.text === "string" && rawQ.text.trim() ? rawQ.text.trim() : `Question regarding ${slot.chapterTitle}`;
-    const qText = repairLatex(cleanQuestionStatement(rawText, qType));
-    let qOptions = Array.isArray(rawQ.options) ? rawQ.options.map((o: unknown) => cleanOptionText(String(o).trim())) : [];
-    if (qType === "TRUE_FALSE") {
-      if (language === "hi") {
-        qOptions = ["सत्य", "असत्य"];
-      } else if (language === "bilingual") {
-        qOptions = ["सत्य / True", "असत्य / False"];
-      } else {
-        qOptions = ["True", "False"];
-      }
-    }
-    const targetSlotMarks = slot.marks || marksEach;
-    const rawSubparts = Array.isArray(rawQ.subparts)
-      ? rawQ.subparts.map((sp: any, spIdx: number) => ({
-          label: String(sp.label || `(${spIdx + 1})`),
-          text: repairLatex(cleanQuestionStatement(String(sp.text || ""))),
-          marks: Number(sp.marks) || 1,
-          options: Array.isArray(sp.options) ? sp.options.map((o: unknown) => cleanOptionText(String(o).trim())) : undefined,
-          answer: sp.answer ? (isMcqLikeType(qType) ? cleanOptionText(String(sp.answer)) : repairLatex(String(sp.answer))) : undefined,
-        }))
-      : [];
-    const qSubparts = rawSubparts.length > 0 ? normalizeSubpartMarks(rawSubparts, targetSlotMarks) : [];
-    let qAnswer =
-      typeof rawQ.answer === "string"
-        ? isMcqLikeType(qType)
-          ? cleanOptionText(rawQ.answer)
-          : repairLatex(rawQ.answer)
-        : "Refer to standard model answer.";
-    if (qType === "TRUE_FALSE" && language === "hi") {
-      if (/true|सत्य|सही/i.test(qAnswer)) qAnswer = "सत्य";
-      else if (/false|असत्य|गलत/i.test(qAnswer)) qAnswer = "असत्य";
-    }
-    const qDiff = ["EASY", "MEDIUM", "HARD"].includes(rawQ.difficulty) ? rawQ.difficulty : "MEDIUM";
-    const figurePrompt = typeof rawQ.figurePrompt === "string" && rawQ.figurePrompt.trim() ? rawQ.figurePrompt.trim() : undefined;
-
-    const questionItem: GeneratedPaperQuestion = {
-      slotIndex: slot.slotIndex,
-      chapterId: slot.chapterId,
-      chapterNumber: slot.chapterNumber,
-      chapterTitle: slot.chapterTitle,
-      type: qType,
-      text: qText,
-      options: qOptions,
-      subparts: qSubparts,
-      answer: qAnswer,
-      difficulty: qDiff as "EASY" | "MEDIUM" | "HARD",
-      cognitiveLevel: rawQ.cognitiveLevel || "APPLYING",
-      explanation: rawQ.explanation,
-      figurePrompt,
-    };
-
-    // Check whether the question text explicitly references a diagram/figure
-    const textLower = qText.toLowerCase();
-    const explicitlyNeedsDiagram =
-      textLower.includes("diagram") ||
-      textLower.includes("figure") ||
-      textLower.includes("shown below") ||
-      textLower.includes("given below") ||
-      textLower.includes("labeled part") ||
-      textLower.includes("marked as") ||
-      textLower.includes("refer to") ||
-      textLower.includes("study the") ||
-      textLower.includes("observe the") ||
-      textLower.includes("visual stimulus") ||
-      textLower.includes("visual input");
-
-    const slotIsVisual = isSubjectChapterVisual(subject, slot.chapterTitle, normalizedType);
-
-    // Board examination discipline: At most ONE diagram per section,
-    // ONLY if the slot's chapter is visually eligible,
-    // and ONLY if the question text explicitly references the figure!
-    const allowDiagram = Boolean(
-      effectiveGenerateDiagrams &&
-      figurePrompt &&
-      slotIsVisual &&
-      explicitlyNeedsDiagram &&
-      sectionDiagramCount === 0
+    const normalizedQuestions = await normalizeRawSectionData(callResult.data);
+    const validation = validateGeneratedSection(
+      normalizedQuestions,
+      contract,
+      existingQuestionTexts || [],
     );
 
-    if (!allowDiagram || !figurePrompt) {
-      questionItem.figurePrompt = undefined;
-      questionItem.imagePath = undefined;
-      questionItem.figureDoc = undefined;
-    } else {
-      try {
-        const eligibleCandidates = await findEligibleDiagrams({
-          query: figurePrompt,
-          subject,
-          chapter: slot.chapterTitle,
-          questionText: questionItem.text,
-        });
+    lastValidationIssues = validation.issues;
+    lastAccepted = validation.acceptedQuestions as GeneratedPaperQuestion[];
 
-        // Strict threshold: Must be eligible, not off-topic, and score >= 75
-        const bestMatch = eligibleCandidates.find(
-          (c) => c.eligibility.eligible && c.eligibility.status !== "OFF_TOPIC" && c.eligibility.score >= 75
-        );
-
-        if (bestMatch) {
-          try {
-            const savedName = await saveDiagramToUploads({
-              svgContent: bestMatch.svgContent,
-              downloadUrl: bestMatch.downloadUrl,
-            });
-            questionItem.imagePath = savedName;
-            questionItem.diagramSource = bestMatch.source;
-            sectionDiagramCount++;
-          } catch (saveErr) {
-            console.warn("Failed to save eligible online diagram to uploads:", saveErr);
-          }
-        }
-
-        // If no eligible online diagram was found or saving failed, synthesize in Figure Studio
-        if (!questionItem.imagePath) {
-          const figRes = await promptToFigureSceneWithGemini({
-            prompt: figurePrompt,
-            subject,
-            apiKey,
-          });
-          if (figRes.success && figRes.data) {
-            questionItem.figureDoc = {
-              summary: figRes.data.summary,
-              canvasWidth: figRes.data.canvasWidth || 640,
-              canvasHeight: figRes.data.canvasHeight || 360,
-              objects: normalizeFigureObjects(figRes.data.objects, figRes.data.canvasWidth, figRes.data.canvasHeight),
-            };
-            sectionDiagramCount++;
-          }
-        }
-      } catch (figErr) {
-        console.warn("Figure generation error for question:", figErr);
-      }
+    if (validation.valid) {
+      const trace = createGenerationJobTrace({
+        contract,
+        modelUsed: lastModelUsed,
+        isOfflineCurriculumMode: callResult.isMock,
+        retryCount: attempt,
+        acceptedCount: normalizedQuestions.length,
+        rejectedCount: 0,
+        validationIssues: validation.issues,
+      });
+      return {
+        success: true,
+        isMock: callResult.isMock,
+        modelUsed: lastModelUsed,
+        data: normalizedQuestions,
+        trace,
+        contract,
+        validationIssues: validation.issues,
+      };
     }
 
-    normalizedQuestions.push(questionItem);
+    // If offline mode failed validation or max retries reached, stop retrying
+    if (callResult.isMock || attempt === MAX_VALIDATION_RETRIES) {
+      retryCount = attempt;
+      break;
+    }
+
+    retryCount = attempt + 1;
+    const errorFeedback = validation.issues.map((iss) => `- ${iss.message}`).join("\n");
+    activePrompt = `${baseUserPrompt}\n\nCRITICAL VALIDATION CORRECTION (Retry #${retryCount}):\nYour previous output was rejected by the Subject & Curriculum Quality Gate for the following reasons:\n${errorFeedback}\nRegenerate the complete JSON array ensuring every question strictly passes all ${contract.canonicalSubject} curriculum and format checks.`;
   }
 
+  const trace = createGenerationJobTrace({
+    contract,
+    modelUsed: lastModelUsed,
+    isOfflineCurriculumMode: lastIsMock,
+    retryCount,
+    acceptedCount: lastAccepted.length,
+    rejectedCount: contract.slots.length - lastAccepted.length,
+    validationIssues: lastValidationIssues,
+  });
+
   return {
-    success: true,
-    isMock: callResult.isMock,
-    data: normalizedQuestions,
+    success: false,
+    isMock: lastIsMock,
+    modelUsed: lastModelUsed,
+    error: `Section generation failed subject/curriculum validation after ${retryCount + 1} attempt(s): ${lastValidationIssues.map((i) => i.message).join("; ")}`,
+    data: lastAccepted,
+    trace,
+    contract,
+    validationIssues: lastValidationIssues,
   };
 }
 

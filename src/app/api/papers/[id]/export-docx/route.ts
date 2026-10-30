@@ -41,6 +41,12 @@ import {
 import { prisma } from "@/lib/prisma";
 import { parseSubparts, subpartsTotalMarks, type SubPart } from "@/lib/types";
 import { UPLOAD_DIR } from "@/lib/uploads";
+import {
+  computeDisplayedPaperNumbering,
+  reconcileSectionGroupInstruction,
+  resolveGroupedExerciseInstruction,
+} from "@/lib/layout";
+import { resolveBoardAndSubjectCode } from "@/lib/curriculumContract";
 
 function renderQuestionOptions(
   opts: string[],
@@ -278,8 +284,23 @@ export async function buildPaperDocx(
 
   const totalMarks = paper.blueprint.sections.reduce((sum, s) => sum + s.count * s.marksEach, 0);
   const examType = resolvePaperExamType(paper);
-  const examTermHeading = `${EXAM_TYPE_LABEL[examType]} Examination (${paper.academicSession || paper.blueprint.academicSession || "2025–26"})`;
-  const resolvedSubjectCode = paper.subjectCode || paper.blueprint.subjectCode || "";
+  const sessionStr = paper.academicSession || paper.blueprint.academicSession || "2025–26";
+  const examTermHeading = `${EXAM_TYPE_LABEL[examType]} Examination (${sessionStr})`;
+  const resolvedBoardSubject = resolveBoardAndSubjectCode({
+    subject: paper.blueprint.book.subject,
+    className: paper.blueprint.book.className,
+    explicitSubjectCode: paper.subjectCode || paper.blueprint.subjectCode,
+    schoolName: paper.schoolName,
+    blueprintName: paper.blueprint.name,
+    academicSession: sessionStr,
+  });
+  const resolvedSubjectCode =
+    resolvedBoardSubject.subjectCode || paper.subjectCode || paper.blueprint.subjectCode || "";
+  const numbering = computeDisplayedPaperNumbering(
+    paper.blueprint.sections,
+    paper.items,
+    (paper.numberingStyle as any) || "CONTINUOUS"
+  );
 
   // Group items by section
   const sectionMap = new Map<string, typeof paper.items>();
@@ -509,6 +530,31 @@ export async function buildPaperDocx(
     }
 
     // Sub-heading for specific question type within grouped section
+    if (!isSameAsPrev && section.instructions) {
+      const secRange = numbering.sectionRanges[section.id];
+      const reconciledInstruction = reconcileSectionGroupInstruction(
+        section.instructions,
+        secRange?.groupStartQ ?? 0,
+        secRange?.groupEndQ ?? 0
+      );
+      if (reconciledInstruction) {
+        paragraphs.push(
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 140 },
+            children: [
+              new TextRun({
+                text: reconciledInstruction,
+                italics: true,
+                size: 20,
+                font: "Times New Roman",
+              }),
+            ],
+          }),
+        );
+      }
+    }
+
     if (hasMultipleTypes) {
       const typeLabel = getQuestionTypeLabel(section.type, paperLang);
       const typeMarksSuffix = isHindi ? "अंक" : "Marks";
@@ -529,23 +575,6 @@ export async function buildPaperDocx(
       );
     }
 
-    if (section.instructions) {
-      paragraphs.push(
-        new Paragraph({
-          alignment: AlignmentType.CENTER,
-          spacing: { after: 140 },
-          children: [
-            new TextRun({
-              text: section.instructions,
-              italics: true,
-              size: 20,
-              font: "Times New Roman",
-            }),
-          ],
-        }),
-      );
-    }
-
     // Render questions in section
     const isGroupedObjective = (section.type === "TRUE_FALSE" || section.type === "FILL_BLANK") && items.length > 1;
 
@@ -553,9 +582,12 @@ export async function buildPaperDocx(
       const qNum = globalQNum++;
       const currentSecRelNum = sectionRelativeNum++;
       const qLabel = formatQuestionNumber(qNum, paper.numberingStyle, sectionLetter, currentSecRelNum);
-      const sharedInstruction = section.instructions?.trim()
-        ? section.instructions.trim()
-        : getSharedInstruction(section.type, paperLang);
+      const sharedInstruction = resolveGroupedExerciseInstruction(
+        section.instructions,
+        section.type,
+        hasMultipleTypes,
+        paperLang
+      );
       const exerciseFormula = formatExerciseFormula(items.length, section.marksEach, paperLang);
 
       paragraphs.push(

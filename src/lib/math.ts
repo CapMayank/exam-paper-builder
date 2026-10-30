@@ -495,7 +495,13 @@ export function isEntirelyMath(str: string): boolean {
  * - Unclosed matrix/cases/aligned LaTeX environments
  */
 export function repairLatex(raw: string): string {
-  let tex = raw.trim();
+  let tex = raw
+    // Restore control characters created when JSON.parse interpreted \f, \b, \t, \r inside LaTeX commands
+    .replace(/\x0c(rac|orall)\b/g, "\\f$1")
+    .replace(/\x08(eta|egin|inom|ar|ullet|ecause|igcup|igcap)\b/g, "\\b$1")
+    .replace(/\t(an|heta|imes|ext|riangle|herefore|au|ilde)\b/g, "\\t$1")
+    .replace(/\r(ight|ightarrow|ho)\b/g, "\\r$1")
+    .trim();
   if (!tex) return "";
 
   // 1. Strip trailing unescaped backslashes (e.g. \sqrt{x}\ -> \sqrt{x})
@@ -693,15 +699,20 @@ function parseInlineMathFragments(rawText: string): MathSegment[] {
 export function parseMathSegments(input: string): MathSegment[] {
   if (!input) return [];
 
+  // Restore any control characters created by historical unescaped JSON LaTeX (\frac -> \x0crac, \beta -> \x08eta)
+  const restoredInput = input
+    .replace(/\x0c(rac|orall)\b/g, "\\f$1")
+    .replace(/\x08(eta|egin|inom|ar|ullet|ecause|igcup|igcap)\b/g, "\\b$1");
+
   // If input has an unclosed single dollar ($) containing LaTeX indicators, safely close it
-  let sanitizedInput = input;
-  const dollarCount = (input.match(/(^|[^\\])\$/g) || []).length;
+  let sanitizedInput = restoredInput;
+  const dollarCount = (restoredInput.match(/(^|[^\\])\$/g) || []).length;
   if (dollarCount % 2 !== 0) {
-    const lastDollarIdx = input.lastIndexOf("$");
+    const lastDollarIdx = restoredInput.lastIndexOf("$");
     if (lastDollarIdx !== -1) {
-      const trailing = input.slice(lastDollarIdx + 1);
+      const trailing = restoredInput.slice(lastDollarIdx + 1);
       if (/[\\^_{}=+]/.test(trailing)) {
-        sanitizedInput = input + "$";
+        sanitizedInput = restoredInput + "$";
       }
     }
   }
@@ -752,3 +763,34 @@ export function parseMathSegments(input: string): MathSegment[] {
 
   return segments;
 }
+
+/**
+ * Safely parses JSON returned by LLMs containing single-backslash LaTeX commands
+ * (e.g., \sin, \cos, \int, \sqrt, \vec, \pi, \frac, \tan, \theta, \right, \beta, \neq)
+ * without throwing "SyntaxError: Bad escaped character in JSON" or corrupting
+ * \f, \t, \r, \b, \n prefixes of LaTeX macros into ASCII control characters.
+ */
+export function parseGeminiJsonWithLatexSafety<T>(rawText: string): T {
+  const cleaned = rawText
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/, "")
+    .replace(/```\s*$/, "")
+    .trim();
+
+  // Escape single-backslash LaTeX macros that collide with valid JSON escapes (\f, \t, \r, \b, \n)
+  const latexProtected = cleaned
+    .replace(
+      /(?<!\\)\\(frac|forall|tan|theta|times|text|to\b|triangle|therefore|tau|tilde|right|Rightarrow|rightarrow|rho|beta|begin|binom|bar|bullet|because|bigcup|bigcap|neq|nabla|notin|nu\b|neg\b|natural)/g,
+      "\\\\$1",
+    )
+    // Escape any remaining single backslash not followed by a valid JSON escape token (\", \\, \/, \b, \f, \n, \r, \t, \uXXXX)
+    .replace(/(?<!\\)\\(?![\\"/bfnrtu])/g, "\\\\");
+
+  try {
+    return JSON.parse(latexProtected) as T;
+  } catch {
+    // Fallback to raw JSON.parse if already valid JSON
+    return JSON.parse(cleaned) as T;
+  }
+}
+

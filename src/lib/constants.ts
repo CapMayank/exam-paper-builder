@@ -115,27 +115,30 @@ export function detectPaperLanguage(
   } | null,
   items?: Array<{ question?: { text?: string | null; options?: string[] } | null }> | null
 ): "hi" | "en" | "bilingual" {
-  if (paper?.language === "hi" || paper?.language === "bilingual") {
+  if (paper?.language === "hi" || paper?.language === "bilingual" || paper?.language === "en") {
     return paper.language;
   }
-  const subject = (paper?.blueprint?.book?.subject || "").toLowerCase();
-  const bookTitle = (paper?.blueprint?.book?.title || "").toLowerCase();
+  const rawSubject = paper?.blueprint?.book?.subject || "";
+  const subjectPrimary = rawSubject.split("/")[0].trim().toLowerCase();
+  const bookTitlePrimary = (paper?.blueprint?.book?.title || "").split("/")[0].trim().toLowerCase();
 
   if (
-    subject.includes("hindi") ||
-    subject.includes("हिंदी") ||
-    subject.includes("हिन्दी") ||
-    subject.includes("sanskrit") ||
-    subject.includes("संस्कृत") ||
-    bookTitle.includes("hindi") ||
-    bookTitle.includes("हिंदी") ||
-    bookTitle.includes("हिन्दी")
+    subjectPrimary.includes("hindi") ||
+    subjectPrimary.includes("हिंदी") ||
+    subjectPrimary.includes("हिन्दी") ||
+    subjectPrimary.includes("sanskrit") ||
+    subjectPrimary.includes("संस्कृत") ||
+    bookTitlePrimary.includes("hindi") ||
+    bookTitlePrimary.includes("हिंदी") ||
+    bookTitlePrimary.includes("हिन्दी")
   ) {
     return "hi";
   }
 
   const devanagariRegex = /[\u0900-\u097F]/;
-  if (devanagariRegex.test(paper?.title || "") || devanagariRegex.test(paper?.blueprint?.book?.subject || "")) {
+  // Strip bilingual "/ हिंदी" suffixes (e.g., "Mathematics / गणित") before testing title or subject
+  const cleanTitle = (paper?.title || "").replace(/\/\s*[\u0900-\u097F\s]+/g, "");
+  if (devanagariRegex.test(cleanTitle) || devanagariRegex.test(subjectPrimary)) {
     return "hi";
   }
 

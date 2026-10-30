@@ -13,6 +13,9 @@ const generateSchema = z.object({
   language: z.enum(["en", "hi", "bilingual"]).default("en"),
   count: z.number().int().min(1).max(10).default(1),
   topicContext: z.string().trim().max(500).optional().default(""),
+  board: z.string().trim().optional(),
+  academicSession: z.string().trim().optional(),
+  subjectCode: z.string().trim().optional(),
 });
 
 export const POST = route(async (req) => {

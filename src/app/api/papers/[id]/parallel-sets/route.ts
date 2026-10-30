@@ -8,6 +8,7 @@ import {
 } from "@/lib/multiset";
 import { loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
+import { isQuestionContaminated } from "@/lib/questionValidator";
 import { parseSubparts } from "@/lib/types";
 
 export const parallelSetsSchema = z.object({
@@ -29,6 +30,7 @@ export const POST = route(async (req, params, user) => {
     include: {
       blueprint: {
         include: {
+          book: true,
           sections: { orderBy: { position: "asc" } },
           chapters: { include: { chapter: true } },
         },
@@ -49,8 +51,8 @@ export const POST = route(async (req, params, user) => {
     throw new HttpError(400, "Source paper has no questions placed. Place questions before generating parallel sets.");
   }
 
-  // 2. Fetch candidate questions from bank for this book
-  const bankQuestions = await prisma.question.findMany({
+  // 2. Fetch candidate questions from bank for this book (filtering out any contaminated legacy questions)
+  const rawBankQuestions = await prisma.question.findMany({
     where: { bookId: source.blueprint.bookId },
     select: {
       id: true,
@@ -66,6 +68,22 @@ export const POST = route(async (req, params, user) => {
       showGrid: true,
       imagePath: true,
     },
+  });
+
+  const bankQuestions = rawBankQuestions.filter((q) => {
+    let parsedOptions: string[] | undefined;
+    if (q.optionsJson) {
+      try {
+        parsedOptions = JSON.parse(q.optionsJson);
+      } catch {
+        parsedOptions = undefined;
+      }
+    }
+    return !isQuestionContaminated(
+      { text: q.text, options: parsedOptions, answer: q.answer },
+      source.blueprint.book.subject,
+      source.blueprint.book.className
+    ).contaminated;
   });
 
   const questionBankLookup = new Map(bankQuestions.map((q) => [q.id, q]));
