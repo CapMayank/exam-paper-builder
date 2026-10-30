@@ -99,7 +99,7 @@ export async function callGeminiApi<T>(
     };
   }
 
-  // Model priority: configured model or gemini-2.5-pro / gemini-2.5-flash (deprecated 404 1.5 models removed)
+  // Model priority: configured model or gemini-2.5-pro / gemini-2.5-flash / gemini-2.5-flash-lite
   const chosenModel = opts.model || process.env.GEMINI_MODEL;
   const isPro = Boolean(chosenModel?.includes("pro"));
   const fallbackList = isPro
@@ -107,13 +107,17 @@ export async function callGeminiApi<T>(
         chosenModel!,
         "gemini-2.5-pro",
         "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
         "gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
         "gemini-flash-lite-latest",
       ]
     : [
         chosenModel || "gemini-2.5-flash",
         "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
         "gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
         "gemini-flash-lite-latest",
         "gemini-flash-latest",
       ];
@@ -144,56 +148,64 @@ export async function callGeminiApi<T>(
   for (const model of candidateModels) {
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-    try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+    for (let retry = 0; retry < 2; retry++) {
+      try {
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
 
-      if (!res.ok) {
-        lastStatus = res.status;
-        lastErrorText = await res.text();
-        console.warn(`Gemini API Model ${model} returned ${res.status}. Trying fallback model...`);
-        continue;
-      }
+        if (!res.ok) {
+          lastStatus = res.status;
+          lastErrorText = await res.text();
+          // On transient 503 (High Demand / Unavailable) or 429, wait briefly once on the primary model before rotating
+          if ((res.status === 503 || res.status === 429) && retry === 0 && model === candidateModels[0]) {
+            await new Promise((r) => setTimeout(r, 450));
+            continue;
+          }
+          console.warn(`Gemini API Model ${model} returned ${res.status}. Trying fallback model...`);
+          break;
+        }
 
-      const json = await res.json();
-      const candidateText =
-        json.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        const json = await res.json();
+        const candidateText =
+          json.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
-      if (opts.json) {
-        const parsedData = parseGeminiJsonWithLatexSafety<T>(candidateText);
+        if (opts.json) {
+          const parsedData = parseGeminiJsonWithLatexSafety<T>(candidateText);
+          return {
+            success: true,
+            isMock: false,
+            modelUsed: model,
+            data: parsedData,
+            rawResponse: candidateText,
+          };
+        }
+
         return {
           success: true,
           isMock: false,
           modelUsed: model,
-          data: parsedData,
+          data: candidateText as unknown as T,
           rawResponse: candidateText,
         };
+      } catch (err: any) {
+        lastErrorText = err?.message || String(err);
+        console.warn(`Gemini API Model ${model} fetch/parse failed:`, lastErrorText);
+        break;
       }
-
-      return {
-        success: true,
-        isMock: false,
-        modelUsed: model,
-        data: candidateText as unknown as T,
-        rawResponse: candidateText,
-      };
-    } catch (err: any) {
-      lastErrorText = err?.message || String(err);
-      console.warn(`Gemini API Model ${model} fetch/parse failed:`, lastErrorText);
     }
   }
 
-  // Only allow fallback on live API failure when explicitly opted in by non-question utilities
-  if (opts.allowFallbackOnApiFailure && opts.mockFallback) {
+  // Fall back to curriculum-grounded offline engine when live API endpoints are unavailable (e.g. 503 High Demand / 429 Quota)
+  if (opts.allowFallbackOnApiFailure !== false && opts.mockFallback) {
     return {
       success: true,
       isMock: true,
-      modelUsed: "offline-fallback",
+      modelUsed: "curriculum-grounded-fallback",
       data: opts.mockFallback(),
-      error: `Gemini API returned status ${lastStatus || 500}.`,
+      error: `Gemini API returned status ${lastStatus || 503}; served from curriculum-grounded engine.`,
     };
   }
 
@@ -533,7 +545,7 @@ Return a JSON array strictly matching this TypeScript structure:
     json: true,
     apiKey,
     mockFallback: fallbackQuestions,
-    allowFallbackOnApiFailure: false,
+    allowFallbackOnApiFailure: true,
   });
 
   if (callResult.success && Array.isArray(callResult.data)) {
@@ -1177,14 +1189,15 @@ JSON Array Output Schema:
         questionItem.figureDoc = undefined;
       } else {
         try {
-          const eligibleCandidates = isGeminiConfigured(apiKey)
-            ? await findEligibleDiagrams({
-                query: figurePrompt,
-                subject: contract.rawSubject,
-                chapter: slot.chapterTitle,
-                questionText: questionItem.text,
-              })
-            : [];
+          const eligibleCandidates =
+            !lastIsMock && isGeminiConfigured(apiKey)
+              ? await findEligibleDiagrams({
+                  query: figurePrompt,
+                  subject: contract.rawSubject,
+                  chapter: slot.chapterTitle,
+                  questionText: questionItem.text,
+                })
+              : [];
 
           const bestMatch = eligibleCandidates.find(
             (c) =>
@@ -1211,7 +1224,7 @@ JSON Array Output Schema:
             const figRes = await promptToFigureSceneWithGemini({
               prompt: figurePrompt,
               subject: contract.rawSubject,
-              apiKey,
+              apiKey: lastIsMock ? null : apiKey,
             });
             if (figRes.success && figRes.data) {
               questionItem.figureDoc = {
@@ -1252,7 +1265,7 @@ JSON Array Output Schema:
       apiKey,
       model: model || "gemini-2.5-pro",
       mockFallback: fallbackQuestions,
-      allowFallbackOnApiFailure: false,
+      allowFallbackOnApiFailure: true,
     });
 
     lastIsMock = callResult.isMock;

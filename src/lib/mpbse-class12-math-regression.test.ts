@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { detectPaperLanguage } from "./constants";
 import {
   buildAndValidateGenerationContract,
@@ -571,6 +571,50 @@ describe("MPBSE Class 12 Mathematics Regression & Subject Integrity Suite", () =
         }
       } finally {
         process.env.GEMINI_API_KEY = prevKey;
+      }
+    });
+  });
+
+  describe("6. Gemini 503 High-Demand Outage Resilience", () => {
+    it("gracefully falls back to the curriculum-grounded engine when Gemini returns 503 UNAVAILABLE across all models", async () => {
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: 503,
+              message: "This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.",
+              status: "UNAVAILABLE",
+            },
+          }),
+          { status: 503, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      try {
+        const res = await generatePaperSectionWithGemini({
+          className: "Class 12",
+          subject: "Mathematics",
+          sectionTitle: "Section A",
+          sectionType: "MCQ",
+          marksEach: 1,
+          language: "en",
+          difficulty: "BALANCED",
+          apiKey: "AIzaSyFakeKeyFor503ResilienceTest",
+          slots: [
+            { slotIndex: 0, chapterId: "ch-3", chapterNumber: 3, chapterTitle: "Matrices", marks: 1 },
+            { slotIndex: 1, chapterId: "ch-4", chapterNumber: 4, chapterTitle: "Determinants", marks: 1 },
+          ],
+        });
+
+        expect(res.success).toBe(true);
+        expect(res.isMock).toBe(true);
+        expect(res.data?.length).toBe(2);
+        for (const q of res.data!) {
+          expect(isQuestionContaminated(q, "Mathematics", "Class 12").contaminated).toBe(false);
+          expect(q.options.length).toBe(4);
+        }
+      } finally {
+        fetchSpy.mockRestore();
       }
     });
   });
