@@ -59,6 +59,7 @@ export function QuestionPicker({
   });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [batchBusy, setBatchBusy] = useState(false);
+  const [addingQuestionId, setAddingQuestionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [formKey, setFormKey] = useState(0);
@@ -181,7 +182,14 @@ export function QuestionPicker({
   }, [bank, placed, def, section.id, isAlternate, activeItem, paper.items, section.type, targetSlotMarks, isMultiUnitMatch, replacingItemId]);
 
   async function add(questionId: string) {
+    if (addingQuestionId) return;
+    setAddingQuestionId(questionId);
     setError(null);
+    const targetQ = bank.find((q) => q.id === questionId);
+    // Optimistically remove question from bank view for standard slot addition
+    if (!isAlternate && !isReplacing) {
+      setBank((b) => b.filter((q) => q.id !== questionId));
+    }
     try {
       if (isAlternate && alternateTargetItemId) {
         const updated = await api<PaperData>(`/api/papers/${paper.id}/questions/${alternateTargetItemId}`, {
@@ -200,12 +208,17 @@ export function QuestionPicker({
       } else {
         const updated = await api<PaperData>(`/api/papers/${paper.id}/questions`, { method: "POST", json: { sectionId: section.id, questionId } });
         onPaper(updated);
-        setBank((b) => b.filter((q) => q.id !== questionId));
         const s = updated.progress.sections.find((x) => x.id === section.id)!;
         if (s.filled >= s.needed) onClose();
       }
     } catch (e) {
+      // Revert optimistic removal on failure so the question remains available in the bank
+      if (targetQ && !isAlternate && !isReplacing) {
+        setBank((b) => (b.some((q) => q.id === questionId) ? b : [targetQ, ...b]));
+      }
       setError((e as Error).message);
+    } finally {
+      setAddingQuestionId(null);
     }
   }
 
@@ -213,6 +226,8 @@ export function QuestionPicker({
     if (selectedIds.size === 0) return;
     setBatchBusy(true);
     setError(null);
+    const prevBank = bank;
+    setBank((b) => b.filter((q) => !selectedIds.has(q.id)));
     try {
       const res = await api<{ success: boolean; addedCount: number; message: string; paper: PaperData }>(
         `/api/papers/${paper.id}/questions/bulk`,
@@ -227,6 +242,8 @@ export function QuestionPicker({
       onPaper(res.paper);
       onClose();
     } catch (e) {
+      // Revert optimistic removal on batch insert failure
+      setBank(prevBank);
       setError((e as Error).message);
     } finally {
       setBatchBusy(false);
@@ -599,9 +616,14 @@ export function QuestionPicker({
                           )}
                           <button
                             className="btn btn-sm btn-primary shadow-2xs"
+                            disabled={addingQuestionId !== null || batchBusy}
                             onClick={() => add(q.id)}
                           >
-                            <Plus size={13} />{" "}
+                            {addingQuestionId === q.id ? (
+                              <Spinner size="sm" />
+                            ) : (
+                              <Plus size={13} />
+                            )}{" "}
                             {isAlternate
                               ? "Set as Alternate (OR)"
                               : isReplacing

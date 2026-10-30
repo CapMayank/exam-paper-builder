@@ -421,7 +421,7 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
       return;
     }
 
-    if (hasPapers && !andBuildPaper) {
+    if (hasPapers) {
       const ok = await confirm({
         title: `Save Blueprint & Sync ${paperCount} Paper(s)?`,
         message: `This blueprint is used in ${paperCount} exam paper(s). Section and quota updates will be applied in-place. If any finalized papers have quota discrepancies, they will safely revert to Draft with detailed reconciliation steps.`,

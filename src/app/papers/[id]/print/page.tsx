@@ -85,7 +85,8 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
   const onInfo = useCallback(
     (i: SheetsInfo) => {
       setInfo(i);
-      if (paper && i.pages > 0 && paper.targetPages !== i.pages) {
+      if (!paper || paper.status === "FINAL") return;
+      if (i.pages > 0 && paper.targetPages !== i.pages) {
         api(`/api/papers/${paper.id}`, {
           method: "PATCH",
           json: { targetPages: i.pages },

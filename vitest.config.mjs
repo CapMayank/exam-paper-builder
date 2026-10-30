@@ -6,8 +6,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   test: {
+    include: ["src/**/*.{test,spec}.?(c|m)[jt]s?(x)"],
     environment: "node",
     fileParallelism: false,
+    env: {
+      GEMINI_API_KEY: "",
+    },
   },
   resolve: {
     alias: {

@@ -4,6 +4,7 @@ import { recordAudit } from "@/lib/audit";
 import { parseAndValidateBatch } from "@/lib/batchQuestionIo";
 import { DIFFICULTIES, QUESTION_TYPES } from "@/lib/constants";
 import { toQuestionDto } from "@/lib/dto";
+import { assertCanModifyQuestion } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 
 // Legacy schema for backward compatibility
@@ -165,3 +166,63 @@ export const POST = route(async (req, _params, user) => {
     message: `Successfully imported ${createdQuestions.length} questions into Chapter ${chapter.number}.`,
   };
 });
+
+const bulkDeleteSchema = z.object({
+  ids: z.array(z.string().min(1)).min(1, "At least one question ID is required"),
+});
+
+export const DELETE = route(async (req, _params, user) => {
+  const input = await body(req, bulkDeleteSchema);
+  const ids = Array.from(new Set(input.ids));
+
+  const questions = await prisma.question.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, text: true, type: true, createdById: true },
+  });
+
+  if (questions.length === 0) {
+    return { success: true, deletedCount: 0, message: "No questions found to delete." };
+  }
+
+  for (const q of questions) {
+    assertCanModifyQuestion(user, q);
+  }
+
+  const paperUse = await prisma.paperQuestion.findFirst({
+    where: {
+      OR: [
+        { questionId: { in: ids } },
+        { orQuestionId: { in: ids } },
+      ],
+    },
+    select: {
+      paper: { select: { title: true } },
+    },
+  });
+
+  if (paperUse) {
+    throw new HttpError(
+      409,
+      `Cannot delete questions: at least one question is used in exam paper "${paperUse.paper.title}". Remove it from papers first.`,
+    );
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    return tx.question.deleteMany({
+      where: { id: { in: ids } },
+    });
+  });
+
+  await recordAudit(user, "QUESTION_DELETE", "QUESTION", undefined, {
+    action: "BULK_DELETE",
+    questionCount: result.count,
+    ids,
+  });
+
+  return {
+    success: true,
+    deletedCount: result.count,
+    message: `Successfully deleted ${result.count} question(s).`,
+  };
+});
+

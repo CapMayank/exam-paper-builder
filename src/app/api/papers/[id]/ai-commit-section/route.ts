@@ -17,7 +17,7 @@ export const POST = route(async (req, { id }, user) => {
   const body = await req.json();
   const { sectionId, questions } = body as {
     sectionId: string;
-    questions: (GeneratedPaperQuestion & { imagePath?: string })[];
+    questions: (GeneratedPaperQuestion & { imagePath?: string; figureScene?: unknown })[];
   };
 
   if (!sectionId) throw new HttpError(400, "sectionId is required");
@@ -76,6 +76,10 @@ export const POST = route(async (req, { id }, user) => {
       }
 
       // 1. Create question in the question bank
+      const figureSceneVal = q.figureScene
+        ? (typeof q.figureScene === "string" ? q.figureScene : JSON.stringify(q.figureScene))
+        : (q.figureDoc ? JSON.stringify(q.figureDoc) : null);
+
       const createdQuestion = await tx.question.create({
         data: {
           bookId: paper.blueprint.bookId,
@@ -86,6 +90,9 @@ export const POST = route(async (req, { id }, user) => {
           subpartsJson: JSON.stringify(normalizedSubparts),
           answer: q.answer || "",
           difficulty: q.difficulty || "MEDIUM",
+          cognitiveLevel: q.cognitiveLevel || null,
+          explanation: q.explanation || null,
+          figureScene: figureSceneVal,
           imagePath: q.imagePath || null,
           createdById: user.id,
         },

@@ -29,10 +29,22 @@ export function AcademicSessionSelector({ compact = false, className = "" }: Aca
     }
   }, [open]);
 
+  function handleSelectSession(session: string) {
+    setSession(session);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("academic-session-changed", { detail: session }));
+    }
+    setOpen(false);
+  }
+
   function handleAddCustom(e: React.FormEvent) {
     e.preventDefault();
     if (!customInput.trim()) return;
-    addCustomSession(customInput.trim());
+    const session = customInput.trim();
+    addCustomSession(session);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("academic-session-changed", { detail: session }));
+    }
     setCustomInput("");
     setAddingCustom(false);
     setOpen(false);
@@ -76,10 +88,7 @@ export function AcademicSessionSelector({ compact = false, className = "" }: Aca
                 <button
                   key={session}
                   type="button"
-                  onClick={() => {
-                    setSession(session);
-                    setOpen(false);
-                  }}
+                  onClick={() => handleSelectSession(session)}
                   className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
                     active ? "bg-indigo-50 font-semibold text-indigo-900" : "text-slate-700 hover:bg-slate-50 hover:text-slate-900"
                   }`}

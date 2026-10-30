@@ -39,7 +39,7 @@ import {
 import { getMaxPaperDiagramBudget, isSectionVisuallyEligible } from "@/lib/diagram-rules";
 import type { GeneratedPaperQuestion } from "@/lib/gemini";
 import type { PaperAutogenPlan } from "@/lib/paperAutogen";
-import type { PaperData } from "@/lib/types";
+import { normalizeSubpartMarks, type PaperData } from "@/lib/types";
 
 interface AIPaperGeneratorModalProps {
   paperId: string;
@@ -74,6 +74,8 @@ export function AIPaperGeneratorModal({
   // Running generation state
   const [status, setStatus] = useState<"config" | "generating" | "done" | "stopped">("config");
   const [currentSectionIndex, setCurrentSectionIndex] = useState<number>(0);
+  const [currentSectionTitle, setCurrentSectionTitle] = useState<string>("");
+  const [sectionStage, setSectionStage] = useState<1 | 2 | 3>(1);
   const [currentActivity, setCurrentActivity] = useState<string>("");
   const [generatedQuestions, setGeneratedQuestions] = useState<
     (GeneratedPaperQuestion & { imagePath?: string; sectionTitle: string })[]
@@ -82,10 +84,22 @@ export function AIPaperGeneratorModal({
   const [latestPaper, setLatestPaper] = useState<PaperData | null>(null);
 
   const abortRef = useRef<boolean>(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Abort in-flight requests on unmount
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
 
   // Fetch plan when modal opens
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      abortControllerRef.current?.abort();
+      return;
+    }
+    abortControllerRef.current?.abort();
     let mounted = true;
     setLoadingPlan(true);
     setError(null);
@@ -140,12 +154,46 @@ export function AIPaperGeneratorModal({
 
   const handleStop = () => {
     abortRef.current = true;
-    setCurrentActivity("Stopping after current section finishes...");
+    setCurrentActivity("Finishing and committing current section before pausing...");
+  };
+
+  const handleCancelGeneration = async () => {
+    abortRef.current = true;
+    abortControllerRef.current?.abort();
+    setStatus("stopped");
+    setCurrentActivity("Cancelling generation and cleaning up draft questions...");
+    try {
+      await api(`/api/papers/${paperId}/clear-questions`, { method: "POST" });
+      const freshPlanRes = await api<{ success: boolean; plan: PaperAutogenPlan }>(
+        `/api/papers/${paperId}/ai-plan`,
+      );
+      setPlan(freshPlanRes.plan);
+      setGeneratedQuestions([]);
+      toast.info("Generation cancelled and draft questions cleared.");
+    } catch (cleanErr) {
+      console.warn("Failed to clear questions on cancel:", cleanErr);
+      toast.info("Generation cancelled.");
+    } finally {
+      setCurrentActivity("");
+    }
+  };
+
+  const handleClose = () => {
+    if (status === "generating") {
+      abortRef.current = true;
+      abortControllerRef.current?.abort();
+    }
+    onClose();
   };
 
   // Section-by-section generator runner
   const handleStartGeneration = async () => {
     if (!plan) return;
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    const signal = controller.signal;
+
     setStatus("generating");
     setError(null);
     abortRef.current = false;
@@ -155,13 +203,15 @@ export function AIPaperGeneratorModal({
     if (generationMode === "fresh" && hasPlaced) {
       setCurrentActivity("Clearing previous draft questions for fresh generation...");
       try {
-        await api(`/api/papers/${paperId}/clear-questions`, { method: "POST" });
+        await api(`/api/papers/${paperId}/clear-questions`, { method: "POST", signal });
         const freshPlanRes = await api<{ success: boolean; plan: PaperAutogenPlan }>(
           `/api/papers/${paperId}/ai-plan`,
+          { signal },
         );
         currentPlan = freshPlanRes.plan;
         setPlan(freshPlanRes.plan);
       } catch (clearErr: any) {
+        if (signal.aborted) return;
         setError(clearErr?.message || "Failed to clear existing questions.");
         setStatus("config");
         return;
@@ -183,17 +233,17 @@ export function AIPaperGeneratorModal({
 
     try {
       for (let i = 0; i < pendingSections.length; i++) {
-        if (abortRef.current) {
+        if (abortRef.current || signal.aborted) {
           setStatus("stopped");
-          toast.info("Generation stopped by user.");
+          toast.info("Current section committed. Generation paused.");
           break;
         }
 
         const sec = pendingSections[i];
         setCurrentSectionIndex(i);
-        setCurrentActivity(
-          `Generating ${sec.slots.length} questions for "${sec.sectionTitle}" (${modelTier.includes("pro") ? "Gemini 2.5 Pro" : "Gemini 2.0 Flash"})...`,
-        );
+        setCurrentSectionTitle(sec.sectionTitle);
+        setSectionStage(1);
+        setCurrentActivity("Formulating questions with Gemini...");
 
         // Board exam standard: dynamically enforce whole-paper diagram budget and section visual eligibility
         const allowSectionDiagrams = Boolean(
@@ -217,6 +267,7 @@ export function AIPaperGeneratorModal({
         }>(`/api/papers/${paperId}/ai-generate-section`, {
           method: "POST",
           headers,
+          signal,
           json: {
             sectionTitle: sec.sectionTitle,
             sectionType: sec.sectionType,
@@ -231,13 +282,33 @@ export function AIPaperGeneratorModal({
           },
         });
 
-        const questions = genRes.questions || [];
+        // Ensure displayed subpart mark allocations in the preview feed match the calculated values before commit
+        const rawQuestions = genRes.questions || [];
+        const questions = rawQuestions.map((q) => {
+          if (q.subparts && q.subparts.length > 0) {
+            return {
+              ...q,
+              subparts: normalizeSubpartMarks(q.subparts, sec.marksEach),
+            };
+          }
+          return q;
+        });
+
+        const hasDiagrams = questions.some(
+          (q) => !q.imagePath && q.figureDoc && Array.isArray(q.figureDoc.objects) && q.figureDoc.objects.length > 0
+        );
 
         // 2. Render and upload any vector diagrams generated by Figure Studio (only if no online diagram was already attached)
-        if (allowSectionDiagrams) {
+        setSectionStage(2);
+        if (hasDiagrams) {
+          setCurrentActivity("Rendering vector diagrams in Figure Studio...");
+        }
+
+        if (allowSectionDiagrams && !signal.aborted) {
           for (const q of questions) {
+            if (signal.aborted) break;
             if (!q.imagePath && q.figureDoc && Array.isArray(q.figureDoc.objects) && q.figureDoc.objects.length > 0) {
-              setCurrentActivity(`Rendering Figure Studio diagram for Chapter ${q.chapterNumber}...`);
+              setCurrentActivity("Rendering vector diagrams in Figure Studio...");
               try {
                 const doc: Doc = {
                   w: q.figureDoc.canvasWidth || 640,
@@ -258,18 +329,25 @@ export function AIPaperGeneratorModal({
           }
         }
 
+        if (signal.aborted) {
+          setStatus("stopped");
+          break;
+        }
+
         // Track how many questions in this section received diagrams
         const diagramsInThisSection = questions.filter((q) => q.imagePath || q.figureDoc).length;
         paperDiagramCount += diagramsInThisSection;
 
         // 3. Commit section questions into database & link to paper
-        setCurrentActivity(`Saving questions for "${sec.sectionTitle}" into database...`);
+        setSectionStage(3);
+        setCurrentActivity("Committing section to database...");
         const commitRes = await api<{
           success: boolean;
           addedCount: number;
           paper: PaperData;
         }>(`/api/papers/${paperId}/ai-commit-section`, {
           method: "POST",
+          signal,
           json: {
             sectionId: sec.sectionId,
             questions,
@@ -288,7 +366,7 @@ export function AIPaperGeneratorModal({
         setGeneratedQuestions(accumulatedQuestions);
       }
 
-      if (!abortRef.current) {
+      if (!abortRef.current && !signal.aborted) {
         setStatus("done");
         toast.success(`Successfully generated ${accumulatedQuestions.length} questions!`);
         if (updatedPaperRef) {
@@ -296,6 +374,11 @@ export function AIPaperGeneratorModal({
         }
       }
     } catch (err: any) {
+      if (signal.aborted || err?.name === "AbortError") {
+        setStatus("stopped");
+        setCurrentActivity("Generation cancelled.");
+        return;
+      }
       setError(err?.message || "An error occurred during section generation.");
       setStatus("stopped");
     } finally {
@@ -335,13 +418,22 @@ export function AIPaperGeneratorModal({
           <Spinner size={14} className="text-indigo-600" />
           Generating paper section by section...
         </div>
-        <button
-          type="button"
-          onClick={handleStop}
-          className="btn btn-ghost border border-red-200 text-red-600 hover:bg-red-50 text-xs py-1.5 px-3 inline-flex items-center gap-1.5"
-        >
-          <StopCircle size={14} /> Stop After Current Section
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleCancelGeneration}
+            className="btn btn-ghost border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs py-1.5 px-3 inline-flex items-center gap-1.5"
+          >
+            <X size={14} /> Cancel Generation
+          </button>
+          <button
+            type="button"
+            onClick={handleStop}
+            className="btn btn-ghost border border-red-200 text-red-600 hover:bg-red-50 text-xs py-1.5 px-3 inline-flex items-center gap-1.5"
+          >
+            <StopCircle size={14} /> Stop After Current Section
+          </button>
+        </div>
       </>
     ) : (
       <>
@@ -367,7 +459,8 @@ export function AIPaperGeneratorModal({
     <Modal
       title="AI Complete Question Paper Generator"
       subtitle={`${paperTitle} · ${plan ? `${plan.className} ${plan.subject}` : "Exam Paper"}`}
-      onClose={onClose}
+      onClose={handleClose}
+      preventClose={status === "generating"}
       size="xl"
       footer={modalFooter}
     >
@@ -630,7 +723,9 @@ export function AIPaperGeneratorModal({
                     )}
                     <span className="text-xs font-bold text-slate-900">
                       {status === "generating"
-                        ? `Generating Section ${currentSectionIndex + 1} of ${pendingSections.length}`
+                        ? `Section ${currentSectionIndex + 1} of ${pendingSections.length}: ${
+                            currentSectionTitle || pendingSections[currentSectionIndex]?.sectionTitle || "Generating..."
+                          }`
                         : status === "done"
                         ? "Exam Paper Generation Completed!"
                         : "Generation Paused"}
@@ -650,6 +745,67 @@ export function AIPaperGeneratorModal({
                     }}
                   />
                 </div>
+
+                {/* Active Section Multi-Stage Progress */}
+                {status === "generating" && (
+                  <div className="mt-3 pt-2.5 border-t border-indigo-100 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {/* Stage 1 */}
+                    <div
+                      className={`flex items-center gap-2 p-2 rounded-lg border text-[11px] transition ${
+                        sectionStage === 1
+                          ? "bg-white border-indigo-300 shadow-2xs font-semibold text-indigo-950 animate-pulse"
+                          : sectionStage > 1
+                          ? "bg-emerald-50/60 border-emerald-200 text-emerald-800"
+                          : "bg-white/50 border-slate-200 text-slate-400"
+                      }`}
+                    >
+                      {sectionStage > 1 ? (
+                        <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
+                      ) : sectionStage === 1 ? (
+                        <Loader2 size={13} className="text-indigo-600 animate-spin shrink-0" />
+                      ) : (
+                        <div className="h-3 w-3 rounded-full border border-slate-300 ml-0.5 shrink-0" />
+                      )}
+                      <span className="truncate">Stage 1: Formulating questions with Gemini...</span>
+                    </div>
+
+                    {/* Stage 2 */}
+                    <div
+                      className={`flex items-center gap-2 p-2 rounded-lg border text-[11px] transition ${
+                        sectionStage === 2
+                          ? "bg-white border-indigo-300 shadow-2xs font-semibold text-indigo-950 animate-pulse"
+                          : sectionStage > 2
+                          ? "bg-emerald-50/60 border-emerald-200 text-emerald-800"
+                          : "bg-white/50 border-slate-200 text-slate-400"
+                      }`}
+                    >
+                      {sectionStage > 2 ? (
+                        <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
+                      ) : sectionStage === 2 ? (
+                        <Loader2 size={13} className="text-indigo-600 animate-spin shrink-0" />
+                      ) : (
+                        <div className="h-3 w-3 rounded-full border border-slate-300 ml-0.5 shrink-0" />
+                      )}
+                      <span className="truncate">Stage 2: Rendering vector diagrams in Figure Studio...</span>
+                    </div>
+
+                    {/* Stage 3 */}
+                    <div
+                      className={`flex items-center gap-2 p-2 rounded-lg border text-[11px] transition ${
+                        sectionStage === 3
+                          ? "bg-white border-indigo-300 shadow-2xs font-semibold text-indigo-950 animate-pulse"
+                          : "bg-white/50 border-slate-200 text-slate-400"
+                      }`}
+                    >
+                      {sectionStage === 3 ? (
+                        <Loader2 size={13} className="text-indigo-600 animate-spin shrink-0" />
+                      ) : (
+                        <div className="h-3 w-3 rounded-full border border-slate-300 ml-0.5 shrink-0" />
+                      )}
+                      <span className="truncate">Stage 3: Committing section to database...</span>
+                    </div>
+                  </div>
+                )}
 
                 {currentActivity && (
                   <p className="text-[11px] text-slate-600 mt-2 italic flex items-center gap-1.5">

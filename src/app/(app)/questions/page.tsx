@@ -30,7 +30,7 @@ import type { BatchImportReport } from "@/lib/batchQuestionIo";
 import { parseBulkQuestions } from "@/lib/bulkImport";
 import { api } from "@/lib/client";
 import { DIFFICULTIES, isKindergartenType, isMcqLikeType, QUESTION_TYPES, QUESTION_TYPE_LABEL, sortClassNames, type QuestionType } from "@/lib/constants";
-import type { Book, QuestionDto } from "@/lib/types";
+import { subpartsTotalMarks, type Book, type QuestionDto } from "@/lib/types";
 
 const SAMPLE_CSV = `type,marks,text,answer,chapterNumber,difficulty,options,subparts
 MCQ,1,"What is the SI unit of electric current?",B,1,EASY,"Volt|Ampere|Ohm|Watt",
@@ -263,14 +263,12 @@ export default function QuestionsPage() {
     setBulkDeleting(true);
     setError(null);
     try {
-      let count = 0;
-      for (const q of selectedList) {
-        try {
-          await api(`/api/questions/${q.id}`, { method: "DELETE" });
-          count++;
-        } catch {}
-      }
-      toast.success(`Deleted ${count} question${count > 1 ? "s" : ""}.`);
+      const res = await api<{ success: boolean; deletedCount: number; message: string }>("/api/questions/bulk", {
+        method: "DELETE",
+        json: { ids: selectedList.map((q) => q.id) },
+      });
+      const count = res.deletedCount;
+      toast.success(`Deleted ${count} question${count === 1 ? "" : "s"}.`);
       setSelectedIds(new Set());
       await load();
     } catch (e) {
@@ -285,14 +283,18 @@ export default function QuestionsPage() {
     setBulkUpdatingDiff(true);
     setError(null);
     try {
-      await api("/api/questions/bulk-update", {
-        method: "POST",
-        json: {
-          questionIds: Array.from(selectedIds),
-          difficulty: diff,
-        },
-      });
-      toast.success(`Updated difficulty to ${diff} for ${selectedIds.size} question(s).`);
+      const res = await api<{ success: boolean; updatedCount: number; count?: number; message: string }>(
+        "/api/questions/bulk-difficulty",
+        {
+          method: "POST",
+          json: {
+            questionIds: Array.from(selectedIds),
+            difficulty: diff,
+          },
+        }
+      );
+      const verifiedCount = res.updatedCount ?? res.count ?? 0;
+      toast.success(`Updated difficulty to ${diff} for ${verifiedCount} question(s).`);
       setSelectedIds(new Set());
       await load();
     } catch (e) {
@@ -559,20 +561,30 @@ export default function QuestionsPage() {
           ))}
         </select>
 
-        <select
-          className="input text-xs"
-          value={filters.marks}
-          onChange={(e) => set("marks", e.target.value)}
-          aria-label="Marks Filter"
-        >
-          <option value="">Any marks</option>
-          <option value="1">1 Mark</option>
-          <option value="2">2 Marks</option>
-          <option value="3">3 Marks</option>
-          <option value="4">4 Marks</option>
-          <option value="5">5 Marks</option>
-          <option value="6">6 Marks</option>
-        </select>
+        <div className="relative">
+          <select
+            className="input text-xs w-full"
+            value={filters.marks}
+            onChange={(e) => set("marks", e.target.value)}
+            aria-label="Marks Filter"
+            title="Standalone question marks are determined by the exam blueprint section. Subpart question marks are calculated by summing subpart marks."
+          >
+            <option value="">Any marks</option>
+            <option value="1">1 Mark</option>
+            <option value="2">2 Marks</option>
+            <option value="3">3 Marks</option>
+            <option value="4">4 Marks</option>
+            <option value="5">5 Marks</option>
+            <option value="6">6 Marks</option>
+          </select>
+          <div
+            className="text-[10px] text-slate-400 mt-0.5 px-0.5 leading-tight flex items-center gap-1"
+            title="Standalone question marks are determined by the exam blueprint section. Subpart question marks are calculated by summing subpart marks."
+          >
+            <HelpCircle size={10} className="text-slate-400 shrink-0" />
+            <span className="truncate">Blueprint or subparts sum</span>
+          </div>
+        </div>
 
         <select
           className="input text-xs"
@@ -691,6 +703,21 @@ export default function QuestionsPage() {
                     {QUESTION_TYPE_LABEL[q.type as keyof typeof QUESTION_TYPE_LABEL]}
                   </span>
                   <span className={`badge border font-semibold ${diffBadgeClass}`}>{q.difficulty}</span>
+                  {q.subparts && q.subparts.length > 0 ? (
+                    <span
+                      className="badge bg-indigo-50 text-indigo-700 font-semibold border border-indigo-200"
+                      title="Calculated by summing subpart marks"
+                    >
+                      {subpartsTotalMarks(q.subparts)} Marks ({q.subparts.length} subparts)
+                    </span>
+                  ) : (
+                    <span
+                      className="badge bg-slate-100 text-slate-500 font-normal border border-slate-200 cursor-help"
+                      title="Standalone question marks are determined by the exam blueprint section when placed into an exam paper."
+                    >
+                      Marks: Blueprint Section
+                    </span>
+                  )}
                   {q.answer && q.answer.trim().length > 0 ? (
                     <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800 border border-emerald-200" title="Model answer key is present">
                       ✓ Answer Key

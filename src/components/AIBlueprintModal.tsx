@@ -62,7 +62,9 @@ export function AIBlueprintModal({
   const [file, setFile] = useState<File | null>(null);
   const [fileBase64, setFileBase64] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
+  const [analysisStage, setAnalysisStage] = useState<1 | 2 | 3 | null>(null);
   const [saving, setSaving] = useState(false);
+  const loading = analyzing || saving;
   const [error, setError] = useState<string | null>(null);
 
   // Extracted blueprint draft state for review & edit
@@ -152,6 +154,15 @@ export function AIBlueprintModal({
 
     setError(null);
     setAnalyzing(true);
+    setAnalysisStage(1);
+
+    const timer1 = setTimeout(() => {
+      setAnalysisStage(2);
+    }, 1200);
+
+    const timer2 = setTimeout(() => {
+      setAnalysisStage(3);
+    }, 3200);
 
     try {
       const payload: Record<string, unknown> = {
@@ -194,6 +205,8 @@ export function AIBlueprintModal({
       if (!res.data) {
         throw new Error("AI could not extract blueprint information from this document.");
       }
+
+      setAnalysisStage(3);
 
       setName(res.data.name || `${res.book.className} ${res.book.subject} Annual Blueprint`);
       setExamType(res.data.examType || "ANNUAL");
@@ -238,7 +251,10 @@ export function AIBlueprintModal({
     } catch (err: any) {
       setError(err?.message || "Failed to analyze blueprint.");
     } finally {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
       setAnalyzing(false);
+      setAnalysisStage(null);
     }
   };
 
@@ -347,6 +363,7 @@ export function AIBlueprintModal({
       onClose={onClose}
       title="AI Blueprint Creator"
       size="xl"
+      preventClose={loading}
     >
       <div className="space-y-4">
         {error && <ErrorBanner message={error} />}
@@ -465,10 +482,87 @@ export function AIBlueprintModal({
               </div>
             )}
 
+            {analyzing && (
+              <div className="rounded-xl border border-indigo-200 bg-indigo-50/70 p-4 space-y-3 anim-pop">
+                <div className="flex items-center justify-between text-xs font-semibold text-indigo-950">
+                  <span className="flex items-center gap-2">
+                    <Sparkles size={15} className="text-indigo-600 animate-pulse" />
+                    AI Blueprint Structure Extraction
+                  </span>
+                  <span className="text-indigo-600 font-mono text-[11px]">
+                    Stage {analysisStage || 1} of 3
+                  </span>
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  {/* Stage 1 */}
+                  <div className="flex items-center gap-2.5">
+                    {(analysisStage ?? 1) > 1 ? (
+                      <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
+                    ) : (
+                      <Loader2 size={15} className="text-indigo-600 animate-spin shrink-0" />
+                    )}
+                    <span
+                      className={`font-medium ${
+                        (analysisStage ?? 1) === 1
+                          ? "text-indigo-950 font-bold"
+                          : (analysisStage ?? 1) > 1
+                          ? "text-emerald-800"
+                          : "text-slate-400"
+                      }`}
+                    >
+                      1. Uploading circular document...
+                    </span>
+                  </div>
+
+                  {/* Stage 2 */}
+                  <div className="flex items-center gap-2.5">
+                    {(analysisStage ?? 1) > 2 ? (
+                      <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
+                    ) : (analysisStage ?? 1) === 2 ? (
+                      <Loader2 size={15} className="text-indigo-600 animate-spin shrink-0" />
+                    ) : (
+                      <div className="h-3.5 w-3.5 rounded-full border border-slate-300 ml-0.5 shrink-0" />
+                    )}
+                    <span
+                      className={`font-medium ${
+                        (analysisStage ?? 1) === 2
+                          ? "text-indigo-950 font-bold"
+                          : (analysisStage ?? 1) > 2
+                          ? "text-emerald-800"
+                          : "text-slate-400"
+                      }`}
+                    >
+                      2. Analyzing syllabus structure with AI...
+                    </span>
+                  </div>
+
+                  {/* Stage 3 */}
+                  <div className="flex items-center gap-2.5">
+                    {(analysisStage ?? 1) === 3 ? (
+                      <Loader2 size={15} className="text-indigo-600 animate-spin shrink-0" />
+                    ) : (
+                      <div className="h-3.5 w-3.5 rounded-full border border-slate-300 ml-0.5 shrink-0" />
+                    )}
+                    <span
+                      className={`font-medium ${
+                        (analysisStage ?? 1) === 3
+                          ? "text-indigo-950 font-bold"
+                          : "text-slate-400"
+                      }`}
+                    >
+                      3. Extracting sections and weightage...
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
                 onClick={onClose}
+                disabled={loading}
                 className="btn btn-secondary text-xs"
               >
                 Cancel
@@ -482,7 +576,11 @@ export function AIBlueprintModal({
                 {analyzing ? (
                   <>
                     <Loader2 size={14} className="animate-spin" />
-                    Extracting Blueprint with AI…
+                    {analysisStage === 1
+                      ? "Uploading circular document..."
+                      : analysisStage === 2
+                      ? "Analyzing syllabus structure with AI..."
+                      : "Extracting sections and weightage..."}
                   </>
                 ) : (
                   <>
@@ -745,6 +843,7 @@ export function AIBlueprintModal({
                 <button
                   type="button"
                   onClick={onClose}
+                  disabled={loading}
                   className="btn btn-secondary text-xs"
                 >
                   Cancel

@@ -125,6 +125,9 @@ model Question {
   subpartsJson   String          @default("[]") // Subparts for multi-part / case study questions
   answer         String          @default("")
   difficulty     String          @default("MEDIUM")
+  cognitiveLevel String?
+  explanation    String?
+  figureScene    String?
   imagePath      String? // file name inside data/uploads
   spaceMm        Int             @default(0) // blank answer space printed under the question
   showGrid       Boolean         @default(false) // DRAW type: print graph-paper grid in the space

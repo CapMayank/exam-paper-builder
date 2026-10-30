@@ -39,15 +39,7 @@ function unlockScroll() {
   }
 }
 
-export function Modal({
-  title,
-  subtitle,
-  onClose,
-  children,
-  wide,
-  size,
-  footer,
-}: {
+export interface ModalProps {
   title: string;
   subtitle?: string;
   onClose: () => void;
@@ -57,13 +49,28 @@ export function Modal({
   size?: "sm" | "md" | "lg" | "xl";
   /** Sticky footer (actions). Keeps primary buttons visible while the body scrolls. */
   footer?: ReactNode;
-}) {
+  /** When true, prevents closing via Escape key and clicking backdrop */
+  preventClose?: boolean;
+}
+
+export function Modal({
+  title,
+  subtitle,
+  onClose,
+  children,
+  wide,
+  size,
+  footer,
+  preventClose,
+}: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
+  const preventCloseRef = useRef(preventClose);
   const titleId = useId();
 
   useEffect(() => {
     onCloseRef.current = onClose;
+    preventCloseRef.current = preventClose;
   });
 
   useEffect(() => {
@@ -80,7 +87,9 @@ export function Modal({
       if (modalStack[modalStack.length - 1] !== id) return;
       if (e.key === "Escape") {
         e.stopPropagation();
-        onCloseRef.current();
+        if (!preventCloseRef.current) {
+          onCloseRef.current();
+        }
       } else if (e.key === "Tab" && dialog) {
         const items = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => el.offsetParent !== null);
         if (items.length === 0) {
@@ -115,7 +124,7 @@ export function Modal({
       className="no-print anim-fade fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-6"
       onPointerDown={(e) => {
         // Only a press that *starts* on the backdrop closes the dialog (selecting text and releasing outside must not).
-        if (e.target === e.currentTarget) onCloseRef.current();
+        if (e.target === e.currentTarget && !preventClose) onCloseRef.current();
       }}
     >
       <div
@@ -135,8 +144,13 @@ export function Modal({
           </div>
           <button
             type="button"
-            className="-mr-1.5 -mt-1 shrink-0 rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
-            onClick={onClose}
+            className={`-mr-1.5 -mt-1 shrink-0 rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 ${
+              preventClose ? "cursor-not-allowed opacity-40 hover:bg-transparent hover:text-slate-500" : ""
+            }`}
+            onClick={() => {
+              if (!preventClose) onClose();
+            }}
+            disabled={preventClose}
             aria-label="Close dialog"
           >
             <X size={18} />
@@ -267,8 +281,15 @@ export function EmptyState({
   );
 }
 
-export function Spinner({ size = 16, className = "" }: { size?: number; className?: string }) {
-  return <Loader2 size={size} className={`animate-spin ${className}`} aria-hidden />;
+export function Spinner({
+  size = 16,
+  className = "",
+}: {
+  size?: number | "sm" | "md" | "lg";
+  className?: string;
+}) {
+  const numSize = typeof size === "number" ? size : size === "sm" ? 14 : size === "lg" ? 24 : 18;
+  return <Loader2 size={numSize} className={`animate-spin ${className}`} aria-hidden />;
 }
 
 export function Skeleton({ className = "" }: { className?: string }) {

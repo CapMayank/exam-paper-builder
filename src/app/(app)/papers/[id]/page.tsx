@@ -48,7 +48,7 @@ import { QuestionForm } from "@/components/QuestionForm";
 import { QuestionPicker } from "@/components/QuestionPicker";
 import { isExhaustedUsage, QuestionFreshnessAlert, QuestionUsagePills } from "@/components/QuestionUsageHistory";
 import { QuestionView } from "@/components/QuestionView";
-import { ErrorBanner, Field, Modal, useConfirm, useToast } from "@/components/ui";
+import { ErrorBanner, Field, Modal, Spinner, useConfirm, useToast } from "@/components/ui";
 import { api, imageUrl } from "@/lib/client";
 import {
   ACADEMIC_SESSIONS,
@@ -150,6 +150,8 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
     shuffleMcqOptions: true,
   });
   const [duplicatingBusy, setDuplicatingBusy] = useState(false);
+  const [movingItemId, setMovingItemId] = useState<string | null>(null);
+  const [exportingDocx, setExportingDocx] = useState(false);
   const [createdPaperLink, setCreatedPaperLink] = useState<{ id: string; title: string } | null>(null);
   const [multiSetModalOpen, setMultiSetModalOpen] = useState(false);
   const [createdPaperLinks, setCreatedPaperLinks] = useState<Array<{ id: string; title: string; setCode: string }>>([]);
@@ -190,7 +192,15 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
     }
   }, []);
 
+  const cancelAutosave = useCallback(() => {
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
+  }, []);
+
   const adopt = useCallback((p: PaperData) => {
+    cancelAutosave();
     setPaper(p);
     setDetails({
       title: p.title,
@@ -206,7 +216,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
       securityWatermark: p.securityWatermark === true,
       watermarkText: p.watermarkText ?? "",
     });
-  }, []);
+  }, [cancelAutosave]);
 
   // Autosave effect for details
   useEffect(() => {
@@ -249,7 +259,55 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
     };
   }, [id, details, paper?.status]);
 
+  async function handleMoveQuestion(itemId: string, direction: "up" | "down") {
+    if (movingItemId) return;
+    cancelAutosave();
+    setMovingItemId(itemId);
+    setError(null);
+    try {
+      const updated = await api<PaperData>(`/api/papers/${id}/questions/${itemId}`, {
+        method: "PATCH",
+        json: { direction },
+      });
+      adopt(updated);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setMovingItemId(null);
+    }
+  }
+
+  async function handleExportDocx() {
+    if (exportingDocx) return;
+    setExportingDocx(true);
+    setExportMenuOpen(false);
+    try {
+      const res = await fetch(`/api/papers/${id}/export-docx`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Export failed" }));
+        throw new Error(err.error || `Export failed (${res.status})`);
+      }
+      const blob = await res.blob();
+      const safeTitle = paper?.title ? paper.title.trim().replace(/[/\\?%*:|"<>]/g, "_") : "Paper";
+      const filename = `${safeTitle}.docx`;
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      toast.success("Word document exported");
+    } catch (e) {
+      toast.error((e as Error).message || "Export failed");
+    } finally {
+      setExportingDocx(false);
+    }
+  }
+
   async function handleTogglePageBreak(itemId: string, pageBreakBefore: boolean) {
+    cancelAutosave();
     try {
       const updated = await api<PaperData>(`/api/papers/${id}/questions/${itemId}`, {
         method: "PATCH",
@@ -278,6 +336,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   }
 
   async function handleExecuteQuickSwap(itemId: string, replacementQuestionId: string) {
+    cancelAutosave();
     setSwappingBusy(true);
     setError(null);
     try {
@@ -295,6 +354,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   }
 
   async function handleSectionAutofill(sectionId: string) {
+    cancelAutosave();
     setError(null);
     setInfoMessage(null);
     setSectionAutofilling(sectionId);
@@ -318,6 +378,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   }
 
   async function handleAutofill() {
+    cancelAutosave();
     setError(null);
     setInfoMessage(null);
     setAutofilling(true);
@@ -344,6 +405,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   }
 
   async function handleReconcileBlueprint() {
+    cancelAutosave();
     setError(null);
     setInfoMessage(null);
     setReconciling(true);
@@ -407,6 +469,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   }, [id, adopt]);
 
   async function call<T = PaperData>(fn: () => Promise<T>, then?: (r: T) => void) {
+    cancelAutosave();
     setError(null);
     try {
       const r = await fn();
@@ -657,20 +720,23 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                     </div>
                   </Link>
 
-                  <a
-                    href={`/api/papers/${id}/export-docx`}
-                    download
-                    onClick={() => setExportMenuOpen(false)}
-                    className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition"
+                  <button
+                    type="button"
+                    disabled={exportingDocx}
+                    onClick={handleExportDocx}
+                    className="w-full flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     <div className="rounded-md bg-blue-50 p-1.5 text-blue-700">
-                      <FileDown size={14} />
+                      {exportingDocx ? <Spinner size="sm" /> : <FileDown size={14} />}
                     </div>
                     <div>
-                      <div className="font-semibold text-slate-900">Word Document (.docx)</div>
+                      <div className="flex items-center gap-2 font-semibold text-slate-900">
+                        <span>Word Document (.docx)</span>
+                        {exportingDocx && <span className="text-[10px] text-blue-600 font-normal">Exporting…</span>}
+                      </div>
                       <div className="text-[11px] text-slate-500">Editable Word exam paper</div>
                     </div>
-                  </a>
+                  </button>
 
                   <Link
                     href={`/papers/${id}/solutions`}
@@ -2063,36 +2129,18 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                   <div className="inline-flex items-center rounded-md border border-slate-200 bg-white shadow-2xs overflow-hidden">
                                     <button
                                       className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-50 disabled:opacity-30 disabled:hover:bg-white"
-                                      disabled={idx === 0}
+                                      disabled={idx === 0 || movingItemId !== null}
                                       title="Move question up"
-                                      onClick={() =>
-                                        call(
-                                          () =>
-                                            api<PaperData>(`/api/papers/${id}/questions/${it.id}`, {
-                                              method: "PATCH",
-                                              json: { direction: "up" },
-                                            }),
-                                          adopt,
-                                        )
-                                      }
+                                      onClick={() => handleMoveQuestion(it.id, "up")}
                                     >
                                       <ArrowUp size={12} />
                                     </button>
                                     <div className="h-3 w-px bg-slate-200" />
                                     <button
                                       className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-50 disabled:opacity-30 disabled:hover:bg-white"
-                                      disabled={idx === items.length - 1}
+                                      disabled={idx === items.length - 1 || movingItemId !== null}
                                       title="Move question down"
-                                      onClick={() =>
-                                        call(
-                                          () =>
-                                            api<PaperData>(`/api/papers/${id}/questions/${it.id}`, {
-                                              method: "PATCH",
-                                              json: { direction: "down" },
-                                            }),
-                                          adopt,
-                                        )
-                                      }
+                                      onClick={() => handleMoveQuestion(it.id, "down")}
                                     >
                                       <ArrowDown size={12} />
                                     </button>
