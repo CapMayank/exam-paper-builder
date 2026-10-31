@@ -73,7 +73,13 @@ export const POST = route(async (req, { id }, user) => {
 
   const last = paper.items.filter((i) => i.sectionId === input.sectionId).at(-1);
   await prisma.paperQuestion.create({
-    data: { paperId: id, sectionId: input.sectionId, questionId: question.id, position: (last?.position ?? -1) + 1 },
+    data: {
+      paperId: id,
+      sectionId: input.sectionId,
+      questionId: question.id,
+      orQuestionId: input.orQuestionId || null,
+      position: (last?.position ?? -1) + 1,
+    },
   });
   await prisma.paper.update({ where: { id }, data: { updatedAt: new Date() } });
   return loadPaperView(id);

@@ -16,8 +16,13 @@ export const PATCH = route(async (req, { id }, user) => {
   if (!current) throw new HttpError(404, "Paper not found");
 
   assertCanModifyPaper(user, current);
-  if (input.status === "FINAL" && !current.progress.complete) {
-    throw new HttpError(409, "The paper doesn't match its blueprint yet, so it can't be finalised.");
+  if (input.status === "FINAL") {
+    if (!current.progress.complete) {
+      throw new HttpError(409, "The paper doesn't match its blueprint yet, so it can't be finalised.");
+    }
+    if (current.internalChoiceAudit && !current.internalChoiceAudit.compliant) {
+      throw new HttpError(409, "The paper does not comply with official internal choice rules. Please fix missing or forbidden choices before finalising.");
+    }
   }
   await prisma.paper.update({ where: { id }, data: input });
 

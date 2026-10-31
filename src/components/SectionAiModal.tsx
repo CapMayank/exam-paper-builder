@@ -186,8 +186,10 @@ export function SectionAiModal({
         method: "POST",
         headers,
         body: JSON.stringify({
+          sectionId: section.id,
           sectionTitle: section.title,
           sectionType: section.type,
+          sectionInstructions: section.instructions,
           marksEach: targetSlotMarks,
           language,
           difficulty,
@@ -657,6 +659,26 @@ export function SectionAiModal({
                       <div className="rounded-lg bg-emerald-50/70 p-2 text-[11px] text-emerald-900 border border-emerald-100">
                         <span className="font-semibold text-emerald-950">Model Answer: </span>
                         <MathText text={q.answer} />
+                      </div>
+                    )}
+
+                    {/* Internal Choice (OR / अथवा) Question & Answer */}
+                    {q.orQuestion && (
+                      <div className="mt-2 pt-2 border-t border-dashed border-indigo-200 space-y-2">
+                        <div className="flex items-center justify-center">
+                          <span className="px-2.5 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-800 font-bold text-[10px] tracking-wide">
+                            OR (अथवा)
+                          </span>
+                        </div>
+                        <div className="font-medium text-slate-900 leading-relaxed">
+                          <MathText text={q.orQuestion.text} />
+                        </div>
+                        {q.orQuestion.answer && (
+                          <div className="rounded-lg bg-indigo-50/70 p-2 text-[11px] text-indigo-900 border border-indigo-100">
+                            <span className="font-semibold text-indigo-950">OR Model Answer: </span>
+                            <MathText text={q.orQuestion.answer} />
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

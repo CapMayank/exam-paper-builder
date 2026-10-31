@@ -16,6 +16,12 @@ import {
   resolveGroupedExerciseInstruction,
 } from "./layout";
 import { parseGeminiJsonWithLatexSafety, parseMathSegments, repairLatex } from "./math";
+import { toPlacedItems } from "./blueprint";
+import {
+  evaluatePaperInternalChoiceCompliance,
+  isParaphraseOrDuplicateChoice,
+  resolveInternalChoiceRequirement,
+} from "./internalChoiceRules";
 import {
   isQuestionContaminated,
   validateGeneratedQuestion,
@@ -705,6 +711,198 @@ describe("MPBSE Class 12 Mathematics Regression & Subject Integrity Suite", () =
       if (segments[0].type === "math") {
         expect(segments[0].html).toContain("π");
       }
+    });
+  });
+
+  describe("7. Mandatory Internal Choice Generation & MPBSE 2026–27 Compliance", () => {
+    it("enforces Circular 465/विद्योचित/2026 rules: 2m forbidden, 3m & 4m mandatory 100% internal choice", () => {
+      // 1-mark objective questions
+      const mcqReq = resolveInternalChoiceRequirement({
+        board: "MPBSE",
+        academicSession: "2026–27",
+        className: "Class 12",
+        subject: "Mathematics",
+        subjectCode: "140",
+        marks: 1,
+        questionType: "MCQ",
+      });
+      expect(mcqReq.forbidden).toBe(true);
+      expect(mcqReq.required).toBe(false);
+      expect(mcqReq.policy).toBe("FORBIDDEN");
+
+      // 2-mark Very Short Answer in MPBSE 2026-27 Main Subject (FORBIDDEN under revised circular)
+      const twoMarkReq = resolveInternalChoiceRequirement({
+        board: "MPBSE",
+        academicSession: "2026–27",
+        className: "Class 12",
+        subject: "Mathematics",
+        subjectCode: "140",
+        marks: 2,
+        questionType: "VERY_SHORT",
+      });
+      expect(twoMarkReq.forbidden).toBe(true);
+      expect(twoMarkReq.required).toBe(false);
+      expect(twoMarkReq.policy).toBe("FORBIDDEN");
+      expect(twoMarkReq.circularReference).toBe("465/विद्योचित/2026");
+
+      // 3-mark Short Answer in MPBSE 2026-27 Main Subject (MANDATORY 100%)
+      const threeMarkReq = resolveInternalChoiceRequirement({
+        board: "MPBSE",
+        academicSession: "2026–27",
+        className: "Class 12",
+        subject: "Mathematics",
+        subjectCode: "140",
+        marks: 3,
+        questionType: "SHORT",
+      });
+      expect(threeMarkReq.required).toBe(true);
+      expect(threeMarkReq.forbidden).toBe(false);
+      expect(threeMarkReq.policy).toBe("MANDATORY_EVERY_SLOT");
+
+      // 4-mark Long Answer in MPBSE 2026-27 Main Subject (MANDATORY 100%)
+      const fourMarkReq = resolveInternalChoiceRequirement({
+        board: "MPBSE",
+        academicSession: "2026–27",
+        className: "Class 12",
+        subject: "Mathematics",
+        subjectCode: "140",
+        marks: 4,
+        questionType: "LONG",
+      });
+      expect(fourMarkReq.required).toBe(true);
+      expect(fourMarkReq.forbidden).toBe(false);
+      expect(fourMarkReq.policy).toBe("MANDATORY_EVERY_SLOT");
+    });
+
+    it("supports NSQF vocational subjects with mandatory choice across 3m, 4m, 5m, and 7m", () => {
+      const nsqf5mReq = resolveInternalChoiceRequirement({
+        board: "MPBSE",
+        academicSession: "2026–27",
+        className: "Class 12",
+        subject: "Information Technology",
+        subjectCode: "402",
+        marks: 5,
+        questionType: "LONG",
+      });
+      expect(nsqf5mReq.required).toBe(true);
+      expect(nsqf5mReq.isNsqf).toBe(true);
+      expect(nsqf5mReq.policy).toBe("MANDATORY_EVERY_SLOT");
+
+      const nsqf7mReq = resolveInternalChoiceRequirement({
+        board: "MPBSE",
+        academicSession: "2026–27",
+        className: "Class 12",
+        subject: "Retail Operations",
+        subjectCode: "401",
+        marks: 7,
+        questionType: "LONG",
+      });
+      expect(nsqf7mReq.required).toBe(true);
+      expect(nsqf7mReq.policy).toBe("MANDATORY_EVERY_SLOT");
+    });
+
+    it("permits 2-mark internal choice under legacy 2025-26 examination pattern", () => {
+      const legacy2mReq = resolveInternalChoiceRequirement({
+        board: "MPBSE",
+        academicSession: "2025–26",
+        className: "Class 12",
+        subject: "Mathematics",
+        subjectCode: "140",
+        marks: 2,
+        questionType: "SHORT",
+      });
+      expect(legacy2mReq.forbidden).toBe(false);
+      expect(legacy2mReq.policy).toBe("MANDATORY_EVERY_SLOT");
+    });
+
+    it("detects paraphrase or duplicate alternative questions", () => {
+      const dup = isParaphraseOrDuplicateChoice(
+        "Evaluate the determinant of matrix A = [[1, 2], [3, 4]].",
+        "Evaluate the determinant of matrix A = [[1, 2], [3, 4]]."
+      );
+      expect(dup.isDuplicateOrParaphrase).toBe(true);
+
+      const paraphrase = isParaphraseOrDuplicateChoice(
+        "Find the inverse of the matrix A = [[1, 2], [3, 4]].",
+        "Find the matrix inverse of A = [[1, 2], [3, 4]] using elementary row operations."
+      );
+      expect(paraphrase.isDuplicateOrParaphrase).toBe(true);
+
+      const distinct = isParaphraseOrDuplicateChoice(
+        "Find the inverse of the matrix A = [[1, 2], [3, 4]].",
+        "Solve the following system of linear equations using matrix method: 2x + 5y = 1, 3x + 2y = 7."
+      );
+      expect(distinct.isDuplicateOrParaphrase).toBe(false);
+    });
+
+    it("evaluates paper compliance: flags missing 3m/4m choices and forbidden 2m choices", () => {
+      const audit = evaluatePaperInternalChoiceCompliance({
+        schoolName: "Sarvodaya Higher Secondary School, Lakhnadon",
+        blueprintName: "MP Board Class 12 Mathematics Blueprint 2026–27",
+        className: "Class 12",
+        academicSession: "2026–27",
+        subject: "Mathematics",
+        subjectCode: "140",
+        sections: [
+          { id: "sec-a", title: "Section A", type: "MCQ", count: 6, marksEach: 1 },
+          { id: "sec-b", title: "Section B", type: "VERY_SHORT", count: 2, marksEach: 2 },
+          { id: "sec-c", title: "Section C", type: "SHORT", count: 2, marksEach: 3 },
+          { id: "sec-d", title: "Section D", type: "LONG", count: 2, marksEach: 4 },
+        ],
+        items: [
+          // Section B (2m) has an illicit OR choice
+          {
+            id: "it-b1",
+            sectionId: "sec-b",
+            question: { id: "q-b1", text: "Find the order and degree of y'' + y' = 0", type: "VERY_SHORT", chapterId: "ch-9" },
+            orQuestion: { id: "q-b1-or", text: "Verify that y = e^x is a solution", type: "VERY_SHORT", chapterId: "ch-9" },
+          },
+          {
+            id: "it-b2",
+            sectionId: "sec-b",
+            question: { id: "q-b2", text: "Find unit vector in direction of vector a = i + j + 2k", type: "VERY_SHORT", chapterId: "ch-10" },
+          },
+          // Section C (3m) is missing OR choice on it-c1
+          {
+            id: "it-c1",
+            sectionId: "sec-c",
+            question: { id: "q-c1", text: "Evaluate int (x / (x^2 + 1)) dx", type: "SHORT", chapterId: "ch-7" },
+          },
+          {
+            id: "it-c2",
+            sectionId: "sec-c",
+            question: { id: "q-c2", text: "Find the area bounded by the curve y = x^2 and line y = 4", type: "SHORT", chapterId: "ch-8" },
+            orQuestion: { id: "q-c2-or", text: "Find the area between parabolas y^2 = 4ax and x^2 = 4ay", type: "SHORT", chapterId: "ch-8" },
+          },
+        ],
+      });
+
+      expect(audit.compliant).toBe(false);
+      expect(audit.forbiddenChoiceSlots.length).toBeGreaterThan(0);
+      expect(audit.missingChoiceSlots.length).toBeGreaterThan(0);
+    });
+
+    it("ensures blueprint toPlacedItems strictly purges subparts from MCQ and 1-mark questions", () => {
+      const placed = toPlacedItems(
+        [{ id: "sec-1", count: 6, marksEach: 1, type: "MCQ" }],
+        [
+          {
+            sectionId: "sec-1",
+            question: {
+              id: "q-1",
+              chapterId: "ch-9",
+              type: "MCQ",
+              text: "What is the degree of the differential equation?",
+              optionsJson: JSON.stringify(["1", "2", "3", "Not defined"]),
+              subpartsJson: JSON.stringify([{ label: "(i)", text: "Determine the degree", marks: 1 }]),
+            },
+          },
+        ]
+      );
+
+      expect(placed).toHaveLength(1);
+      // Effective marks for an MCQ must remain strictly 1 mark regardless of rogue subpartsJson
+      expect(placed[0].marks).toBe(1);
     });
   });
 });

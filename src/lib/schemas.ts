@@ -280,9 +280,16 @@ export const snapshotPayloadSchema = z.object({
   timestamp: z.string(),
 });
 
-export const addItemSchema = z.object({ sectionId: z.string().min(1), questionId: z.string().min(1) });
+export const addItemSchema = z.object({
+  sectionId: z.string().min(1),
+  questionId: z.string().min(1),
+  orQuestionId: z.string().nullable().optional(),
+});
 export const moveItemSchema = z.object({ direction: z.enum(["up", "down"]) });
-export const replaceItemSchema = z.object({ replaceWithQuestionId: z.string().min(1) });
+export const replaceItemSchema = z.object({
+  replaceWithQuestionId: z.string().min(1),
+  orQuestionId: z.string().nullable().optional(),
+});
 export const editPaperItemSchema = z.object({
   mode: z.enum(["UPDATE_MASTER", "FORK_COPY"]),
   question: questionSchema,

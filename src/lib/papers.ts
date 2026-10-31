@@ -1,9 +1,10 @@
 import "server-only";
 import { HttpError, type SessionUser } from "./api";
-import { parseMatchColumnPairs, resolvePaperExamType } from "./constants";
+import { isSubpartQuestionType, parseMatchColumnPairs, resolvePaperExamType } from "./constants";
 import { toQuestionDto } from "./dto";
 import { diagnosePaperImplications, paperStatus, toPlacedItems } from "./blueprint";
 import { blueprintInclude } from "./blueprints";
+import { evaluatePaperInternalChoiceCompliance } from "./internalChoiceRules";
 import { prisma } from "./prisma";
 import { parseSubparts, subpartsTotalMarks } from "./types";
 
@@ -146,7 +147,9 @@ export async function loadPaperView(id: string) {
         } catch {}
         matchCount = parseMatchColumnPairs(opts, i.question.text, (i.question as any).explanation).length;
       }
-      const subparts = parseSubparts(i.question.subpartsJson);
+      const subparts = isSubpartQuestionType(i.question.type)
+        ? parseSubparts(i.question.subpartsJson)
+        : [];
       const submarks = subpartsTotalMarks(subparts);
       const sec = blueprint.sections.find((s) => s.id === i.sectionId);
       const secMarksEach = sec?.marksEach ?? 1;
@@ -175,6 +178,65 @@ export async function loadPaperView(id: string) {
     }),
   );
   const resolvedExamType = resolvePaperExamType(paper);
+  const dtoItems = items.map((i) => ({
+    id: i.id,
+    sectionId: i.sectionId,
+    position: i.position,
+    pageBreakBefore: Boolean(i.pageBreakBefore),
+    question: toQuestionDto(i.question),
+    orQuestion: i.orQuestion ? toQuestionDto(i.orQuestion) : null,
+  }));
+
+  const internalChoiceAudit = evaluatePaperInternalChoiceCompliance({
+    schoolName: rest.schoolName,
+    blueprintName: blueprint.name,
+    className: blueprint.book.className,
+    academicSession: rest.academicSession || blueprint.academicSession,
+    subject: blueprint.book.subject,
+    subjectCode: rest.subjectCode || blueprint.subjectCode,
+    sections: blueprint.sections.map((s) => ({
+      id: s.id,
+      title: s.title,
+      type: s.type,
+      count: s.count,
+      marksEach: s.marksEach,
+      instructions: s.instructions,
+    })),
+    items: dtoItems.map((i) => ({
+      id: i.id,
+      sectionId: i.sectionId,
+      question: {
+        id: i.question.id,
+        text: i.question.text,
+        type: i.question.type,
+        chapterId: i.question.chapter?.id || i.question.chapterId,
+        answer: i.question.answer,
+      },
+      orQuestion: i.orQuestion
+        ? {
+            id: i.orQuestion.id,
+            text: i.orQuestion.text,
+            type: i.orQuestion.type,
+            chapterId: i.orQuestion.chapter?.id || i.orQuestion.chapterId,
+            answer: i.orQuestion.answer,
+          }
+        : null,
+    })),
+  });
+
+  if (dtoItems.length > 0 && !internalChoiceAudit.compliant) {
+    for (const iss of internalChoiceAudit.issues) {
+      implications.push({
+        code: iss.code,
+        severity: iss.severity,
+        sectionId: iss.sectionId,
+        sectionTitle: iss.sectionTitle,
+        questionId: iss.questionId,
+        message: iss.message,
+      });
+    }
+  }
+
   return {
     ...rest,
     examType: resolvedExamType,
@@ -182,16 +244,10 @@ export async function loadPaperView(id: string) {
       ...blueprint,
       examType: resolvedExamType,
     },
-    items: items.map((i) => ({
-      id: i.id,
-      sectionId: i.sectionId,
-      position: i.position,
-      pageBreakBefore: Boolean(i.pageBreakBefore),
-      question: toQuestionDto(i.question),
-      orQuestion: i.orQuestion ? toQuestionDto(i.orQuestion) : null,
-    })),
+    items: dtoItems,
     progress,
     implications,
+    internalChoiceAudit,
   };
 }
 

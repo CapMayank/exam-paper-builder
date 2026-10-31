@@ -6,6 +6,7 @@ import {
   type QuestionType,
 } from "./constants";
 import { cleanChapterTitleForLookup, type GenerationContract } from "./curriculumContract";
+import { isParaphraseOrDuplicateChoice } from "./internalChoiceRules";
 import { getCanonicalSubjectName } from "./schoolCurriculum";
 import { subpartsTotalMarks, type SubPart } from "./types";
 
@@ -22,6 +23,8 @@ export interface ValidatableQuestion {
   explanation?: string;
   marks?: number;
   difficulty?: string;
+  requiresInternalChoice?: boolean;
+  orQuestion?: ValidatableQuestion | null;
 }
 
 export interface QuestionValidationIssue {
@@ -37,7 +40,10 @@ export interface QuestionValidationIssue {
     | "LATEX_CORRUPTION"
     | "LANGUAGE_MISMATCH"
     | "DUPLICATE_QUESTION"
-    | "INCOMPLETE_CONTENT";
+    | "INCOMPLETE_CONTENT"
+    | "MISSING_INTERNAL_CHOICE"
+    | "FORBIDDEN_INTERNAL_CHOICE"
+    | "INVALID_INTERNAL_CHOICE";
   severity: "ERROR" | "WARNING";
   message: string;
   slotIndex?: number;
@@ -297,6 +303,7 @@ export function validateGeneratedQuestion(
   opts?: {
     slotIndex?: number;
     existingNormalizedTexts?: Set<string>;
+    skipInternalChoiceCheck?: boolean;
   },
 ): QuestionValidationResult {
   const issues: QuestionValidationIssue[] = [];
@@ -307,7 +314,7 @@ export function validateGeneratedQuestion(
   const text = (question.text || "").trim();
   const answer = (question.answer || "").trim();
   const options = Array.isArray(question.options) ? question.options.map((o) => String(o).trim()) : [];
-  const subparts = Array.isArray(question.subparts) ? question.subparts : [];
+  const subparts = isSubpartQuestionType(qType) && Array.isArray(question.subparts) ? question.subparts : [];
 
   // 1. Content completeness check
   if (!text || text.length < 5) {
@@ -529,6 +536,82 @@ export function validateGeneratedQuestion(
     }
   }
 
+  // 7. Internal Choice (OR / अथवा) Completeness & Rule Compliance Check
+  if (!opts?.skipInternalChoiceCheck) {
+    const slotRequiresChoice = Boolean(
+      slot?.requiresInternalChoice ?? contract.internalChoiceRequirement?.required,
+    );
+    const slotForbidsChoice = Boolean(
+      slot?.internalChoiceRequirement?.forbidden ?? contract.internalChoiceRequirement?.forbidden,
+    );
+    const hasOr = Boolean(question.orQuestion && (question.orQuestion.text || "").trim().length > 0);
+    const slotMarks = slot?.marks || contract.marksEach;
+
+    if (slotForbidsChoice && hasOr && slotMarks === 2) {
+      issues.push({
+        code: "FORBIDDEN_INTERNAL_CHOICE",
+        severity: "ERROR",
+        message: `Slot ${slotIdx + 1}: Internal choice (OR / अथवा) is prohibited for 2-mark questions under ${contract.internalChoiceRequirement?.patternVersion || "MPBSE 2026–27 revised rules"}.`,
+        slotIndex: slotIdx,
+      });
+    } else if (slotRequiresChoice) {
+      if (!hasOr || !question.orQuestion) {
+        issues.push({
+          code: "MISSING_INTERNAL_CHOICE",
+          severity: "ERROR",
+          message: `Slot ${slotIdx + 1}: Mandatory internal choice (OR / अथवा) is missing for this ${slotMarks}-mark slot (${contract.internalChoiceRequirement?.patternVersion || "board blueprint rule"}).`,
+          slotIndex: slotIdx,
+        });
+      } else {
+        const orQ = question.orQuestion;
+        // Validate the alternative question itself
+        const orVal = validateGeneratedQuestion(
+          {
+            ...orQ,
+            type: orQ.type || qType,
+            chapterId: orQ.chapterId || question.chapterId || slot?.chapterId,
+            chapterTitle: orQ.chapterTitle || chapterTitle,
+          },
+          contract,
+          {
+            slotIndex: slotIdx,
+            existingNormalizedTexts: opts?.existingNormalizedTexts,
+            skipInternalChoiceCheck: true,
+          },
+        );
+
+        for (const orIss of orVal.issues) {
+          issues.push({
+            ...orIss,
+            message: `Slot ${slotIdx + 1} (OR Alternative): ${orIss.message.replace(/^Slot \d+:\s*/, "")}`,
+          });
+        }
+
+        // Check that OR alternative belongs to the same chapter
+        const primaryChId = question.chapterId || slot?.chapterId;
+        if (orQ.chapterId && primaryChId && orQ.chapterId !== primaryChId) {
+          issues.push({
+            code: "CHAPTER_MISMATCH",
+            severity: "ERROR",
+            message: `Slot ${slotIdx + 1} (OR Alternative): Must belong to the same chapter (${chapterTitle}) as the primary question.`,
+            slotIndex: slotIdx,
+          });
+        }
+
+        // Check that OR alternative is not identical or a mere paraphrase of the primary question
+        const paraCheck = isParaphraseOrDuplicateChoice(text, orQ.text || "");
+        if (paraCheck.isDuplicateOrParaphrase) {
+          issues.push({
+            code: "INVALID_INTERNAL_CHOICE",
+            severity: "ERROR",
+            message: `Slot ${slotIdx + 1} (OR Alternative): ${paraCheck.reason || "Alternative question must not be a paraphrase of the primary question."}`,
+            slotIndex: slotIdx,
+          });
+        }
+      }
+    }
+  }
+
   const hasError = issues.some((i) => i.severity === "ERROR");
   return {
     valid: !hasError,
@@ -627,6 +710,15 @@ export function validateGeneratedSection(
         .replace(/\s+/g, " ")
         .trim();
       if (norm.length > 15) seenTexts.add(norm);
+      if (q.orQuestion && q.orQuestion.text) {
+        const normOr = q.orQuestion.text
+          .toLowerCase()
+          .replace(/\$+/g, "")
+          .replace(/[.,?!:;]+$/g, "")
+          .replace(/\s+/g, " ")
+          .trim();
+        if (normOr.length > 15) seenTexts.add(normOr);
+      }
       acceptedQuestions.push(q);
     } else {
       rejectedSlotIndices.push(slot.slotIndex);

@@ -5,6 +5,10 @@ import {
   serializeMatchColumnPair,
 } from "./constants";
 import { isSectionVisuallyEligible, isSubjectChapterVisual } from "./diagram-rules";
+import {
+  resolveInternalChoiceRequirement,
+  type InternalChoiceRequirement,
+} from "./internalChoiceRules";
 import { getCanonicalSubjectName, getStandardPresetForClass } from "./schoolCurriculum";
 import { normalizeSubpartMarks, type SubPart } from "./types";
 
@@ -66,6 +70,8 @@ export interface GenerationSlotContract {
   chapterNumber: number;
   chapterTitle: string;
   marks: number;
+  requiresInternalChoice?: boolean;
+  internalChoiceRequirement?: InternalChoiceRequirement;
   curriculumSpec: ChapterCurriculumSpec;
 }
 
@@ -89,6 +95,8 @@ export interface GenerationContract {
   language: "en" | "hi" | "bilingual";
   requiredCount: number;
   sectionTitle: string;
+  sectionInstructions?: string;
+  internalChoiceRequirement: InternalChoiceRequirement;
   slots: GenerationSlotContract[];
   forbiddenCrossSubjectDomains: string[];
   provenance: {
@@ -97,6 +105,8 @@ export interface GenerationContract {
     syllabusVersion: string;
     subjectCode: string;
     canonicalSubject: string;
+    examinationPatternVersion?: string;
+    circularReference?: string;
   };
 }
 
@@ -383,11 +393,19 @@ const CLASS_12_MATH_CHAPTER_SPECS: Record<string, Omit<ChapterCurriculumSpec, "c
         text: "Show that the relation $R$ in the set $\\mathbb{Z}$ of integers given by $R = \\{(a, b) : 2 \\text{ divides } (a - b)\\}$ is an equivalence relation.",
         answer: "Model Answer: 1. Reflexive: $a - a = 0$ is divisible by $2$, so $(a,a) \\in R$. 2. Symmetric: If $2 \\mid (a - b)$, then $2 \\mid (b - a)$, so $(b,a) \\in R$. 3. Transitive: If $2 \\mid (a - b)$ and $2 \\mid (b - c)$, their sum $(a - c)$ is divisible by $2$, so $(a,c) \\in R$. Hence $R$ is an equivalence relation.",
       },
+      {
+        text: "Check whether the relation $R$ defined in the set $\\{1, 2, 3, 4, 5, 6\\}$ as $R = \\{(a, b) : b = a + 1\\}$ is reflexive, symmetric, or transitive.",
+        answer: "Model Answer: 1. Not reflexive since $(a, a) \\notin R$ as $a \\neq a + 1$. 2. Not symmetric since $(1, 2) \\in R$ but $(2, 1) \\notin R$. 3. Not transitive since $(1, 2) \\in R$ and $(2, 3) \\in R$ but $(1, 3) \\notin R$.",
+      },
     ],
     sampleLong: [
       {
         text: "Let $A = \\mathbb{R} - \\{3\\}$ and $B = \\mathbb{R} - \\{1\\}$. Consider the function $f: A \\to B$ defined by $f(x) = \\frac{x - 2}{x - 3}$. Prove that $f$ is one-one and onto.",
         answer: "Model Answer: 1. One-one: Let $f(x_1) = f(x_2) \\implies \\frac{x_1 - 2}{x_1 - 3} = \\frac{x_2 - 2}{x_2 - 3} \\implies (x_1 - 2)(x_2 - 3) = (x_2 - 2)(x_1 - 3) \\implies x_1 = x_2$. Thus $f$ is one-one. [2 Marks]\n2. Onto: Let $y \\in B = \\mathbb{R} - \\{1\\}$. Solving $y = \\frac{x - 2}{x - 3}$ gives $x = \\frac{3y - 2}{y - 1} \\in A$. Since $f(x) = y$ for every $y \\in B$, $f$ is onto. [2 Marks]",
+      },
+      {
+        text: "Show that the relation $R$ in the set $A = \\{x \\in \\mathbb{Z} : 0 \\le x \\le 12\\}$ given by $R = \\{(a, b) : |a - b| \\text{ is a multiple of } 4\\}$ is an equivalence relation. Find the set of all elements related to $1$.",
+        answer: "Model Answer: 1. Reflexive: $|a - a| = 0$ is a multiple of $4$. [1 Mark]\n2. Symmetric: $|a - b| = |b - a|$ is a multiple of $4$. [1 Mark]\n3. Transitive: $a - c = (a - b) + (b - c)$ is a multiple of $4$. [1 Mark]\n4. Elements related to $1$ are $\\{1, 5, 9\\}$. [1 Mark]",
       },
     ],
   },
@@ -451,11 +469,19 @@ const CLASS_12_MATH_CHAPTER_SPECS: Record<string, Omit<ChapterCurriculumSpec, "c
         text: "Write the function $\\tan^{-1}\\left(\\frac{\\sqrt{1+x^2}-1}{x}\\right), x \\neq 0$, in the simplest form.",
         answer: "Model Answer: Put $x = \\tan\\theta \\implies \\theta = \\tan^{-1} x$. Then $\\frac{\\sqrt{1+\\tan^2\\theta}-1}{\\tan\\theta} = \\frac{\\sec\\theta - 1}{\\tan\\theta} = \\frac{1 - \\cos\\theta}{\\sin\\theta} = \\tan\\left(\\frac{\\theta}{2}\\right)$. Hence the expression simplifies to $\\frac{1}{2}\\tan^{-1} x$.",
       },
+      {
+        text: "Find the value of $\\tan^{-1}(1) + \\cos^{-1}\\left(-\\frac{1}{2}\\right) + \\sin^{-1}\\left(-\\frac{1}{2}\\right)$.",
+        answer: "Model Answer: $\\tan^{-1}(1) = \\frac{\\pi}{4}$, $\\cos^{-1}\\left(-\\frac{1}{2}\\right) = \\pi - \\frac{\\pi}{3} = \\frac{2\\pi}{3}$, and $\\sin^{-1}\\left(-\\frac{1}{2}\\right) = -\\frac{\\pi}{6}$. Sum $= \\frac{\\pi}{4} + \\frac{2\\pi}{3} - \\frac{\\pi}{6} = \\frac{3\\pi}{4}$.",
+      },
     ],
     sampleLong: [
       {
         text: "Evaluate $\\tan^{-1}\\left[2\\cos\\left(2\\sin^{-1}\\frac{1}{2}\\right)\\right]$ and state the domain and principal range of $\\tan^{-1} x$.",
         answer: "Model Answer: Since $\\sin^{-1}(1/2) = \\frac{\\pi}{6}$, we have $2\\sin^{-1}(1/2) = \\frac{\\pi}{3}$. Next, $2\\cos(\\pi/3) = 2 \\times \\frac{1}{2} = 1$. Therefore, $\\tan^{-1}(1) = \\frac{\\pi}{4}$. Domain of $\\tan^{-1}x$ is $\\mathbb{R}$ and principal value range is $(-\\pi/2, \\pi/2)$.",
+      },
+      {
+        text: "Prove that $\\tan^{-1}\\left(\\frac{\\cos x}{1 - \\sin x}\\right) = \\frac{\\pi}{4} + \\frac{x}{2}$, where $-\\frac{\\pi}{2} < x < \\frac{\\pi}{2}$.",
+        answer: "Model Answer: 1. Write $\\cos x = \\cos^2(x/2) - \\sin^2(x/2)$ and $1 - \\sin x = (\\cos(x/2) - \\sin(x/2))^2$. [1.5 Marks]\n2. Simplify fraction to $\\frac{\\cos(x/2) + \\sin(x/2)}{\\cos(x/2) - \\sin(x/2)} = \\tan\\left(\\frac{\\pi}{4} + \\frac{x}{2}\\right)$. [1.5 Marks]\n3. Hence $\\tan^{-1}\\left(\\tan\\left(\\frac{\\pi}{4} + \\frac{x}{2}\\right)\\right) = \\frac{\\pi}{4} + \\frac{x}{2}$. [1 Mark]",
       },
     ],
   },
@@ -1593,6 +1619,7 @@ export function buildAndValidateGenerationContract(params: {
   subject?: string | null;
   subjectCode?: string | null;
   sectionTitle?: string | null;
+  sectionInstructions?: string | null;
   questionType?: string | null;
   sectionType?: string | null;
   marksEach?: number | null;
@@ -1605,6 +1632,7 @@ export function buildAndValidateGenerationContract(params: {
     chapterNumber: number;
     chapterTitle: string;
     marks: number;
+    requiresInternalChoice?: boolean;
   }>;
   validBookChapterIds?: Set<string>;
 }): GenerationContractValidationResult {
@@ -1644,6 +1672,7 @@ export function buildAndValidateGenerationContract(params: {
     subject: rawSubject,
     subjectCode: params.subjectCode,
     sectionTitles: params.sectionTitle ? [params.sectionTitle] : [],
+    sectionInstructions: params.sectionInstructions ? [params.sectionInstructions] : [],
   });
 
   if (params.validBookChapterIds && params.validBookChapterIds.size > 0) {
@@ -1706,14 +1735,54 @@ export function buildAndValidateGenerationContract(params: {
       ? params.difficulty
       : "BALANCED";
 
-  const slots: GenerationSlotContract[] = rawSlots.map((s, idx) => ({
-    slotIndex: typeof s.slotIndex === "number" ? s.slotIndex : idx,
-    chapterId: s.chapterId || `ch_${idx + 1}`,
-    chapterNumber: s.chapterNumber || idx + 1,
-    chapterTitle: s.chapterTitle || `Chapter ${idx + 1}`,
-    marks: Number.isFinite(s.marks) && s.marks > 0 ? s.marks : marksEach,
-    curriculumSpec: getChapterCurriculumSpec(rawSubject, s.chapterTitle || `Chapter ${idx + 1}`, className),
-  }));
+  const sectionInternalChoiceRequirement = resolveInternalChoiceRequirement({
+    board,
+    schoolName: params.schoolName,
+    blueprintName: params.blueprintName,
+    academicSession,
+    className,
+    subject: rawSubject,
+    subjectCode,
+    examType: params.examType,
+    sectionTitle: params.sectionTitle,
+    sectionInstructions: params.sectionInstructions,
+    questionType: qTypeRaw,
+    marksEach,
+  });
+
+  const slots: GenerationSlotContract[] = rawSlots.map((s, idx) => {
+    const slotMarks = Number.isFinite(s.marks) && s.marks > 0 ? s.marks : marksEach;
+    const slotChoiceReq = resolveInternalChoiceRequirement({
+      board,
+      schoolName: params.schoolName,
+      blueprintName: params.blueprintName,
+      academicSession,
+      className,
+      subject: rawSubject,
+      subjectCode,
+      examType: params.examType,
+      sectionTitle: params.sectionTitle,
+      sectionInstructions: params.sectionInstructions,
+      questionType: qTypeRaw,
+      marksEach: slotMarks,
+    });
+    const requiresInternalChoice = slotChoiceReq.forbidden
+      ? false
+      : typeof s.requiresInternalChoice === "boolean"
+      ? s.requiresInternalChoice
+      : slotChoiceReq.required;
+
+    return {
+      slotIndex: typeof s.slotIndex === "number" ? s.slotIndex : idx,
+      chapterId: s.chapterId || `ch_${idx + 1}`,
+      chapterNumber: s.chapterNumber || idx + 1,
+      chapterTitle: s.chapterTitle || `Chapter ${idx + 1}`,
+      marks: slotMarks,
+      requiresInternalChoice,
+      internalChoiceRequirement: slotChoiceReq,
+      curriculumSpec: getChapterCurriculumSpec(rawSubject, s.chapterTitle || `Chapter ${idx + 1}`, className),
+    };
+  });
 
   const requiredCount =
     qTypeRaw === "MATCH_COLUMN"
@@ -1742,6 +1811,8 @@ export function buildAndValidateGenerationContract(params: {
     language,
     requiredCount,
     sectionTitle: (params.sectionTitle || qTypeRaw).trim(),
+    sectionInstructions: params.sectionInstructions || undefined,
+    internalChoiceRequirement: sectionInternalChoiceRequirement,
     slots,
     forbiddenCrossSubjectDomains: getForbiddenDomainsForSubject(canonicalSubject),
     provenance: {
@@ -1750,6 +1821,8 @@ export function buildAndValidateGenerationContract(params: {
       syllabusVersion,
       subjectCode,
       canonicalSubject,
+      examinationPatternVersion: sectionInternalChoiceRequirement.patternVersion,
+      circularReference: sectionInternalChoiceRequirement.circularReference,
     },
   };
 
@@ -1761,15 +1834,7 @@ export function buildAndValidateGenerationContract(params: {
   };
 }
 
-/**
- * Generates curriculum-grounded, subject-and-chapter-specific questions for a validated GenerationContract.
- * Used when operating in offline/test mode without a live Gemini API key.
- * Strictly honors subject, chapter, questionType, marks, and diagram eligibility without ever emitting cross-subject templates.
- */
-export function generateCurriculumGroundedSectionQuestions(
-  contract: GenerationContract,
-  opts?: { generateDiagrams?: boolean; existingQuestionTexts?: string[] },
-): Array<{
+export interface GroundedGeneratedQuestion {
   slotIndex: number;
   chapterId: string;
   chapterNumber: number;
@@ -1783,7 +1848,33 @@ export function generateCurriculumGroundedSectionQuestions(
   cognitiveLevel: string;
   explanation: string;
   figurePrompt?: string;
-}> {
+  requiresInternalChoice?: boolean;
+  orQuestion?: {
+    chapterId: string;
+    chapterNumber: number;
+    chapterTitle: string;
+    type: QuestionType;
+    text: string;
+    marks: number;
+    options: string[];
+    subparts: SubPart[];
+    answer: string;
+    difficulty: "EASY" | "MEDIUM" | "HARD";
+    cognitiveLevel: string;
+    explanation: string;
+    figurePrompt?: string;
+  };
+}
+
+/**
+ * Generates curriculum-grounded, subject-and-chapter-specific questions for a validated GenerationContract.
+ * Used when operating in offline/test mode without a live Gemini API key.
+ * Strictly honors subject, chapter, questionType, marks, internal choice rules, and diagram eligibility without ever emitting cross-subject templates.
+ */
+export function generateCurriculumGroundedSectionQuestions(
+  contract: GenerationContract,
+  opts?: { generateDiagrams?: boolean; existingQuestionTexts?: string[] },
+): GroundedGeneratedQuestion[] {
   const qType = contract.questionType;
   const isHindi = contract.language === "hi";
   const isBilingual = contract.language === "bilingual";
@@ -1807,6 +1898,133 @@ export function generateCurriculumGroundedSectionQuestions(
       : `${baseText} (In the context of ${altTopic} using ${altConcept} — Set Q${idx + 1}, ${marks}M)`;
     seenNormalizedTexts.add(normalize(candidate));
     return candidate;
+  };
+
+  const buildDistinctOrQuestion = (
+    slot: GenerationSlotContract,
+    idx: number,
+    primaryText: string,
+    diff: "EASY" | "MEDIUM" | "HARD",
+  ): NonNullable<GroundedGeneratedQuestion["orQuestion"]> => {
+    const spec = slot.curriculumSpec;
+    const cleanCh = cleanChapterTitleForLookup(slot.chapterTitle);
+    const targetMarks = slot.marks || contract.marksEach;
+
+    if (qType === "CASE_STUDY" || qType === "UNSEEN_PASSAGE" || qType === "REFERENCE_CONTEXT") {
+      const altTopic = spec.includedTopics[1 % Math.max(1, spec.includedTopics.length)] || spec.includedTopics[0] || cleanCh;
+      const altFormula = spec.keyFormulasOrConcepts[1 % Math.max(1, spec.keyFormulasOrConcepts.length)] || spec.keyFormulasOrConcepts[0] || cleanCh;
+      const altSa = spec.sampleShort[1 % Math.max(1, spec.sampleShort.length)] || spec.sampleLong[0] || spec.sampleShort[0];
+      const altLa = spec.sampleLong[1 % Math.max(1, spec.sampleLong.length)] || spec.sampleLong[0] || spec.sampleShort[0];
+      const rawSubparts: SubPart[] = [
+        {
+          label: "(i)",
+          text: `Define or state the condition governing ${altTopic} in ${cleanCh}.`,
+          marks: 1,
+          answer: altFormula,
+        },
+        {
+          label: "(ii)",
+          text: altSa.text,
+          marks: 1,
+          answer: altSa.answer,
+        },
+        {
+          label: "(iii)",
+          text: altLa.text,
+          marks: Math.max(1, targetMarks - 2),
+          answer: altLa.answer,
+        },
+      ];
+      const normalizedSubparts = normalizeSubpartMarks(rawSubparts, targetMarks);
+      const altPassage = isBilingual
+        ? `Read the following alternative ${contract.canonicalSubject} case study on ${cleanCh} and answer the sub-questions (निम्नलिखित वैकल्पिक केस स्टडी को पढ़कर प्रश्नों के उत्तर दीजिए):\nAn analytical application of "${cleanCh}" investigates ${altTopic} using the relation ${altFormula}.`
+        : isHindi
+        ? `अध्याय "${cleanCh}" पर आधारित निम्नलिखित वैकल्पिक केस स्टडी को पढ़कर प्रश्नों के उत्तर दीजिए:\nइस प्रकरण में ${altTopic} तथा ${altFormula} के अनुप्रयोग का विश्लेषण किया गया है।`
+        : `Read the following alternative ${contract.canonicalSubject} analytical case study on ${cleanCh} and answer the questions that follow:\nAn applied investigation in "${cleanCh}" models ${altTopic} using the governing principle: ${altFormula}.`;
+
+      return {
+        chapterId: slot.chapterId,
+        chapterNumber: slot.chapterNumber,
+        chapterTitle: slot.chapterTitle,
+        type: qType,
+        text: ensureUniqueStem(altPassage, cleanCh, spec, idx + 100, targetMarks),
+        marks: targetMarks,
+        options: [],
+        subparts: normalizedSubparts,
+        answer: normalizedSubparts.map((sp) => `${sp.label} ${sp.answer}`).join(" | "),
+        difficulty: diff,
+        cognitiveLevel: "EVALUATING",
+        explanation: `Alternative case study grounded in ${cleanCh} (${contract.canonicalSubject}) totaling ${targetMarks} marks.`,
+      };
+    }
+
+    // Subjective 3m / 4m / 5m / 7m questions
+    const primaryPool =
+      targetMarks <= 2 || qType === "VERY_SHORT"
+        ? spec.sampleVeryShort
+        : targetMarks >= 4 || qType === "LONG"
+        ? spec.sampleLong
+        : spec.sampleShort;
+    const secondaryPool =
+      targetMarks >= 4 || qType === "LONG" ? spec.sampleShort : spec.sampleLong;
+
+    let altCandidate: { text: string; answer: string } | null = null;
+    if (primaryPool.length > 1) {
+      altCandidate = primaryPool[(idx + 1) % primaryPool.length];
+    } else if (secondaryPool.length > 0 && secondaryPool[0].text !== primaryText) {
+      altCandidate = secondaryPool[idx % secondaryPool.length];
+    }
+
+    const altTopic =
+      spec.includedTopics[(idx + 1) % Math.max(1, spec.includedTopics.length)] ||
+      `analytical applications of ${cleanCh}`;
+    const altConcept =
+      spec.keyFormulasOrConcepts[(idx + 1) % Math.max(1, spec.keyFormulasOrConcepts.length)] ||
+      spec.keyFormulasOrConcepts[0] ||
+      `standard principles of ${cleanCh}`;
+
+    let altText = altCandidate ? altCandidate.text : "";
+    let altAnswer = altCandidate ? altCandidate.answer : "";
+
+    // Ensure the alternative is never identical or a near-paraphrase of primaryText
+    if (
+      !altText ||
+      altText.trim().toLowerCase() === primaryText.trim().toLowerCase()
+    ) {
+      if (contract.canonicalSubject === "Mathematics") {
+        altText = `Establish and apply the property "${altConcept}" to solve a standard ${targetMarks}-mark problem on ${altTopic} in ${cleanCh}.`;
+        altAnswer = `Model Answer: 1. State and set up the governing relation: ${altConcept}. [1 Mark]\n2. Apply step-by-step algebraic/calculus simplification for ${altTopic}. [${Math.max(1, targetMarks - 2)} Marks]\n3. Conclude the verified result in ${cleanCh}. [1 Mark]`;
+      } else {
+        altText = `Analyze the mechanism and practical applications of ${altTopic} in "${cleanCh}" with reference to ${altConcept}.`;
+        altAnswer = `Model Answer: 1. Core principle of ${altTopic} in ${cleanCh} [1 Mark]. 2. Detailed explanation of ${altConcept} [${Math.max(1, targetMarks - 2)} Marks]. 3. Verified conclusion and significance [1 Mark].`;
+      }
+    }
+
+    if (isHindi && !/[\u0900-\u097F]/.test(altText)) {
+      altText = `अध्याय "${cleanCh}" (${altTopic}) के संदर्भ में: ${altText}`;
+    } else if (isBilingual && !/[\u0900-\u097F]/.test(altText)) {
+      altText = `${altText}\n(अध्याय "${cleanCh}" — ${altTopic} के आधार पर हल कीजिए।)`;
+    }
+
+    altText = ensureUniqueStem(altText, cleanCh, spec, idx + 200, targetMarks);
+    const formattedAltAnswer = altAnswer.startsWith("Model Answer")
+      ? altAnswer
+      : `Model Answer: ${altAnswer}`;
+
+    return {
+      chapterId: slot.chapterId,
+      chapterNumber: slot.chapterNumber,
+      chapterTitle: slot.chapterTitle,
+      type: qType,
+      text: altText,
+      marks: targetMarks,
+      options: [],
+      subparts: [],
+      answer: formattedAltAnswer,
+      difficulty: diff,
+      cognitiveLevel: targetMarks >= 4 ? "EVALUATING" : "APPLYING",
+      explanation: `Alternative (OR) curriculum-verified ${contract.canonicalSubject} solution for ${cleanCh} (${targetMarks} marks).`,
+    };
   };
 
   // Special handling for MATCH_COLUMN: 1 combined question covering all slots
@@ -2060,19 +2278,26 @@ export function generateCurriculumGroundedSectionQuestions(
         ? `अध्याय "${cleanCh}" (${contract.canonicalSubject}) पर आधारित निम्नलिखित गद्यांश को पढ़कर प्रश्नों के उत्तर दीजिए:\n${cleanCh} के अंतर्गत ${spec.includedTopics[0]} का अध्ययन किया जाता है, जिसमें ${spec.keyFormulasOrConcepts[0]} का प्रयोग होता है।`
         : `Read the following ${contract.canonicalSubject} source passage on ${cleanCh} and answer the questions that follow:\nIn ${contract.className} ${contract.canonicalSubject}, "${cleanCh}" establishes ${spec.includedTopics.join("; ")}. Key governing relation: ${spec.keyFormulasOrConcepts[0]}.`;
 
+      const primaryText = ensureUniqueStem(passage, cleanCh, spec, idx, targetMarks);
+      const slotRequiresOr = Boolean(
+        slot.requiresInternalChoice ?? contract.internalChoiceRequirement?.required,
+      );
+
       return {
         slotIndex: slot.slotIndex,
         chapterId: slot.chapterId,
         chapterNumber: slot.chapterNumber,
         chapterTitle: slot.chapterTitle,
         type: qType,
-        text: passage,
+        text: primaryText,
         options: [],
         subparts: normalizedSubparts,
         answer: normalizedSubparts.map((sp) => `${sp.label} ${sp.answer}`).join(" | "),
         difficulty: diff,
         cognitiveLevel: "ANALYZING",
         explanation: `Case study grounded in ${cleanCh} (${contract.canonicalSubject}) totaling ${targetMarks} marks.`,
+        requiresInternalChoice: slotRequiresOr,
+        orQuestion: slotRequiresOr ? buildDistinctOrQuestion(slot, idx, primaryText, diff) : undefined,
       };
     }
 
@@ -2108,6 +2333,10 @@ export function generateCurriculumGroundedSectionQuestions(
       ? item.answer
       : `Model Answer: ${item.answer}`;
 
+    const slotRequiresOr = Boolean(
+      slot.requiresInternalChoice ?? contract.internalChoiceRequirement?.required,
+    );
+
     return {
       slotIndex: slot.slotIndex,
       chapterId: slot.chapterId,
@@ -2122,6 +2351,8 @@ export function generateCurriculumGroundedSectionQuestions(
       cognitiveLevel: slot.marks >= 4 ? "EVALUATING" : slot.marks >= 2 ? "APPLYING" : "UNDERSTANDING",
       explanation: `Curriculum-verified ${contract.canonicalSubject} solution for ${cleanCh} (${slot.marks} mark${slot.marks > 1 ? "s" : ""}).`,
       figurePrompt,
+      requiresInternalChoice: slotRequiresOr,
+      orQuestion: slotRequiresOr ? buildDistinctOrQuestion(slot, idx, text, diff) : undefined,
     };
   });
 }

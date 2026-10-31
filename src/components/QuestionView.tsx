@@ -16,6 +16,7 @@ import {
   getKindergartenActivity,
   parseKindergartenConfig,
 } from "@/lib/kindergarten/registry";
+import { getInternalChoiceSeparatorLabel } from "@/lib/internalChoiceRules";
 import type { QuestionDto } from "@/lib/types";
 import { MathText } from "@/components/MathText";
 
@@ -403,7 +404,13 @@ export function QuestionView({
 
   const hasHindi = /[\u0900-\u097F]/.test(q.text) || (orQuestion && /[\u0900-\u097F]/.test(orQuestion.text));
   const effectiveLang: "hi" | "en" | "bilingual" = lang ?? (hasHindi ? "hi" : "en");
-  const orSeparator = effectiveLang === "hi" ? "— अथवा —" : effectiveLang === "bilingual" ? "— OR / अथवा —" : "— OR —";
+  const orSeparator = getInternalChoiceSeparatorLabel(effectiveLang);
+
+  // Show marks allocation ONCE for the entire choice group:
+  // - For INLINE marks style with an OR choice, display marks once on the OR alternative at the end of the group.
+  // - For RIGHT_COLUMN marks style, display marks once on the primary row at the top-right of the group.
+  const primaryMarks = orQuestion && marksStyle === "INLINE" ? undefined : marks;
+  const orMarks = orQuestion && marksStyle === "INLINE" ? marks : undefined;
 
   return (
     <div style={{ breakInside: "avoid", pageBreakInside: "avoid" }}>
@@ -411,7 +418,7 @@ export function QuestionView({
         q={q}
         number={number}
         numberLabel={numberLabel}
-        marks={marks}
+        marks={primaryMarks}
         marksStyle={marksStyle}
         showAnswer={showAnswer}
         renderMode={renderMode}
@@ -420,20 +427,34 @@ export function QuestionView({
       />
 
       {orQuestion && (
-        <div style={{ marginTop: "2.5mm" }}>
+        <div
+          style={{
+            marginTop: "2mm",
+            marginLeft: hasLabel ? (isA5 ? "7.5mm" : "9.5mm") : 0,
+            breakInside: "avoid",
+            pageBreakInside: "avoid",
+          }}
+        >
           <div
             style={{
               textAlign: "center",
-              margin: "2.5mm 0",
+              margin: "2mm 0",
               fontWeight: 700,
-              fontSize: isA5 ? "8pt" : "9pt",
-              letterSpacing: "0.08em",
-              color: "#333",
+              fontSize: isA5 ? "8.5pt" : "9.5pt",
+              letterSpacing: "0.04em",
+              color: "#1e293b",
             }}
           >
             {orSeparator}
           </div>
-          <SingleQuestionBody q={orQuestion} showAnswer={showAnswer} marksStyle={marksStyle} isA5={isA5} lang={lang} />
+          <SingleQuestionBody
+            q={orQuestion}
+            marks={orMarks}
+            showAnswer={showAnswer}
+            marksStyle={marksStyle}
+            isA5={isA5}
+            lang={lang}
+          />
         </div>
       )}
 

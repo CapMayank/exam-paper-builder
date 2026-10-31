@@ -9,7 +9,13 @@ export type CandidateQuestion = {
 };
 
 export type AutoFillResult = {
-  added: { sectionId: string; questionId: string; chapterId: string }[];
+  added: {
+    sectionId: string;
+    questionId: string;
+    orQuestionId?: string | null;
+    requiresInternalChoice?: boolean;
+    chapterId: string;
+  }[];
   unfilled: { sectionId: string; title: string; count: number }[];
   complete: boolean;
   solverMode?: "optimal" | "greedy";
@@ -22,6 +28,7 @@ type Slot = {
   type: string;
   marksEach: number;
   order: number;
+  requiresInternalChoice?: boolean;
 };
 
 function getItemUnits(item: PlacedItem, secCount: number): number {
@@ -54,10 +61,17 @@ export function autoFillPaper(
   bp: BlueprintDef,
   currentItems: (PlacedItem & { questionId?: string })[],
   candidatePool: CandidateQuestion[],
-  excludedQuestionIds: string[] | { targetSectionId?: string; preferredDifficulty?: string } = [],
+  excludedQuestionIds:
+    | string[]
+    | {
+        targetSectionId?: string;
+        preferredDifficulty?: string;
+        internalChoiceSectionIds?: Set<string>;
+      } = [],
   options?: {
     targetSectionId?: string;
     preferredDifficulty?: string;
+    internalChoiceSectionIds?: Set<string>;
   },
 ): AutoFillResult {
   const actualExcluded: string[] = Array.isArray(excludedQuestionIds) ? excludedQuestionIds : [];
@@ -97,6 +111,7 @@ export function autoFillPaper(
     }
     const placed = placedCount.get(sec.id) ?? 0;
     const needed = Math.max(0, sec.count - placed);
+    const requiresInternalChoice = Boolean(actualOptions?.internalChoiceSectionIds?.has(sec.id));
     for (let i = 0; i < needed; i++) {
       slots.push({
         sectionId: sec.id,
@@ -104,6 +119,7 @@ export function autoFillPaper(
         type: sec.type,
         marksEach: sec.marksEach,
         order: order++,
+        requiresInternalChoice,
       });
     }
   }
@@ -229,7 +245,28 @@ export function autoFillPaper(
   for (const slot of slots) {
     const q = chosen.get(slot.order);
     if (q) {
-      added.push({ sectionId: slot.sectionId, questionId: q.id, chapterId: q.chapterId });
+      let orQuestionId: string | null = null;
+      if (slot.requiresInternalChoice) {
+        const pool = candidatesByType.get(slot.type) ?? [];
+        const orCand = pool.find(
+          (c) =>
+            c.id !== q.id &&
+            !chosenQuestionIds.has(c.id) &&
+            c.chapterId === q.chapterId &&
+            (c.subpartsMarks === undefined || c.subpartsMarks === slot.marksEach),
+        );
+        if (orCand) {
+          orQuestionId = orCand.id;
+          chosenQuestionIds.add(orCand.id);
+        }
+      }
+      added.push({
+        sectionId: slot.sectionId,
+        questionId: q.id,
+        orQuestionId,
+        requiresInternalChoice: slot.requiresInternalChoice,
+        chapterId: q.chapterId,
+      });
     } else {
       const cur = unfilledMap.get(slot.sectionId) ?? { title: slot.title, count: 0 };
       cur.count++;

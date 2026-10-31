@@ -21,6 +21,7 @@ import {
   serializeMatchColumnPair,
 } from "@/lib/constants";
 import { type Book, type PaperData, type QuestionDto, type Section, subpartsTotalMarks, normalizeSubpartMarks } from "@/lib/types";
+import { resolveInternalChoiceRequirement } from "@/lib/internalChoiceRules";
 import { MathText } from "./MathText";
 import type { GeneratedQuestionItem } from "@/lib/gemini";
 
@@ -181,7 +182,7 @@ export function QuestionPicker({
       .sort((a, b) => Number(!!a.why) - Number(!!b.why) || (a.q.timesUsed ?? 0) - (b.q.timesUsed ?? 0));
   }, [bank, placed, def, section.id, isAlternate, activeItem, paper.items, section.type, targetSlotMarks, isMultiUnitMatch, replacingItemId]);
 
-  async function add(questionId: string) {
+  async function add(questionId: string, orQuestionId?: string | null) {
     if (addingQuestionId) return;
     setAddingQuestionId(questionId);
     setError(null);
@@ -201,12 +202,15 @@ export function QuestionPicker({
       } else if (isReplacing) {
         const updated = await api<PaperData>(`/api/papers/${paper.id}/questions/${replacingItemId}`, {
           method: "PATCH",
-          json: { replaceWithQuestionId: questionId },
+          json: { replaceWithQuestionId: questionId, orQuestionId },
         });
         onPaper(updated);
         onClose();
       } else {
-        const updated = await api<PaperData>(`/api/papers/${paper.id}/questions`, { method: "POST", json: { sectionId: section.id, questionId } });
+        const updated = await api<PaperData>(`/api/papers/${paper.id}/questions`, {
+          method: "POST",
+          json: { sectionId: section.id, questionId, orQuestionId },
+        });
         onPaper(updated);
         const s = updated.progress.sections.find((x) => x.id === section.id)!;
         if (s.filled >= s.needed) onClose();
@@ -265,6 +269,19 @@ export function QuestionPicker({
       return;
     }
 
+    const choiceReq = resolveInternalChoiceRequirement({
+      schoolName: paper.schoolName,
+      blueprintName: paper.blueprint.name,
+      className: paper.blueprint.book.className,
+      academicSession: paper.academicSession || paper.blueprint.academicSession,
+      subject: paper.blueprint.book.subject,
+      subjectCode: paper.subjectCode || paper.blueprint.subjectCode,
+      questionType: section.type,
+      marksEach: section.marksEach,
+      sectionTitle: section.title,
+      sectionInstructions: section.instructions,
+    });
+
     setAiBusy(true);
     setAiError(null);
     try {
@@ -295,6 +312,10 @@ export function QuestionPicker({
           language: aiLanguage,
           count: 1,
           topicContext: aiTopicContext.trim(),
+          academicSession: paper.academicSession || paper.blueprint.academicSession,
+          subjectCode: paper.subjectCode || paper.blueprint.subjectCode,
+          sectionInstructions: section.instructions,
+          requiresInternalChoice: !isAlternate && choiceReq.required,
         },
       });
 
@@ -325,6 +346,19 @@ export function QuestionPicker({
       if (!selectedChapter) {
         throw new Error("Please select a valid chapter.");
       }
+
+      const choiceReq = resolveInternalChoiceRequirement({
+        schoolName: paper.schoolName,
+        blueprintName: paper.blueprint.name,
+        className: paper.blueprint.book.className,
+        academicSession: paper.academicSession || paper.blueprint.academicSession,
+        subject: paper.blueprint.book.subject,
+        subjectCode: paper.subjectCode || paper.blueprint.subjectCode,
+        questionType: section.type,
+        marksEach: section.marksEach,
+        sectionTitle: section.title,
+        sectionInstructions: section.instructions,
+      });
 
       const isMatch = section.type === "MATCH_COLUMN";
       let processedOptions = aiGenerated.options || [];
@@ -362,7 +396,37 @@ export function QuestionPicker({
         json: payload,
       });
 
-      await add(created.id);
+      let createdOrId: string | null = null;
+      if (!isAlternate && !choiceReq.forbidden && aiGenerated.orQuestion && aiGenerated.orQuestion.text?.trim()) {
+        const orProcessedOptions = aiGenerated.orQuestion.options || [];
+        const orRawSubparts = (aiGenerated.orQuestion.subparts || []).map((sp, idx) => ({
+          label: sp.label || `(${idx + 1})`,
+          text: sp.text,
+          marks: Number(sp.marks) || 1,
+          answer: sp.answer || "",
+          options: Array.isArray(sp.options) && sp.options.length > 0 ? sp.options.map((o: string) => cleanOptionText(String(o))) : undefined,
+        }));
+        const orNormalizedSubparts = orRawSubparts.length > 0 ? normalizeSubpartMarks(orRawSubparts, marksToGenerate) : [];
+        const orPayload = {
+          bookId: paper.blueprint.bookId,
+          chapterId: aiChapterId,
+          type: aiGenerated.orQuestion.type || section.type,
+          text: aiGenerated.orQuestion.text,
+          options: orProcessedOptions,
+          subparts: orNormalizedSubparts,
+          answer: aiGenerated.orQuestion.answer || "",
+          difficulty: aiGenerated.orQuestion.difficulty || aiDifficulty,
+          spaceMm: section.type === "LONG" ? 60 : section.type === "SHORT" ? 20 : 0,
+          showGrid: false,
+        };
+        const createdOr = await api<QuestionDto>("/api/questions", {
+          method: "POST",
+          json: orPayload,
+        });
+        createdOrId = createdOr.id;
+      }
+
+      await add(created.id, createdOrId);
     } catch (e) {
       setAiError((e as Error).message || "Failed to save question to paper.");
     } finally {
@@ -1041,6 +1105,28 @@ export function QuestionPicker({
                           )}
                         </div>
                       ))}
+                    </div>
+                  )}
+
+                  {/* Internal Choice (OR / अथवा) Question Preview */}
+                  {aiGenerated.orQuestion && (
+                    <div className="space-y-2.5 rounded-lg border border-indigo-200 bg-indigo-50/40 p-3">
+                      <div className="flex items-center justify-center">
+                        <span className="px-2.5 py-0.5 rounded-full bg-indigo-100 border border-indigo-300 text-indigo-900 font-bold text-xs tracking-wide">
+                          OR (अथवा) Alternative
+                        </span>
+                      </div>
+                      <div className="font-medium text-slate-900 leading-relaxed text-xs">
+                        <MathText text={aiGenerated.orQuestion.text} />
+                      </div>
+                      {aiGenerated.orQuestion.answer && (
+                        <div className="rounded-lg border border-indigo-100 bg-white p-2.5 text-xs text-indigo-950 font-normal">
+                          <span className="font-semibold text-indigo-900 block text-[11px] uppercase tracking-wide">
+                            OR Model Answer:
+                          </span>
+                          <MathText text={aiGenerated.orQuestion.answer} />
+                        </div>
+                      )}
                     </div>
                   )}
 

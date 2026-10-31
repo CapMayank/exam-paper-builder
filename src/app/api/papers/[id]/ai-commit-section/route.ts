@@ -60,6 +60,7 @@ export const POST = route(async (req, { id }, user) => {
     subject: paper.blueprint.book.subject,
     subjectCode: paper.subjectCode || paper.blueprint.subjectCode,
     sectionTitle: section.title,
+    sectionInstructions: section.instructions,
     questionType: section.type,
     marksEach: section.marksEach,
     slots: questions.map((q, idx) => {
@@ -72,6 +73,7 @@ export const POST = route(async (req, { id }, user) => {
         chapterNumber: ch?.number || q.chapterNumber || idx + 1,
         chapterTitle: q.chapterTitle || ch?.title || "Syllabus Chapter",
         marks: section.marksEach,
+        requiresInternalChoice: q.requiresInternalChoice,
       };
     }),
   });
@@ -80,8 +82,15 @@ export const POST = route(async (req, { id }, user) => {
     throw new HttpError(422, `Invalid generation contract: ${contractRes.errors.join(" ")}`);
   }
 
+  const choiceForbidden = contractRes.contract.internalChoiceRequirement.forbidden;
+
   for (let i = 0; i < questions.length; i++) {
     const q = questions[i];
+    if (choiceForbidden && q.orQuestion) {
+      q.orQuestion = undefined;
+      q.requiresInternalChoice = false;
+    }
+
     const contam = isQuestionContaminated(
       {
         text: q.text,
@@ -145,7 +154,7 @@ export const POST = route(async (req, { id }, user) => {
         chapterId = fallbackChapterId;
       }
 
-      // 1. Create question in the question bank
+      // 1. Create primary question in the question bank
       const figureSceneVal = q.figureScene
         ? (typeof q.figureScene === "string" ? q.figureScene : JSON.stringify(q.figureScene))
         : (q.figureDoc ? JSON.stringify(q.figureDoc) : null);
@@ -168,12 +177,44 @@ export const POST = route(async (req, { id }, user) => {
         },
       });
 
-      // 2. Link question into this paper's section
+      // 1b. Create internal choice (OR / अथवा) question in the question bank when present
+      let createdOrQuestionId: string | null = null;
+      if (!choiceForbidden && q.orQuestion && typeof q.orQuestion.text === "string" && q.orQuestion.text.trim()) {
+        const orType = q.orQuestion.type || qType;
+        const orOptions = Array.isArray(q.orQuestion.options) ? q.orQuestion.options : [];
+        let orSubparts =
+          isSubpartQuestionType(orType) && Array.isArray(q.orQuestion.subparts)
+            ? q.orQuestion.subparts
+            : [];
+        if (orSubparts.length > 0) {
+          orSubparts = normalizeSubpartMarks(orSubparts, section.marksEach);
+        }
+
+        const createdOrQuestion = await tx.question.create({
+          data: {
+            bookId: paper.blueprint.bookId,
+            chapterId,
+            type: orType,
+            text: q.orQuestion.text,
+            optionsJson: JSON.stringify(orOptions),
+            subpartsJson: JSON.stringify(orSubparts),
+            answer: q.orQuestion.answer || "",
+            difficulty: q.orQuestion.difficulty || q.difficulty || "MEDIUM",
+            cognitiveLevel: q.orQuestion.cognitiveLevel || q.cognitiveLevel || null,
+            explanation: q.orQuestion.explanation || null,
+            createdById: user.id,
+          },
+        });
+        createdOrQuestionId = createdOrQuestion.id;
+      }
+
+      // 2. Link question (and OR choice if applicable) into this paper's section
       await tx.paperQuestion.create({
         data: {
           paperId: id,
           sectionId,
           questionId: createdQuestion.id,
+          orQuestionId: createdOrQuestionId,
           position: nextPos++,
         },
       });

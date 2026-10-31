@@ -12,8 +12,10 @@ export const POST = route(async (req, { id }, user) => {
 
   const body = await req.json();
   const {
+    sectionId,
     sectionTitle,
     sectionType,
+    sectionInstructions,
     marksEach,
     language = "en",
     difficulty = "BALANCED",
@@ -28,15 +30,23 @@ export const POST = route(async (req, { id }, user) => {
     throw new HttpError(400, "Slots array is required and must not be empty.");
   }
 
+  const matchedSection = paper.blueprint.sections.find(
+    (s) => (sectionId && s.id === sectionId) || s.title === sectionTitle,
+  );
+  const effectiveInstructions = sectionInstructions ?? matchedSection?.instructions ?? null;
+
   const validBookChapterIds = new Set(paper.blueprint.chapters.map((c) => c.chapterId));
-  const existingQuestionTexts = paper.items.map((i) => i.question.text);
+  const existingQuestionTexts = paper.items.flatMap((i) =>
+    [i.question.text, i.orQuestion?.text].filter((t): t is string => Boolean(t && t.trim())),
+  );
 
   const res = await generatePaperSectionWithGemini({
     className: paper.blueprint.book.className,
     subject: paper.blueprint.book.subject,
-    sectionTitle: sectionTitle || "Section",
-    sectionType: sectionType || "MCQ",
-    marksEach: Number(marksEach) || 1,
+    sectionTitle: sectionTitle || matchedSection?.title || "Section",
+    sectionType: sectionType || matchedSection?.type || "MCQ",
+    sectionInstructions: effectiveInstructions,
+    marksEach: Number(marksEach) || matchedSection?.marksEach || 1,
     language,
     difficulty,
     model,

@@ -16,6 +16,8 @@ const generateSchema = z.object({
   board: z.string().trim().optional(),
   academicSession: z.string().trim().optional(),
   subjectCode: z.string().trim().optional(),
+  sectionInstructions: z.string().trim().optional(),
+  requiresInternalChoice: z.boolean().optional(),
 });
 
 export const POST = route(async (req) => {

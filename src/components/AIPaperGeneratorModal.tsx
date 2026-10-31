@@ -276,8 +276,10 @@ export function AIPaperGeneratorModal({
           headers,
           signal,
           json: {
+            sectionId: sec.sectionId,
             sectionTitle: sec.sectionTitle,
             sectionType: sec.sectionType,
+            sectionInstructions: sec.sectionInstructions,
             marksEach: sec.marksEach,
             language,
             difficulty,
@@ -717,12 +719,22 @@ export function AIPaperGeneratorModal({
                       key={sec.sectionId}
                       className="flex items-center justify-between text-xs p-2.5 rounded-lg border border-slate-200 bg-slate-50/50"
                     >
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="text-slate-400 font-mono text-[11px] w-4">{idx + 1}.</span>
                         <span className="font-semibold text-slate-800">{sec.sectionTitle}</span>
                         <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-200/80 text-slate-700">
                           {QUESTION_TYPE_LABEL[sec.sectionType as QuestionType] || sec.sectionType}
                         </span>
+                        {sec.internalChoiceRequirement?.required && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
+                            100% Internal Choice (OR / अथवा)
+                          </span>
+                        )}
+                        {sec.internalChoiceRequirement?.forbidden && sec.marksEach === 2 && (
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                            No Internal Choice (2026–27 Rule)
+                          </span>
+                        )}
                       </div>
                       <div className="text-slate-600 font-mono text-[11px]">
                         {sec.slots.length} Qs × {sec.marksEach}m = <span className="font-bold text-slate-900">{sec.slots.length * sec.marksEach}m</span>
@@ -1002,6 +1014,33 @@ export function AIPaperGeneratorModal({
                             </div>
                           )}
 
+                          {/* Internal Choice (OR / अथवा) Question Preview */}
+                          {q.orQuestion && (
+                            <div className="mt-2 pt-2 border-t border-dashed border-indigo-200 space-y-1.5">
+                              <div className="flex items-center justify-center">
+                                <span className="px-2.5 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-800 font-bold text-[10px] tracking-wide">
+                                  OR (अथवा)
+                                </span>
+                              </div>
+                              <div className="text-xs text-slate-900 font-medium leading-relaxed">
+                                <MathText text={q.orQuestion.text} />
+                              </div>
+                              {isSubpartQuestionType(q.orQuestion.type || q.type) &&
+                                q.orQuestion.subparts &&
+                                q.orQuestion.subparts.length > 0 && (
+                                  <div className="space-y-1 pt-1 border-t border-slate-100 text-xs">
+                                    {q.orQuestion.subparts.map((sp, spIdx) => (
+                                      <div key={spIdx} className="text-[11px] text-slate-700 flex items-start gap-1">
+                                        <span className="font-bold text-slate-500">{sp.label}</span>
+                                        <span className="flex-1"><MathText text={sp.text} /></span>
+                                        <span className="text-[10px] text-slate-400 font-mono">[{sp.marks}m]</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                            </div>
+                          )}
+
                           {/* Answer Toggle */}
                           <div className="pt-1">
                             <button
@@ -1013,8 +1052,15 @@ export function AIPaperGeneratorModal({
                               <span>{isExpanded ? "Hide Model Answer & Marking" : "View Model Answer & Marking"}</span>
                             </button>
                             {isExpanded && (
-                              <div className="mt-1.5 p-2 rounded-lg bg-emerald-50/70 border border-emerald-200 text-[11px] text-emerald-950 font-mono whitespace-pre-wrap leading-relaxed">
-                                {q.answer}
+                              <div className="mt-1.5 space-y-1.5">
+                                <div className="p-2 rounded-lg bg-emerald-50/70 border border-emerald-200 text-[11px] text-emerald-950 font-mono whitespace-pre-wrap leading-relaxed">
+                                  {q.orQuestion ? `Primary Answer:\n${q.answer}` : q.answer}
+                                </div>
+                                {q.orQuestion && q.orQuestion.answer && (
+                                  <div className="p-2 rounded-lg bg-indigo-50/70 border border-indigo-200 text-[11px] text-indigo-950 font-mono whitespace-pre-wrap leading-relaxed">
+                                    {`OR (अथवा) Answer:\n${q.orQuestion.answer}`}
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>

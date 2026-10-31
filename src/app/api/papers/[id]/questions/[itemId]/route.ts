@@ -1,6 +1,7 @@
 import { body, HttpError, route, type SessionUser } from "@/lib/api";
 import { whyCannotAdd } from "@/lib/blueprint";
 import { parseMatchColumnPairs } from "@/lib/constants";
+import { resolveInternalChoiceRequirement } from "@/lib/internalChoiceRules";
 import { assertCanModifyPaper, assertCanModifyQuestion, loadPaperView, toPlacedItems } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { editPaperItemSchema, moveItemSchema, replaceItemSchema } from "@/lib/schemas";
@@ -45,7 +46,7 @@ export const PATCH = route(async (req, { id, itemId }, user) => {
   }
 
   if ("replaceWithQuestionId" in raw) {
-    const { replaceWithQuestionId } = replaceItemSchema.parse(raw);
+    const { replaceWithQuestionId, orQuestionId } = replaceItemSchema.parse(raw);
     const paper = await loadPaperView(id);
     if (!paper) throw new HttpError(404, "Paper not found");
 
@@ -58,6 +59,19 @@ export const PATCH = route(async (req, { id, itemId }, user) => {
     if (paper.items.some((i) => (i.question.id === candidate.id || i.orQuestion?.id === candidate.id) && i.id !== itemId)) {
       throw new HttpError(409, "This question is already elsewhere in this paper (as primary or alternate question)");
     }
+
+    const choiceReq = resolveInternalChoiceRequirement({
+      schoolName: paper.schoolName,
+      blueprintName: paper.blueprint.name,
+      className: paper.blueprint.book.className,
+      academicSession: paper.academicSession || paper.blueprint.academicSession,
+      subject: paper.blueprint.book.subject,
+      subjectCode: paper.subjectCode || paper.blueprint.subjectCode,
+      questionType: item.section.type,
+      marksEach: item.section.marksEach,
+      sectionTitle: item.section.title,
+      sectionInstructions: item.section.instructions,
+    });
 
     const itemsWithoutCurrent = toPlacedItems(
       paper.blueprint.sections,
@@ -109,8 +123,12 @@ export const PATCH = route(async (req, { id, itemId }, user) => {
     );
     if (reason) throw new HttpError(409, reason);
 
-    const updateData: { questionId: string; orQuestionId?: null } = { questionId: candidate.id };
-    if (item.orQuestionId && candidate.chapterId !== item.question.chapterId) {
+    const updateData: { questionId: string; orQuestionId?: string | null } = { questionId: candidate.id };
+    if (choiceReq.forbidden) {
+      updateData.orQuestionId = null;
+    } else if (orQuestionId !== undefined) {
+      updateData.orQuestionId = orQuestionId;
+    } else if (item.orQuestionId && candidate.chapterId !== item.question.chapterId) {
       updateData.orQuestionId = null;
     }
     await prisma.paperQuestion.update({ where: { id: itemId }, data: updateData });
@@ -128,6 +146,26 @@ export const PATCH = route(async (req, { id, itemId }, user) => {
 
     const paper = await loadPaperView(id);
     if (!paper) throw new HttpError(404, "Paper not found");
+
+    const choiceReq = resolveInternalChoiceRequirement({
+      schoolName: paper.schoolName,
+      blueprintName: paper.blueprint.name,
+      className: paper.blueprint.book.className,
+      academicSession: paper.academicSession || paper.blueprint.academicSession,
+      subject: paper.blueprint.book.subject,
+      subjectCode: paper.subjectCode || paper.blueprint.subjectCode,
+      questionType: item.section.type,
+      marksEach: item.section.marksEach,
+      sectionTitle: item.section.title,
+      sectionInstructions: item.section.instructions,
+    });
+
+    if (choiceReq.forbidden) {
+      throw new HttpError(
+        400,
+        `Board Guardrail Violation: Internal choices (OR / अथवा) are forbidden for this section (${choiceReq.rationale}).`
+      );
+    }
 
     const candidate = await prisma.question.findUnique({
       where: { id: orQuestionId },

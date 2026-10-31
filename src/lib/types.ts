@@ -1,8 +1,9 @@
 import type { QuestionDto } from "./dto";
 import type { PaperImplication, PaperStatus } from "./blueprint";
 import type { MarksStyle, NumberingStyle, PrintDensity, UserRole, TimetableStatus, SessionSlot } from "./constants";
+import type { PaperInternalChoiceAudit } from "./internalChoiceRules";
 
-export type { QuestionDto, PaperImplication };
+export type { QuestionDto, PaperImplication, PaperInternalChoiceAudit };
 export type { MarksStyle, NumberingStyle, PrintDensity, UserRole, TimetableStatus, SessionSlot };
 
 export type ClassSubjectDto = {
@@ -170,6 +171,7 @@ export type PaperData = {
   items: PaperItem[];
   progress: PaperStatus;
   implications?: PaperImplication[];
+  internalChoiceAudit?: PaperInternalChoiceAudit;
 
   // Milestone 1 Customization & Board Guardrail Extensions
   academicSession: string;

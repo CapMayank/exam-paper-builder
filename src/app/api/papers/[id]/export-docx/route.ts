@@ -18,6 +18,7 @@ import {
 import { HttpError, route, type SessionUser } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { formatMathTextRuns, formatOptionPairRuns } from "@/lib/docxMath";
+import { getInternalChoiceSeparatorLabel } from "@/lib/internalChoiceRules";
 import { extractTableFromText } from "@/lib/math";
 import {
   cleanMatchItem,
@@ -158,23 +159,28 @@ function renderSubpartsDocx(
 function renderQuestionTextWithTable(
   qLabel: string,
   qText: string,
-  qTotalMarks: number,
+  qTotalMarks: number | undefined,
   isMatch: boolean,
   pageBreakBefore: boolean,
   paragraphs: (Paragraph | Table)[],
   lang: "hi" | "en" | "bilingual" = "en",
+  keepNext = false,
 ) {
-  const marksText = `  ${formatMarksLabel(qTotalMarks, lang)}`;
+  const marksText = qTotalMarks !== undefined ? `  ${formatMarksLabel(qTotalMarks, lang)}` : "";
+  const labelRuns = qLabel ? [new TextRun({ text: `${qLabel}  `, bold: true, font: "Times New Roman" })] : [];
+  const marksRuns = marksText ? [new TextRun({ text: marksText, bold: true, font: "Times New Roman" })] : [];
   const tableData = !isMatch ? extractTableFromText(qText) : null;
   if (tableData && tableData.table) {
     paragraphs.push(
       new Paragraph({
         pageBreakBefore,
+        keepNext: true,
+        indent: qLabel ? undefined : { left: 360 },
         spacing: { before: 100, after: 60 },
         children: [
-          new TextRun({ text: `${qLabel}  `, bold: true, font: "Times New Roman" }),
+          ...labelRuns,
           ...formatMathTextRuns(tableData.prefixText, { font: "Times New Roman" }),
-          new TextRun({ text: marksText, bold: true, font: "Times New Roman" }),
+          ...marksRuns,
         ],
       }),
     );
@@ -232,6 +238,8 @@ function renderQuestionTextWithTable(
     if (tableData.suffixText.trim()) {
       paragraphs.push(
         new Paragraph({
+          keepNext,
+          indent: qLabel ? undefined : { left: 360 },
           spacing: { before: 60, after: 60 },
           children: formatMathTextRuns(tableData.suffixText, { font: "Times New Roman" }),
         }),
@@ -241,11 +249,13 @@ function renderQuestionTextWithTable(
     paragraphs.push(
       new Paragraph({
         pageBreakBefore,
+        keepNext,
+        indent: qLabel ? undefined : { left: 360 },
         spacing: { before: 100, after: 60 },
         children: [
-          new TextRun({ text: `${qLabel}  `, bold: true, font: "Times New Roman" }),
+          ...labelRuns,
           ...formatMathTextRuns(qText, { font: "Times New Roman" }),
-          new TextRun({ text: marksText, bold: true, font: "Times New Roman" }),
+          ...marksRuns,
         ],
       }),
     );
@@ -663,11 +673,12 @@ export async function buildPaperDocx(
       renderQuestionTextWithTable(
         qLabel,
         qText,
-        qTotalMarks,
+        item.orQuestion ? undefined : qTotalMarks,
         isMatch,
         Boolean((item as any).pageBreakBefore),
         paragraphs,
         paperLang,
+        Boolean(item.orQuestion),
       );
 
       // Embedded diagram image if present
@@ -863,31 +874,26 @@ export async function buildPaperDocx(
           ? orSubpartsMarks
           : section.marksEach;
         const orQText = isOrMatch ? getMatchColumnInstruction(orQ.text) : orQ.text;
-
-        const orLabel = isHindi
-          ? `${qLabel} (अथवा)`
-          : paperLang === "bilingual"
-          ? `${qLabel} (OR / अथवा)`
-          : `${qLabel} (OR)`;
+        const orSeparatorLabel = getInternalChoiceSeparatorLabel(paperLang);
 
         paragraphs.push(
           new Paragraph({
             alignment: AlignmentType.CENTER,
+            keepNext: true,
             spacing: { before: 80, after: 80 },
             children: [
               new TextRun({
-                text: isHindi ? "— अथवा —" : paperLang === "bilingual" ? "— OR / अथवा —" : "— OR —",
+                text: orSeparatorLabel,
                 bold: true,
-                italics: true,
                 font: "Times New Roman",
               }),
             ],
           }),
         );
         renderQuestionTextWithTable(
-          orLabel,
+          "",
           orQText,
-          orTotalMarks,
+          qTotalMarks || orTotalMarks,
           isOrMatch,
           false,
           paragraphs,

@@ -33,6 +33,7 @@ import {
   validateGeneratedSection,
   type QuestionValidationIssue,
 } from "./questionValidator";
+import { isParaphraseOrDuplicateChoice } from "./internalChoiceRules";
 import { normalizeQuestionType } from "./paperImport";
 import { ensureLanguageNonChapterUnits } from "./syllabusImport";
 import { parseGeminiJsonWithLatexSafety, repairLatex } from "./math";
@@ -232,6 +233,21 @@ export interface GeneratedQuestionItem {
   difficulty: "EASY" | "MEDIUM" | "HARD";
   cognitiveLevel: "REMEMBERING" | "UNDERSTANDING" | "APPLYING" | "ANALYZING" | "EVALUATING";
   explanation?: string;
+  requiresInternalChoice?: boolean;
+  orQuestion?: {
+    chapterId?: string;
+    chapterNumber?: number;
+    chapterTitle?: string;
+    type: string;
+    text: string;
+    options: string[];
+    subparts: Array<{ label: string; text: string; marks: number; answer: string; options?: string[] }>;
+    answer: string;
+    marks: number;
+    difficulty: "EASY" | "MEDIUM" | "HARD";
+    cognitiveLevel?: string;
+    explanation?: string;
+  };
 }
 
 export async function generateQuestionsWithGemini(params: {
@@ -248,6 +264,8 @@ export async function generateQuestionsWithGemini(params: {
   board?: string | null;
   academicSession?: string | null;
   subjectCode?: string | null;
+  sectionInstructions?: string | null;
+  requiresInternalChoice?: boolean;
   apiKey?: string | null;
 }): Promise<GeminiCallResult<GeneratedQuestionItem[]>> {
   const {
@@ -264,6 +282,8 @@ export async function generateQuestionsWithGemini(params: {
     board,
     academicSession,
     subjectCode,
+    sectionInstructions,
+    requiresInternalChoice,
     apiKey,
   } = params;
 
@@ -275,6 +295,7 @@ export async function generateQuestionsWithGemini(params: {
     academicSession,
     subject,
     subjectCode,
+    sectionInstructions,
     questionType: normalizedType,
     marksEach: marks || 1,
     difficulty,
@@ -286,6 +307,7 @@ export async function generateQuestionsWithGemini(params: {
       chapterNumber: i + 1,
       chapterTitle: chapter || "Syllabus Chapter",
       marks: marks || 1,
+      requiresInternalChoice,
     })),
   });
 
@@ -546,6 +568,29 @@ Return a JSON array strictly matching this TypeScript structure:
       difficulty: g.difficulty,
       cognitiveLevel: (g.cognitiveLevel as any) || "UNDERSTANDING",
       explanation: g.explanation,
+      requiresInternalChoice: g.requiresInternalChoice,
+      orQuestion: g.orQuestion
+        ? {
+            chapterId: g.orQuestion.chapterId,
+            chapterNumber: g.orQuestion.chapterNumber,
+            chapterTitle: g.orQuestion.chapterTitle,
+            type: g.orQuestion.type,
+            text: g.orQuestion.text,
+            options: g.orQuestion.options,
+            subparts: g.orQuestion.subparts.map((sp) => ({
+              label: sp.label,
+              text: sp.text,
+              marks: sp.marks,
+              answer: sp.answer || "",
+              options: sp.options,
+            })),
+            answer: g.orQuestion.answer,
+            marks: g.orQuestion.marks,
+            difficulty: g.orQuestion.difficulty,
+            cognitiveLevel: g.orQuestion.cognitiveLevel,
+            explanation: g.orQuestion.explanation,
+          }
+        : undefined,
     }));
   };
 
@@ -575,7 +620,10 @@ Return a JSON array strictly matching this TypeScript structure:
       });
     }
 
-    callResult.data = callResult.data.map((item) => {
+    const fallbackPool = fallbackQuestions();
+
+    callResult.data = callResult.data.map((item, itemIdx) => {
+      const slot = contract.slots[itemIdx] || contract.slots[0];
       const qType = normalizeQuestionType(item.type || type);
       const isMatch = qType === "MATCH_COLUMN";
       let options = Array.isArray(item.options) ? item.options.map((o) => repairLatex(cleanOptionText(String(o).trim()))) : [];
@@ -669,6 +717,77 @@ Return a JSON array strictly matching this TypeScript structure:
 
       const normalizedSubparts = rawSubparts.length > 0 ? normalizeSubpartMarks(rawSubparts, marks) : [];
 
+      let normalizedOrQuestion: GeneratedQuestionItem["orQuestion"] = undefined;
+      if (!contract.internalChoiceRequirement.forbidden && slot?.requiresInternalChoice) {
+        if (item.orQuestion && typeof item.orQuestion.text === "string" && item.orQuestion.text.trim()) {
+          const orText = repairLatex(cleanQuestionStatement(item.orQuestion.text.trim(), qType));
+          const orOpts = Array.isArray(item.orQuestion.options)
+            ? item.orQuestion.options.map((o) => repairLatex(cleanOptionText(String(o).trim())))
+            : [];
+          const orSubpartsRaw =
+            isSubpartQuestionType(qType) && Array.isArray(item.orQuestion.subparts)
+              ? item.orQuestion.subparts.map((sp, spIdx) => ({
+                  label: String(sp.label || `(${spIdx + 1})`),
+                  text: repairLatex(String(sp.text || "")),
+                  marks: Number(sp.marks) || 1,
+                  options: Array.isArray(sp.options)
+                    ? sp.options.map((o) => repairLatex(cleanOptionText(String(o).trim())))
+                    : undefined,
+                  answer: sp.answer
+                    ? isMcqLikeType(qType)
+                      ? repairLatex(cleanOptionText(String(sp.answer)))
+                      : repairLatex(String(sp.answer))
+                    : "",
+                }))
+              : [];
+          const orSubparts = orSubpartsRaw.length > 0 ? normalizeSubpartMarks(orSubpartsRaw, marks) : [];
+          const orAnswer = isMcqLikeType(qType)
+            ? repairLatex(cleanOptionText(item.orQuestion.answer || ""))
+            : repairLatex(String(item.orQuestion.answer || "").trim());
+
+          if (!isParaphraseOrDuplicateChoice(qText, orText) && orAnswer.trim().length > 0) {
+            normalizedOrQuestion = {
+              chapterId: slot.chapterId,
+              chapterNumber: slot.chapterNumber,
+              chapterTitle: slot.chapterTitle,
+              type: qType,
+              text: orText,
+              options: orOpts,
+              subparts: orSubparts,
+              answer: orAnswer,
+              marks,
+              difficulty: (["EASY", "MEDIUM", "HARD"].includes(item.orQuestion.difficulty)
+                ? item.orQuestion.difficulty
+                : item.difficulty || "MEDIUM") as "EASY" | "MEDIUM" | "HARD",
+              cognitiveLevel: item.orQuestion.cognitiveLevel || item.cognitiveLevel || "APPLYING",
+              explanation: item.orQuestion.explanation,
+            };
+          }
+        }
+
+        if (!normalizedOrQuestion) {
+          const fbItem = fallbackPool[itemIdx] || fallbackPool[0];
+          if (fbItem?.orQuestion && !isParaphraseOrDuplicateChoice(qText, fbItem.orQuestion.text)) {
+            normalizedOrQuestion = fbItem.orQuestion;
+          } else if (fbItem && !isParaphraseOrDuplicateChoice(qText, fbItem.text)) {
+            normalizedOrQuestion = {
+              chapterId: slot.chapterId,
+              chapterNumber: slot.chapterNumber,
+              chapterTitle: slot.chapterTitle,
+              type: qType,
+              text: fbItem.text,
+              options: fbItem.options,
+              subparts: fbItem.subparts,
+              answer: fbItem.answer,
+              marks,
+              difficulty: fbItem.difficulty,
+              cognitiveLevel: fbItem.cognitiveLevel,
+              explanation: fbItem.explanation,
+            };
+          }
+        }
+      }
+
       return {
         ...item,
         type: qType,
@@ -677,6 +796,8 @@ Return a JSON array strictly matching this TypeScript structure:
         answer: qAnswer,
         marks,
         subparts: normalizedSubparts,
+        requiresInternalChoice: Boolean(!contract.internalChoiceRequirement.forbidden && slot?.requiresInternalChoice),
+        orQuestion: normalizedOrQuestion,
       };
     });
 
@@ -723,6 +844,7 @@ export interface GeneratePaperSectionSlot {
   chapterTitle: string;
   marks: number;
   topicFocus?: string;
+  requiresInternalChoice?: boolean;
 }
 
 export interface GeneratePaperSectionInput {
@@ -730,6 +852,7 @@ export interface GeneratePaperSectionInput {
   subject: string;
   sectionTitle: string;
   sectionType: string;
+  sectionInstructions?: string | null;
   marksEach: number;
   language: "en" | "hi" | "bilingual";
   difficulty: "BALANCED" | "EASY" | "MEDIUM" | "HARD";
@@ -771,6 +894,21 @@ export interface GeneratedPaperQuestion {
     canvasHeight: number;
     objects: unknown[];
   };
+  requiresInternalChoice?: boolean;
+  orQuestion?: {
+    chapterId: string;
+    chapterNumber: number;
+    chapterTitle: string;
+    type: string;
+    text: string;
+    options: string[];
+    subparts: Array<{ label: string; text: string; marks: number; answer?: string; options?: string[] }>;
+    answer: string;
+    marks: number;
+    difficulty: "EASY" | "MEDIUM" | "HARD";
+    cognitiveLevel?: string;
+    explanation?: string;
+  };
 }
 
 export async function generatePaperSectionWithGemini(
@@ -781,6 +919,7 @@ export async function generatePaperSectionWithGemini(
     subject,
     sectionTitle,
     sectionType,
+    sectionInstructions,
     marksEach,
     language,
     difficulty,
@@ -812,6 +951,7 @@ export async function generatePaperSectionWithGemini(
     subject,
     subjectCode,
     sectionTitle,
+    sectionInstructions,
     questionType: normalizedType,
     marksEach,
     difficulty,
@@ -831,6 +971,8 @@ export async function generatePaperSectionWithGemini(
   }
 
   const contract = contractRes.contract;
+  const anySlotRequiresChoice = contract.slots.some((s) => s.requiresInternalChoice);
+  const choiceForbidden = contract.internalChoiceRequirement.forbidden;
 
   // Check section and chapter visual eligibility
   const sectionEligible = isSectionVisuallyEligible(normalizedType, contract.rawSubject);
@@ -859,7 +1001,16 @@ ${contract.forbiddenCrossSubjectDomains.length > 0 ? `2. FORBIDDEN CROSS-SUBJECT
 8. For subjective questions (VERY_SHORT, SHORT, LONG, NUMERICAL): Provide a detailed step-wise model answer and marking scheme breakdown.
 9. LaTeX Math: Enclose all mathematical expressions, equations, symbols, and formulas in standard LaTeX $...$ delimiters.
 10. Vector Diagram Prompt (Figure Studio): If diagram generation is enabled and a question naturally involves a visual diagram, provide a concise description in "figurePrompt". Otherwise leave "figurePrompt" as null.
-11. Return ONLY a valid JSON array of question objects. No markdown wrapping or conversational commentary.`;
+11. INTERNAL CHOICE (अथवा / OR) POLICY (${contract.internalChoiceRequirement.patternVersion}):
+   - ${contract.internalChoiceRequirement.rationale}
+   - ${
+     anySlotRequiresChoice
+       ? `For EVERY question slot requiring internal choice, you MUST generate a complete "orQuestion" object from the EXACT SAME chapter, with equivalent marks (${marksEach}), equivalent difficulty, and a distinct subtopic/method/problem (NEVER a paraphrase of the primary question).`
+       : choiceForbidden
+       ? `Internal choice (OR / अथवा) is STRICTLY FORBIDDEN for this section. Do NOT generate "orQuestion" on any item.`
+       : `Do not include "orQuestion" unless explicitly required by a slot.`
+   }
+12. Return ONLY a valid JSON array of question objects. No markdown wrapping or conversational commentary.`;
 
   const slotsDescription = contract.slots
     .map((s, idx) => {
@@ -869,7 +1020,12 @@ ${contract.forbiddenCrossSubjectDomains.length > 0 ? `2. FORBIDDEN CROSS-SUBJECT
         s.curriculumSpec.deletedTopics.length > 0
           ? ` | Excluded/Deleted Topics: ${s.curriculumSpec.deletedTopics.join("; ")}`
           : "";
-      return `Question ${idx + 1} (Slot ${s.slotIndex}): Chapter ${s.chapterNumber} - "${s.chapterTitle}" (${s.marks} marks) | Allowed Topics: ${allowed}${deleted}${
+      const choiceRule = s.requiresInternalChoice
+        ? ` | Internal Choice: REQUIRED (Must include distinct "orQuestion" from same chapter "${s.chapterTitle}")`
+        : choiceForbidden
+        ? ` | Internal Choice: FORBIDDEN (No "orQuestion")`
+        : "";
+      return `Question ${idx + 1} (Slot ${s.slotIndex}): Chapter ${s.chapterNumber} - "${s.chapterTitle}" (${s.marks} marks) | Allowed Topics: ${allowed}${deleted}${choiceRule}${
         origSlot?.topicFocus ? ` | Topic Focus: ${origSlot.topicFocus}` : ""
       }`;
     })
@@ -924,6 +1080,13 @@ JSON Array Output Schema:
 - Section Title: ${sectionTitle}
 - Section Question Type: ${normalizedType}
 - Marks Per Question: ${marksEach}
+- Internal Choice Policy (${contract.internalChoiceRequirement.patternVersion}): ${
+        anySlotRequiresChoice
+          ? `MANDATORY — Every slot requiring internal choice MUST include a complete "orQuestion" object from the SAME chapter assessing a different subtopic/formula/method.`
+          : choiceForbidden
+          ? `FORBIDDEN — Never include "orQuestion" in this section (${contract.internalChoiceRequirement.rationale}).`
+          : `Not required.`
+      }
 - Language: ${
         language === "bilingual"
           ? "Bilingual (English with Hindi translation in parentheses)"
@@ -989,7 +1152,27 @@ JSON Array Output Schema:
     "difficulty": "EASY" | "MEDIUM" | "HARD",
     "cognitiveLevel": "REMEMBERING" | "UNDERSTANDING" | "APPLYING" | "ANALYZING" | "EVALUATING",
     "explanation": "Brief explanation or concept rationale",
-    "figurePrompt": "Concise description of diagram to draw" // or null
+    "figurePrompt": "Concise description of diagram to draw"${
+      anySlotRequiresChoice
+        ? `,
+    "orQuestion": {
+      "chapterNumber": 1,
+      "chapterTitle": "Chapter Name",
+      "type": "${normalizedType}",
+      "text": "Distinct alternative (OR / अथवा) question from the same chapter...",
+      "options": ${isMcqLikeType(normalizedType) ? '["A", "B", "C", "D"]' : "[]"},
+      "subparts": ${
+        isSubpartQuestionType(normalizedType)
+          ? '[\n        { "label": "(i)", "text": "Alternative subpart question", "marks": 1, "answer": "Model answer" }\n      ]'
+          : "[]"
+      },
+      "answer": "Complete independent model answer and step-marking scheme for the OR question",
+      "difficulty": "EASY" | "MEDIUM" | "HARD",
+      "cognitiveLevel": "APPLYING",
+      "explanation": "Brief explanation for the alternative question"
+    }`
+        : ""
+    }
   }
 ]`;
 
@@ -1012,6 +1195,8 @@ JSON Array Output Schema:
       cognitiveLevel: g.cognitiveLevel,
       explanation: g.explanation,
       figurePrompt: g.figurePrompt,
+      requiresInternalChoice: g.requiresInternalChoice,
+      orQuestion: g.orQuestion ? { ...g.orQuestion } : undefined,
     }));
   };
 
@@ -1110,6 +1295,7 @@ JSON Array Output Schema:
           difficulty: ["EASY", "MEDIUM", "HARD"].includes(primaryQ.difficulty) ? primaryQ.difficulty : "MEDIUM",
           cognitiveLevel: primaryQ.cognitiveLevel || "UNDERSTANDING",
           explanation: primaryQ.explanation || `Curriculum matching exercise across ${contract.canonicalSubject} chapters.`,
+          requiresInternalChoice: false,
         },
       ];
     }
@@ -1170,6 +1356,65 @@ JSON Array Output Schema:
           ? rawQ.figurePrompt.trim()
           : undefined;
 
+      // Normalize OR choice when allowed/required by slot
+      const slotRequiresChoice = Boolean(!choiceForbidden && slot.requiresInternalChoice);
+      let normalizedOrQuestion: GeneratedPaperQuestion["orQuestion"] = undefined;
+
+      if (!choiceForbidden && rawQ.orQuestion && typeof rawQ.orQuestion.text === "string" && rawQ.orQuestion.text.trim()) {
+        const orText = repairLatex(cleanQuestionStatement(rawQ.orQuestion.text.trim(), qType));
+        let orOptions = Array.isArray(rawQ.orQuestion.options)
+          ? rawQ.orQuestion.options.map((o: unknown) => repairLatex(cleanOptionText(String(o).trim())))
+          : [];
+        if (qType === "TRUE_FALSE") {
+          orOptions = [...qOptions];
+        }
+        const rawOrSubparts =
+          isSubpartQuestionType(qType) && Array.isArray(rawQ.orQuestion.subparts)
+            ? rawQ.orQuestion.subparts.map((sp: any, spIdx: number) => ({
+                label: String(sp.label || `(${spIdx + 1})`),
+                text: repairLatex(cleanQuestionStatement(String(sp.text || ""))),
+                marks: Number(sp.marks) || 1,
+                options: Array.isArray(sp.options)
+                  ? sp.options.map((o: unknown) => repairLatex(cleanOptionText(String(o).trim())))
+                  : undefined,
+                answer: sp.answer
+                  ? isMcqLikeType(qType)
+                    ? repairLatex(cleanOptionText(String(sp.answer)))
+                    : repairLatex(String(sp.answer))
+                  : undefined,
+              }))
+            : [];
+        const orSubparts = rawOrSubparts.length > 0 ? normalizeSubpartMarks(rawOrSubparts, targetSlotMarks) : [];
+        let orAnswer =
+          typeof rawQ.orQuestion.answer === "string"
+            ? isMcqLikeType(qType)
+              ? repairLatex(cleanOptionText(rawQ.orQuestion.answer))
+              : repairLatex(rawQ.orQuestion.answer)
+            : "";
+        if (qType === "TRUE_FALSE" && language === "hi") {
+          if (/true|सत्य|सही/i.test(orAnswer)) orAnswer = "सत्य";
+          else if (/false|असत्य|गलत/i.test(orAnswer)) orAnswer = "असत्य";
+        }
+        const orDiff = ["EASY", "MEDIUM", "HARD"].includes(rawQ.orQuestion.difficulty)
+          ? rawQ.orQuestion.difficulty
+          : qDiff;
+
+        normalizedOrQuestion = {
+          chapterId: slot.chapterId,
+          chapterNumber: slot.chapterNumber,
+          chapterTitle: slot.chapterTitle,
+          type: qType,
+          text: orText,
+          options: orOptions,
+          subparts: orSubparts,
+          answer: orAnswer,
+          marks: targetSlotMarks,
+          difficulty: orDiff as "EASY" | "MEDIUM" | "HARD",
+          cognitiveLevel: rawQ.orQuestion.cognitiveLevel || rawQ.cognitiveLevel || "APPLYING",
+          explanation: rawQ.orQuestion.explanation,
+        };
+      }
+
       const questionItem: GeneratedPaperQuestion = {
         slotIndex: slot.slotIndex,
         chapterId: slot.chapterId,
@@ -1184,6 +1429,8 @@ JSON Array Output Schema:
         cognitiveLevel: rawQ.cognitiveLevel || "APPLYING",
         explanation: rawQ.explanation,
         figurePrompt,
+        requiresInternalChoice: slotRequiresChoice,
+        orQuestion: normalizedOrQuestion,
       };
 
       const textLower = qText.toLowerCase();
@@ -1317,12 +1564,69 @@ JSON Array Output Schema:
       };
     }
 
-    const normalizedQuestions = await normalizeRawSectionData(callResult.data);
-    const validation = validateGeneratedSection(
+    let normalizedQuestions = await normalizeRawSectionData(callResult.data);
+    let validation = validateGeneratedSection(
       normalizedQuestions,
       contract,
       existingQuestionTexts || [],
     );
+
+    // If on the final attempt (or mock fallback) some slots only failed because of missing/invalid orQuestion,
+    // backfill the missing/invalid orQuestion from the curriculum-grounded generator and re-validate.
+    if (
+      !validation.valid &&
+      (callResult.isMock || attempt === MAX_VALIDATION_RETRIES) &&
+      anySlotRequiresChoice
+    ) {
+      const groundedFallbacks = generateCurriculumGroundedSectionQuestions(contract, {
+        generateDiagrams: false,
+        existingQuestionTexts: [
+          ...(existingQuestionTexts || []),
+          ...normalizedQuestions.map((q) => q.text),
+        ],
+      });
+      normalizedQuestions = normalizedQuestions.map((q, idx) => {
+        const slot = contract.slots[idx];
+        if (!slot?.requiresInternalChoice || choiceForbidden) return q;
+        const slotHasOrIssue = validation.issues.some(
+          (iss) =>
+            iss.slotIndex === slot.slotIndex &&
+            (iss.code === "MISSING_INTERNAL_CHOICE" || iss.code === "INVALID_INTERNAL_CHOICE"),
+        );
+        if (!q.orQuestion || slotHasOrIssue) {
+          const fb = groundedFallbacks[idx];
+          if (fb?.orQuestion && !isParaphraseOrDuplicateChoice(q.text, fb.orQuestion.text)) {
+            return { ...q, requiresInternalChoice: true, orQuestion: { ...fb.orQuestion } };
+          }
+          if (fb && !isParaphraseOrDuplicateChoice(q.text, fb.text)) {
+            return {
+              ...q,
+              requiresInternalChoice: true,
+              orQuestion: {
+                chapterId: slot.chapterId,
+                chapterNumber: slot.chapterNumber,
+                chapterTitle: slot.chapterTitle,
+                type: q.type,
+                text: fb.text,
+                options: fb.options,
+                subparts: fb.subparts,
+                answer: fb.answer,
+                marks: slot.marks || marksEach,
+                difficulty: fb.difficulty,
+                cognitiveLevel: fb.cognitiveLevel,
+                explanation: fb.explanation,
+              },
+            };
+          }
+        }
+        return q;
+      });
+      validation = validateGeneratedSection(
+        normalizedQuestions,
+        contract,
+        existingQuestionTexts || [],
+      );
+    }
 
     lastValidationIssues = validation.issues;
     lastAccepted = validation.acceptedQuestions as GeneratedPaperQuestion[];

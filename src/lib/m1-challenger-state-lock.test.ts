@@ -243,6 +243,7 @@ describe("Milestone 1.2 Challenger Empirical State Machine & Finalized Lock Harn
         blueprintId,
         layout: "BOOKLET",
         schoolName: "Sarvodaya Lakhnadon",
+        academicSession: "2026–27",
         status: "DRAFT",
         createdById: teacherAlice.id,
         items: {

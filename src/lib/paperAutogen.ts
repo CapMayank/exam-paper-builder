@@ -1,3 +1,7 @@
+import {
+  resolveInternalChoiceRequirement,
+  type InternalChoiceRequirement,
+} from "./internalChoiceRules";
 import type { PaperData, Section } from "./types";
 
 export interface PaperAutogenSlot {
@@ -6,13 +10,17 @@ export interface PaperAutogenSlot {
   chapterNumber: number;
   chapterTitle: string;
   marks: number;
+  requiresInternalChoice?: boolean;
 }
 
 export interface PaperAutogenSectionPlan {
   sectionId: string;
   sectionTitle: string;
   sectionType: string;
+  sectionInstructions?: string;
   marksEach: number;
+  requiresInternalChoice?: boolean;
+  internalChoiceRequirement?: InternalChoiceRequirement;
   totalQuestionsNeeded: number;
   alreadyPlacedCount: number;
   slots: PaperAutogenSlot[];
@@ -40,10 +48,19 @@ export interface PaperAutogenPlan {
 export interface PaperAutogenInput {
   id: string;
   title: string;
+  schoolName?: string | null;
+  academicSession?: string | null;
+  examType?: string | null;
+  subjectCode?: string | null;
   blueprint: {
+    name?: string | null;
+    academicSession?: string | null;
+    examType?: string | null;
+    subjectCode?: string | null;
     sections: Array<{
       id: string;
       title: string;
+      instructions?: string | null;
       type: string;
       count: number;
       marksEach: number;
@@ -226,6 +243,20 @@ export function planPaperSlotAssignments(paper: PaperAutogenInput): PaperAutogen
     const placed = placedCountBySection.get(sec.id) ?? 0;
     const needed = Math.max(0, sec.count - placed);
 
+    const choiceReq = resolveInternalChoiceRequirement({
+      schoolName: paper.schoolName,
+      blueprintName: blueprint.name,
+      academicSession: paper.academicSession || blueprint.academicSession,
+      className: blueprint.book?.className,
+      subject: blueprint.book?.subject,
+      subjectCode: paper.subjectCode || blueprint.subjectCode,
+      examType: paper.examType || blueprint.examType,
+      sectionTitle: sec.title,
+      sectionInstructions: sec.instructions,
+      questionType: sec.type,
+      marksEach: sec.marksEach,
+    });
+
     let sectionSlots: PaperAutogenSlot[] = [];
 
     if (sec.type === "MATCH_COLUMN") {
@@ -241,6 +272,7 @@ export function planPaperSlotAssignments(paper: PaperAutogenInput): PaperAutogen
           chapterNumber: assignedChap.chapterNumber,
           chapterTitle: assignedChap.chapterTitle,
           marks: sec.marksEach,
+          requiresInternalChoice: false,
         }));
       }
     } else {
@@ -258,6 +290,7 @@ export function planPaperSlotAssignments(paper: PaperAutogenInput): PaperAutogen
             chapterNumber: assignedChap.chapterNumber,
             chapterTitle: assignedChap.chapterTitle,
             marks: s.marksEach,
+            requiresInternalChoice: choiceReq.required,
           };
         });
     }
@@ -266,7 +299,10 @@ export function planPaperSlotAssignments(paper: PaperAutogenInput): PaperAutogen
       sectionId: sec.id,
       sectionTitle: sec.title,
       sectionType: sec.type,
+      sectionInstructions: sec.instructions || undefined,
       marksEach: sec.marksEach,
+      requiresInternalChoice: choiceReq.required,
+      internalChoiceRequirement: choiceReq,
       totalQuestionsNeeded: needed,
       alreadyPlacedCount: placed,
       slots: sectionSlots,

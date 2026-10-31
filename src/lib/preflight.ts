@@ -1,4 +1,5 @@
 import { cleanOptionText, isMcqLikeType } from "./constants";
+import { evaluatePaperInternalChoiceCompliance } from "./internalChoiceRules";
 import type { PaperData } from "./types";
 
 export type PreflightIssue = {
@@ -134,6 +135,54 @@ export function validatePaperPreflight(paper: PaperData): PreflightReport {
         });
       }
     }
+  }
+
+  // 9. Mandatory / Forbidden Internal Choice (OR / अथवा) Compliance Check
+  const choiceAudit = evaluatePaperInternalChoiceCompliance({
+    schoolName: paper.schoolName,
+    blueprintName: paper.blueprint.name,
+    className: paper.blueprint.book.className,
+    academicSession: paper.academicSession || (paper.blueprint as any).academicSession,
+    subject: paper.blueprint.book.subject,
+    subjectCode: paper.subjectCode || (paper.blueprint as any).subjectCode,
+    sections: paper.blueprint.sections.map((s) => ({
+      id: s.id,
+      title: s.title,
+      type: s.type,
+      count: s.count,
+      marksEach: s.marksEach,
+      instructions: s.instructions,
+    })),
+    items: paper.items.map((i) => ({
+      id: i.id,
+      sectionId: i.sectionId,
+      question: {
+        id: i.question.id,
+        text: i.question.text,
+        type: i.question.type,
+        chapterId: i.question.chapter?.id || i.question.chapterId,
+        answer: i.question.answer,
+      },
+      orQuestion: i.orQuestion
+        ? {
+            id: i.orQuestion.id,
+            text: i.orQuestion.text,
+            type: i.orQuestion.type,
+            chapterId: i.orQuestion.chapter?.id || i.orQuestion.chapterId,
+            answer: i.orQuestion.answer,
+          }
+        : null,
+    })),
+  });
+
+  for (const choiceIss of choiceAudit.issues) {
+    issues.push({
+      code: choiceIss.code,
+      severity: choiceIss.severity,
+      message: choiceIss.message,
+      questionNumber: choiceIss.questionNumber,
+      questionId: choiceIss.questionId,
+    });
   }
 
   const errors = issues.filter((i) => i.severity === "error");

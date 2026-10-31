@@ -1,6 +1,6 @@
 // Pure blueprint rules. Used by the API (to reject) and the UI (to explain). No I/O here.
 
-import { parseMatchColumnPairs } from "./constants";
+import { isSubpartQuestionType, parseMatchColumnPairs } from "./constants";
 import { parseSubparts, subpartsTotalMarks } from "./types";
 
 export type SectionDef = { id: string; title: string; type: string; count: number; marksEach: number };
@@ -307,7 +307,10 @@ export type PaperImplication = {
     | "TYPE_MISMATCH"
     | "CHAPTER_EXCESS"
     | "CHAPTER_DEFICIT"
-    | "ORPHANED_SECTION";
+    | "ORPHANED_SECTION"
+    | "MISSING_INTERNAL_CHOICE"
+    | "FORBIDDEN_INTERNAL_CHOICE"
+    | "INVALID_INTERNAL_CHOICE";
   severity: "error" | "warning";
   sectionId?: string;
   sectionTitle?: string;
@@ -488,10 +491,11 @@ export function toPlacedItems(
       }
       matchCount = parseMatchColumnPairs(opts, i.question.text, (i.question as any).explanation).length;
     }
-    const subparts =
-      Array.isArray(i.question.subparts) && i.question.subparts.length > 0
+    const subparts = isSubpartQuestionType(i.question.type)
+      ? Array.isArray(i.question.subparts) && i.question.subparts.length > 0
         ? i.question.subparts
-        : parseSubparts(i.question.subpartsJson);
+        : parseSubparts(i.question.subpartsJson)
+      : [];
     const submarks = subpartsTotalMarks(subparts as any);
     const sec = sections.find((s) => s.id === i.sectionId);
     const secMarksEach = sec?.marksEach ?? 1;
