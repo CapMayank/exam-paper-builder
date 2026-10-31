@@ -34,7 +34,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { use, useCallback, useEffect, useMemo, useRef, useState, Fragment } from "react";
+import { use, useCallback, useEffect, useRef, useState, Fragment } from "react";
 import { AIPaperAuditModal } from "@/components/AIPaperAuditModal";
 import { AIPaperGeneratorModal } from "@/components/AIPaperGeneratorModal";
 import { DiagramSearchModal } from "@/components/DiagramSearchModal";
@@ -523,14 +523,10 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   const pickerSection = blueprint.sections.find((s) => s.id === pickerSectionId) ?? null;
 
   // Continuous numbering & structured metrics across sections
-  const paperNumbering = useMemo(
-    () =>
-      computeDisplayedPaperNumbering(
-        blueprint.sections,
-        paper.items,
-        paper.numberingStyle || "CONTINUOUS"
-      ),
-    [blueprint.sections, paper.items, paper.numberingStyle]
+  const paperNumbering = computeDisplayedPaperNumbering(
+    blueprint.sections,
+    paper.items,
+    paper.numberingStyle || "CONTINUOUS"
   );
 
   const firstNumber = new Map<string, number>();
