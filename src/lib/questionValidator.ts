@@ -43,7 +43,15 @@ export interface QuestionValidationIssue {
     | "INCOMPLETE_CONTENT"
     | "MISSING_INTERNAL_CHOICE"
     | "FORBIDDEN_INTERNAL_CHOICE"
-    | "INVALID_INTERNAL_CHOICE";
+    | "INVALID_INTERNAL_CHOICE"
+    | "SANSKRIT_PRATYAYA_MISMATCH"
+    | "SANSKRIT_HINDI_CALQUE_ERROR"
+    | "SANSKRIT_AGREEMENT_ERROR"
+    | "SANSKRIT_MORPHOLOGY_ERROR"
+    | "SANSKRIT_SPELLING_ERROR"
+    | "SANSKRIT_SEMANTIC_ERROR"
+    | "SANSKRIT_STYLE_WARNING"
+    | "EMBEDDED_OR_CHOICE_WARNING";
   severity: "ERROR" | "WARNING";
   message: string;
   slotIndex?: number;
@@ -121,10 +129,10 @@ export function isQuestionContaminated(
     explanation?: string | null;
     chapterTitle?: string | null;
   },
-  rawSubject: string,
+  rawSubject: string = "",
   className = "Class 12",
 ): { contaminated: boolean; reason?: string } {
-  const canonicalSubject = getCanonicalSubjectName(rawSubject) || rawSubject.trim();
+  const canonicalSubject = getCanonicalSubjectName(rawSubject || "") || (rawSubject || "").trim();
   const optionsArr: string[] = Array.isArray(question.options)
     ? question.options
     : typeof question.options === "string"
@@ -301,6 +309,199 @@ function checkDeletedSyllabusTopics(
 }
 
 /**
+ * Context-aware academic validation for Sanskrit examination questions.
+ * Applies deterministic morphological and syntactic checks (e.g. क्त vs क्तवतु,
+ * dual agreement, anti-calque detection) as ERRORS, and flags ambiguous linguistic
+ * expressions as WARNINGS for teacher review without hard rejection.
+ */
+function validateSanskritAcademicIntegrity(
+  question: ValidatableQuestion,
+  contract: GenerationContract,
+  slotIdx: number,
+  issues: QuestionValidationIssue[],
+  opts?: {
+    slotIndex?: number;
+    existingNormalizedTexts?: Set<string>;
+    skipInternalChoiceCheck?: boolean;
+  },
+): void {
+  const isSanskrit =
+    contract.language === "sa" ||
+    (contract.canonicalSubject && contract.canonicalSubject.toLowerCase().includes("sanskrit")) ||
+    contract.subjectCode === "122" ||
+    contract.subjectCode === "512";
+
+  if (!isSanskrit) return;
+
+  const text = (question.text || "").trim();
+  const qType = (question.type || contract.questionType) as QuestionType;
+  const options = Array.isArray(question.options) ? question.options.map((o) => String(o).trim()) : [];
+
+  // 1. MATCH_COLUMN Morphological Consistency (Deterministic Paninian Rules)
+  if (qType === "MATCH_COLUMN") {
+    const pairs = parseMatchColumnPairs(options, text, question.explanation);
+    for (const pair of pairs) {
+      const left = pair.left.trim();
+      const right = pair.right.trim();
+
+      // Rule: Past active participle ending in -वान् / -वती / -वत् (e.g. पठितवान्, कृतवान्) has क्तवतु-प्रत्ययः (Panini 3.2.102), NEVER तप्रत्ययः / क्त-प्रत्ययः.
+      const isPastActiveParticiple = /(?:वान्|वती|वत्)(?:$|[^\u0900-\u097F])/.test(left);
+      const claimsTaPratyaya = /(?:^|[^\u0900-\u097F])(?:त-?प्रत्यय[ः]?|क्त-?प्रत्यय[ः]?)(?:$|[^\u0900-\u097F])/.test(right) && !/क्तवतु/.test(right);
+
+      if (isPastActiveParticiple && claimsTaPratyaya) {
+        issues.push({
+          code: "SANSKRIT_PRATYAYA_MISMATCH",
+          severity: "ERROR",
+          message: `Slot ${slotIdx + 1}: Morphological error in matching pair '${left}' ↔ '${right}'. Participle ending in '-वान्' takes 'क्तवतु-प्रत्ययः' (Panini 3.2.102), not 'तप्रत्ययः' / 'क्त-प्रत्ययः'.`,
+          slotIndex: slotIdx,
+        });
+      }
+
+      // Rule: Past passive participle ending in -तः / -ता / -तम् (e.g. पठितः, कृतः) has क्त-प्रत्ययः, NEVER क्तवतु.
+      const isPastPassiveParticiple = /(?:तः|ता|तम्)(?:$|[^\u0900-\u097F])/.test(left);
+      const claimsKtavatu = /क्तवतु-?प्रत्यय/.test(right);
+      if (isPastPassiveParticiple && claimsKtavatu) {
+        issues.push({
+          code: "SANSKRIT_PRATYAYA_MISMATCH",
+          severity: "ERROR",
+          message: `Slot ${slotIdx + 1}: Morphological error in matching pair '${left}' ↔ '${right}'. Words ending in '-तः/-तम्' have 'क्त-प्रत्ययः', not 'क्तवतु-प्रत्ययः'.`,
+          slotIndex: slotIdx,
+        });
+      }
+
+      // Rule: Present participle ending in -न् (e.g. गच्छन्, पठन्, कुर्वन्) has शतृ-प्रत्ययः
+      const isPresParticiple = /(?:गच्छन्|पठन्|कुर्वन्|पश्यन्|हसन्)(?:$|[^\u0900-\u097F])/.test(left);
+      if (isPresParticiple && /क्तवतु|शानच्/.test(right)) {
+        issues.push({
+          code: "SANSKRIT_PRATYAYA_MISMATCH",
+          severity: "ERROR",
+          message: `Slot ${slotIdx + 1}: Morphological error in matching pair '${left}' ↔ '${right}'. Present active participles ending in '-न्' take 'शतृ-प्रत्ययः'.`,
+          slotIndex: slotIdx,
+        });
+      }
+    }
+  }
+
+  // 2. Pseudo-Sanskrit Hindi Passive Calques (Deterministic Grammar Error)
+  // Sanskrit does NOT use finite forms of √गम् ('गच्छति' / 'ग्छति') as a passive auxiliary.
+  const calqueMatch = text.match(/(?:प्रदत्त|दत्त|कृत|उक्त|ज्ञात|लिखित)[ःो]?\s*(?:ग्छति|गच्छति)|प्रदत्तोग्छति/);
+  if (calqueMatch) {
+    issues.push({
+      code: "SANSKRIT_HINDI_CALQUE_ERROR",
+      severity: "ERROR",
+      message: `Slot ${slotIdx + 1}: Pseudo-Sanskrit Hindi passive calque detected ('${calqueMatch[0]}'). Sanskrit expresses passive voice using authentic passive forms ('प्रदीयते', 'दीयते', 'क्रियते') or participle with copula ('प्रदत्तः अस्ति'), never with 'गच्छति'.`,
+      slotIndex: slotIdx,
+    });
+  }
+
+  // 3. MCQ Interrogative Pronoun & Entity Agreement (Deterministic Grammar Error)
+  if (isMcqLikeType(qType)) {
+    const cleanOpts = options.map((o) => cleanOptionText(o).trim());
+    // Interrogative masculine singular pronoun "कः" or masculine accusative singular "कम्"
+    const hasSingularInterrogative = /(?:^|[^\u0900-\u097F])(?:कः|कम्)(?:$|[^\u0900-\u097F])/.test(text);
+    // All options are dual masculine nouns ending in -ौ (e.g. लवकुशौ, भरतशत्रुघ्नौ, सुग्रीवविभीषणौ, युधिष्ठिरभीमसेनौ)
+    const allOptionsDual =
+      cleanOpts.length >= 2 &&
+      cleanOpts.every((o) => /ौ$/.test(o) && !/सर्वौ|उभौ/.test(o));
+
+    if (hasSingularInterrogative && allOptionsDual) {
+      issues.push({
+        code: "SANSKRIT_AGREEMENT_ERROR",
+        severity: "ERROR",
+        message: `Slot ${slotIdx + 1}: Grammatical agreement mismatch: question uses singular interrogative pronoun 'कः/कम्', but all answer choices are dual entities ('-ौ', e.g. '${cleanOpts[0]}'). The question stem must use dual interrogative 'कौ'.`,
+        slotIndex: slotIdx,
+      });
+    }
+
+    // Invalid dual noun inflection before verbs e.g. "द्वौ बालको" (must be "द्वौ बालकौ" / "बालकाव्")
+    const badDualMatch = text.match(/(?:^|[^\u0900-\u097F])द्वौ\s+([^\s]+ो)(?:$|[^\u0900-\u097F])/);
+    if (badDualMatch) {
+      issues.push({
+        code: "SANSKRIT_MORPHOLOGY_ERROR",
+        severity: "ERROR",
+        message: `Slot ${slotIdx + 1}: Invalid dual noun inflection '${badDualMatch[0].trim()}'. Dual masculine of akārānta nouns must end in '-ौ' ('द्वौ बालकौ'), not '-ो'.`,
+        slotIndex: slotIdx,
+      });
+    }
+  }
+
+  // 4. Deterministic Typographical & Semantic Corruptions in Exam Stems
+  if (/(?:^|[^\u0900-\u097F])एकचने(?:$|[^\u0900-\u097F])/.test(text)) {
+    issues.push({
+      code: "SANSKRIT_SPELLING_ERROR",
+      severity: "ERROR",
+      message: `Slot ${slotIdx + 1}: Typographical corruption 'एकचने'. Standard grammatical case form is 'एकवचने'.`,
+      slotIndex: slotIdx,
+    });
+  }
+
+  // Corrupted imperative 'वर्जयत' used in examination prompt where 'वर्णयत' is intended
+  if (/(?:सविस्तरं|विस्तरेण|स्पष्टं|भावं|स्वरूपं)\s*वर्जयत[।.]?/.test(text)) {
+    issues.push({
+      code: "SANSKRIT_SEMANTIC_ERROR",
+      severity: "ERROR",
+      message: `Slot ${slotIdx + 1}: Academic semantic error: 'वर्जयत' means 'avoid/renounce'. Use 'वर्णयत' ('describe') for examination prompts.`,
+      slotIndex: slotIdx,
+    });
+  }
+
+  // 5. Context-Aware Linguistic Warnings (Ambiguous Phrasings - Non-Fatal WARNING for Teacher Review)
+  if (!opts?.skipInternalChoiceCheck && /(?:^|[^\u0900-\u097F])अथवा(?:$|[^\u0900-\u097F])/.test(text)) {
+    const isNaturalConjunction = /गद्यांशस्य\s+वा\s+पद्यांशस्य|वा\s+अथवा|चित्वा\s+.*अथवा\s+.*कुरुत/.test(text);
+    if (!isNaturalConjunction && text.length > 30) {
+      issues.push({
+        code: "EMBEDDED_OR_CHOICE_WARNING",
+        severity: "WARNING",
+        message: `Slot ${slotIdx + 1}: Question stem contains 'अथवा'. Ensure that alternative questions are structured in the dedicated 'orQuestion' object rather than embedded in the stem.`,
+        slotIndex: slotIdx,
+      });
+    }
+  }
+
+  if (/(?:^|[^\u0900-\u097F])लिखति\s+समये(?:$|[^\u0900-\u097F])/.test(text)) {
+    issues.push({
+      code: "SANSKRIT_STYLE_WARNING",
+      severity: "WARNING",
+      message: `Slot ${slotIdx + 1}: Phrasing 'लिखति समये' is non-standard. Recommended standard form is 'लेखनसमये' or 'लिखद्भिः छात्रैः'.`,
+      slotIndex: slotIdx,
+    });
+  }
+
+  if (/(?:^|[^\u0900-\u097F])पत्यमानं(?:$|[^\u0900-\u097F])/.test(text)) {
+    issues.push({
+      code: "SANSKRIT_STYLE_WARNING",
+      severity: "WARNING",
+      message: `Slot ${slotIdx + 1}: 'पत्यमानं' is non-standard. Standard participle from √पत् is 'पतन्तम्' or 'पतितम्' or 'निपत्यमानम्'.`,
+      slotIndex: slotIdx,
+    });
+  }
+
+  if (/(?:^|[^\u0900-\u097F])कुशलयवौ(?:$|[^\u0900-\u097F])/.test(text)) {
+    issues.push({
+      code: "SANSKRIT_STYLE_WARNING",
+      severity: "WARNING",
+      message: `Slot ${slotIdx + 1}: Name 'कुशलयवौ' appears to have transposed letters for 'लवकुशौ' or 'कुशलवौ'. Review character name.`,
+      slotIndex: slotIdx,
+    });
+  }
+
+  // 6. Q16 Fill-in-the-blank word-bank restriction
+  // In the MPBSE 2026–27 model paper, Q16 textbook fill-in-the-blank exercises do NOT have a word bank (मञ्जूषा). Word bank belongs only to Q5.
+  if (
+    qType === "FILL_BLANK" &&
+    (contract.marksEach === 2 || (question as any).marks === 2) &&
+    /(?:मञ्जूषा|मंजूषा|प्रदत्तैः\s*शब्दैः|कोष्ठके\s*दत्त)/.test(text)
+  ) {
+    issues.push({
+      code: "SANSKRIT_STYLE_WARNING",
+      severity: "WARNING",
+      message: `Slot ${slotIdx + 1}: Q16 textbook fill-in-the-blank exercises must be answered directly without a word-bank (मञ्जूषा). Word banks are restricted to Q5.`,
+      slotIndex: slotIdx,
+    });
+  }
+}
+
+/**
  * Validates a single generated question against the Subject-Specific Generation Contract.
  */
 export function validateGeneratedQuestion(
@@ -342,7 +543,7 @@ export function validateGeneratedQuestion(
       explanation: question.explanation,
       chapterTitle,
     },
-    contract.rawSubject,
+    contract.rawSubject || contract.canonicalSubject || "",
     contract.className,
   );
   if (contam.contaminated) {
@@ -530,6 +731,9 @@ export function validateGeneratedQuestion(
     });
   }
 
+  // 5b. Subject-specific Sanskrit academic integrity & morphological validation
+  validateSanskritAcademicIntegrity(question, contract, slotIdx, issues, opts);
+
   // 6. Duplication check within paper/section
   if (opts?.existingNormalizedTexts) {
     const norm = text
@@ -559,11 +763,11 @@ export function validateGeneratedQuestion(
     const hasOr = Boolean(question.orQuestion && (question.orQuestion.text || "").trim().length > 0);
     const slotMarks = slot?.marks || contract.marksEach;
 
-    if (slotForbidsChoice && hasOr && slotMarks === 2) {
+    if (slotForbidsChoice && hasOr) {
       issues.push({
         code: "FORBIDDEN_INTERNAL_CHOICE",
         severity: "ERROR",
-        message: `Slot ${slotIdx + 1}: Internal choice (OR / अथवा) is prohibited for 2-mark questions under ${contract.internalChoiceRequirement?.patternVersion || "MPBSE 2026–27 revised rules"}.`,
+        message: `Slot ${slotIdx + 1}: Internal choice (OR / अथवा) is prohibited for this ${slotMarks}-mark slot under ${contract.internalChoiceRequirement?.patternVersion || "MPBSE 2026–27 revised rules"}.`,
         slotIndex: slotIdx,
       });
     } else if (slotRequiresChoice) {

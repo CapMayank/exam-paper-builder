@@ -1074,8 +1074,13 @@ ${contract.forbiddenCrossSubjectDomains.length > 0 ? `2. FORBIDDEN CROSS-SUBJECT
    - DO NOT append marks annotations (like "[1 Mark]", "[2 Marks]", "[1 अंक]", "[1 अङ्कः]") inside the "text" field. Marks are rendered dynamically in the right margin.
    - For FILL_BLANK: Write ONLY the statement with blank(s) indicated as "________" (at least 8 underscores). NEVER append meta-instructions like "इति रिक्तस्थानं पूरयत", "fill in the blanks", or "रिक्त स्थान भरिए" to the "text" field.
    - For TRUE_FALSE: Write ONLY a single declarative factual statement. NEVER append questions or prompt wrappers like "अयम् आशयः सत्यः अस्ति वा?", "सत्यं वा असत्यं", or "state whether true or false". The answer field MUST be "आम्" or "न" for Sanskrit, "सत्य" or "असत्य" for Hindi, "True" or "False" for English.
-13. LANGUAGE PURITY & ANTI-BILINGUAL LEAKAGE:
-   - When language is "sa" (Sanskrit), generate 100% authentic Sanskrit in Devanagari script. Never leak English or Hindi words.
+13. LANGUAGE PURITY & SANSKRIT ACADEMIC INTEGRITY:
+   - When language is "sa" (Sanskrit), generate 100% authentic Sanskrit in Devanagari script. Follow Paninian grammar and NCERT Shemushi standards.
+   - Suffix Precision (Pratyaya): Past active participles ending in '-वान् / -वती / -वत्' (e.g. पठितवान्, कृतवान्) MUST be matched or identified as 'क्तवतु-प्रत्ययः', NEVER as 'तप्रत्ययः' or 'क्त-प्रत्ययः'. Words ending in '-तः / -तम्' (e.g. पठितः) are 'क्त-प्रत्ययः'. Words ending in '-न्' (e.g. गच्छन्) are 'शतृ-प्रत्ययः'. Feminine ending in '-आ' (e.g. बालिका) is 'टाप्-प्रत्ययः'.
+   - Interrogative Agreement: Strictly match the grammatical number of interrogatives with the target answer entity. Use 'कः' only for singular masculine; use dual 'कौ' for dual entities (e.g. 'कौ बालकौ', 'लवकुशौ'); use plural 'के' for plural entities. Dual masculine nouns must end in '-ौ' (e.g. 'द्वौ बालकौ', NEVER 'द्वौ बालको').
+   - Anti-Calque Rule: NEVER use 'गच्छति' / 'ग्छति' as a passive voice auxiliary (e.g. NEVER generate 'प्रदत्तोग्छति' or 'प्रदत्तो गच्छति'). The authentic passive of 'to give' is 'प्रदीयते' or 'दीयते', or 'प्रदत्तः अस्ति'.
+   - Textbook Accuracy: For Shemushi chapters, adhere strictly to authentic textbook dialogues. Never mix 1st person 'अहम्' with 2nd person verbs (like 'भुञ्जाथ'). Never fabricate corrupted words like 'कालिकाविधानाय' or 'एकचने'. For examination directives asking to describe, write 'वर्णयत' (describe), NEVER 'वर्जयत' (avoid).
+   - Internal Choice Isolation: NEVER embed the word 'अथवा' or alternative questions inside the primary question's 'text' field. All alternative questions must strictly be placed in the separate 'orQuestion' object.
    - When language is "hi" (Hindi), generate 100% standard Hindi in Devanagari script. Never leak English words.
    - When language is "en" (English), generate 100% English.
 14. Return ONLY a valid JSON array of question objects. No markdown wrapping or conversational commentary.`;
@@ -1111,7 +1116,7 @@ ${contract.forbiddenCrossSubjectDomains.length > 0 ? `2. FORBIDDEN CROSS-SUBJECT
 - Total Marks: ${slots.length * marksEach} (${slots.length} pairs × ${marksEach} mark each)
 - Language: ${
         language === "sa"
-          ? "Pure Sanskrit in authentic Devanagari script (संस्कृतम्). Follow NCERT/MPBSE Shemushi standards. Use proper sandhi, vibhakti, and Sanskrit terminology. Do NOT write in English or Hindi. TRUE_FALSE answers must be 'आम्' or 'न'. Match columns must use 'स्तम्भ अ' / 'स्तम्भ ब'. Never output English column names or marks inside question text."
+          ? "Pure Sanskrit in authentic Devanagari script (संस्कृतम्). Follow NCERT/MPBSE Shemushi standards. Use proper sandhi, vibhakti, and Paninian grammar: 'पठितवान्' is 'क्तवतु-प्रत्ययः' (never 'तप्रत्ययः'), passive is 'प्रदीयते'/'दीयते' (never 'प्रदत्तोग्छति'), interrogatives must agree in number (use 'कौ' for dual entities like लवकुशौ). Dual masculine nouns end in '-ौ' (द्वौ बालकौ). Match columns must use 'स्तम्भ अ' / 'स्तम्भ ब'. Never output English column names or marks inside question text."
           : language === "hi"
           ? "Hindi in Devanagari script. Follow MP Board standards. Do NOT write in English. TRUE_FALSE answers must be 'सत्य' or 'असत्य'. Match columns must use 'स्तम्भ क' / 'स्तम्भ ख'. Never output English column names or marks inside question text."
           : language === "bilingual"
@@ -1159,7 +1164,7 @@ JSON Array Output Schema:
       }
 - Language: ${
         language === "sa"
-          ? "Pure Sanskrit in authentic Devanagari script (संस्कृतम्). Follow NCERT/MPBSE Shemushi standards. Use proper sandhi, vibhakti, and Sanskrit terminology. Do NOT write in English or Hindi. TRUE_FALSE answers must be 'आम्' or 'न'. Never append [1 Mark] or instructions like 'इति रिक्तस्थानं पूरयत' or 'अयम् आशयः सत्यः अस्ति वा?'."
+          ? "Pure Sanskrit in authentic Devanagari script (संस्कृतम्). Follow NCERT/MPBSE Shemushi standards. Use proper sandhi, vibhakti, and Paninian grammar: 'पठितवान्' is 'क्तवतु-प्रत्ययः' (never 'तप्रत्ययः'), passive is 'प्रदीयते'/'दीयते' (never 'प्रदत्तोग्छति'), interrogatives must agree in number (use 'कौ' for dual entities like लवकुशौ). Dual masculine nouns end in '-ौ' (द्वौ बालकौ). For directives use 'वर्णयत' (never 'वर्जयत'). Never embed 'अथवा' in primary question text. TRUE_FALSE answers must be 'आम्' or 'न'. Never append [1 Mark] or instructions like 'इति रिक्तस्थानं पूरयत' or 'अयम् आशयः सत्यः अस्ति वा?'."
           : language === "hi"
           ? "Hindi in Devanagari script. Follow MP Board standards. Do NOT write in English. TRUE_FALSE answers must be 'सत्य' or 'असत्य'. Never append [1 अंक] or instructions."
           : language === "bilingual"

@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   ArrowDown,
   ArrowUp,
+  BookOpen,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
@@ -33,7 +34,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { use, useCallback, useEffect, useRef, useState, Fragment } from "react";
+import { use, useCallback, useEffect, useMemo, useRef, useState, Fragment } from "react";
 import { AIPaperAuditModal } from "@/components/AIPaperAuditModal";
 import { AIPaperGeneratorModal } from "@/components/AIPaperGeneratorModal";
 import { DiagramSearchModal } from "@/components/DiagramSearchModal";
@@ -75,7 +76,7 @@ import {
   type ExamType,
   type PaperLanguage,
 } from "@/lib/constants";
-import { formatQuestionNumber } from "@/lib/layout";
+import { formatQuestionNumber, computeDisplayedPaperNumbering } from "@/lib/layout";
 import { nextSetIdentifier } from "@/lib/multiset";
 import { resolveInternalChoiceRequirement } from "@/lib/internalChoiceRules";
 import type { Book, PaperData, PaperItem, Section, MarksStyle, NumberingStyle, PrintDensity } from "@/lib/types";
@@ -521,7 +522,17 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   const resolvedExamType = resolvePaperExamType(paper);
   const pickerSection = blueprint.sections.find((s) => s.id === pickerSectionId) ?? null;
 
-  // Continuous numbering across sections
+  // Continuous numbering & structured metrics across sections
+  const paperNumbering = useMemo(
+    () =>
+      computeDisplayedPaperNumbering(
+        blueprint.sections,
+        paper.items,
+        paper.numberingStyle || "CONTINUOUS"
+      ),
+    [blueprint.sections, paper.items, paper.numberingStyle]
+  );
+
   const firstNumber = new Map<string, number>();
   let numbered = 0;
   for (const s of blueprint.sections) {
@@ -713,7 +724,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
               {exportMenuOpen && (
                 <div className="absolute right-0 top-full mt-1.5 w-64 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg z-30 space-y-0.5">
                   <Link
-                    href={`/papers/${id}/print`}
+                    href={`/papers/${id}/print?view=reading`}
                     target="_blank"
                     onClick={() => setExportMenuOpen(false)}
                     className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition"
@@ -722,8 +733,23 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                       <Printer size={14} />
                     </div>
                     <div>
-                      <div className="font-semibold text-slate-900">Preview &amp; Print</div>
-                      <div className="text-[11px] text-slate-500">A3 / A4 booklets &amp; sheets</div>
+                      <div className="font-semibold text-slate-900">Print / Save PDF (Sequential)</div>
+                      <div className="text-[11px] text-slate-500">Normal 1-up portrait pages in reading order</div>
+                    </div>
+                  </Link>
+
+                  <Link
+                    href={`/papers/${id}/print?view=sheets`}
+                    target="_blank"
+                    onClick={() => setExportMenuOpen(false)}
+                    className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition"
+                  >
+                    <div className="rounded-md bg-indigo-50 p-1.5 text-indigo-700">
+                      <BookOpen size={14} />
+                    </div>
+                    <div>
+                      <div className="font-semibold text-slate-900">Print Folded Booklet Sheets</div>
+                      <div className="text-[11px] text-slate-500">2-up landscape sheets for duplex folding</div>
                     </div>
                   </Link>
 
@@ -1011,6 +1037,16 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                 )}
               </div>
               <Bar used={progress.usedMarks} target={progress.totalMarks} isComplete={progress.complete} />
+              <div className="pt-2 border-t border-slate-100 grid grid-cols-2 gap-2 text-[11px] text-slate-600">
+                <div className="bg-slate-50 p-1.5 rounded border border-slate-100">
+                  <span className="block text-slate-400 font-semibold uppercase text-[9px]">Numbered Qs</span>
+                  <strong className="text-slate-800 text-xs">{paperNumbering.numberedParentQuestions} Questions</strong>
+                </div>
+                <div className="bg-slate-50 p-1.5 rounded border border-slate-100">
+                  <span className="block text-slate-400 font-semibold uppercase text-[9px]">Blueprint Units</span>
+                  <strong className="text-slate-800 text-xs">{paperNumbering.blueprintAllocationUnits} Units ({paperNumbering.atomicResponseTasks} Tasks)</strong>
+                </div>
+              </div>
             </section>
 
             {/* Chapter Weightage Quotas */}

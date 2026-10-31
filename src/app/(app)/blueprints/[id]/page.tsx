@@ -9,6 +9,7 @@ import { BlueprintImportModal } from "@/components/BlueprintImportModal";
 import { BlueprintJsonModal } from "@/components/BlueprintJsonModal";
 import { BlueprintTemplateModal } from "@/components/BlueprintTemplateModal";
 import { STANDARD_BLUEPRINT_TEMPLATES, type BlueprintTemplate } from "@/lib/curriculumTemplates";
+import { SANSKRIT_COMPETENCY_TAXONOMY } from "@/lib/curriculumContract";
 import { downloadBlueprintJson, type BlueprintWithExportRelations } from "@/lib/blueprintExport";
 import { useAcademicSession } from "@/lib/academicSession";
 import {
@@ -303,6 +304,22 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
         (!selectedSubjectFilter || isSubjectMatching(b.subject, selectedSubjectFilter))
     );
   }, [books, selectedClassFilter, selectedSubjectFilter]);
+
+  const isSanskrit10 = useMemo(() => {
+    const isSa =
+      Boolean(book?.subject?.toLowerCase().includes("sanskrit")) ||
+      Boolean(selectedSubjectFilter?.toLowerCase().includes("sanskrit")) ||
+      name.toLowerCase().includes("संस्कृत") ||
+      name.toLowerCase().includes("sanskrit") ||
+      subjectCode === "512" ||
+      subjectCode === "122";
+    const isC10 =
+      Boolean(book?.className?.includes("10")) ||
+      Boolean(selectedClassFilter?.includes("10")) ||
+      name.includes("10") ||
+      name.toLowerCase().includes("कक्षा 10");
+    return isSa && isC10;
+  }, [book, selectedSubjectFilter, selectedClassFilter, name, subjectCode]);
 
   function autoDistributeMarks() {
     if (!book || book.chapters.length === 0 || total === 0) return;
@@ -768,6 +785,46 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
             When you save, the system will update the blueprint in-place, preserve existing question placements, 
             and provide an intelligent reconciliation report in each linked paper detailing any required adjustments.
           </p>
+        </div>
+      )}
+
+      {isSanskrit10 && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50/80 p-4 text-xs text-amber-950 shadow-2xs space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 font-bold text-amber-900 text-sm">
+              <Sparkles size={16} className="text-amber-600 shrink-0" />
+              <span>MPBSE Class 10 Sanskrit (2026–27) Official Examination Blueprint</span>
+            </div>
+            {!isReadOnly && (
+              <button
+                type="button"
+                onClick={() => {
+                  const tmpl = STANDARD_BLUEPRINT_TEMPLATES.find((t) => t.id === "mpbse-sanskrit-10th-75m");
+                  if (tmpl) applyStarterTemplate(tmpl);
+                }}
+                className="btn btn-sm btn-ghost border border-amber-300 bg-white hover:bg-amber-100 text-amber-900 font-semibold flex items-center gap-1.5 shadow-2xs"
+                title="Populate with the 23-question, 75-mark official MPBSE 2026–27 model paper structure"
+              >
+                <Layers size={13} className="text-amber-700" /> Load Official 23-Q / 75-Mark Pattern
+              </button>
+            )}
+          </div>
+          <p className="leading-relaxed text-amber-900">
+            Aligned with the official Board Model Paper (Subject Code 512, Shemushi Part 2 &amp; Vyakaranavithi): 
+            23 numbered parent questions, 75 maximum marks, five 6-mark objective groups (Q1–Q5), 
+            compulsory 2-mark textbook exercises without OR choices (Q6–Q17), attempt-4-of-5 for Q21 unseen comprehension, 
+            and 4 default essay topics for Q23.
+          </p>
+          {(total !== 75 || sections.length !== 19 || (subjectCode && subjectCode !== "512")) && (
+            <div className="flex items-center gap-1.5 text-amber-800 font-medium pt-1 border-t border-amber-200">
+              <span>⚠️ Configuration notice:</span>
+              <span>
+                {total !== 75 ? `Total marks: ${total}m (official standard is 75m). ` : ""}
+                {sections.length !== 19 ? `Section items: ${sections.length} (official blueprint uses 19 section items mapping to 23 questions). ` : ""}
+                {subjectCode && subjectCode !== "512" ? `Subject code: ${subjectCode} (MPBSE Sanskrit is 512, CBSE is 122).` : ""}
+              </span>
+            </div>
+          )}
         </div>
       )}
 
@@ -1373,6 +1430,48 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
           </div>
         </section>
       </div>
+
+      {isSanskrit10 && (
+        <div className="rounded-xl border border-indigo-200 bg-white p-4 text-xs shadow-2xs space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+            <div className="flex items-center gap-2">
+              <Sparkles size={16} className="text-indigo-600" />
+              <h3 className="font-bold text-slate-900 text-sm">
+                Application-defined Sanskrit Competency Taxonomy (16 Syllabus Competencies)
+              </h3>
+            </div>
+            <span className="badge badge-indigo text-[10px] font-bold">
+              MPBSE Class 10 Syllabus Mapping · 75 Marks Reference
+            </span>
+          </div>
+          <p className="text-slate-600 leading-relaxed text-[11px]">
+            This application-defined taxonomy maps the 16 core curriculum competencies of Shemushi Part 2 and Vyakaranavithi across 
+            Grammar (18M), Vocabulary/Wisdom (12M), Textual Comprehension (21M), and Epistolary/Thematic Composition (8M).
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
+            {SANSKRIT_COMPETENCY_TAXONOMY.map((c) => (
+              <div
+                key={c.id}
+                className="rounded-lg border border-slate-200 bg-slate-50/60 p-2.5 flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-800">
+                    <span>{c.nameSanskrit}</span>
+                    <span className="text-indigo-600 font-extrabold">{c.defaultExpectedMarks}m</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-medium mt-0.5">{c.name}</div>
+                  <div className="text-[9.5px] text-slate-600 line-clamp-2 mt-1 italic">
+                    {c.syllabusDescription}
+                  </div>
+                </div>
+                <div className="mt-1.5 pt-1 border-t border-slate-200/60 flex items-center justify-between text-[9px] text-slate-400 font-semibold uppercase">
+                  <span>{c.category}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {(problems.length > 0 || feasibilityWarnings.length > 0) && (
         <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-4 text-xs text-amber-900 shadow-2xs space-y-1">

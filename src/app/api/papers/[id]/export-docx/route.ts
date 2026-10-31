@@ -58,8 +58,12 @@ function renderQuestionOptions(
   type: string,
   paragraphs: (Paragraph | Table)[],
   indent = 720,
+  font = "Times New Roman",
+  lang: PaperLanguage = "en",
 ) {
-  const letters = ["A", "B", "C", "D", "E", "F"];
+  const letters = lang === "sa" || lang === "hi"
+    ? ["अ", "ब", "स", "द", "य", "र"]
+    : ["A", "B", "C", "D", "E", "F"];
   const maxOptionLen = Math.max(...opts.map((o) => String(o).length));
   const isMathComplex = opts.some(
     (o) => String(o).includes("\\frac") || String(o).includes("\\sqrt") || String(o).includes("\n"),
@@ -73,7 +77,7 @@ function renderQuestionOptions(
         new Paragraph({
           indent: { left: indent },
           spacing: { after: 30 },
-          children: formatMathTextRuns(optText, { font: "Times New Roman" }),
+          children: formatMathTextRuns(optText, { font }),
         }),
       );
     }
@@ -85,7 +89,7 @@ function renderQuestionOptions(
         new Paragraph({
           indent: { left: indent },
           spacing: { after: 30 },
-          children: formatOptionPairRuns(leftOpt, rightOpt, { font: "Times New Roman" }),
+          children: formatOptionPairRuns(leftOpt, rightOpt, { font }),
         }),
       );
     }
@@ -529,14 +533,13 @@ export async function buildPaperDocx(
     if (!isSameAsPrev) {
       const groupCount = allInGroup.reduce((sum, s) => sum + s.count, 0);
       const groupMarks = allInGroup.reduce((sum, s) => sum + s.count * s.marksEach, 0);
+      const secRange = numbering.sectionRanges[section.id];
 
-      const groupRightLabel = isSanskrit
-        ? `${groupCount} प्रश्नाः · ${groupMarks} अङ्काः`
-        : isHindi
-        ? `${groupCount} प्रश्न · ${groupMarks} अंक`
-        : paperLang === "bilingual"
-        ? `${groupCount} Questions / प्रश्न · ${groupMarks} Marks / अंक`
-        : `${groupCount} Questions · ${groupMarks} Marks`;
+      const groupRightLabel = locale.section.formatGroupSummary(groupCount, groupMarks, {
+        displayedCount: secRange?.groupDisplayedCount,
+        rawItemCount: secRange?.groupRawItemCount ?? groupCount,
+        type: section.type,
+      });
 
       const sectionTitleDisplay = locale.section.formatSectionHeader(sectionLetter, section.title);
 
@@ -562,7 +565,14 @@ export async function buildPaperDocx(
       );
     }
 
-    const isGroupedObjective = (section.type === "TRUE_FALSE" || section.type === "FILL_BLANK") && items.length > 1;
+    const isNumberedSingleGroupedExercise =
+      /(?:^|[^0-9])(?:प्रश्न\s*[1-5]\b|question\s*[1-5]\b|q[1-5]\b)/i.test(section.title);
+
+    const isGroupedObjective =
+      items.length > 1 &&
+      (section.type === "TRUE_FALSE" ||
+        section.type === "FILL_BLANK" ||
+        ((section.type === "MCQ" || section.type === "VERY_SHORT") && isNumberedSingleGroupedExercise));
 
     // Sub-heading for specific question type within grouped section
     if (!isSameAsPrev && section.instructions && !isGroupedObjective) {
@@ -640,8 +650,12 @@ export async function buildPaperDocx(
       );
 
       const LETTERS = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"];
+      const DEVANAGARI_SUB_LABELS = ["(क)", "(ख)", "(ग)", "(घ)", "(ङ)", "(च)", "(छ)", "(ज)", "(झ)", "(ञ)"];
+      const isIndic = paperLang === "sa" || paperLang === "hi" || /[\u0900-\u097F]/.test(section.title);
       items.forEach((item, itemIdx) => {
-        const subLabel = `(${LETTERS[itemIdx] ?? itemIdx + 1})`;
+        const subLabel = isIndic
+          ? (DEVANAGARI_SUB_LABELS[itemIdx] ?? `(${itemIdx + 1})`)
+          : `(${LETTERS[itemIdx] ?? itemIdx + 1})`;
         const cleanedStem = cleanQuestionStatement(item.question.text, section.type);
 
         paragraphs.push(
@@ -654,6 +668,15 @@ export async function buildPaperDocx(
             ],
           }),
         );
+
+        if (section.type === "MCQ" && item.question.optionsJson) {
+          try {
+            const parsedOpts = JSON.parse(item.question.optionsJson);
+            if (Array.isArray(parsedOpts) && parsedOpts.length > 0) {
+              renderQuestionOptions(parsedOpts, section.type, paragraphs, 1080, docFont, paperLang);
+            }
+          } catch {}
+        }
 
         if (isMarkingScheme && item.question.answer) {
           const itemAnsPrefix = isSanskrit ? "उत्तरम्: " : isHindi ? "उत्तर: " : "Answer: ";
@@ -768,7 +791,7 @@ export async function buildPaperDocx(
         try {
           const opts: string[] = JSON.parse(q.optionsJson);
           if (Array.isArray(opts) && opts.length > 0) {
-            renderQuestionOptions(opts, q.type, paragraphs, 720);
+            renderQuestionOptions(opts, q.type, paragraphs, 720, docFont, paperLang);
           }
         } catch {
           // ignore parsing error

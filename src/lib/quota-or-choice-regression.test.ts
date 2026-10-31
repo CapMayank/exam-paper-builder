@@ -9,7 +9,7 @@ import { STANDARD_CURRICULUM_PRESETS } from "./curriculumPresets";
 
 describe("Quota Manager & Internal Choice (OR) Marks Isolation Regression", () => {
   const sanskritPreset = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "cbse-10-sanskrit")!;
-  const sanskritTpl = STANDARD_BLUEPRINT_TEMPLATES.find((t) => t.id === "mpbse-sanskrit-10th-75m")!;
+  const sanskritTpl = STANDARD_BLUEPRINT_TEMPLATES.find((t) => t.id === "mpbse-sanskrit-10th-legacy-75m")!;
 
   const sections = sanskritTpl.sections.flatMap((grp, gIdx) =>
     grp.questionTypes.map((qt, qIdx) => ({

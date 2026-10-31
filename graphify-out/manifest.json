@@ -54,9 +54,9 @@
     "semantic_hash": ""
   },
   "src/app/(app)/blueprints/[id]/page.tsx": {
-    "mtime": 1793424642.6270707,
-    "seen": 1793424724.083891,
-    "ast_hash": "24ce3cc6f305c924d09979a738021c53",
+    "mtime": 1793454198.7763762,
+    "seen": 1793455136.0322418,
+    "ast_hash": "653c9d39f93bf1ba861457e0cb3f6ec5",
     "semantic_hash": ""
   },
   "src/app/(app)/blueprints/page.tsx": {
@@ -96,9 +96,9 @@
     "semantic_hash": ""
   },
   "src/app/(app)/papers/[id]/page.tsx": {
-    "mtime": 1793443972.8433745,
-    "seen": 1793444277.945782,
-    "ast_hash": "a53b97c41bf9013f1e81a7a776921630",
+    "mtime": 1793449890.401072,
+    "seen": 1793450157.1641831,
+    "ast_hash": "6ca6b7d6145db955943b7e65a1b007cd",
     "semantic_hash": ""
   },
   "src/app/(app)/papers/page.tsx": {
@@ -348,9 +348,9 @@
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/export-docx/route.ts": {
-    "mtime": 1793437916.2202222,
-    "seen": 1793438260.4130752,
-    "ast_hash": "ccbaa1e05e339c7b4f5255ca2bf684a9",
+    "mtime": 1793455059.1146145,
+    "seen": 1793455136.0322418,
+    "ast_hash": "30e2ddc7231d0e43f4750580c6ba185b",
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/import-questions/route.ts": {
@@ -474,9 +474,9 @@
     "semantic_hash": ""
   },
   "src/app/papers/[id]/print/page.tsx": {
-    "mtime": 1793341101.1189845,
-    "seen": 1793341462.1109204,
-    "ast_hash": "72600ad31e2fda149063e54e2cf68e65",
+    "mtime": 1793449031.810038,
+    "seen": 1793450157.1647072,
+    "ast_hash": "76d1c3f173fb2c5035c71c539b7575b4",
     "semantic_hash": ""
   },
   "src/app/papers/[id]/solutions/page.tsx": {
@@ -594,9 +594,9 @@
     "semantic_hash": ""
   },
   "src/components/PaperSheets.tsx": {
-    "mtime": 1793437772.7329204,
-    "seen": 1793438260.4130752,
-    "ast_hash": "a6785c5615687bfa102a57dbd86b3682",
+    "mtime": 1793454095.3219132,
+    "seen": 1793455136.0322418,
+    "ast_hash": "017a9facd67f91d868fabee5a505a100",
     "semantic_hash": ""
   },
   "src/components/QuestionForm.tsx": {
@@ -852,9 +852,9 @@
     "semantic_hash": ""
   },
   "src/lib/dto.ts": {
-    "mtime": 1793437642.9333875,
-    "seen": 1793438260.4130752,
-    "ast_hash": "6a82652f9ec22de409e4455bc067bc43",
+    "mtime": 1793449903.74903,
+    "seen": 1793450157.1647072,
+    "ast_hash": "333079ee2d4a854673457aeee49c5166",
     "semantic_hash": ""
   },
   "src/lib/format.ts": {
@@ -870,9 +870,9 @@
     "semantic_hash": ""
   },
   "src/lib/gemini.ts": {
-    "mtime": 1793438199.3244753,
-    "seen": 1793438260.4130752,
-    "ast_hash": "8c3541245e243854bc39a77e7fc75b97",
+    "mtime": 1793449225.4960527,
+    "seen": 1793450157.1647072,
+    "ast_hash": "5d7e43b8348d43e9757e1c49098b6d56",
     "semantic_hash": ""
   },
   "src/lib/kindergarten.test.ts": {
@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "src/lib/layout.ts": {
-    "mtime": 1793434203.1451178,
-    "seen": 1793434666.9442203,
-    "ast_hash": "d6207c7bbd4168a8e5c8b56839dd0670",
+    "mtime": 1793454073.7126298,
+    "seen": 1793455136.0322418,
+    "ast_hash": "340b72767e95eeac11992b1a14729164",
     "semantic_hash": ""
   },
   "src/lib/logic.test.ts": {
@@ -1164,9 +1164,9 @@
     "semantic_hash": ""
   },
   "src/lib/schoolCurriculum.ts": {
-    "mtime": 1792476783.543147,
-    "seen": 1792685467.5911267,
-    "ast_hash": "9091b7bbb4d00dfbb2e5da3700b4b273",
+    "mtime": 1793453851.1607494,
+    "seen": 1793455136.0322418,
+    "ast_hash": "4a3a2b075f0237a02a57cd50944c0c13",
     "semantic_hash": ""
   },
   "src/lib/session.ts": {
@@ -1458,9 +1458,9 @@
     "semantic_hash": ""
   },
   "src/lib/curriculumTemplates.ts": {
-    "mtime": 1793429336.358981,
-    "seen": 1793430179.0615995,
-    "ast_hash": "c650c55d5de46340d1f6338ba414b1e0",
+    "mtime": 1793454875.7658541,
+    "seen": 1793455136.0322418,
+    "ast_hash": "f6d898b0223b1e9b643aa872880fa4e1",
     "semantic_hash": ""
   },
   "src/lib/newFeatures.test.ts": {
@@ -1536,9 +1536,9 @@
     "semantic_hash": ""
   },
   "src/lib/curriculumContract.ts": {
-    "mtime": 1793429120.128667,
-    "seen": 1793430179.0615995,
-    "ast_hash": "5c107becf3eaf6bb0797b2a23457557f",
+    "mtime": 1793454702.662127,
+    "seen": 1793455136.0322418,
+    "ast_hash": "c1d4803c39dfd273e25ae978bea7d51b",
     "semantic_hash": ""
   },
   "src/lib/generationObservability.ts": {
@@ -1554,9 +1554,9 @@
     "semantic_hash": ""
   },
   "src/lib/questionValidator.ts": {
-    "mtime": 1793437538.2537832,
-    "seen": 1793438260.4130752,
-    "ast_hash": "1b9489b0990ce0f222d24a4ea35b2c7d",
+    "mtime": 1793454053.58845,
+    "seen": 1793455136.0322418,
+    "ast_hash": "f2d93a52c6dfac06b7bdadd002b72aed",
     "semantic_hash": ""
   },
   "src/lib/internalChoiceRules.ts": {
@@ -1584,9 +1584,9 @@
     "semantic_hash": ""
   },
   "src/lib/localization/dictionaries.ts": {
-    "mtime": 1793434610.8181376,
-    "seen": 1793434666.9442203,
-    "ast_hash": "dbdd3cc1707ccd5116b739dc397354bf",
+    "mtime": 1793448872.5884018,
+    "seen": 1793450157.1647072,
+    "ast_hash": "0a2b7ae883e2db4fb6027e565277c615",
     "semantic_hash": ""
   },
   "src/lib/localization/index.ts": {
@@ -1596,9 +1596,9 @@
     "semantic_hash": ""
   },
   "src/lib/localization/types.ts": {
-    "mtime": 1793428435.9916036,
-    "seen": 1793430179.0615995,
-    "ast_hash": "6c0fb610179c49e7e5dd88d30bb22f04",
+    "mtime": 1793448826.1715171,
+    "seen": 1793450157.1647072,
+    "ast_hash": "ab5686df5140640e24a91758927ea049",
     "semantic_hash": ""
   },
   "src/lib/subpartExtractor.test.ts": {
@@ -1620,9 +1620,21 @@
     "semantic_hash": ""
   },
   "src/lib/quota-or-choice-regression.test.ts": {
-    "mtime": 1793444221.431843,
-    "seen": 1793444277.9467785,
-    "ast_hash": "f2a70eed091a02ae36b97fda509e93de",
+    "mtime": 1793454880.2801256,
+    "seen": 1793455136.0322418,
+    "ast_hash": "206340dcc723c2dad67b025f94b6590d",
+    "semantic_hash": ""
+  },
+  "src/lib/fixtures/sanskritPaperFixture.ts": {
+    "mtime": 1793455101.979414,
+    "seen": 1793455136.0322418,
+    "ast_hash": "9542dde944b756a115939180935325e4",
+    "semantic_hash": ""
+  },
+  "src/lib/sanskrit-academic-quality.test.ts": {
+    "mtime": 1793454602.01802,
+    "seen": 1793455136.0322418,
+    "ast_hash": "fc192c93fae2f69a71aa5f59784a69a0",
     "semantic_hash": ""
   }
 }

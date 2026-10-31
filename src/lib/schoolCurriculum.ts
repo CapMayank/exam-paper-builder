@@ -339,6 +339,9 @@ export function getCanonicalSubjectName(rawSubject?: string | null): string {
   }
 
   // Sanskrit variants
+  if (base === "sanskrit communicative" || (base.includes("communicative") && base.includes("sanskrit"))) {
+    return "Sanskrit Communicative";
+  }
   if (base === "sanskrit" || base === "sans" || base === "संस्कृत") {
     return "Sanskrit";
   }

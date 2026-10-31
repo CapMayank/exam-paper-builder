@@ -384,8 +384,14 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
     }
 
     const sectionItems = paper.items.filter((item) => item.sectionId === s.id);
+    const isNumberedSingleGroupedExercise =
+      /(?:^|[^0-9])(?:प्रश्न\s*[1-5]\b|question\s*[1-5]\b|q[1-5]\b)/i.test(s.title);
+
     const isGroupedObjective =
-      (s.type === "TRUE_FALSE" || s.type === "FILL_BLANK") && sectionItems.length > 1;
+      sectionItems.length > 1 &&
+      (s.type === "TRUE_FALSE" ||
+        s.type === "FILL_BLANK" ||
+        ((s.type === "MCQ" || s.type === "VERY_SHORT") && isNumberedSingleGroupedExercise));
 
     // Only render the main SECTION header if it's the first in this title group!
     if (!isSameAsPrev) {
@@ -406,7 +412,11 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
           ? getSharedInstruction(s.type, paperLang)
           : rawReconciled;
 
-      const groupRightLabel = locale.section.formatGroupSummary(groupCount, groupMarks);
+      const groupRightLabel = locale.section.formatGroupSummary(groupCount, groupMarks, {
+        displayedCount: secRange?.groupDisplayedCount,
+        rawItemCount: secRange?.groupRawItemCount ?? groupCount,
+        type: s.type,
+      });
       const localizedSectionTitle = locale.section.formatSectionHeader(sectionLetter, s.title);
 
       blocks.push({
@@ -523,9 +533,14 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
         ),
       });
 
+      const DEVANAGARI_SUB_LABELS = ["(क)", "(ख)", "(ग)", "(घ)", "(ङ)", "(च)", "(छ)", "(ज)", "(झ)", "(ञ)"];
+      const isIndic = paperLang === "sa" || paperLang === "hi" || /[\u0900-\u097F]/.test(s.title);
+
       sectionItems.forEach((it, itemIdx) => {
         const isLastItem = itemIdx === sectionItems.length - 1;
-        const subLabel = `(${LETTERS[itemIdx]?.toLowerCase() ?? itemIdx + 1})`;
+        const subLabel = isIndic
+          ? (DEVANAGARI_SUB_LABELS[itemIdx] ?? `(${itemIdx + 1})`)
+          : `(${LETTERS[itemIdx]?.toLowerCase() ?? itemIdx + 1})`;
         blocks.push({
           key: it.id,
           keepWithNext: itemIdx === 0,
@@ -546,6 +561,29 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
                 <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight: isA5 ? 1.35 : 1.45 }}>
                   <MathText text={cleanQuestionStatement(it.question.text, s.type)} />
                 </div>
+                {s.type === "MCQ" && Array.isArray(it.question.options) && it.question.options.length > 0 && (
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
+                      gap: "1.5mm",
+                      marginTop: "1.5mm",
+                      fontSize: isA5 ? "8pt" : "8.5pt",
+                    }}
+                  >
+                    {it.question.options.map((opt: string, optIdx: number) => {
+                      const optLabel = isIndic
+                        ? ["(अ)", "(ब)", "(स)", "(द)"][optIdx] || `(${optIdx + 1})`
+                        : ["(A)", "(B)", "(C)", "(D)"][optIdx] || `(${optIdx + 1})`;
+                      return (
+                        <div key={optIdx} style={{ display: "flex", gap: "1.5mm" }}>
+                          <span style={{ fontWeight: 600 }}>{optLabel}</span>
+                          <MathText text={opt} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
                 {it.question.imagePath && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -844,7 +882,7 @@ export type SheetsInfo = { pages: number; sheets: number; isTwoUpCut?: boolean }
  */
 export function PaperSheets({
   paper,
-  view = "sheets",
+  view = "reading",
   zoom = 1,
   compact,
   includeRoughWork = false,

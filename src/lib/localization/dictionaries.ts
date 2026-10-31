@@ -225,7 +225,31 @@ export const SANSKRIT_DICTIONARY: PaperLocaleDictionary = {
   },
   section: {
     formatSectionHeader: (letter, customTitle) => localizeSectionTitle(customTitle, "sa", letter),
-    formatGroupSummary: (count, marks) => `${count} प्रश्नाः · ${marks} अङ्काः`,
+    formatGroupSummary: (count, marks, context) => {
+      const dispCount = context?.displayedCount;
+      const rawCount = context?.rawItemCount ?? count;
+      const qType = context?.type;
+      const marksUnit = marks === 1 ? "अङ्कः" : marks === 2 ? "अङ्कौ" : "अङ्काः";
+
+      if (dispCount === 1 && rawCount > 1) {
+        if (qType === "FILL_BLANK") {
+          return `1 प्रश्नः (${rawCount} रिक्तस्थानानि) · ${marks} ${marksUnit}`;
+        }
+        if (qType === "TRUE_FALSE") {
+          return `1 प्रश्नः (${rawCount} सत्यासत्य-कथनानि) · ${marks} ${marksUnit}`;
+        }
+        if (qType === "MATCH_COLUMN") {
+          return `1 प्रश्नः (${rawCount} युग्मानि) · ${marks} ${marksUnit}`;
+        }
+        return `1 प्रश्नः (${rawCount} उपप्रश्नाः) · ${marks} ${marksUnit}`;
+      }
+
+      const effectiveCount = dispCount ?? count;
+      if (effectiveCount === 1) {
+        return `1 प्रश्नः · ${marks} ${marksUnit}`;
+      }
+      return `${effectiveCount} प्रश्नाः · ${marks} अङ्काः`;
+    },
     formatTypeFormula: (count, marksEach, type) => {
       if (type === "MATCH_COLUMN") {
         return `1 प्रश्नः (${count} युग्मानि) × ${marksEach} अङ्कः = ${count * marksEach} अङ्काः`;
@@ -308,7 +332,27 @@ export const HINDI_DICTIONARY: PaperLocaleDictionary = {
   },
   section: {
     formatSectionHeader: (letter, customTitle) => localizeSectionTitle(customTitle, "hi", letter),
-    formatGroupSummary: (count, marks) => `${count} प्रश्न · ${marks} अंक`,
+    formatGroupSummary: (count, marks, context) => {
+      const dispCount = context?.displayedCount;
+      const rawCount = context?.rawItemCount ?? count;
+      const qType = context?.type;
+
+      if (dispCount === 1 && rawCount > 1) {
+        if (qType === "FILL_BLANK") {
+          return `1 प्रश्न (${rawCount} रिक्त स्थान) · ${marks} अंक`;
+        }
+        if (qType === "TRUE_FALSE") {
+          return `1 प्रश्न (${rawCount} सत्य/असत्य कथन) · ${marks} अंक`;
+        }
+        if (qType === "MATCH_COLUMN") {
+          return `1 प्रश्न (${rawCount} सही जोड़ियाँ) · ${marks} अंक`;
+        }
+        return `1 प्रश्न (${rawCount} उप-प्रश्न) · ${marks} अंक`;
+      }
+
+      const effectiveCount = dispCount ?? count;
+      return `${effectiveCount} प्रश्न · ${marks} अंक`;
+    },
     formatTypeFormula: (count, marksEach, type) => {
       if (type === "MATCH_COLUMN") {
         return `1 प्रश्न (${count} जोड़ियाँ) × ${marksEach} अंक = ${count * marksEach} अंक`;
@@ -386,7 +430,29 @@ export const ENGLISH_DICTIONARY: PaperLocaleDictionary = {
   },
   section: {
     formatSectionHeader: (letter, customTitle) => localizeSectionTitle(customTitle, "en", letter),
-    formatGroupSummary: (count, marks) => `${count} Questions · ${marks} Marks`,
+    formatGroupSummary: (count, marks, context) => {
+      const dispCount = context?.displayedCount;
+      const rawCount = context?.rawItemCount ?? count;
+      const qType = context?.type;
+      const marksUnit = marks === 1 ? "Mark" : "Marks";
+
+      if (dispCount === 1 && rawCount > 1) {
+        if (qType === "FILL_BLANK") {
+          return `1 Question (${rawCount} Fill-in-the-Blank items) · ${marks} ${marksUnit}`;
+        }
+        if (qType === "TRUE_FALSE") {
+          return `1 Question (${rawCount} True/False statements) · ${marks} ${marksUnit}`;
+        }
+        if (qType === "MATCH_COLUMN") {
+          return `1 Question (${rawCount} Matching pairs) · ${marks} ${marksUnit}`;
+        }
+        return `1 Question (${rawCount} sub-items) · ${marks} ${marksUnit}`;
+      }
+
+      const effectiveCount = dispCount ?? count;
+      const qUnit = effectiveCount === 1 ? "Question" : "Questions";
+      return `${effectiveCount} ${qUnit} · ${marks} ${marksUnit}`;
+    },
     formatTypeFormula: (count, marksEach, type) => {
       if (type === "MATCH_COLUMN") {
         return `1 question (${count} pairs) × ${marksEach}m = ${count * marksEach}m`;
@@ -464,7 +530,27 @@ export const BILINGUAL_DICTIONARY: PaperLocaleDictionary = {
   },
   section: {
     formatSectionHeader: (letter, customTitle) => localizeSectionTitle(customTitle, "bilingual", letter),
-    formatGroupSummary: (count, marks) => `${count} Questions / प्रश्न · ${marks} Marks / अंक`,
+    formatGroupSummary: (count, marks, context) => {
+      const dispCount = context?.displayedCount;
+      const rawCount = context?.rawItemCount ?? count;
+      const qType = context?.type;
+
+      if (dispCount === 1 && rawCount > 1) {
+        if (qType === "FILL_BLANK") {
+          return `1 Question / प्रश्न (${rawCount} Blanks / रिक्त स्थान) · ${marks} Marks / अंक`;
+        }
+        if (qType === "TRUE_FALSE") {
+          return `1 Question / प्रश्न (${rawCount} Statements / कथन) · ${marks} Marks / अंक`;
+        }
+        if (qType === "MATCH_COLUMN") {
+          return `1 Question / प्रश्न (${rawCount} Pairs / सही जोड़ियाँ) · ${marks} Marks / अंक`;
+        }
+        return `1 Question / प्रश्न (${rawCount} items / उप-प्रश्न) · ${marks} Marks / अंक`;
+      }
+
+      const effectiveCount = dispCount ?? count;
+      return `${effectiveCount} Questions / प्रश्न · ${marks} Marks / अंक`;
+    },
     formatTypeFormula: (count, marksEach, type) => {
       if (type === "MATCH_COLUMN") {
         return `1 question (${count} pairs) × ${marksEach}m = ${count * marksEach}m`;

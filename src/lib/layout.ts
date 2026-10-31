@@ -166,11 +166,18 @@ export interface DisplayedSectionRange {
   groupEndQ: number;
   groupDisplayedCount: number;
   groupRawItemCount: number;
+  sectionType?: string;
+  subItemCount?: number;
 }
 
 export interface DisplayedPaperNumbering {
   totalDisplayedQuestions: number;
   totalRawItems: number;
+  numberedParentQuestions: number;
+  blueprintAllocationUnits: number;
+  answerableItems: number;
+  atomicResponseTasks: number;
+  totalMarks: number;
   hasGroupedSubItems: boolean;
   sectionRanges: Record<string, DisplayedSectionRange>;
   itemNumbers: Record<string, DisplayedItemNumber>;
@@ -195,6 +202,8 @@ export function computeDisplayedPaperNumbering(
     endQ: number;
     displayedCount: number;
     rawItemCount: number;
+    sectionType?: string;
+    subItemCount?: number;
   }> = [];
 
   let globalCounter = 0;
@@ -208,8 +217,14 @@ export function computeDisplayedPaperNumbering(
         sec.title.match(/Section\s+([A-Z])/i)?.[1]?.toUpperCase() ||
         String.fromCharCode(65 + sIdx);
 
+      const isNumberedSingleGroupedExercise =
+        /(?:^|[^0-9])(?:प्रश्न\s*[1-5]\b|question\s*[1-5]\b|q[1-5]\b)/i.test(sec.title);
+
       const isGroupedObjective =
-        (sec.type === "TRUE_FALSE" || sec.type === "FILL_BLANK") && sItems.length > 1;
+        sItems.length > 1 &&
+        (sec.type === "TRUE_FALSE" ||
+          sec.type === "FILL_BLANK" ||
+          ((sec.type === "MCQ" || sec.type === "VERY_SHORT") && isNumberedSingleGroupedExercise));
 
       if (sItems.length === 0) {
         rawSectionRanges.push({
@@ -219,6 +234,8 @@ export function computeDisplayedPaperNumbering(
           endQ: globalCounter,
           displayedCount: 0,
           rawItemCount: 0,
+          sectionType: sec.type,
+          subItemCount: 0,
         });
         return;
       }
@@ -226,12 +243,16 @@ export function computeDisplayedPaperNumbering(
       if (isGroupedObjective) {
         const qIdx = globalCounter++;
         const qLabel = formatQuestionNumber(numberingStyle, qIdx, sLetter, 0);
+        const DEVANAGARI_SUB_LABELS = ["(क)", "(ख)", "(ग)", "(घ)", "(ङ)", "(च)", "(छ)", "(ज)", "(झ)", "(ञ)"];
+        const isIndic = /[\u0900-\u097F]/.test(sec.title);
         sItems.forEach((item, localIdx) => {
-          const subLetter = String.fromCharCode(97 + localIdx);
+          const subLetter = isIndic
+            ? (DEVANAGARI_SUB_LABELS[localIdx] || `(${localIdx + 1})`)
+            : `(${String.fromCharCode(97 + localIdx)})`;
           itemNumbers[item.id] = {
             questionNumber: qIdx + 1,
-            displayLabel: `${qLabel} (${subLetter})`,
-            subLabel: `(${subLetter})`,
+            displayLabel: `${qLabel} ${subLetter}`,
+            subLabel: subLetter,
             isGroupedSubItem: true,
           };
         });
@@ -242,6 +263,8 @@ export function computeDisplayedPaperNumbering(
           endQ: qIdx + 1,
           displayedCount: 1,
           rawItemCount: sItems.length,
+          sectionType: sec.type,
+          subItemCount: sItems.length,
         });
       } else {
         const startQ = globalCounter + 1;
@@ -254,6 +277,10 @@ export function computeDisplayedPaperNumbering(
             isGroupedSubItem: false,
           };
         });
+        const subItemCount =
+          sec.type === "MATCH_COLUMN"
+            ? (sec as any).count || sItems.length
+            : sItems.length;
         rawSectionRanges.push({
           sectionId: sec.id,
           title: sec.title.trim(),
@@ -261,6 +288,8 @@ export function computeDisplayedPaperNumbering(
           endQ: globalCounter,
           displayedCount: sItems.length,
           rawItemCount: sItems.length,
+          sectionType: sec.type,
+          subItemCount,
         });
       }
     });
@@ -307,14 +336,60 @@ export function computeDisplayedPaperNumbering(
         groupEndQ,
         groupDisplayedCount,
         groupRawItemCount,
+        sectionType: r.sectionType,
+        subItemCount: r.subItemCount,
       };
     }
     i = j + 1;
   }
 
+  // Separate, consistent metrics for parent questions, blueprint allocation units, atomic response tasks, and marks
+  const blueprintAllocationUnits = sections.reduce(
+    (sum, s) => sum + (Number((s as any).count) || 0),
+    0
+  );
+  const totalMarks = sections.reduce(
+    (sum, s) => sum + (Number((s as any).count) || 0) * (Number((s as any).marksEach) || 0),
+    0
+  );
+
+  let atomicResponseTasks = 0;
+  for (const item of items) {
+    const q: any = item.question || {};
+    const qType = q.type || "";
+    if (qType === "MATCH_COLUMN") {
+      let pairsCount = 0;
+      if (Array.isArray(q.options)) {
+        pairsCount = q.options.length;
+      } else if (typeof q.optionsJson === "string") {
+        try {
+          const opts = JSON.parse(q.optionsJson);
+          pairsCount = Array.isArray(opts) ? opts.length : 0;
+        } catch {}
+      }
+      atomicResponseTasks += Math.max(1, pairsCount);
+    } else if (Array.isArray(q.subparts) && q.subparts.length > 0) {
+      atomicResponseTasks += q.subparts.length;
+    } else if (typeof q.subpartsJson === "string") {
+      try {
+        const subs = JSON.parse(q.subpartsJson);
+        atomicResponseTasks += Array.isArray(subs) && subs.length > 0 ? subs.length : 1;
+      } catch {
+        atomicResponseTasks += 1;
+      }
+    } else {
+      atomicResponseTasks += 1;
+    }
+  }
+
   return {
     totalDisplayedQuestions: globalCounter,
     totalRawItems: items.length,
+    numberedParentQuestions: globalCounter,
+    blueprintAllocationUnits: blueprintAllocationUnits || globalCounter,
+    answerableItems: blueprintAllocationUnits || globalCounter,
+    atomicResponseTasks: atomicResponseTasks || blueprintAllocationUnits || globalCounter,
+    totalMarks,
     hasGroupedSubItems: globalCounter !== items.length,
     sectionRanges,
     itemNumbers,

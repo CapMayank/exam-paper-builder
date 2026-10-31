@@ -29,7 +29,13 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
   const { id } = use(params);
   const [paper, setPaper] = useState<PaperData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<"reading" | "sheets">("sheets");
+  const [view, setView] = useState<"reading" | "sheets">(() => {
+    if (typeof window !== "undefined") {
+      const urlView = new URLSearchParams(window.location.search).get("view");
+      if (urlView === "sheets" || urlView === "reading") return urlView;
+    }
+    return "reading";
+  });
   const [zoom, setZoom] = useState<number | null>(() => {
     if (typeof window !== "undefined") {
       try {
@@ -149,6 +155,20 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
               <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-100 p-0.5 text-xs font-semibold">
                 <button
                   onClick={() => {
+                    setView("reading");
+                    handleSetZoom(null);
+                  }}
+                  className={`rounded-md px-2.5 py-1 transition ${
+                    view === "reading"
+                      ? "bg-white text-indigo-700 shadow-xs"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                  title="Sequential 1-up reading order (Page 1, 2, 3...) ideal for standard digital PDF export & desktop printers"
+                >
+                  Sequential PDF (Reading Order)
+                </button>
+                <button
+                  onClick={() => {
                     setView("sheets");
                     handleSetZoom(null);
                   }}
@@ -163,21 +183,7 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
                       : "A3 2-sided landscape sheets folded to A4 pages"
                   }
                 >
-                  {isA5 ? "A4 Folded Sheets (A5 Booklet)" : "A3 Folded Sheets (A4 Booklet)"}
-                </button>
-                <button
-                  onClick={() => {
-                    setView("reading");
-                    handleSetZoom(null);
-                  }}
-                  className={`rounded-md px-2.5 py-1 transition ${
-                    view === "reading"
-                      ? "bg-white text-indigo-700 shadow-xs"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
-                  title="Sequential order: Page 1, Page 2, Page 3, Page 4"
-                >
-                  Reading Sequence
+                  {isA5 ? "Folded Booklet (A4 $\\to$ A5)" : "Folded Booklet (A3 $\\to$ A4)"}
                 </button>
               </div>
             )}
@@ -323,7 +329,8 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
               onClick={() => window.print()}
               title="Open browser print dialog"
             >
-              <Printer size={15} /> Print Now
+              <Printer size={15} />{" "}
+              {booklet && view === "sheets" ? "Print Booklet Sheets" : "Save / Print Sequential PDF"}
             </button>
           </div>
         </div>

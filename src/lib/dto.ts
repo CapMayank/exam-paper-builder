@@ -18,8 +18,10 @@ export type QuestionDto = {
   type: string;
   text: string;
   options: string[];
+  optionsJson?: string;
   answer: string;
   difficulty: string;
+  marks?: number;
   imagePath: string | null;
   spaceMm: number;
   showGrid: boolean;

@@ -19,7 +19,15 @@ export interface PaperLocaleHeader {
 
 export interface PaperLocaleSection {
   formatSectionHeader: (letter: string, customTitle?: string | null) => string;
-  formatGroupSummary: (count: number, marks: number) => string;
+  formatGroupSummary: (
+    count: number,
+    marks: number,
+    context?: {
+      displayedCount?: number;
+      rawItemCount?: number;
+      type?: string;
+    }
+  ) => string;
   formatTypeFormula: (count: number, marksEach: number, type?: string) => string;
 }
 
