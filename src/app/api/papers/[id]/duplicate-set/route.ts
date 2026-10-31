@@ -47,6 +47,7 @@ export const POST = route(async (req, params, user) => {
       examDate: source.examDate,
       paperSet: formattedSet,
       subjectCode: source.subjectCode,
+      language: source.language,
       generalInstructions: source.generalInstructions,
       academicSession: source.academicSession,
       schoolLogo: source.schoolLogo,

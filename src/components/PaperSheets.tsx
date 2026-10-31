@@ -12,14 +12,17 @@ import {
   EXAM_TYPE_LABEL,
   formatExerciseFormula,
   formatMarksLabel,
+  getPaperLocale,
   getQuestionTypeLabel,
   getSharedInstruction,
   isBookletLayout,
   isPrePrimaryClass,
   isSubpartQuestionType,
+  localizeSectionTitle,
   parseMatchColumnPairs,
   QUESTION_TYPE_LABEL,
   resolvePaperExamType,
+  type PaperLanguage,
 } from "@/lib/constants";
 import { WorkbookHeader } from "@/lib/kindergarten/components/WorkbookHeader";
 import {
@@ -67,6 +70,7 @@ function extractSectionLetter(title: string, fallbackIndex: number): string {
 function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSignatures?: boolean): Block[] {
   const { blueprint } = paper;
   const paperLang = detectPaperLanguage(paper, paper.items);
+  const locale = getPaperLocale(paperLang);
   const isHindi = paperLang === "hi";
   const total = paper.progress.totalMarks;
   const examType = resolvePaperExamType(paper);
@@ -143,7 +147,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
           }}
         >
           <div>
-            <span style={{ fontWeight: 600 }}>Total Questions: </span>
+            <span style={{ fontWeight: 600 }}>{locale.header.totalQuestions} </span>
             <strong>{numbering.totalDisplayedQuestions}</strong>
           </div>
           {paper.paperSet && (
@@ -157,13 +161,13 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
               }}
             >
               {paper.paperSet.toUpperCase().startsWith("SET")
-                ? paper.paperSet.toUpperCase()
-                : `SET ${paper.paperSet.toUpperCase()}`}
+                ? `${locale.header.set} ${paper.paperSet.toUpperCase().replace(/^SET\s*/i, "")}`
+                : `${locale.header.set} ${paper.paperSet.toUpperCase()}`}
             </div>
           )}
           {effectiveSubjectCode && (
             <div>
-              <span style={{ fontWeight: 600 }}>Subject Code: </span>
+              <span style={{ fontWeight: 600 }}>{locale.header.subjectCode} </span>
               <strong>{effectiveSubjectCode}</strong>
             </div>
           )}
@@ -227,14 +231,11 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
           }}
         >
           <span>
-            Time Allowed:{" "}
-            {blueprint.durationMin >= 60
-              ? `${Math.floor(blueprint.durationMin / 60)} hr ${
-                  blueprint.durationMin % 60 ? `${blueprint.durationMin % 60} min` : ""
-                }`
-              : `${blueprint.durationMin} min`}
+            {locale.header.timeAllowed} {locale.header.timeFormat(blueprint.durationMin)}
           </span>
-          <span>Maximum Marks: {total}</span>
+          <span>
+            {locale.header.maxMarks} {total}
+          </span>
         </div>
 
         {/* Candidate Details Box */}
@@ -253,11 +254,11 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
               <div style={{ display: "flex", flexDirection: "column", gap: "1.2mm" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div style={{ display: "flex", alignItems: "center", flex: 1, minWidth: 0, marginRight: "3mm" }}>
-                    <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>Student Name:&nbsp;</span>
+                    <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>{locale.header.studentName}&nbsp;</span>
                     <span style={{ display: "inline-block", flex: 1, borderBottom: "1px solid #000" }}>&nbsp;</span>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: "1.5mm", flexShrink: 0 }}>
-                    <span style={{ fontWeight: 700 }}>Roll No:</span>
+                    <span style={{ fontWeight: 700 }}>{locale.header.rollNo}</span>
                     <span style={{ display: "inline-flex", gap: "1px" }}>
                       {[0, 1, 2, 3, 4, 5, 6].map((i) => (
                         <span
@@ -277,14 +278,14 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div style={{ display: "flex", alignItems: "center", flex: 1, minWidth: 0, marginRight: "3mm" }}>
                     <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>
-                      {isHindi ? "कक्षा व वर्ग:" : paperLang === "bilingual" ? "Class & Sec / कक्षा:" : "Class & Section:"}&nbsp;
+                      {locale.header.classAndSec}&nbsp;
                     </span>
                     <span style={{ display: "inline-block", width: "24mm", borderBottom: "1px solid #000" }}>&nbsp;</span>
                   </div>
                   {effectiveShowSignatures && (
                     <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
                       <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>
-                        {isHindi ? "निरीक्षक हस्ताक्षर:" : paperLang === "bilingual" ? "Invig. Sign / हस्ताक्षर:" : "Invigilator Sign:"}&nbsp;
+                        {locale.header.invigilatorSign}&nbsp;
                       </span>
                       <span style={{ display: "inline-block", width: "24mm", borderBottom: "1px solid #000" }}>&nbsp;</span>
                     </div>
@@ -295,19 +296,19 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1.5mm" }}>
                 <div style={{ display: "flex", alignItems: "center", flex: "1 1 50mm" }}>
                   <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>
-                    {isHindi ? "विद्यार्थी का नाम:" : paperLang === "bilingual" ? "Student Name / नाम:" : "Student Name:"}&nbsp;
+                    {locale.header.studentName}&nbsp;
                   </span>
                   <span style={{ display: "inline-block", flex: 1, borderBottom: "1px solid #000" }}>&nbsp;</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
                   <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>
-                    {isHindi ? "कक्षा व वर्ग:" : paperLang === "bilingual" ? "Class / कक्षा:" : "Class & Sec:"}&nbsp;
+                    {locale.header.classAndSec}&nbsp;
                   </span>
                   <span style={{ display: "inline-block", width: "16mm", borderBottom: "1px solid #000" }}>&nbsp;</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "1.5mm", flexShrink: 0 }}>
                   <span style={{ fontWeight: 700 }}>
-                    {isHindi ? "अनुक्रमांक:" : paperLang === "bilingual" ? "Roll No / रोल नं:" : "Roll No:"}
+                    {locale.header.rollNo}
                   </span>
                   <span style={{ display: "inline-flex", gap: "1.5px" }}>
                     {[0, 1, 2, 3, 4, 5, 6].map((i) => (
@@ -327,7 +328,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
                 {effectiveShowSignatures && (
                   <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
                     <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>
-                      {isHindi ? "निरीक्षक हस्ताक्षर:" : paperLang === "bilingual" ? "Invig. Sign / हस्ताक्षर:" : "Invigilator Sign:"}&nbsp;
+                      {locale.header.invigilatorSign}&nbsp;
                     </span>
                     <span style={{ display: "inline-block", width: "20mm", borderBottom: "1px solid #000" }}>&nbsp;</span>
                   </div>
@@ -388,17 +389,19 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
       const groupMarks = allInGroup.reduce((sum, x) => sum + x.count * x.marksEach, 0);
       const groupCount = allInGroup.reduce((sum, x) => sum + x.count, 0);
       const secRange = numbering.sectionRanges[s.id];
-      const reconciledMainInstruction = reconcileSectionGroupInstruction(
+      const rawReconciled = reconcileSectionGroupInstruction(
         s.instructions,
         secRange?.groupStartQ ?? 0,
         secRange?.groupEndQ ?? 0
       );
+      const isEnglishInstruction = /^[A-Za-z0-9\s.,'":;()\-–?!/]+$/.test((rawReconciled || "").trim());
+      const reconciledMainInstruction =
+        (paperLang === "sa" || paperLang === "hi") && isEnglishInstruction
+          ? getSharedInstruction(s.type, paperLang)
+          : rawReconciled;
 
-      const groupRightLabel = isHindi
-        ? `${groupCount} प्रश्न · ${groupMarks} अंक`
-        : paperLang === "bilingual"
-        ? `${groupCount} Questions / प्रश्न · ${groupMarks} Marks / अंक`
-        : `${groupCount} Questions · ${groupMarks} Marks`;
+      const groupRightLabel = locale.section.formatGroupSummary(groupCount, groupMarks);
+      const localizedSectionTitle = locale.section.formatSectionHeader(sectionLetter, s.title);
 
       blocks.push({
         key: `sec-main-${s.id}`,
@@ -416,7 +419,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
                 fontSize: isA5 ? "10.5pt" : "11pt",
               }}
             >
-              <span>{s.title}</span>
+              <span>{localizedSectionTitle}</span>
               <span style={{ fontWeight: 600, fontSize: isA5 ? "9pt" : "9.5pt" }}>
                 {groupRightLabel}
               </span>
@@ -434,14 +437,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
     // If section has multiple question types, render a clean sub-heading for this question type!
     if (hasMultipleTypes) {
       const typeLabel = getQuestionTypeLabel(s.type, paperLang);
-      const typeFormula =
-        s.type === "MATCH_COLUMN"
-          ? isHindi
-            ? `1 प्रश्न (${s.count} जोड़ियाँ) × ${s.marksEach} अंक = ${s.count * s.marksEach} अंक`
-            : `1 question (${s.count} pairs) × ${s.marksEach}m = ${s.count * s.marksEach}m`
-          : isHindi
-          ? `${s.count} प्रश्न × ${s.marksEach} अंक = ${s.count * s.marksEach} अंक`
-          : `${s.count} question(s) × ${s.marksEach} mark(s) = ${s.count * s.marksEach}m`;
+      const typeFormula = locale.section.formatTypeFormula(s.count, s.marksEach, s.type);
 
       blocks.push({
         key: `sec-sub-${s.id}`,
@@ -686,7 +682,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
           color: "#334155",
         }}
       >
-        *** END OF QUESTION PAPER / समाप्त ***
+        {locale.footer.endOfPaper}
       </div>
     ),
   });
@@ -702,6 +698,7 @@ function Page({
   continuationKeys,
   watermark,
   watermarkText,
+  lang = "en",
 }: {
   n: number;
   total: number;
@@ -710,8 +707,10 @@ function Page({
   continuationKeys?: Set<string>;
   watermark?: boolean;
   watermarkText?: string;
+  lang?: PaperLanguage;
 }) {
   const isLastPage = n === total;
+  const locale = getPaperLocale(lang);
   return (
     <div className={`${isA5 ? "a5" : "a4"} paper-font relative overflow-hidden`}>
       {watermark && (
@@ -760,10 +759,10 @@ function Page({
           {/* Left margin spacer */}
         </div>
         <div style={{ flex: 1, textAlign: "center", fontWeight: 700, fontSize: isA5 ? "7.5pt" : "8.5pt", color: "#334155" }}>
-          Page {n} of {total}
+          {locale.footer.pageOf(n, total)}
         </div>
         <div style={{ flex: 1, textAlign: "right", fontWeight: 700, fontSize: isA5 ? "7pt" : "8pt", color: "#1e293b" }}>
-          {!isLastPage ? <span>P.T.O. / कृपया उलटिए &rarr;</span> : null}
+          {!isLastPage ? <span>{locale.footer.pto}</span> : null}
         </div>
       </div>
     </div>
@@ -855,6 +854,7 @@ export function PaperSheets({
 }) {
   const isA5 = paper.layout === "BOOKLET_A4";
   const isBooklet = isBookletLayout(paper.layout);
+  const paperLang = detectPaperLanguage(paper, paper.items);
   const effectiveWatermark = watermark ?? paper.securityWatermark ?? false;
   const effectiveWatermarkText = watermarkText || paper.watermarkText || "CONFIDENTIAL — SARVODAYA EXAM CELL";
   const blocks = useMemo(
@@ -964,6 +964,7 @@ export function PaperSheets({
         continuationKeys={continuationKeys}
         watermark={effectiveWatermark}
         watermarkText={effectiveWatermarkText}
+        lang={paperLang}
       />
     );
 

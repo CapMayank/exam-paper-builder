@@ -16,6 +16,7 @@ import {
   getMatchColumnInstruction,
   isKindergartenType,
   isSubpartQuestionType,
+  PaperLanguage,
   parseMatchColumnPairs,
   QUESTION_TYPE_LABEL,
   serializeMatchColumnPair,
@@ -70,7 +71,7 @@ export function QuestionPicker({
   const [aiChapterId, setAiChapterId] = useState<string>("");
   const [aiDifficulty, setAiDifficulty] = useState<"EASY" | "MEDIUM" | "HARD">("MEDIUM");
   const [aiCognitiveLevel, setAiCognitiveLevel] = useState<string>("APPLYING");
-  const [aiLanguage, setAiLanguage] = useState<"en" | "hi" | "bilingual">(() => detectPaperLanguage(paper, paper.items));
+  const [aiLanguage, setAiLanguage] = useState<PaperLanguage>(() => detectPaperLanguage(paper, paper.items));
   const [aiTopicContext, setAiTopicContext] = useState<string>("");
   const [aiBusy, setAiBusy] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
@@ -905,10 +906,11 @@ export function QuestionPicker({
                     <select
                       className="input text-xs"
                       value={aiLanguage}
-                      onChange={(e) => setAiLanguage(e.target.value as "en" | "hi" | "bilingual")}
+                      onChange={(e) => setAiLanguage(e.target.value as PaperLanguage)}
                     >
                       <option value="en">English</option>
                       <option value="hi">Hindi (हिंदी)</option>
+                      <option value="sa">Sanskrit (संस्कृतम्)</option>
                       <option value="bilingual">Bilingual (English + Hindi)</option>
                     </select>
                   </div>

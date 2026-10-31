@@ -21,10 +21,79 @@ export interface BlueprintTemplate {
   durationMin: number;
   totalMarks: number;
   targetClasses: string; // e.g. "Class 9, Class 10, Class 11, Class 12"
+  language?: string;
   sections: BlueprintTemplateSectionGroup[];
 }
 
 export const STANDARD_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
+  {
+    id: "mpbse-sanskrit-10th-75m",
+    title: "MPBSE संस्कृतम् कक्षा 10 (75 अङ्काः - शेमुषी भाग-2)",
+    description: "म.प्र. माध्यमिक शिक्षा मण्डल (MPBSE) द्वारा निर्धारित कक्षा 10वीं संस्कृत का आधिकारिक 75-अङ्कीय प्रश्नपत्र प्रतिरूप (कोड 512/122)।",
+    examType: "ANNUAL",
+    durationMin: 180,
+    totalMarks: 75,
+    targetClasses: "Class 10",
+    language: "sa",
+    sections: [
+      {
+        title: "खण्डः 'क' : बहुविकल्पीयप्रश्नाः",
+        instructions: "उचितविकल्पं चित्वा लिखत (प्रश्नक्रमाङ्कः 1):",
+        questionTypes: [
+          { type: "MCQ", count: 6, marksEach: 1 },
+        ],
+      },
+      {
+        title: "खण्डः 'ख' : रिक्तस्थानपूर्तिः",
+        instructions: "कोष्ठकेषु प्रदत्तशब्दैः रिक्तस्थानानि पूरयत (प्रश्नक्रमाङ्कः 2):",
+        questionTypes: [
+          { type: "FILL_BLANK", count: 6, marksEach: 1 },
+        ],
+      },
+      {
+        title: "खण्डः 'ग' : शुद्ध/अशुद्धवाक्यनिरूपणम्",
+        instructions: "शुद्धवाक्यानां समक्षम् 'आम्' अशुद्धवाक्यानां समक्षं 'न' इति लिखत (प्रश्नक्रमाङ्कः 3):",
+        questionTypes: [
+          { type: "TRUE_FALSE", count: 6, marksEach: 1 },
+        ],
+      },
+      {
+        title: "खण्डः 'घ' : उचितयुग्ममेलनम्",
+        instructions: "स्तम्भ 'अ' सह स्तम्भ 'ब' इत्यस्य समुचितं मेलनं कुरुत (प्रश्नक्रमाङ्कः 4):",
+        questionTypes: [
+          { type: "MATCH_COLUMN", count: 6, marksEach: 1 },
+        ],
+      },
+      {
+        title: "खण्डः 'ङ' : एकपदेन उत्तराणि",
+        instructions: "एकपदेन उत्तरं संस्कृतभाषया लिखत (प्रश्नक्रमाङ्कः 5):",
+        questionTypes: [
+          { type: "VERY_SHORT", count: 6, marksEach: 1 },
+        ],
+      },
+      {
+        title: "खण्डः 'च' : लघूत्तरीयप्रश्नाः",
+        instructions: "अधोलिखितानां प्रश्नानाम् उत्तराणि संस्कृतभाषया संक्षेपेण लिखत (प्रश्नक्रमाङ्कः 6 तः 17 पर्यन्तम्):",
+        questionTypes: [
+          { type: "SHORT", count: 12, marksEach: 2, orChoiceMode: "REQUIRED" },
+        ],
+      },
+      {
+        title: "खण्डः 'छ' : पाठ्यांश-अवबोधनम्",
+        instructions: "प्रदत्तं गद्यांशं/पद्यांशं/नाट्यांशं पठित्वा प्रश्नानाम् उत्तराणि लिखत (प्रश्नक्रमाङ्कः 18 तः 20 पर्यन्तम्):",
+        questionTypes: [
+          { type: "SHORT", count: 3, marksEach: 3, orChoiceMode: "REQUIRED" },
+        ],
+      },
+      {
+        title: "खण्डः 'ज' : दीर्घोत्तरीय-रचनात्मककार्यम्",
+        instructions: "पत्रलेखनम्, अपठितगद्यांशः, तथा निबन्धलेखनं कुरुत (प्रश्नक्रमाङ्कः 21 तः 23 पर्यन्तम्):",
+        questionTypes: [
+          { type: "LONG", count: 3, marksEach: 4, orChoiceMode: "REQUIRED" },
+        ],
+      },
+    ],
+  },
   {
     id: "cbse-80m-5sec",
     title: "CBSE Standard Board Pattern (80 Marks)",

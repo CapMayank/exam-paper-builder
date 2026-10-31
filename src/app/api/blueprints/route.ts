@@ -27,6 +27,7 @@ export const POST = route(async (req) => {
       examType: input.examType,
       durationMin: input.durationMin,
       subjectCode: input.subjectCode ?? "",
+      language: input.language || "en",
       chapters: { create: input.chapters },
       sections: {
         create: input.sections.map((s, position) => ({

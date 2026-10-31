@@ -92,7 +92,7 @@ export interface GenerationContract {
   questionType: QuestionType;
   marksEach: number;
   difficulty: "EASY" | "MEDIUM" | "HARD" | "BALANCED";
-  language: "en" | "hi" | "bilingual";
+  language: "en" | "hi" | "sa" | "bilingual";
   requiredCount: number;
   sectionTitle: string;
   sectionInstructions?: string;
@@ -1728,8 +1728,10 @@ export function buildAndValidateGenerationContract(params: {
 
   const academicSession = (params.academicSession || "2026–27").trim();
   const syllabusVersion = `${board}-${academicSession}-RATIONALIZED`;
-  const language: "en" | "hi" | "bilingual" =
-    params.language === "hi" || params.language === "bilingual" ? params.language : "en";
+  const language: "en" | "hi" | "sa" | "bilingual" =
+    params.language === "sa" || params.language === "hi" || params.language === "bilingual"
+      ? params.language
+      : "en";
   const difficulty: "EASY" | "MEDIUM" | "HARD" | "BALANCED" =
     params.difficulty === "EASY" || params.difficulty === "MEDIUM" || params.difficulty === "HARD"
       ? params.difficulty
@@ -1876,6 +1878,7 @@ export function generateCurriculumGroundedSectionQuestions(
   opts?: { generateDiagrams?: boolean; existingQuestionTexts?: string[] },
 ): GroundedGeneratedQuestion[] {
   const qType = contract.questionType;
+  const isSanskrit = contract.language === "sa";
   const isHindi = contract.language === "hi";
   const isBilingual = contract.language === "bilingual";
   const seenNormalizedTexts = new Set<string>(
@@ -1893,7 +1896,9 @@ export function generateCurriculumGroundedSectionQuestions(
     }
     const altTopic = spec.includedTopics[(idx + 1) % Math.max(1, spec.includedTopics.length)] || cleanCh;
     const altConcept = spec.keyFormulasOrConcepts[(idx + 1) % Math.max(1, spec.keyFormulasOrConcepts.length)] || cleanCh;
-    candidate = isHindi
+    candidate = isSanskrit
+      ? `${baseText} (${altTopic} तथा ${altConcept} इत्यस्य सन्दर्भे स्पष्टीकुरुत - भागः ${idx + 1})`
+      : isHindi
       ? `${baseText} (${altTopic} एवं ${altConcept} के संदर्भ में स्पष्ट कीजिए - भाग ${idx + 1})`
       : `${baseText} (In the context of ${altTopic} using ${altConcept} — Set Q${idx + 1}, ${marks}M)`;
     seenNormalizedTexts.add(normalize(candidate));
@@ -2000,7 +2005,9 @@ export function generateCurriculumGroundedSectionQuestions(
       }
     }
 
-    if (isHindi && !/[\u0900-\u097F]/.test(altText)) {
+    if (isSanskrit && !/[\u0900-\u097F]/.test(altText)) {
+      altText = `पाठः "${cleanCh}" (${altTopic}) इत्यस्य सन्दर्भे: ${altText}`;
+    } else if (isHindi && !/[\u0900-\u097F]/.test(altText)) {
       altText = `अध्याय "${cleanCh}" (${altTopic}) के संदर्भ में: ${altText}`;
     } else if (isBilingual && !/[\u0900-\u097F]/.test(altText)) {
       altText = `${altText}\n(अध्याय "${cleanCh}" — ${altTopic} के आधार पर हल कीजिए।)`;
@@ -2073,7 +2080,9 @@ export function generateCurriculumGroundedSectionQuestions(
     const colILines = activePairs.map(
       (p, i) => `(${letters[i] || i + 1}) ${p.left.replace(/^\([A-Za-z0-9]+\)\s*/, "")}`,
     );
-    const stemHeader = isHindi
+    const stemHeader = isSanskrit
+      ? "अधोदत्तानां पदानां समुचितं मेलनं कुरुत (स्तम्भ 'अ' सह स्तम्भ 'ब'):"
+      : isHindi
       ? "स्तम्भ 'अ' के मदों का स्तम्भ 'ब' के सही विकल्पों से मिलान कीजिए:"
       : isBilingual
       ? "Match the items in Column I with their correct counterparts in Column II (स्तम्भ 'अ' का स्तम्भ 'ब' से सही मिलान कीजिए):"
@@ -2142,7 +2151,9 @@ export function generateCurriculumGroundedSectionQuestions(
         text = `Observe the given diagram for ${cleanCh}. ${sample.text}`;
         figurePrompt = `${contract.canonicalSubject} educational diagram for ${cleanCh} (${contract.className})`;
       }
-      if (isHindi && !/[\u0900-\u097F]/.test(text)) {
+      if (isSanskrit && !/[\u0900-\u097F]/.test(text)) {
+        text = `पाठः "${cleanCh}" इत्यस्य सन्दर्भे: ${text}`;
+      } else if (isHindi && !/[\u0900-\u097F]/.test(text)) {
         text = `अध्याय "${cleanCh}" के संदर्भ में: ${text}`;
       } else if (isBilingual && !/[\u0900-\u097F]/.test(text)) {
         text = `${text} (अध्याय "${cleanCh}" के आधार पर सही विकल्प चुनिए।)`;
@@ -2172,7 +2183,14 @@ export function generateCurriculumGroundedSectionQuestions(
         correctOptionIndex: 0 as const,
         explanation: `Both Assertion (A) and Reason (R) are true and (R) correctly explains (A) in ${cleanCh}.`,
       };
-      const options = isHindi
+      const options = isSanskrit
+        ? [
+            "अभिकथनं (A) कारणं (R) च उभे सत्ये स्तः, (R) इति (A) इत्यस्य सम्यक् व्याख्या अस्ति।",
+            "अभिकथनं (A) कारणं (R) च उभे सत्ये स्तः, परन्तु (R) इति (A) इत्यस्य सम्यक् व्याख्या नास्ति।",
+            "अभिकथनं (A) सत्यम् अस्ति, परन्तु कारणं (R) असत्यम् अस्ति।",
+            "अभिकथनं (A) असत्यम् अस्ति, परन्तु कारणं (R) सत्यम् अस्ति।",
+          ]
+        : isHindi
         ? [
             "अभिकथन (A) और कारण (R) दोनों सत्य हैं तथा (R), (A) की सही व्याख्या करता है।",
             "अभिकथन (A) और कारण (R) दोनों सत्य हैं, परन्तु (R), (A) की सही व्याख्या नहीं करता है।",
@@ -2191,7 +2209,11 @@ export function generateCurriculumGroundedSectionQuestions(
         chapterNumber: slot.chapterNumber,
         chapterTitle: slot.chapterTitle,
         type: "ASSERTION_REASON",
-        text: `Assertion (A): ${ar.assertion}\nReason (R): ${ar.reason}`,
+        text: isSanskrit
+          ? `अभिकथनम् (A): ${ar.assertion}\nकारणम् (R): ${ar.reason}`
+          : isHindi
+          ? `अभिकथन (A): ${ar.assertion}\nकारण (R): ${ar.reason}`
+          : `Assertion (A): ${ar.assertion}\nReason (R): ${ar.reason}`,
         options,
         subparts: [],
         answer: options[ar.correctOptionIndex],
@@ -2204,7 +2226,9 @@ export function generateCurriculumGroundedSectionQuestions(
     if (qType === "FILL_BLANK") {
       const fb = spec.sampleFillBlanks[idx % spec.sampleFillBlanks.length];
       let text = fb.text.includes("________") ? fb.text : `${fb.text} ________.`;
-      if (isHindi && !/[\u0900-\u097F]/.test(text)) {
+      if (isSanskrit && !/[\u0900-\u097F]/.test(text)) {
+        text = `पाठः "${cleanCh}": ${text}`;
+      } else if (isHindi && !/[\u0900-\u097F]/.test(text)) {
         text = `अध्याय "${cleanCh}": ${text}`;
       }
       text = ensureUniqueStem(text, cleanCh, spec, idx, slot.marks);
@@ -2227,7 +2251,9 @@ export function generateCurriculumGroundedSectionQuestions(
     if (qType === "TRUE_FALSE") {
       const tf = spec.sampleTrueFalse[idx % spec.sampleTrueFalse.length];
       let text = tf.text;
-      if (isHindi && !/[\u0900-\u097F]/.test(text)) {
+      if (isSanskrit && !/[\u0900-\u097F]/.test(text)) {
+        text = `कथनम् (${cleanCh}): ${text}`;
+      } else if (isHindi && !/[\u0900-\u097F]/.test(text)) {
         text = `कथन (${cleanCh}): ${text}`;
       }
       text = ensureUniqueStem(text, cleanCh, spec, idx, slot.marks);
@@ -2238,9 +2264,9 @@ export function generateCurriculumGroundedSectionQuestions(
         chapterTitle: slot.chapterTitle,
         type: "TRUE_FALSE",
         text,
-        options: isHindi ? ["सत्य", "असत्य"] : ["True", "False"],
+        options: isSanskrit ? ["आम्", "न"] : isHindi ? ["सत्य", "असत्य"] : ["True", "False"],
         subparts: [],
-        answer: isHindi ? (tf.answer === "True" ? "सत्य" : "असत्य") : tf.answer,
+        answer: isSanskrit ? (tf.answer === "True" ? "आम्" : "न") : isHindi ? (tf.answer === "True" ? "सत्य" : "असत्य") : tf.answer,
         difficulty: diff,
         cognitiveLevel: "UNDERSTANDING",
         explanation: tf.explanation,

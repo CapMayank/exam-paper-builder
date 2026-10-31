@@ -9,6 +9,7 @@ import {
   isKindergartenType,
   isMcqLikeType,
   isSubpartQuestionType,
+  PaperLanguage,
   parseMatchColumnPairs,
   QUESTION_TYPES,
 } from "./constants";
@@ -258,7 +259,7 @@ export async function generateQuestionsWithGemini(params: {
   marks: number;
   difficulty: string;
   cognitiveLevel?: string;
-  language: "en" | "hi" | "bilingual";
+  language: PaperLanguage;
   count: number;
   topicContext?: string;
   board?: string | null;
@@ -351,7 +352,15 @@ Output format: JSON array of question objects only. No conversational wrapper.`;
 - Marks: ${marks} marks each (containing exactly ${pairCount} matching pairs)
 - Difficulty: ${difficulty}
 - Cognitive Level: ${cognitiveLevel || "APPLYING"}
-- Language: ${language === "bilingual" ? "Bilingual (English with Hindi translation in parentheses)" : language === "hi" ? "Hindi (Devanagari script)" : "English"}
+- Language: ${
+  language === "sa"
+    ? "Pure Sanskrit in authentic Devanagari script (संस्कृतम्). Follow NCERT/MPBSE Shemushi standards. Use proper sandhi, vibhakti, and Sanskrit terminology. Do NOT write in English or Hindi."
+    : language === "bilingual"
+    ? "Bilingual (English with Hindi translation in parentheses)"
+    : language === "hi"
+    ? "Hindi (Devanagari script)"
+    : "English"
+}
 ${topicContext ? `- Specific Topic / Context Focus: ${topicContext}` : ""}
 
 CRITICAL MATCH_COLUMN STRUCTURE REQUIREMENTS:
@@ -389,7 +398,15 @@ Return a JSON array strictly matching this TypeScript structure:
 - Marks: ${marks} marks each
 - Difficulty: ${difficulty}
 - Cognitive Level: ${cognitiveLevel || "APPLYING"}
-- Language: ${language === "bilingual" ? "Bilingual (English with Hindi translation in parentheses)" : language === "hi" ? "Hindi (Devanagari script)" : "English"}
+- Language: ${
+  language === "sa"
+    ? "Pure Sanskrit in authentic Devanagari script (संस्कृतम्). Follow NCERT/MPBSE Shemushi standards. Use proper sandhi, vibhakti, and Sanskrit terminology. Do NOT write in English or Hindi."
+    : language === "bilingual"
+    ? "Bilingual (English with Hindi translation in parentheses)"
+    : language === "hi"
+    ? "Hindi (Devanagari script)"
+    : "English"
+}
 ${topicContext ? `- Specific Topic / Context Focus: ${topicContext}` : ""}
 
 Strict requirements:
@@ -402,7 +419,7 @@ Strict requirements:
 3. For CASE_STUDY: Provide a domain-authentic ${contract.canonicalSubject} scenario/passage for "${chapter}", followed by 3-4 subparts with label (e.g. "(i)", "(ii)", "(iii)"), question text, marks distribution totaling ${marks} marks, and answers.
 4. For VERY_SHORT, SHORT, LONG, NUMERICAL: Provide step-wise model answer and marking scheme breakdown.
 5. For FILL_BLANK: Provide question text containing one or more blanks indicated by "________" (at least 8 underscores). Options should be empty []. The answer should be the exact word(s) or value filling the blank.
-6. For TRUE_FALSE: Provide a clear declarative statement. Options should be ["True", "False"] (or ["सत्य", "असत्य"] for Hindi). Answer must be "True" or "False" (or Hindi equivalent).
+6. For TRUE_FALSE: Provide a clear declarative statement. Options should be ["True", "False"] (or ["आम्", "न"] for Sanskrit, or ["सत्य", "असत्य"] for Hindi). Answer must be "True", "False", "आम्", "न", "सत्य", or "असत्य".
 7. Use standard LaTeX math $...$ for any mathematical expressions, formulas, chemical reactions, or units.
 8. Subparts rule: ${
     isSubpartQuestionType(normalizedType)
@@ -631,7 +648,11 @@ Return a JSON array strictly matching this TypeScript structure:
       let qAnswer = isMcqLikeType(qType) ? repairLatex(cleanOptionText(item.answer || "")) : repairLatex(String(item.answer || "").trim());
 
       if (qType === "TRUE_FALSE") {
-        if (language === "hi") {
+        if (language === "sa") {
+          options = ["आम्", "न"];
+          if (/true|सत्य|आम्|सही/i.test(qAnswer)) qAnswer = "आम्";
+          else if (/false|असत्य|न|गलत/i.test(qAnswer)) qAnswer = "न";
+        } else if (language === "hi") {
           options = ["सत्य", "असत्य"];
           if (/true|सत्य|सही/i.test(qAnswer)) qAnswer = "सत्य";
           else if (/false|असत्य|गलत/i.test(qAnswer)) qAnswer = "असत्य";
@@ -854,7 +875,7 @@ export interface GeneratePaperSectionInput {
   sectionType: string;
   sectionInstructions?: string | null;
   marksEach: number;
-  language: "en" | "hi" | "bilingual";
+  language: PaperLanguage;
   difficulty: "BALANCED" | "EASY" | "MEDIUM" | "HARD";
   model?: string;
   teacherFocus?: string;
@@ -1042,7 +1063,9 @@ ${contract.forbiddenCrossSubjectDomains.length > 0 ? `2. FORBIDDEN CROSS-SUBJECT
 - Section Question Type: MATCH_COLUMN
 - Total Marks: ${slots.length * marksEach} (${slots.length} pairs × ${marksEach} mark each)
 - Language: ${
-        language === "bilingual"
+        language === "sa"
+          ? "Pure Sanskrit in authentic Devanagari script (संस्कृतम्). Follow NCERT/MPBSE Shemushi standards. Use proper sandhi, vibhakti, and Sanskrit terminology. Do NOT write in English or Hindi."
+          : language === "bilingual"
           ? "Bilingual (English with Hindi translation in parentheses)"
           : language === "hi"
           ? "Hindi (Devanagari script)"
@@ -1088,7 +1111,9 @@ JSON Array Output Schema:
           : `Not required.`
       }
 - Language: ${
-        language === "bilingual"
+        language === "sa"
+          ? "Pure Sanskrit in authentic Devanagari script (संस्कृतम्). Follow NCERT/MPBSE Shemushi standards. Use proper sandhi, vibhakti, and Sanskrit terminology. Do NOT write in English or Hindi."
+          : language === "bilingual"
           ? "Bilingual (English with Hindi translation in parentheses)"
           : language === "hi"
           ? "Hindi (Devanagari script)"
@@ -1314,7 +1339,9 @@ JSON Array Output Schema:
         ? rawQ.options.map((o: unknown) => repairLatex(cleanOptionText(String(o).trim())))
         : [];
       if (qType === "TRUE_FALSE") {
-        if (language === "hi") {
+        if (language === "sa") {
+          qOptions = ["आम्", "न"];
+        } else if (language === "hi") {
           qOptions = ["सत्य", "असत्य"];
         } else if (language === "bilingual") {
           qOptions = ["सत्य / True", "असत्य / False"];
@@ -1346,9 +1373,14 @@ JSON Array Output Schema:
             ? repairLatex(cleanOptionText(rawQ.answer))
             : repairLatex(rawQ.answer)
           : "";
-      if (qType === "TRUE_FALSE" && language === "hi") {
-        if (/true|सत्य|सही/i.test(qAnswer)) qAnswer = "सत्य";
-        else if (/false|असत्य|गलत/i.test(qAnswer)) qAnswer = "असत्य";
+      if (qType === "TRUE_FALSE") {
+        if (language === "sa") {
+          if (/true|सत्य|आम्|सही/i.test(qAnswer)) qAnswer = "आम्";
+          else if (/false|असत्य|न|गलत/i.test(qAnswer)) qAnswer = "न";
+        } else if (language === "hi") {
+          if (/true|सत्य|सही/i.test(qAnswer)) qAnswer = "सत्य";
+          else if (/false|असत्य|गलत/i.test(qAnswer)) qAnswer = "असत्य";
+        }
       }
       const qDiff = ["EASY", "MEDIUM", "HARD"].includes(rawQ.difficulty) ? rawQ.difficulty : "MEDIUM";
       const figurePrompt =
@@ -1391,9 +1423,14 @@ JSON Array Output Schema:
               ? repairLatex(cleanOptionText(rawQ.orQuestion.answer))
               : repairLatex(rawQ.orQuestion.answer)
             : "";
-        if (qType === "TRUE_FALSE" && language === "hi") {
-          if (/true|सत्य|सही/i.test(orAnswer)) orAnswer = "सत्य";
-          else if (/false|असत्य|गलत/i.test(orAnswer)) orAnswer = "असत्य";
+        if (qType === "TRUE_FALSE") {
+          if (language === "sa") {
+            if (/true|सत्य|आम्|सही/i.test(orAnswer)) orAnswer = "आम्";
+            else if (/false|असत्य|न|गलत/i.test(orAnswer)) orAnswer = "न";
+          } else if (language === "hi") {
+            if (/true|सत्य|सही/i.test(orAnswer)) orAnswer = "सत्य";
+            else if (/false|असत्य|गलत/i.test(orAnswer)) orAnswer = "असत्य";
+          }
         }
         const orDiff = ["EASY", "MEDIUM", "HARD"].includes(rawQ.orQuestion.difficulty)
           ? rawQ.orQuestion.difficulty

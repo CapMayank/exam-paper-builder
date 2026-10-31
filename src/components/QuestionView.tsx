@@ -17,6 +17,7 @@ import {
   parseKindergartenConfig,
 } from "@/lib/kindergarten/registry";
 import { getInternalChoiceSeparatorLabel } from "@/lib/internalChoiceRules";
+import { isTextPredominantlySanskrit, type PaperLanguage } from "@/lib/localization";
 import type { QuestionDto } from "@/lib/types";
 import { MathText } from "@/components/MathText";
 
@@ -49,7 +50,7 @@ function SingleQuestionBody({
   subpartIndex?: number;
   isContinuation?: boolean;
   isA5?: boolean;
-  lang?: "hi" | "en" | "bilingual";
+  lang?: PaperLanguage;
 }) {
   const displayLabel = numberLabel ?? (number !== undefined ? `${number}.` : undefined);
   const optFontSize = isA5 ? "9.5pt" : "10pt";
@@ -59,18 +60,28 @@ function SingleQuestionBody({
   const subpartMarginLeft = isA5 ? "6mm" : "7mm";
   const lineHeight = isA5 ? 1.35 : 1.45;
 
+  const hasSanskrit = isTextPredominantlySanskrit(q.text) || q.options.some((o) => isTextPredominantlySanskrit(o));
   const hasHindi = /[\u0900-\u097F]/.test(q.text) || q.options.some((o) => /[\u0900-\u097F]/.test(o));
-  const effectiveLang: "hi" | "en" | "bilingual" = lang ?? (hasHindi ? "hi" : "en");
+  const effectiveLang: PaperLanguage = lang ?? (hasSanskrit ? "sa" : hasHindi ? "hi" : "en");
   const colLabels = getColumnLabels(effectiveLang);
 
   if (renderMode === "SUBPART_ONLY") {
     const sp = q.subparts && subpartIndex !== undefined ? q.subparts[subpartIndex] : null;
     if (!sp) return null;
+    const contPrefix = effectiveLang === "sa" ? "प्रश्नः" : effectiveLang === "hi" ? "प्रश्न" : "Q.";
     const contLabel = displayLabel
-      ? displayLabel.startsWith("Q.")
+      ? displayLabel.startsWith("Q.") || displayLabel.startsWith("प्रश्न")
         ? displayLabel
-        : `Q. ${displayLabel}`
-      : "Question";
+        : `${contPrefix} ${displayLabel}`
+      : effectiveLang === "sa" ? "प्रश्नः" : effectiveLang === "hi" ? "प्रश्न" : "Question";
+    const contSuffix =
+      effectiveLang === "sa"
+        ? " (क्रमशः...)"
+        : effectiveLang === "hi"
+        ? " (क्रमशः...)"
+        : effectiveLang === "bilingual"
+        ? " (Continued / क्रमशः...)"
+        : " (Continued)";
     return (
       <div style={{ marginLeft: subpartMarginLeft }}>
         {isContinuation && (
@@ -87,7 +98,7 @@ function SingleQuestionBody({
               marginBottom: "1.5mm",
             }}
           >
-            <span>{contLabel} (Continued / क्रमशः...)</span>
+            <span>{contLabel}{contSuffix}</span>
           </div>
         )}
         <div
@@ -118,7 +129,7 @@ function SingleQuestionBody({
             )}
             {showAnswer && sp.answer && (
               <div style={{ marginTop: "1mm", fontSize: isA5 ? "7.5pt" : "0.85em", color: "#166534" }}>
-                <span style={{ fontWeight: 600 }}>{lang === "hi" ? "उत्तर:" : "Answer:"}</span> <MathText text={sp.answer} />
+                <span style={{ fontWeight: 600 }}>{effectiveLang === "sa" ? "उत्तरम्:" : effectiveLang === "hi" ? "उत्तर:" : "Answer:"}</span> <MathText text={sp.answer} />
               </div>
             )}
           </div>
@@ -132,7 +143,7 @@ function SingleQuestionBody({
                 color: "#475569",
               }}
             >
-              {formatMarksLabel(sp.marks, lang ?? (hasHindi ? "hi" : "en"))}
+              {formatMarksLabel(sp.marks, effectiveLang)}
             </div>
           )}
         </div>
@@ -256,7 +267,9 @@ function SingleQuestionBody({
           )}
           {q.type === "TRUE_FALSE" && (
             <div style={{ marginTop: "1.5mm", fontStyle: "italic", fontSize: metaFontSize }}>
-              {effectiveLang === "hi"
+              {effectiveLang === "sa"
+                ? "(आम् / न)"
+                : effectiveLang === "hi"
                 ? "(सत्य / असत्य)"
                 : effectiveLang === "bilingual"
                 ? "(सही / गलत — True / False)"
@@ -295,7 +308,7 @@ function SingleQuestionBody({
                     )}
                     {showAnswer && sp.answer && (
                       <div style={{ marginTop: "1mm", fontSize: isA5 ? "8pt" : "0.85em", color: "#166534" }}>
-                        <span style={{ fontWeight: 600 }}>Answer:</span> <MathText text={sp.answer} />
+                        <span style={{ fontWeight: 600 }}>{effectiveLang === "sa" ? "उत्तरम्:" : effectiveLang === "hi" ? "उत्तर:" : "Answer:"}</span> <MathText text={sp.answer} />
                       </div>
                     )}
                   </div>
@@ -309,7 +322,7 @@ function SingleQuestionBody({
                         color: "#475569",
                       }}
                     >
-                      [{sp.marks} Mark{sp.marks > 1 ? "s" : ""}]
+                      {formatMarksLabel(sp.marks, effectiveLang)}
                     </div>
                   )}
                 </div>
@@ -325,7 +338,7 @@ function SingleQuestionBody({
       </div>
       {renderMode !== "STEM_ONLY" && showAnswer && q.answer && (
         <div style={{ marginTop: "1.5mm", marginLeft: displayLabel !== undefined ? (isA5 ? "7.5mm" : "9.5mm") : 0, fontSize: isA5 ? "8pt" : "0.85em", color: "#166534" }}>
-          <span style={{ fontWeight: 600 }}>Answer:</span>{" "}
+          <span style={{ fontWeight: 600 }}>{effectiveLang === "sa" ? "उत्तरम्:" : effectiveLang === "hi" ? "उत्तर:" : "Answer:"}</span>{" "}
           {isMcq && normalizedMcq ? (
             <span>
               ({normalizedMcq.letter.toLowerCase()}) <MathText text={normalizedMcq.optionText ?? q.answer} />
@@ -370,8 +383,12 @@ export function QuestionView({
   subpartIndex?: number;
   isContinuation?: boolean;
   isA5?: boolean;
-  lang?: "hi" | "en" | "bilingual";
+  lang?: PaperLanguage;
 }) {
+  const hasSanskrit = isTextPredominantlySanskrit(q.text) || (orQuestion && isTextPredominantlySanskrit(orQuestion.text));
+  const hasHindi = /[\u0900-\u097F]/.test(q.text) || (orQuestion && /[\u0900-\u097F]/.test(orQuestion.text));
+  const effectiveLang: PaperLanguage = lang ?? (hasSanskrit ? "sa" : hasHindi ? "hi" : "en");
+
   if (renderMode === "SUBPART_ONLY") {
     return (
       <div style={{ breakInside: "avoid", pageBreakInside: "avoid" }}>
@@ -386,7 +403,7 @@ export function QuestionView({
           subpartIndex={subpartIndex}
           isContinuation={isContinuation}
           isA5={isA5}
-          lang={lang}
+          lang={effectiveLang}
         />
       </div>
     );
@@ -402,8 +419,6 @@ export function QuestionView({
     orQuestion?.type === "MAP_WORK";
   const hasLabel = numberLabel !== undefined || number !== undefined;
 
-  const hasHindi = /[\u0900-\u097F]/.test(q.text) || (orQuestion && /[\u0900-\u097F]/.test(orQuestion.text));
-  const effectiveLang: "hi" | "en" | "bilingual" = lang ?? (hasHindi ? "hi" : "en");
   const orSeparator = getInternalChoiceSeparatorLabel(effectiveLang);
 
   // Show marks allocation ONCE for the entire choice group:
@@ -411,6 +426,22 @@ export function QuestionView({
   // - For RIGHT_COLUMN marks style, display marks once on the primary row at the top-right of the group.
   const primaryMarks = orQuestion && marksStyle === "INLINE" ? undefined : marks;
   const orMarks = orQuestion && marksStyle === "INLINE" ? marks : undefined;
+
+  const spaceLabel = isDraw
+    ? effectiveLang === "sa"
+      ? "[चित्राङ्कनार्थं स्थानम्]"
+      : effectiveLang === "hi"
+      ? "[चित्र हेतु स्थान]"
+      : effectiveLang === "bilingual"
+      ? "[Space for Diagram / चित्र हेतु स्थान]"
+      : "[Space for Diagram]"
+    : effectiveLang === "sa"
+    ? "[उत्तरलेखनार्थं स्थानम्]"
+    : effectiveLang === "hi"
+    ? "[उत्तर हेतु स्थान]"
+    : effectiveLang === "bilingual"
+    ? "[Space for Answer / उत्तर हेतु स्थान]"
+    : "[Space for Answer]";
 
   return (
     <div style={{ breakInside: "avoid", pageBreakInside: "avoid" }}>
@@ -423,7 +454,7 @@ export function QuestionView({
         showAnswer={showAnswer}
         renderMode={renderMode}
         isA5={isA5}
-        lang={lang}
+        lang={effectiveLang}
       />
 
       {orQuestion && (
@@ -453,7 +484,7 @@ export function QuestionView({
             showAnswer={showAnswer}
             marksStyle={marksStyle}
             isA5={isA5}
-            lang={lang}
+            lang={effectiveLang}
           />
         </div>
       )}
@@ -479,7 +510,7 @@ export function QuestionView({
               userSelect: "none",
             }}
           >
-            {isDraw ? "[Space for Diagram / चित्र हेतु स्थान]" : "[Space for Answer / उत्तर हेतु स्थान]"}
+            {spaceLabel}
           </span>
         </div>
       )}

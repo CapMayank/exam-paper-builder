@@ -786,12 +786,15 @@ export function detectBoardRuleConflict(
  * according to paper language and examination board.
  */
 export function getInternalChoiceSeparatorLabel(
-  lang?: "en" | "hi" | "bilingual" | string | null,
+  lang?: "en" | "hi" | "sa" | "bilingual" | string | null,
   board: "MPBSE" | "CBSE" | "OTHER" | string = "MPBSE",
 ): string {
   const normalizedLang = (lang || "en").trim().toLowerCase();
+  if (normalizedLang === "sa" || normalizedLang === "sanskrit") {
+    return "(अथवा)";
+  }
   if (normalizedLang === "hi" || normalizedLang === "hindi") {
-    return "अथवा (OR)";
+    return "अथवा";
   }
   if (normalizedLang === "bilingual" || String(board).toUpperCase() === "MPBSE") {
     return "OR (अथवा)";

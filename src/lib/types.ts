@@ -1,10 +1,10 @@
 import type { QuestionDto } from "./dto";
 import type { PaperImplication, PaperStatus } from "./blueprint";
-import type { MarksStyle, NumberingStyle, PrintDensity, UserRole, TimetableStatus, SessionSlot } from "./constants";
+import type { MarksStyle, NumberingStyle, PrintDensity, UserRole, TimetableStatus, SessionSlot, PaperLanguage } from "./constants";
 import type { PaperInternalChoiceAudit } from "./internalChoiceRules";
 
 export type { QuestionDto, PaperImplication, PaperInternalChoiceAudit };
-export type { MarksStyle, NumberingStyle, PrintDensity, UserRole, TimetableStatus, SessionSlot };
+export type { MarksStyle, NumberingStyle, PrintDensity, UserRole, TimetableStatus, SessionSlot, PaperLanguage };
 
 export type ClassSubjectDto = {
   id: string;
@@ -61,6 +61,7 @@ export type Blueprint = {
   examType: string;
   durationMin: number;
   subjectCode: string;
+  language?: PaperLanguage;
   book: { id: string; title: string; subject: string; className: string };
   chapters: { chapterId: string; marks: number; chapter: { id: string; number: number; title: string } }[];
   sections: Section[];
@@ -128,6 +129,7 @@ export type PaperSnapshotPayload = {
   examDate: string;
   paperSet: string;
   subjectCode: string;
+  language?: PaperLanguage;
   generalInstructions: string;
   academicSession: string;
   logoPath?: string | null;
@@ -168,6 +170,7 @@ export type PaperData = {
   examDate: string;
   paperSet: string;
   subjectCode: string;
+  language?: PaperLanguage;
   generalInstructions: string;
   status: "DRAFT" | "FINAL";
   blueprint: Blueprint;

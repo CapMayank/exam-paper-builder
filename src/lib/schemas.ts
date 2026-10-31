@@ -181,6 +181,7 @@ export const blueprintSchema = z.object({
   examType: z.enum(EXAM_TYPES),
   durationMin: z.number().int().min(5).max(600),
   subjectCode: z.string().trim().max(40).optional().default(""),
+  language: z.enum(["en", "hi", "sa", "bilingual"]).optional().default("en"),
   chapters: z.array(z.object({ chapterId: z.string().min(1), marks: z.number().int().min(0).max(1000) })),
   sections: z
     .array(
@@ -208,6 +209,7 @@ export const paperCreateSchema = z.object({
   examDate: z.string().max(40).default(""),
   paperSet: z.string().max(40).default(""),
   subjectCode: z.string().max(40).default(""),
+  language: z.enum(["en", "hi", "sa", "bilingual"]).optional().default("en"),
   generalInstructions: z.string().max(5000).default(""),
   academicSession: z.string().max(40).default(DEFAULT_ACADEMIC_SESSION),
   schoolLogo: z.string().nullable().optional().default(null),
@@ -232,6 +234,7 @@ export const paperUpdateSchema = z
     examDate: z.string().max(40),
     paperSet: z.string().max(40),
     subjectCode: z.string().max(40),
+    language: z.enum(["en", "hi", "sa", "bilingual"]),
     generalInstructions: z.string().max(5000),
     status: z.enum(["DRAFT", "FINAL"]),
     academicSession: z.string().max(40),
@@ -261,6 +264,7 @@ export const snapshotPayloadSchema = z.object({
   examDate: z.string(),
   paperSet: z.string(),
   subjectCode: z.string(),
+  language: z.enum(["en", "hi", "sa", "bilingual"]).optional().default("en"),
   generalInstructions: z.string(),
   academicSession: z.string(),
   logoPath: z.string().nullable().optional(),

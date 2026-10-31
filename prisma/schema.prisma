@@ -81,6 +81,7 @@ model Blueprint {
   examType        String // QUARTERLY | HALF_YEARLY | ANNUAL
   durationMin     Int
   subjectCode     String             @default("")
+  language        String             @default("en")
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
   book            Book               @relation(fields: [bookId], references: [id], onDelete: Restrict)
@@ -158,6 +159,7 @@ model Paper {
   examDate             String          @default("")
   paperSet             String          @default("")
   subjectCode          String          @default("")
+  language             String          @default("en")
   generalInstructions  String          @default("")
   printDensity         String          @default("STANDARD") // COMPACT | STANDARD | COMFORTABLE
   twoColumn            Boolean         @default(false)

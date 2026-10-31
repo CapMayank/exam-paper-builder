@@ -20,6 +20,7 @@ import {
   detectPaperLanguage,
   getMatchColumnInstruction,
   isSubpartQuestionType,
+  PaperLanguage,
   parseMatchColumnPairs,
   QUESTION_TYPE_LABEL,
   serializeMatchColumnPair,
@@ -43,9 +44,7 @@ export function SectionAiModal({
   onCommitted,
 }: SectionAiModalProps) {
   const [difficulty, setDifficulty] = useState<"BALANCED" | "EASY" | "MEDIUM" | "HARD">("BALANCED");
-  const [language, setLanguage] = useState<"en" | "hi">(() =>
-    detectPaperLanguage(paper, paper.items) === "hi" ? "hi" : "en"
-  );
+  const [language, setLanguage] = useState<PaperLanguage>(() => detectPaperLanguage(paper, paper.items));
   const [chapterMode, setChapterMode] = useState<"auto" | "specific">("auto");
   const [selectedChapterId, setSelectedChapterId] = useState<string>("");
   const [questionCount, setQuestionCount] = useState<number>(1);
@@ -469,11 +468,13 @@ export function SectionAiModal({
                   </label>
                   <select
                     value={language}
-                    onChange={(e) => setLanguage(e.target.value as any)}
+                    onChange={(e) => setLanguage(e.target.value as PaperLanguage)}
                     className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium focus:border-indigo-500 focus:outline-hidden"
                   >
                     <option value="en">English</option>
+                    <option value="sa">Sanskrit (संस्कृतम्)</option>
                     <option value="hi">Hindi (हिंदी)</option>
+                    <option value="bilingual">Bilingual (English + Hindi)</option>
                   </select>
                 </div>
                 <div className="flex items-end pb-2">

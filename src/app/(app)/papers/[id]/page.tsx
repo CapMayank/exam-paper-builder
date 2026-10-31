@@ -72,6 +72,7 @@ import {
   resolvePaperExamType,
   SCHOOL_DISPLAY_NAME,
   type ExamType,
+  type PaperLanguage,
 } from "@/lib/constants";
 import { formatQuestionNumber } from "@/lib/layout";
 import { nextSetIdentifier } from "@/lib/multiset";
@@ -122,6 +123,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
     examDate: "",
     paperSet: "",
     subjectCode: "",
+    language: "en" as PaperLanguage,
     generalInstructions: "",
     printDensity: "STANDARD" as PrintDensity,
     showCandidateDetails: true,
@@ -211,6 +213,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
       examDate: p.examDate,
       paperSet: p.paperSet ?? "",
       subjectCode: p.subjectCode ?? "",
+      language: ((p.language as PaperLanguage) || detectPaperLanguage(p, p.items)) ?? "en",
       generalInstructions: p.generalInstructions ?? "",
       printDensity: (p.printDensity as PrintDensity) ?? "STANDARD",
       showCandidateDetails: p.showCandidateDetails !== false,
@@ -241,6 +244,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
             examDate: details.examDate,
             paperSet: details.paperSet,
             subjectCode: details.subjectCode,
+            language: details.language,
             generalInstructions: details.generalInstructions,
             printDensity: details.printDensity,
             showCandidateDetails: details.showCandidateDetails,
@@ -1203,7 +1207,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                 <Field label="Subject Code">
                   <input
                     className="input text-xs"
-                    placeholder="e.g. 086 / SCI"
+                    placeholder="e.g. 086 / 122"
                     value={details.subjectCode}
                     onChange={(e) => setDetails({ ...details, subjectCode: e.target.value })}
                     onBlur={() => details.subjectCode !== paper.subjectCode && patch({ subjectCode: details.subjectCode })}
@@ -1212,14 +1216,21 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
               </div>
 
               <div className="grid grid-cols-2 gap-2">
-                <Field label="Exam Date">
-                  <input
-                    type="date"
-                    className="input text-xs"
-                    value={details.examDate}
-                    onChange={(e) => setDetails({ ...details, examDate: e.target.value })}
-                    onBlur={() => details.examDate !== paper.examDate && patch({ examDate: details.examDate })}
-                  />
+                <Field label="Paper Language">
+                  <select
+                    className="input text-xs font-medium"
+                    value={details.language || "en"}
+                    onChange={(e) => {
+                      const lang = e.target.value as PaperLanguage;
+                      setDetails((d) => ({ ...d, language: lang }));
+                      patch({ language: lang });
+                    }}
+                  >
+                    <option value="en">English (Default)</option>
+                    <option value="hi">हिन्दी (Hindi)</option>
+                    <option value="sa">संस्कृतम् (Sanskrit)</option>
+                    <option value="bilingual">Bilingual (English + हिन्दी)</option>
+                  </select>
                 </Field>
                 <Field label="Paper Set">
                   <input
@@ -1231,6 +1242,16 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                   />
                 </Field>
               </div>
+
+              <Field label="Exam Date">
+                <input
+                  type="date"
+                  className="input text-xs"
+                  value={details.examDate}
+                  onChange={(e) => setDetails({ ...details, examDate: e.target.value })}
+                  onBlur={() => details.examDate !== paper.examDate && patch({ examDate: details.examDate })}
+                />
+              </Field>
             </section>
 
             {/* Card 2: Print Formatting & Layout */}
@@ -1394,15 +1415,35 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                     type="button"
                     className="self-end text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 transition"
                     onClick={() => {
-                      const sample = [
-                        "1. All questions are compulsory. Internal choices are provided in some questions.",
-                        ...blueprint.sections.map(
-                          (s, idx) =>
-                            `2.${idx + 1} ${s.title} contains ${s.count} question(s) of ${s.marksEach} mark(s) each.`,
-                        ),
-                        "3. Neat and labeled diagrams must be drawn wherever necessary.",
-                        "4. Use of calculators and electronic devices is strictly prohibited.",
-                      ].join("\n");
+                      const effLang = details.language || detectPaperLanguage(paper, paper.items);
+                      let sample = "";
+                      if (effLang === "sa") {
+                        sample = [
+                          "1. सर्वे प्रश्नाः अनिवार्याः सन्ति।",
+                          "2. प्रश्नक्रमाङ्क 1 तः 5 पर्यन्तं वस्तुनिष्ठप्रश्नाः सन्ति, प्रत्येकस्मिन् 1 अङ्कः निर्धारितः।",
+                          "3. प्रश्नक्रमाङ्क 6 तः 23 पर्यन्तं आन्तरिकविकल्पाः प्रदत्ताः।",
+                          "4. आवश्यकतानुसारं स्पष्टाः नामाङ्किताः आकृतयः रचितव्याः।",
+                          "5. गणनायन्त्रस्य (कैलकुलेटर) प्रयोगः सर्वथा वर्जितः अस्ति।",
+                        ].join("\n");
+                      } else if (effLang === "hi") {
+                        sample = [
+                          "1. सभी प्रश्न अनिवार्य हैं।",
+                          "2. प्रश्न क्रमांक 1 से 5 तक वस्तुनिष्ठ प्रश्न हैं, जिनके लिए प्रत्येक प्रश्न पर 1 अंक निर्धारित है।",
+                          "3. प्रश्न क्रमांक 6 से 23 तक आंतरिक विकल्प दिए गए हैं।",
+                          "4. आवश्यकतानुसार स्वच्छ एवं नामांकित चित्र बनाइए।",
+                          "5. कैलकुलेटर या किसी भी इलेक्ट्रॉनिक उपकरण का उपयोग पूर्णतः वर्जित है।",
+                        ].join("\n");
+                      } else {
+                        sample = [
+                          "1. All questions are compulsory. Internal choices are provided in some questions.",
+                          ...blueprint.sections.map(
+                            (s, idx) =>
+                              `2.${idx + 1} ${s.title} contains ${s.count} question(s) of ${s.marksEach} mark(s) each.`,
+                          ),
+                          "3. Neat and labeled diagrams must be drawn wherever necessary.",
+                          "4. Use of calculators and electronic devices is strictly prohibited.",
+                        ].join("\n");
+                      }
                       setDetails((d) => ({ ...d, generalInstructions: sample }));
                       patch({ generalInstructions: sample });
                     }}

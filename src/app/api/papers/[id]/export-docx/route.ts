@@ -19,6 +19,7 @@ import { HttpError, route, type SessionUser } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { formatMathTextRuns, formatOptionPairRuns } from "@/lib/docxMath";
 import { getInternalChoiceSeparatorLabel } from "@/lib/internalChoiceRules";
+import { getPaperLocale, type PaperLanguage } from "@/lib/localization";
 import { extractTableFromText } from "@/lib/math";
 import {
   cleanMatchItem,
@@ -93,8 +94,10 @@ function renderSubpartsDocx(
   subparts: SubPart[],
   paragraphs: (Paragraph | Table)[],
   isMarkingScheme: boolean,
+  lang: PaperLanguage = "en",
 ) {
   const romans = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
+  const font = lang === "sa" || lang === "hi" ? "Mangal" : "Times New Roman";
   for (let spIdx = 0; spIdx < subparts.length; spIdx++) {
     const sp = subparts[spIdx];
     const spLabel = sp.label && String(sp.label).trim() ? String(sp.label).trim() : (romans[spIdx] || `(${spIdx + 1})`);
@@ -104,9 +107,9 @@ function renderSubpartsDocx(
         indent: { left: 720 },
         spacing: { after: 40 },
         children: [
-          new TextRun({ text: `${spLabel} `, bold: true, font: "Times New Roman" }),
-          ...formatMathTextRuns(sp.text || "", { font: "Times New Roman" }),
-          new TextRun({ text: ` [${spMarks} Mark${spMarks > 1 ? "s" : ""}]`, bold: true, font: "Times New Roman" }),
+          new TextRun({ text: `${spLabel} `, bold: true, font }),
+          ...formatMathTextRuns(sp.text || "", { font }),
+          new TextRun({ text: ` [${formatMarksLabel(spMarks, lang)}]`, bold: true, font }),
         ],
       }),
     );
@@ -122,7 +125,7 @@ function renderSubpartsDocx(
             new Paragraph({
               indent: { left: 1080 },
               spacing: { after: 30 },
-              children: formatMathTextRuns(optText, { font: "Times New Roman" }),
+              children: formatMathTextRuns(optText, { font }),
             }),
           );
         }
@@ -134,7 +137,7 @@ function renderSubpartsDocx(
             new Paragraph({
               indent: { left: 1080 },
               spacing: { after: 30 },
-              children: formatOptionPairRuns(leftOpt, rightOpt, { font: "Times New Roman" }),
+              children: formatOptionPairRuns(leftOpt, rightOpt, { font }),
             }),
           );
         }
@@ -142,13 +145,14 @@ function renderSubpartsDocx(
     }
 
     if (isMarkingScheme && sp.answer) {
+      const ansPrefix = lang === "sa" ? "उत्तरम्: " : lang === "hi" ? "उत्तर: " : "Ans: ";
       paragraphs.push(
         new Paragraph({
           indent: { left: 1080 },
           spacing: { before: 20, after: 60 },
           children: [
-            new TextRun({ text: "Ans: ", bold: true, color: "0B6623", font: "Times New Roman" }),
-            ...formatMathTextRuns(sp.answer, { font: "Times New Roman" }),
+            new TextRun({ text: ansPrefix, bold: true, color: "0B6623", font }),
+            ...formatMathTextRuns(sp.answer, { font }),
           ],
         }),
       );
@@ -163,12 +167,13 @@ function renderQuestionTextWithTable(
   isMatch: boolean,
   pageBreakBefore: boolean,
   paragraphs: (Paragraph | Table)[],
-  lang: "hi" | "en" | "bilingual" = "en",
+  lang: PaperLanguage = "en",
   keepNext = false,
 ) {
+  const font = lang === "sa" || lang === "hi" ? "Mangal" : "Times New Roman";
   const marksText = qTotalMarks !== undefined ? `  ${formatMarksLabel(qTotalMarks, lang)}` : "";
-  const labelRuns = qLabel ? [new TextRun({ text: `${qLabel}  `, bold: true, font: "Times New Roman" })] : [];
-  const marksRuns = marksText ? [new TextRun({ text: marksText, bold: true, font: "Times New Roman" })] : [];
+  const labelRuns = qLabel ? [new TextRun({ text: `${qLabel}  `, bold: true, font })] : [];
+  const marksRuns = marksText ? [new TextRun({ text: marksText, bold: true, font })] : [];
   const tableData = !isMatch ? extractTableFromText(qText) : null;
   if (tableData && tableData.table) {
     paragraphs.push(
@@ -179,7 +184,7 @@ function renderQuestionTextWithTable(
         spacing: { before: 100, after: 60 },
         children: [
           ...labelRuns,
-          ...formatMathTextRuns(tableData.prefixText, { font: "Times New Roman" }),
+          ...formatMathTextRuns(tableData.prefixText, { font }),
           ...marksRuns,
         ],
       }),
@@ -202,7 +207,7 @@ function renderQuestionTextWithTable(
                 width: { size: colPct, type: WidthType.PERCENTAGE },
                 children: [
                   new Paragraph({
-                    children: formatMathTextRuns(h, { bold: true, font: "Times New Roman" }),
+                    children: formatMathTextRuns(h, { bold: true, font }),
                   }),
                 ],
               }),
@@ -221,7 +226,7 @@ function renderQuestionTextWithTable(
                 width: { size: colPct, type: WidthType.PERCENTAGE },
                 children: [
                   new Paragraph({
-                    children: formatMathTextRuns(cell, { font: "Times New Roman" }),
+                    children: formatMathTextRuns(cell, { font }),
                   }),
                 ],
               }),
@@ -241,7 +246,7 @@ function renderQuestionTextWithTable(
           keepNext,
           indent: qLabel ? undefined : { left: 360 },
           spacing: { before: 60, after: 60 },
-          children: formatMathTextRuns(tableData.suffixText, { font: "Times New Roman" }),
+          children: formatMathTextRuns(tableData.suffixText, { font }),
         }),
       );
     }
@@ -254,7 +259,7 @@ function renderQuestionTextWithTable(
         spacing: { before: 100, after: 60 },
         children: [
           ...labelRuns,
-          ...formatMathTextRuns(qText, { font: "Times New Roman" }),
+          ...formatMathTextRuns(qText, { font }),
           ...marksRuns,
         ],
       }),
@@ -290,7 +295,10 @@ export async function buildPaperDocx(
   if (!paper) throw new HttpError(404, "Paper not found");
 
   const paperLang = detectPaperLanguage(paper, paper.items);
+  const locale = getPaperLocale(paperLang);
   const isHindi = paperLang === "hi";
+  const isSanskrit = paperLang === "sa";
+  const docFont = isSanskrit || isHindi ? "Mangal" : "Times New Roman";
   const colLabels = getColumnLabels(paperLang);
 
   const totalMarks = paper.blueprint.sections.reduce((sum, s) => sum + s.count * s.marksEach, 0);
@@ -384,11 +392,15 @@ export async function buildPaperDocx(
             spacing: { after: 100 },
             children: [
               new TextRun({
-                text: "CONFIDENTIAL — TEACHER'S MARKING SCHEME & MODEL ANSWERS (मूल्यांकन योजना)",
+                text: isSanskrit
+                  ? "गोपनीयम् — शिक्षकस्य अङ्कयोजना तथा आदर्शोत्तराणि"
+                  : isHindi
+                  ? "CONFIDENTIAL — TEACHER'S MARKING SCHEME & MODEL ANSWERS (मूल्यांकन योजना)"
+                  : "CONFIDENTIAL — TEACHER'S MARKING SCHEME & MODEL ANSWERS",
                 bold: true,
                 size: 20, // 10pt
                 color: "0B6623",
-                font: "Times New Roman",
+                font: docFont,
               }),
             ],
           }),
@@ -415,12 +427,12 @@ export async function buildPaperDocx(
             children: [
               new Paragraph({
                 children: [
-                  new TextRun({ text: "Class: ", bold: true, font: "Times New Roman" }),
-                  new TextRun({ text: `${paper.blueprint.book.className}  |  `, font: "Times New Roman" }),
-                  new TextRun({ text: "Subject: ", bold: true, font: "Times New Roman" }),
+                  new TextRun({ text: `${locale.header.classLabel} `, bold: true, font: docFont }),
+                  new TextRun({ text: `${paper.blueprint.book.className}  |  `, font: docFont }),
+                  new TextRun({ text: `${locale.header.subjectLabel} `, bold: true, font: docFont }),
                   new TextRun({
                     text: `${paper.blueprint.book.subject}${resolvedSubjectCode ? ` (${resolvedSubjectCode})` : ""}`,
-                    font: "Times New Roman",
+                    font: docFont,
                   }),
                 ],
               }),
@@ -434,14 +446,14 @@ export async function buildPaperDocx(
                 children: [
                   ...(paper.examDate
                     ? [
-                        new TextRun({ text: "Date: ", bold: true, font: "Times New Roman" }),
-                        new TextRun({ text: `${paper.examDate}  |  `, font: "Times New Roman" }),
+                        new TextRun({ text: `${locale.header.date} `, bold: true, font: docFont }),
+                        new TextRun({ text: `${paper.examDate}  |  `, font: docFont }),
                       ]
                     : []),
-                  new TextRun({ text: "Time: ", bold: true, font: "Times New Roman" }),
-                  new TextRun({ text: `${paper.blueprint.durationMin} Mins  |  `, font: "Times New Roman" }),
-                  new TextRun({ text: "Max. Marks: ", bold: true, font: "Times New Roman" }),
-                  new TextRun({ text: `${totalMarks}`, bold: true, font: "Times New Roman" }),
+                  new TextRun({ text: `${locale.header.timeAllowed} `, bold: true, font: docFont }),
+                  new TextRun({ text: `${locale.header.timeFormat(paper.blueprint.durationMin)}  |  `, font: docFont }),
+                  new TextRun({ text: `${locale.header.maxMarks} `, bold: true, font: docFont }),
+                  new TextRun({ text: `${totalMarks}`, bold: true, font: docFont }),
                 ],
               }),
             ],
@@ -459,14 +471,10 @@ export async function buildPaperDocx(
         spacing: { before: 200, after: 60 },
         children: [
           new TextRun({
-            text: isHindi
-              ? "सामान्य निर्देश:"
-              : paperLang === "bilingual"
-              ? "General Instructions / सामान्य निर्देश:"
-              : "General Instructions:",
+            text: `${locale.header.generalInstructionsLabel}:`,
             bold: true,
             italics: true,
-            font: "Times New Roman",
+            font: docFont,
           }),
         ],
       }),
@@ -475,7 +483,7 @@ export async function buildPaperDocx(
         children: [
           new TextRun({
             text: paper.generalInstructions,
-            font: "Times New Roman",
+            font: docFont,
             size: 20, // 10pt
           }),
         ],
@@ -512,11 +520,15 @@ export async function buildPaperDocx(
       const groupCount = allInGroup.reduce((sum, s) => sum + s.count, 0);
       const groupMarks = allInGroup.reduce((sum, s) => sum + s.count * s.marksEach, 0);
 
-      const groupRightLabel = isHindi
+      const groupRightLabel = isSanskrit
+        ? `${groupCount} प्रश्नाः · ${groupMarks} अङ्काः`
+        : isHindi
         ? `${groupCount} प्रश्न · ${groupMarks} अंक`
         : paperLang === "bilingual"
         ? `${groupCount} Questions / प्रश्न · ${groupMarks} Marks / अंक`
         : `${groupCount} Questions · ${groupMarks} Marks`;
+
+      const sectionTitleDisplay = locale.section.formatSectionHeader(section.title, sectionLetter);
 
       paragraphs.push(
         new Paragraph({
@@ -525,15 +537,15 @@ export async function buildPaperDocx(
           spacing: { before: 280, after: 140 },
           children: [
             new TextRun({
-              text: `${section.title.toUpperCase()}`,
+              text: sectionTitleDisplay,
               bold: true,
               size: 24, // 12pt
-              font: "Times New Roman",
+              font: docFont,
             }),
             new TextRun({
               text: ` (${groupRightLabel})`,
               bold: true,
-              font: "Times New Roman",
+              font: docFont,
             }),
           ],
         }),
@@ -558,7 +570,7 @@ export async function buildPaperDocx(
                 text: reconciledInstruction,
                 italics: true,
                 size: 20,
-                font: "Times New Roman",
+                font: docFont,
               }),
             ],
           }),
@@ -568,18 +580,18 @@ export async function buildPaperDocx(
 
     if (hasMultipleTypes) {
       const typeLabel = getQuestionTypeLabel(section.type, paperLang);
-      const typeMarksSuffix = isHindi ? "अंक" : "Marks";
+      const formula = formatExerciseFormula(section.count, section.marksEach, paperLang);
       paragraphs.push(
         new Paragraph({
           alignment: AlignmentType.CENTER,
           spacing: { before: 120, after: 100 },
           children: [
             new TextRun({
-              text: `[${typeLabel} · ${section.count} × ${section.marksEach} = ${section.count * section.marksEach} ${typeMarksSuffix}]`,
+              text: `[${typeLabel} · ${formula}]`,
               bold: true,
               italics: true,
               size: 20, // 10pt
-              font: "Times New Roman",
+              font: docFont,
             }),
           ],
         }),
@@ -605,9 +617,9 @@ export async function buildPaperDocx(
         new Paragraph({
           spacing: { before: 120, after: 60 },
           children: [
-            new TextRun({ text: `${qLabel}  `, bold: true, font: "Times New Roman" }),
-            new TextRun({ text: `${sharedInstruction} `, bold: true, font: "Times New Roman" }),
-            new TextRun({ text: ` ${exerciseFormula}`, bold: true, font: "Times New Roman" }),
+            new TextRun({ text: `${qLabel}  `, bold: true, font: docFont }),
+            new TextRun({ text: `${sharedInstruction} `, bold: true, font: docFont }),
+            new TextRun({ text: ` ${exerciseFormula}`, bold: true, font: docFont }),
           ],
         }),
       );
@@ -622,23 +634,24 @@ export async function buildPaperDocx(
             indent: { left: 720 },
             spacing: { before: 30, after: 30 },
             children: [
-              new TextRun({ text: `${subLabel}  `, bold: true, font: "Times New Roman" }),
-              ...formatMathTextRuns(cleanedStem, { font: "Times New Roman" }),
+              new TextRun({ text: `${subLabel}  `, bold: true, font: docFont }),
+              ...formatMathTextRuns(cleanedStem, { font: docFont }),
             ],
           }),
         );
 
         if (isMarkingScheme && item.question.answer) {
+          const itemAnsPrefix = isSanskrit ? "उत्तरम्: " : isHindi ? "उत्तर: " : "Answer: ";
           paragraphs.push(
             new Paragraph({
               indent: { left: 1080 },
               spacing: { before: 20, after: 40 },
               children: [
                 new TextRun({
-                  text: `${isHindi ? "उत्तर: " : "Answer: "}${item.question.answer}`,
+                  text: `${itemAnsPrefix}${item.question.answer}`,
                   italics: true,
                   color: "0B6623",
-                  font: "Times New Roman",
+                  font: docFont,
                 }),
               ],
             }),
@@ -742,7 +755,9 @@ export async function buildPaperDocx(
             spacing: { before: 20, after: 40 },
             children: [
               new TextRun({
-                text: isHindi
+                text: isSanskrit
+                  ? "(आम् / न)"
+                  : isHindi
                   ? "(सत्य / असत्य)"
                   : paperLang === "bilingual"
                   ? "(सही / गलत — True / False)"
@@ -750,7 +765,7 @@ export async function buildPaperDocx(
                 italics: true,
                 size: 18, // 9pt
                 color: "475569",
-                font: "Times New Roman",
+                font: docFont,
               }),
             ],
           }),
@@ -775,7 +790,7 @@ export async function buildPaperDocx(
                         width: { size: 50, type: WidthType.PERCENTAGE },
                         children: [
                           new Paragraph({
-                            children: [new TextRun({ text: colLabels.colA, bold: true, font: "Times New Roman" })],
+                            children: [new TextRun({ text: colLabels.colA, bold: true, font: docFont })],
                           }),
                         ],
                       }),
@@ -783,7 +798,7 @@ export async function buildPaperDocx(
                         width: { size: 50, type: WidthType.PERCENTAGE },
                         children: [
                           new Paragraph({
-                            children: [new TextRun({ text: colLabels.colB, bold: true, font: "Times New Roman" })],
+                            children: [new TextRun({ text: colLabels.colB, bold: true, font: docFont })],
                           }),
                         ],
                       }),
@@ -798,8 +813,8 @@ export async function buildPaperDocx(
                             children: [
                               new Paragraph({
                                 children: [
-                                  new TextRun({ text: `(${letters[idx] ?? idx + 1}) `, bold: true, font: "Times New Roman" }),
-                                  ...formatMathTextRuns(cleanMatchItem(pair.left), { font: "Times New Roman" }),
+                                  new TextRun({ text: `(${letters[idx] ?? idx + 1}) `, bold: true, font: docFont }),
+                                  ...formatMathTextRuns(cleanMatchItem(pair.left), { font: docFont }),
                                 ],
                               }),
                             ],
@@ -809,8 +824,8 @@ export async function buildPaperDocx(
                             children: [
                               new Paragraph({
                                 children: [
-                                  new TextRun({ text: `${roman[idx] ?? `(${idx + 1})`} `, bold: true, font: "Times New Roman" }),
-                                  ...formatMathTextRuns(cleanMatchItem(pair.right), { font: "Times New Roman" }),
+                                  new TextRun({ text: `${roman[idx] ?? `(${idx + 1})`} `, bold: true, font: docFont }),
+                                  ...formatMathTextRuns(cleanMatchItem(pair.right), { font: docFont }),
                                 ],
                               }),
                             ],
@@ -829,7 +844,7 @@ export async function buildPaperDocx(
 
       // Subparts for case study / passage / multi-part questions
       if (parsedSubparts.length > 0) {
-        renderSubpartsDocx(parsedSubparts, paragraphs, isMarkingScheme);
+        renderSubpartsDocx(parsedSubparts, paragraphs, isMarkingScheme, paperLang);
       }
 
       // Model Answer / Solution for primary question
@@ -840,16 +855,18 @@ export async function buildPaperDocx(
             spacing: { before: 40, after: 80 },
             children: [
               new TextRun({
-                text: isHindi
+                text: isSanskrit
+                  ? "उत्तरप्रारूपम् / अङ्कयोजना: "
+                  : isHindi
                   ? "उत्तर प्रारूप / अंक योजना: "
                   : paperLang === "bilingual"
                   ? "Model Answer / उत्तर प्रारूप: "
                   : "Model Answer / Scheme: ",
                 bold: true,
                 color: "0B6623",
-                font: "Times New Roman",
+                font: docFont,
               }),
-              ...formatMathTextRuns(q.answer, { font: "Times New Roman" }),
+              ...formatMathTextRuns(q.answer, { font: docFont }),
             ],
           }),
         );
@@ -885,7 +902,7 @@ export async function buildPaperDocx(
               new TextRun({
                 text: orSeparatorLabel,
                 bold: true,
-                font: "Times New Roman",
+                font: docFont,
               }),
             ],
           }),
@@ -961,7 +978,9 @@ export async function buildPaperDocx(
               spacing: { before: 20, after: 40 },
               children: [
                 new TextRun({
-                  text: isHindi
+                  text: isSanskrit
+                    ? "(आम् / न)"
+                    : isHindi
                     ? "(सत्य / असत्य)"
                     : paperLang === "bilingual"
                     ? "(सही / गलत — True / False)"
@@ -969,7 +988,7 @@ export async function buildPaperDocx(
                   italics: true,
                   size: 18, // 9pt
                   color: "475569",
-                  font: "Times New Roman",
+                  font: docFont,
                 }),
               ],
             }),
@@ -994,7 +1013,7 @@ export async function buildPaperDocx(
                           width: { size: 50, type: WidthType.PERCENTAGE },
                           children: [
                             new Paragraph({
-                              children: [new TextRun({ text: colLabels.colA, bold: true, font: "Times New Roman" })],
+                              children: [new TextRun({ text: colLabels.colA, bold: true, font: docFont })],
                             }),
                           ],
                         }),
@@ -1002,7 +1021,7 @@ export async function buildPaperDocx(
                           width: { size: 50, type: WidthType.PERCENTAGE },
                           children: [
                             new Paragraph({
-                              children: [new TextRun({ text: colLabels.colB, bold: true, font: "Times New Roman" })],
+                              children: [new TextRun({ text: colLabels.colB, bold: true, font: docFont })],
                             }),
                           ],
                         }),
@@ -1017,8 +1036,8 @@ export async function buildPaperDocx(
                               children: [
                                 new Paragraph({
                                   children: [
-                                    new TextRun({ text: `(${letters[idx] ?? idx + 1}) `, bold: true, font: "Times New Roman" }),
-                                    ...formatMathTextRuns(cleanMatchItem(pair.left), { font: "Times New Roman" }),
+                                    new TextRun({ text: `(${letters[idx] ?? idx + 1}) `, bold: true, font: docFont }),
+                                    ...formatMathTextRuns(cleanMatchItem(pair.left), { font: docFont }),
                                   ],
                                 }),
                               ],
@@ -1028,8 +1047,8 @@ export async function buildPaperDocx(
                               children: [
                                 new Paragraph({
                                   children: [
-                                    new TextRun({ text: `${roman[idx] ?? `(${idx + 1})`} `, bold: true, font: "Times New Roman" }),
-                                    ...formatMathTextRuns(cleanMatchItem(pair.right), { font: "Times New Roman" }),
+                                    new TextRun({ text: `${roman[idx] ?? `(${idx + 1})`} `, bold: true, font: docFont }),
+                                    ...formatMathTextRuns(cleanMatchItem(pair.right), { font: docFont }),
                                   ],
                                 }),
                               ],
@@ -1048,7 +1067,7 @@ export async function buildPaperDocx(
 
         // Subparts for case study / passage for OR question
         if (parsedOrSubparts.length > 0) {
-          renderSubpartsDocx(parsedOrSubparts, paragraphs, isMarkingScheme);
+          renderSubpartsDocx(parsedOrSubparts, paragraphs, isMarkingScheme, paperLang);
         }
 
         // Model Answer / Solution for OR question
@@ -1059,16 +1078,18 @@ export async function buildPaperDocx(
               spacing: { before: 40, after: 80 },
               children: [
                 new TextRun({
-                  text: isHindi
+                  text: isSanskrit
+                    ? "उत्तरप्रारूपम् / अङ्कयोजना: "
+                    : isHindi
                     ? "उत्तर प्रारूप / अंक योजना: "
                     : paperLang === "bilingual"
                     ? "Model Answer / उत्तर प्रारूप: "
                     : "Model Answer / Scheme: ",
                   bold: true,
                   color: "0B6623",
-                  font: "Times New Roman",
+                  font: docFont,
                 }),
-                ...formatMathTextRuns(orQ.answer, { font: "Times New Roman" }),
+                ...formatMathTextRuns(orQ.answer, { font: docFont }),
               ],
             }),
           );
@@ -1079,16 +1100,19 @@ export async function buildPaperDocx(
       if (!isMarkingScheme) {
         const maxSpace = Math.max(q.spaceMm || 0, item.orQuestion?.spaceMm || 0);
         if (maxSpace > 0) {
+          const blankSpaceLabel = q.type === "DRAW"
+            ? (isSanskrit ? "[चित्राङ्कनार्थं स्थानम्]" : isHindi ? "[चित्र हेतु स्थान]" : paperLang === "bilingual" ? "[Space for Diagram / चित्र हेतु स्थान]" : "[Space for Diagram]")
+            : (isSanskrit ? "[उत्तरलेखनार्थं स्थानम्]" : isHindi ? "[उत्तर हेतु स्थान]" : paperLang === "bilingual" ? "[Space for Answer / उत्तर हेतु स्थान]" : "[Space for Answer]");
           paragraphs.push(
             new Paragraph({
               spacing: { before: 60, after: Math.min(2400, Math.round(maxSpace * 56.7)) },
               children: [
                 new TextRun({
-                  text: q.type === "DRAW" ? "[Space for Diagram / चित्र हेतु स्थान]" : "[Space for Answer / उत्तर हेतु स्थान]",
+                  text: blankSpaceLabel,
                   size: 16, // 8pt
                   italics: true,
                   color: "94A3B8",
-                  font: "Times New Roman",
+                  font: docFont,
                 }),
               ],
             }),
@@ -1098,6 +1122,12 @@ export async function buildPaperDocx(
     }
   }
 }
+
+  const docHeaderTitle = `${paper.title} · ${paper.paperSet ? `${locale.header.set} ${paper.paperSet} · ` : ""}${
+    isMarkingScheme
+      ? (isSanskrit ? "गोपनीय-अङ्कयोजना" : isHindi ? "गोपनीय अंक योजना" : "Confidential Marking Scheme")
+      : (isSanskrit ? "प्रश्नपत्रम्" : isHindi ? "प्रश्न पत्र" : "Examination Paper")
+  }`;
 
   const doc = new Document({
     sections: [
@@ -1119,10 +1149,10 @@ export async function buildPaperDocx(
                 alignment: AlignmentType.RIGHT,
                 children: [
                   new TextRun({
-                    text: `${paper.title} · ${paper.paperSet ? `Set ${paper.paperSet} · ` : ""}${isMarkingScheme ? "Confidential Marking Scheme" : "Examination Paper"}`,
+                    text: docHeaderTitle,
                     size: 16,
                     italics: true,
-                    font: "Times New Roman",
+                    font: docFont,
                   }),
                 ],
               }),

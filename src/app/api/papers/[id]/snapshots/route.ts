@@ -2,7 +2,7 @@ import { HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
-import type { PaperSnapshotPayload } from "@/lib/types";
+import type { PaperLanguage, PaperSnapshotPayload } from "@/lib/types";
 
 export const GET = route(async (_req, params, _user) => {
   const { id } = await params;
@@ -58,6 +58,7 @@ export const POST = route(async (req, params, user) => {
     examDate: current.examDate,
     paperSet: current.paperSet ?? "",
     subjectCode: current.subjectCode ?? "",
+    language: (current.language as PaperLanguage) || "en",
     generalInstructions: current.generalInstructions ?? "",
     academicSession: current.academicSession ?? "2025–26",
     logoPath: current.logoPath,

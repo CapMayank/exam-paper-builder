@@ -126,7 +126,7 @@ export function imposeBooklet(realPages: number): Sheet[] {
   return sheets;
 }
 
-import { getSharedInstruction, type NumberingStyle } from "./constants";
+import { getSharedInstruction, type NumberingStyle, type PaperLanguage } from "./constants";
 
 
 export { NumberingStyle };
@@ -345,6 +345,11 @@ export function reconcileSectionGroupInstruction(
     /(प्रश्‍?न\s*क्रमांक\s*)\d+\s*से\s*\d+/g,
     `$1${startQ} से ${endQ}`
   );
+  // Replace Sanskrit "प्रश्नक्रमाङ्कः X तः Y पर्यन्तम्"
+  updated = updated.replace(
+    /(प्रश्नक्रमाङ्कः?\s*)\d+\s*तः\s*\d+(\s*पर्यन्तम्)?/g,
+    `$1${startQ} तः ${endQ}$2`
+  );
   return updated;
 }
 
@@ -357,14 +362,20 @@ export function resolveGroupedExerciseInstruction(
   sectionInstruction: string | null | undefined,
   sectionType: string,
   hasMultipleTypes: boolean,
-  paperLang: "hi" | "en" | "bilingual" = "en"
+  paperLang: PaperLanguage = "en"
 ): string {
   const shared = getSharedInstruction(sectionType, paperLang);
   const trimmed = (sectionInstruction || "").trim();
   if (!trimmed) return shared;
 
+  const isEnglishInstruction = /^[A-Za-z0-9\s.,'":;()\-–?!/]+$/.test(trimmed);
+  // If paper language is Sanskrit or Hindi, but sectionInstruction is purely English (e.g. from blueprint defaults), replace with shared localized instruction!
+  if ((paperLang === "sa" || paperLang === "hi") && isEnglishInstruction) {
+    return shared || trimmed;
+  }
+
   const looksLikeSectionWideOverview =
-    /\b(?:questions?\s*(?:nos?\.?)?\s*\d+\s*(?:to|[-–])\s*\d+|total\s+\d+\s+objective[- ]type|प्रश्‍?न\s*क्रमांक\s*\d+\s*से\s*\d+)/i.test(
+    /\b(?:questions?\s*(?:nos?\.?)?\s*\d+\s*(?:to|[-–])\s*\d+|total\s+\d+\s+objective[- ]type|प्रश्‍?न\s*क्रमांक\s*\d+\s*से\s*\d+|प्रश्नक्रमाङ्कः?\s*\d+\s*तः\s*\d+)/i.test(
       trimmed
     );
 

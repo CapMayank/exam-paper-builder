@@ -33,6 +33,7 @@ import {
   cleanOptionText,
   getMatchColumnInstruction,
   isSubpartQuestionType,
+  PaperLanguage,
   parseMatchColumnPairs,
   QUESTION_TYPE_LABEL,
   type QuestionType,
@@ -65,7 +66,7 @@ export function AIPaperGeneratorModal({
   const [error, setError] = useState<string | null>(null);
 
   // Form parameters
-  const [language, setLanguage] = useState<"en" | "hi" | "bilingual">("en");
+  const [language, setLanguage] = useState<PaperLanguage>("en");
   const [difficulty, setDifficulty] = useState<"BALANCED" | "EASY" | "MEDIUM" | "HARD">("BALANCED");
   const [modelTier, setModelTier] = useState<string>("gemini-2.5-pro");
   const [generateDiagrams, setGenerateDiagrams] = useState<boolean>(true);
@@ -116,12 +117,20 @@ export function AIPaperGeneratorModal({
         const bTitle = (res.plan.bookTitle || "").split("/")[0].trim().toLowerCase();
         const pTitle = (res.plan.title || "").split("/")[0].trim().toLowerCase();
         const devanagariRegex = /[\u0900-\u097F]/;
-        if (
+        const isSanskrit =
+          sub.includes("sanskrit") ||
+          sub.includes("संस्कृत") ||
+          bTitle.includes("sanskrit") ||
+          bTitle.includes("शेमुषी") ||
+          bTitle.includes("shemushi") ||
+          pTitle.includes("sanskrit") ||
+          pTitle.includes("संस्कृत");
+        if (isSanskrit) {
+          setLanguage("sa");
+        } else if (
           sub.includes("hindi") ||
           sub.includes("हिंदी") ||
           sub.includes("हिन्दी") ||
-          sub.includes("sanskrit") ||
-          sub.includes("संस्कृत") ||
           bTitle.includes("hindi") ||
           bTitle.includes("हिंदी") ||
           devanagariRegex.test(sub) ||
@@ -626,8 +635,9 @@ export function AIPaperGeneratorModal({
                     onChange={(e) => setLanguage(e.target.value as any)}
                   >
                     <option value="en">English (Standard National Terminology)</option>
-                    <option value="bilingual">Bilingual (English with Hindi Devanagari translation)</option>
+                    <option value="sa">Sanskrit (संस्कृतम् - शुद्ध देवनागरी)</option>
                     <option value="hi">Hindi (Devanagari script only)</option>
+                    <option value="bilingual">Bilingual (English with Hindi Devanagari translation)</option>
                   </select>
                 </div>
 

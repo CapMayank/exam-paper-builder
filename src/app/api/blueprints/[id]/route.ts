@@ -140,6 +140,7 @@ export const PUT = route(async (req, { id }, user) => {
         examType: input.examType,
         durationMin: input.durationMin,
         subjectCode: input.subjectCode ?? "",
+        language: input.language || "en",
       },
     });
   });

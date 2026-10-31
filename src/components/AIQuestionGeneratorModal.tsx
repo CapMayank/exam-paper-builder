@@ -16,7 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { Modal, Spinner, useToast } from "@/components/ui";
-import { cleanOptionText } from "@/lib/constants";
+import { cleanOptionText, type PaperLanguage } from "@/lib/constants";
 import { api } from "@/lib/client";
 import { MathText } from "./MathText";
 import type { Book, Chapter } from "@/lib/types";
@@ -79,7 +79,17 @@ export function AIQuestionGeneratorModal({
   const [marks, setMarks] = useState<number>(defaultMarks || 3);
   const [difficulty, setDifficulty] = useState<"EASY" | "MEDIUM" | "HARD">("MEDIUM");
   const [cognitiveLevel, setCognitiveLevel] = useState<string>("APPLYING");
-  const [language, setLanguage] = useState<"en" | "bilingual" | "hi">("en");
+  const [language, setLanguage] = useState<PaperLanguage>(() => {
+    const sub = (selectedBook?.subject || "").toLowerCase();
+    const title = (selectedBook?.title || "").toLowerCase();
+    if (sub.includes("sanskrit") || sub.includes("संस्कृत") || title.includes("sanskrit") || title.includes("शेमुषी")) {
+      return "sa";
+    }
+    if (sub.includes("hindi") || sub.includes("हिंदी") || title.includes("hindi")) {
+      return "hi";
+    }
+    return "en";
+  });
   const [topicContext, setTopicContext] = useState<string>("");
 
   // Case study specific state
@@ -483,11 +493,12 @@ export function AIQuestionGeneratorModal({
             <select
               className="input text-xs"
               value={language}
-              onChange={(e) => setLanguage(e.target.value as "en" | "bilingual" | "hi")}
+              onChange={(e) => setLanguage(e.target.value as PaperLanguage)}
             >
               <option value="en">English only</option>
-              <option value="bilingual">Bilingual (English + Hindi Devanagari)</option>
+              <option value="sa">Sanskrit (संस्कृतम्)</option>
               <option value="hi">Hindi (Devanagari)</option>
+              <option value="bilingual">Bilingual (English + Hindi Devanagari)</option>
             </select>
           </label>
 
