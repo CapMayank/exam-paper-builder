@@ -1,5 +1,6 @@
 import { HttpError, route } from "@/lib/api";
 import { generatePaperSectionWithGemini, type GeneratePaperSectionSlot } from "@/lib/gemini";
+import { resolveInternalChoiceRequirement } from "@/lib/internalChoiceRules";
 import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
 
 export const POST = route(async (req, { id }, user) => {
@@ -40,6 +41,35 @@ export const POST = route(async (req, { id }, user) => {
     [i.question.text, i.orQuestion?.text].filter((t): t is string => Boolean(t && t.trim())),
   );
 
+  const resolvedSlots: GeneratePaperSectionSlot[] = (slots as GeneratePaperSectionSlot[]).map((slot, idx) => {
+    const slotIdx = typeof slot.slotIndex === "number" ? slot.slotIndex : idx;
+    let reqChoice = slot.requiresInternalChoice;
+    if (matchedSection) {
+      const choiceRule = resolveInternalChoiceRequirement({
+        schoolName: paper.schoolName,
+        blueprintName: paper.blueprint.name,
+        className: paper.blueprint.book.className,
+        academicSession: paper.academicSession || paper.blueprint.academicSession,
+        subject: paper.blueprint.book.subject,
+        subjectCode: paper.subjectCode || paper.blueprint.subjectCode,
+        questionType: matchedSection.type,
+        marksEach: matchedSection.marksEach,
+        sectionTitle: matchedSection.title,
+        sectionInstructions: effectiveInstructions,
+        slotIndex: slotIdx,
+        orChoiceMode: (matchedSection as any).orChoiceMode,
+        orAlternativeCount: (matchedSection as any).orAlternativeCount,
+        orSlotsJson: (matchedSection as any).orSlotsJson,
+      });
+      reqChoice = choiceRule.required;
+    }
+    return {
+      ...slot,
+      slotIndex: slotIdx,
+      requiresInternalChoice: reqChoice,
+    };
+  });
+
   const res = await generatePaperSectionWithGemini({
     className: paper.blueprint.book.className,
     subject: paper.blueprint.book.subject,
@@ -52,7 +82,7 @@ export const POST = route(async (req, { id }, user) => {
     model,
     teacherFocus,
     generateDiagrams: Boolean(generateDiagrams),
-    slots: slots as GeneratePaperSectionSlot[],
+    slots: resolvedSlots,
     schoolName: paper.schoolName,
     blueprintName: paper.blueprint.name,
     academicSession: paper.academicSession || paper.blueprint.academicSession,

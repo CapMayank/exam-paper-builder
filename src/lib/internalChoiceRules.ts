@@ -37,6 +37,11 @@ export interface InternalChoiceResolutionContext {
   questionType?: string | null;
   marksEach?: number;
   marks?: number;
+  orChoiceMode?: "BOARD_DEFAULT" | "REQUIRED" | "NOT_REQUIRED" | string | null;
+  orAlternativeCount?: number | null;
+  orSlots?: boolean[] | null;
+  orSlotsJson?: string | null;
+  slotIndex?: number | null;
 }
 
 export interface InternalChoiceRequirement {
@@ -401,6 +406,53 @@ function parseBlueprintInstructionOverride(
 }
 
 /**
+ * Resolves the effective override from slot override, blueprint section mode, or instruction text.
+ */
+export function resolveEffectiveChoiceOverride(
+  ctx: InternalChoiceResolutionContext,
+  options?: { isMpbse2026MainTwoMark?: boolean },
+): "DISABLE" | "ENABLE" | null {
+  // 1. Slot-level override takes highest precedence if slotIndex is provided
+  if (ctx.slotIndex !== undefined && ctx.slotIndex !== null) {
+    let slots = ctx.orSlots;
+    if (!slots && ctx.orSlotsJson) {
+      try {
+        const parsed = JSON.parse(ctx.orSlotsJson);
+        if (Array.isArray(parsed)) slots = parsed;
+      } catch {
+        // ignore malformed json
+      }
+    }
+    if (Array.isArray(slots)) {
+      const matched: any = (slots as any[]).find(
+        (s: any, idx: number) =>
+          (typeof s === "object" && s !== null && s.slotIndex === ctx.slotIndex) ||
+          (typeof s === "boolean" && idx === ctx.slotIndex),
+      );
+
+      if (matched !== undefined) {
+        if (typeof matched === "boolean") {
+          return matched ? "ENABLE" : "DISABLE";
+        }
+        if (typeof matched === "object" && matched !== null && typeof (matched as any).required === "boolean") {
+          return (matched as any).required ? "ENABLE" : "DISABLE";
+        }
+      } else if (ctx.slotIndex < slots.length && typeof (slots as any)[ctx.slotIndex] === "boolean") {
+        return (slots as any)[ctx.slotIndex] ? "ENABLE" : "DISABLE";
+      }
+    }
+  }
+
+  // 2. Blueprint Section-level choice mode
+  const mode = (ctx.orChoiceMode || "").trim().toUpperCase();
+  if (mode === "REQUIRED") return "ENABLE";
+  if (mode === "NOT_REQUIRED") return "DISABLE";
+
+  // 3. Instruction text override (legacy blueprints)
+  return parseBlueprintInstructionOverride(ctx.sectionInstructions, options);
+}
+
+/**
  * Resolves the exact internal choice requirement for a given question slot / section
  * based on board, academic session, class, subject (Main vs NSQF), question category, marks,
  * and blueprint section instructions.
@@ -416,7 +468,7 @@ function resolveInternalChoiceRequirementBase(
   const marks = Math.max(1, Number(ctx.marksEach ?? (ctx as any).marks) || 1);
   const qType = (ctx.questionType || "SHORT").trim().toUpperCase();
 
-  // Objective / 1-mark questions never have internal choice
+  // Objective / 1-mark questions default to no internal choice, unless explicitly overridden
   if (isObjectiveSectionOrQuestion(qType, marks)) {
     const patternVersion: ExaminationPatternVersionId =
       board === "MPBSE"
@@ -428,6 +480,25 @@ function resolveInternalChoiceRequirementBase(
         : board === "CBSE"
         ? "CBSE_STANDARD"
         : "GENERIC_BOARD";
+
+    const override = resolveEffectiveChoiceOverride(ctx);
+    if (override === "ENABLE") {
+      return {
+        required: true,
+        forbidden: false,
+        policy: "MANDATORY_EVERY_SLOT",
+        patternVersion,
+        circularReference:
+          patternVersion.startsWith("MPBSE_2026_27")
+            ? "465/विद्योचित/2026"
+            : undefined,
+        board,
+        academicSession,
+        isNsqf: nsqf,
+        overrideApplied: "BLUEPRINT_ENABLE",
+        reason: `Enabled via explicit blueprint configuration on objective question (${qType}, ${marks}m).`,
+      };
+    }
 
     return {
       required: false,
@@ -452,7 +523,7 @@ function resolveInternalChoiceRequirementBase(
       : EXAMINATION_PATTERN_REGISTRY.MPBSE_2026_27_MAIN_465;
 
     const isMpbse2026MainTwoMark = !nsqf && marks === 2;
-    const override = parseBlueprintInstructionOverride(ctx.sectionInstructions, {
+    const override = resolveEffectiveChoiceOverride(ctx, {
       isMpbse2026MainTwoMark,
     });
 
@@ -527,7 +598,7 @@ function resolveInternalChoiceRequirementBase(
   // Case 2: MPBSE Legacy 2025-26 Session
   if (board === "MPBSE" && isHighSchoolOrHigher && isLegacy2025Session(ctx.academicSession)) {
     const ruleSet = EXAMINATION_PATTERN_REGISTRY.MPBSE_2025_26_LEGACY;
-    const override = parseBlueprintInstructionOverride(ctx.sectionInstructions);
+    const override = resolveEffectiveChoiceOverride(ctx);
     if (override === "DISABLE") {
       return {
         required: false,
@@ -561,7 +632,7 @@ function resolveInternalChoiceRequirementBase(
     board === "CBSE"
       ? EXAMINATION_PATTERN_REGISTRY.CBSE_STANDARD
       : EXAMINATION_PATTERN_REGISTRY.GENERIC_BOARD;
-  const override = parseBlueprintInstructionOverride(ctx.sectionInstructions);
+  const override = resolveEffectiveChoiceOverride(ctx);
 
   if (override === "DISABLE") {
     return {
@@ -625,6 +696,89 @@ export function resolveInternalChoiceRequirement(
     ...req,
     rationale: req.rationale || req.reason,
   };
+}
+
+/**
+ * Returns the un-overridden board default requirement for a section or question.
+ */
+export function getBoardDefaultChoiceRequirement(
+  ctx: InternalChoiceResolutionContext,
+): InternalChoiceRequirement {
+  return resolveInternalChoiceRequirementBase({
+    ...ctx,
+    orChoiceMode: "BOARD_DEFAULT",
+    orSlots: null,
+    orSlotsJson: null,
+    slotIndex: null,
+    sectionInstructions: "",
+  });
+}
+
+export interface BoardRuleConflictResult {
+  hasConflict: boolean;
+  message?: string;
+  ruleReference?: string;
+}
+
+/**
+ * Detects if a teacher's explicit override conflicts with mandatory official board patterns.
+ */
+export function detectBoardRuleConflict(
+  ctx: InternalChoiceResolutionContext,
+): BoardRuleConflictResult {
+  const mode = (ctx.orChoiceMode || "BOARD_DEFAULT").trim().toUpperCase();
+  if (mode === "BOARD_DEFAULT" || !mode) {
+    return { hasConflict: false };
+  }
+
+  const boardDefault = getBoardDefaultChoiceRequirement(ctx);
+  const marks = Math.max(1, Number(ctx.marksEach ?? (ctx as any).marks) || 1);
+  const qType = (ctx.questionType || "SHORT").trim().toUpperCase();
+  const isObj = isObjectiveSectionOrQuestion(qType, marks);
+
+  if (isObj && mode === "REQUIRED") {
+    return {
+      hasConflict: true,
+      message: "Notice: Board patterns forbid internal choices for 1-mark/objective questions. Custom school override will generate alternatives.",
+      ruleReference: boardDefault.patternVersion,
+    };
+  }
+
+  if (boardDefault.board === "MPBSE" && isSession2026OrLater(ctx.academicSession)) {
+    const nsqf = isNsqfSubject(ctx.subject, ctx.subjectCode, ctx.className);
+    if (!nsqf && marks === 2 && mode === "REQUIRED") {
+      return {
+        hasConflict: true,
+        message: "Notice: MPBSE Circular 465/2026 specifies no internal choice for 2-mark questions. Custom school override will be applied.",
+        ruleReference: "MPBSE Circular 465/विद्योचित/2026",
+      };
+    }
+    if (!nsqf && (marks === 3 || marks === 4) && mode === "NOT_REQUIRED") {
+      return {
+        hasConflict: true,
+        message: `Notice: MPBSE 2026–27 pattern prescribes internal choices for ${marks}-mark questions. Custom school override will omit alternatives.`,
+        ruleReference: "MPBSE Circular 465/विद्योचित/2026",
+      };
+    }
+  }
+
+  if (boardDefault.required && mode === "NOT_REQUIRED") {
+    return {
+      hasConflict: true,
+      message: `Notice: Prescribed board examination pattern expects internal choice for ${marks}-mark questions. Custom school override will omit alternatives.`,
+      ruleReference: boardDefault.patternVersion,
+    };
+  }
+
+  if (!boardDefault.required && mode === "REQUIRED") {
+    return {
+      hasConflict: true,
+      message: `Notice: Board pattern does not prescribe internal choices for ${marks}-mark questions. Custom school override will add alternatives.`,
+      ruleReference: boardDefault.patternVersion,
+    };
+  }
+
+  return { hasConflict: false };
 }
 
 /**
@@ -839,6 +993,9 @@ export function evaluatePaperInternalChoiceCompliance(params: {
     type: string;
     count: number;
     marksEach: number;
+    orChoiceMode?: string | null;
+    orAlternativeCount?: number | null;
+    orSlotsJson?: string | null;
   }>;
   items: Array<{
     id?: string;
@@ -881,27 +1038,31 @@ export function evaluatePaperInternalChoiceCompliance(params: {
   });
 
   for (const sec of params.sections) {
-    const req = resolveInternalChoiceRequirement({
-      board: params.board,
-      schoolName: params.schoolName,
-      blueprintName: params.blueprintName,
-      academicSession: params.academicSession,
-      className: params.className,
-      subject: params.subject,
-      subjectCode: params.subjectCode,
-      examType: params.examType,
-      sectionTitle: sec.title,
-      sectionInstructions: sec.instructions,
-      questionType: sec.type,
-      marksEach: sec.marksEach,
-    });
-
     const secItems = params.items.filter((i) => i.sectionId === sec.id);
     const slotTotal = Math.max(sec.count, secItems.length);
 
     for (let idx = 0; idx < slotTotal; idx++) {
       const item = secItems[idx];
       const currentQNum = qNum++;
+
+      const req = resolveInternalChoiceRequirement({
+        board: params.board,
+        schoolName: params.schoolName,
+        blueprintName: params.blueprintName,
+        academicSession: params.academicSession,
+        className: params.className,
+        subject: params.subject,
+        subjectCode: params.subjectCode,
+        examType: params.examType,
+        sectionTitle: sec.title,
+        sectionInstructions: sec.instructions,
+        questionType: sec.type,
+        marksEach: sec.marksEach,
+        slotIndex: idx,
+        orChoiceMode: sec.orChoiceMode,
+        orAlternativeCount: sec.orAlternativeCount,
+        orSlotsJson: sec.orSlotsJson,
+      });
 
       if (!item) {
         if (req.required) {

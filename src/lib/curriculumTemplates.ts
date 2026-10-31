@@ -7,6 +7,9 @@ export interface BlueprintTemplateSectionGroup {
     type: QuestionType;
     count: number;
     marksEach: number;
+    orChoiceMode?: "BOARD_DEFAULT" | "REQUIRED" | "NOT_REQUIRED";
+    orAlternativeCount?: number;
+    orSlots?: boolean[];
   }>;
 }
 

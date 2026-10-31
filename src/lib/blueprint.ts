@@ -3,7 +3,17 @@
 import { isSubpartQuestionType, parseMatchColumnPairs } from "./constants";
 import { parseSubparts, subpartsTotalMarks } from "./types";
 
-export type SectionDef = { id: string; title: string; type: string; count: number; marksEach: number };
+export type SectionDef = {
+  id: string;
+  title: string;
+  type: string;
+  count: number;
+  marksEach: number;
+  instructions?: string | null;
+  orChoiceMode?: "BOARD_DEFAULT" | "REQUIRED" | "NOT_REQUIRED" | string | null;
+  orAlternativeCount?: number | null;
+  orSlotsJson?: string | null;
+};
 export type ChapterQuota = { chapterId: string; marks: number; title?: string; number?: number | null };
 export type BlueprintDef = { sections: SectionDef[]; chapters: ChapterQuota[] };
 export type PlacedItem = {
@@ -20,6 +30,9 @@ export type QuestionTypeItem = {
   type: string;
   count: number;
   marksEach: number;
+  orChoiceMode?: "BOARD_DEFAULT" | "REQUIRED" | "NOT_REQUIRED";
+  orAlternativeCount?: number;
+  orSlotsJson?: string;
 };
 
 export type SectionGroup = {
@@ -61,16 +74,22 @@ export function groupSectionsFromFlat(
   flat: {
     id?: string;
     title: string;
-    instructions?: string;
+    instructions?: string | null;
     type: string;
     count: number;
     marksEach: number;
+    orChoiceMode?: string | null;
+    orAlternativeCount?: number | null;
+    orSlotsJson?: string | null;
   }[]
 ): SectionGroup[] {
   const groups: SectionGroup[] = [];
   let seq = 0;
   for (const s of flat) {
     const last = groups[groups.length - 1];
+    const orChoiceMode = (s.orChoiceMode as any) || "BOARD_DEFAULT";
+    const orAlternativeCount = s.orAlternativeCount ?? 1;
+    const orSlotsJson = s.orSlotsJson || "[]";
     if (last && last.title.trim().toLowerCase() === s.title.trim().toLowerCase()) {
       last.questionTypes.push({
         key: `qt-${s.id || seq++}`,
@@ -78,6 +97,9 @@ export function groupSectionsFromFlat(
         type: s.type,
         count: s.count,
         marksEach: s.marksEach,
+        orChoiceMode,
+        orAlternativeCount,
+        orSlotsJson,
       });
       if (!last.instructions && s.instructions) {
         last.instructions = s.instructions;
@@ -94,6 +116,9 @@ export function groupSectionsFromFlat(
             type: s.type,
             count: s.count,
             marksEach: s.marksEach,
+            orChoiceMode,
+            orAlternativeCount,
+            orSlotsJson,
           },
         ],
       });
@@ -106,7 +131,7 @@ export function groupSectionsFromFlat(
           key: `grp-0`,
           title: "Section A",
           instructions: "",
-          questionTypes: [{ key: `qt-0`, type: "MCQ", count: 5, marksEach: 1 }],
+          questionTypes: [{ key: `qt-0`, type: "MCQ", count: 5, marksEach: 1, orChoiceMode: "BOARD_DEFAULT", orAlternativeCount: 1, orSlotsJson: "[]" }],
         },
       ];
 }
@@ -121,6 +146,9 @@ export function flattenSectionGroups(groups: SectionGroup[]): {
   type: string;
   count: number;
   marksEach: number;
+  orChoiceMode: "BOARD_DEFAULT" | "REQUIRED" | "NOT_REQUIRED";
+  orAlternativeCount: number;
+  orSlotsJson: string;
 }[] {
   return groups.flatMap((g) =>
     g.questionTypes.map((qt) => ({
@@ -130,6 +158,9 @@ export function flattenSectionGroups(groups: SectionGroup[]): {
       type: qt.type,
       count: qt.count,
       marksEach: qt.marksEach,
+      orChoiceMode: (qt.orChoiceMode as any) || "BOARD_DEFAULT",
+      orAlternativeCount: qt.orAlternativeCount ?? 1,
+      orSlotsJson: qt.orSlotsJson || "[]",
     }))
   );
 }

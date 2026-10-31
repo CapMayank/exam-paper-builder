@@ -240,6 +240,9 @@ export default function BlueprintsPage() {
             type: s.type,
             count: s.count,
             marksEach: s.marksEach,
+            orChoiceMode: s.orChoiceMode || "BOARD_DEFAULT",
+            orAlternativeCount: s.orAlternativeCount ?? 1,
+            orSlotsJson: s.orSlotsJson || "[]",
           })),
           chapters: b.chapters.map((c) => ({
             chapterId: c.chapterId,
@@ -758,6 +761,19 @@ export default function BlueprintsPage() {
                             <span className="badge !bg-indigo-50 !text-indigo-700 border border-indigo-200/50 text-[10px] uppercase font-semibold">
                               {sec.type}
                             </span>
+                            {sec.orChoiceMode === "REQUIRED" ? (
+                              <span className="badge bg-purple-50 text-purple-700 border border-purple-200 text-[10px] font-semibold">
+                                OR Required
+                              </span>
+                            ) : sec.orChoiceMode === "NOT_REQUIRED" ? (
+                              <span className="badge bg-slate-100 text-slate-600 border border-slate-200 text-[10px] font-medium">
+                                No OR
+                              </span>
+                            ) : (
+                              <span className="badge bg-slate-50 text-slate-500 border border-slate-200 text-[10px] font-medium">
+                                Board Default
+                              </span>
+                            )}
                           </div>
                           {sec.instructions && (
                             <p className="text-xs text-slate-500 italic">{sec.instructions}</p>

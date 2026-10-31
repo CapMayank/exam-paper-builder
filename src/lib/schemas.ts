@@ -191,6 +191,9 @@ export const blueprintSchema = z.object({
         type: z.enum(QUESTION_TYPES),
         count: z.number().int().min(1).max(100),
         marksEach: z.number().int().min(1).max(100),
+        orChoiceMode: z.enum(["BOARD_DEFAULT", "REQUIRED", "NOT_REQUIRED"]).default("BOARD_DEFAULT"),
+        orAlternativeCount: z.number().int().min(0).max(5).default(1),
+        orSlotsJson: z.string().default("[]"),
       }),
     )
     .max(50),

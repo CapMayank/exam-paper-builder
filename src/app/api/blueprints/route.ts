@@ -29,7 +29,17 @@ export const POST = route(async (req) => {
       subjectCode: input.subjectCode ?? "",
       chapters: { create: input.chapters },
       sections: {
-        create: input.sections.map((s, position) => ({ title: s.title, instructions: s.instructions, type: s.type, count: s.count, marksEach: s.marksEach, position })),
+        create: input.sections.map((s, position) => ({
+          title: s.title,
+          instructions: s.instructions,
+          type: s.type,
+          count: s.count,
+          marksEach: s.marksEach,
+          orChoiceMode: s.orChoiceMode || "BOARD_DEFAULT",
+          orAlternativeCount: s.orAlternativeCount ?? 1,
+          orSlotsJson: s.orSlotsJson || "[]",
+          position,
+        })),
       },
     },
   });

@@ -94,6 +94,9 @@ export const PUT = route(async (req, { id }, user) => {
             type: s.type,
             count: s.count,
             marksEach: s.marksEach,
+            orChoiceMode: s.orChoiceMode || "BOARD_DEFAULT",
+            orAlternativeCount: s.orAlternativeCount ?? 1,
+            orSlotsJson: s.orSlotsJson || "[]",
             position,
           },
         });
@@ -106,6 +109,9 @@ export const PUT = route(async (req, { id }, user) => {
             type: s.type,
             count: s.count,
             marksEach: s.marksEach,
+            orChoiceMode: s.orChoiceMode || "BOARD_DEFAULT",
+            orAlternativeCount: s.orAlternativeCount ?? 1,
+            orSlotsJson: s.orSlotsJson || "[]",
             position,
           },
         });

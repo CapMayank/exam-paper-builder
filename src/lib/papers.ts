@@ -201,6 +201,9 @@ export async function loadPaperView(id: string) {
       count: s.count,
       marksEach: s.marksEach,
       instructions: s.instructions,
+      orChoiceMode: (s as any).orChoiceMode,
+      orAlternativeCount: (s as any).orAlternativeCount,
+      orSlotsJson: (s as any).orSlotsJson,
     })),
     items: dtoItems.map((i) => ({
       id: i.id,

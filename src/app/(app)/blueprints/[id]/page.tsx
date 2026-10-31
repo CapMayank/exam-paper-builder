@@ -21,6 +21,10 @@ import {
   type QuestionTypeItem,
   type SectionGroup,
 } from "@/lib/blueprint";
+import {
+  detectBoardRuleConflict,
+  getBoardDefaultChoiceRequirement,
+} from "@/lib/internalChoiceRules";
 import { api } from "@/lib/client";
 import { DEFAULT_SCHOOL_NAME, EXAM_TYPES, EXAM_TYPE_LABEL, QUESTION_TYPES, QUESTION_TYPE_LABEL, sortClassNames } from "@/lib/constants";
 import { isSubjectMatching } from "@/lib/schoolCurriculum";
@@ -32,6 +36,7 @@ const newQuestionType = (over: Partial<QuestionTypeItem> = {}): QuestionTypeItem
   type: "MCQ",
   count: 5,
   marksEach: 1,
+  orChoiceMode: "BOARD_DEFAULT",
   ...over,
 });
 
@@ -74,6 +79,7 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
   const [importModalTab, setImportModalTab] = useState<"import" | "ai" | "examples">("import");
   const [jsonModalOpen, setJsonModalOpen] = useState(false);
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
+  const [expandedSlotCustomizers, setExpandedSlotCustomizers] = useState<Record<string, boolean>>({});
 
   const [selectedClassFilter, setSelectedClassFilter] = useState("");
   const [selectedSubjectFilter, setSelectedSubjectFilter] = useState("");
@@ -201,6 +207,55 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
   const chapterTotal = chapterQuotas.reduce((s, c) => s + c.marks, 0);
   const problems = validateBlueprint({ sections, chapters: chapterQuotas });
   const feasibilityWarnings = checkBlueprintFeasibility({ sections, chapters: chapterQuotas });
+
+  const { totalLogicalQuestions, totalAlternativeQuestions } = useMemo(() => {
+    let logical = 0;
+    let alt = 0;
+    for (const grp of sectionGroups) {
+      for (const qt of grp.questionTypes) {
+        logical += qt.count;
+        const boardRule = getBoardDefaultChoiceRequirement({
+          board: "MPBSE",
+          className: book?.className,
+          subject: book?.subject,
+          subjectCode,
+          academicSession,
+          examType,
+          questionType: qt.type,
+          marksEach: qt.marksEach,
+          sectionTitle: grp.title,
+        });
+
+        let overrides: Record<number, boolean> | null = null;
+        if (qt.orSlotsJson) {
+          try {
+            const arr = JSON.parse(qt.orSlotsJson);
+            if (Array.isArray(arr)) {
+              overrides = {};
+              arr.forEach((s: any) => {
+                if (typeof s?.slotIndex === "number" && typeof s?.required === "boolean") {
+                  overrides![s.slotIndex] = s.required;
+                }
+              });
+            }
+          } catch {}
+        }
+
+        const modeDefault =
+          qt.orChoiceMode === "REQUIRED"
+            ? true
+            : qt.orChoiceMode === "NOT_REQUIRED"
+            ? false
+            : boardRule.required;
+
+        for (let idx = 0; idx < qt.count; idx++) {
+          const req = overrides && typeof overrides[idx] === "boolean" ? overrides[idx] : modeDefault;
+          if (req) alt++;
+        }
+      }
+    }
+    return { totalLogicalQuestions: logical, totalAlternativeQuestions: alt };
+  }, [sectionGroups, book, subjectCode, academicSession, examType]);
 
   const canManageBlueprint = currentUser?.role === "ADMIN" || currentUser?.role === "HOD";
   const isReadOnly = id !== "new" && !canManageBlueprint;
@@ -347,6 +402,84 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
     );
   }
 
+  function toggleSlotCustomizer(qtKey: string) {
+    setExpandedSlotCustomizers((prev) => ({
+      ...prev,
+      [qtKey]: !prev[qtKey],
+    }));
+  }
+
+  function parseSlotOverrides(json?: string | null): Record<number, boolean> | null {
+    if (!json) return null;
+    try {
+      const arr = JSON.parse(json);
+      if (Array.isArray(arr)) {
+        const map: Record<number, boolean> = {};
+        arr.forEach((s: any) => {
+          if (typeof s?.slotIndex === "number" && typeof s?.required === "boolean") {
+            map[s.slotIndex] = s.required;
+          }
+        });
+        return map;
+      }
+    } catch {}
+    return null;
+  }
+
+  function isSlotChoiceRequired(
+    qt: QuestionTypeItem,
+    slotIdx: number,
+    boardDefault: boolean,
+  ): boolean {
+    const overrides = parseSlotOverrides(qt.orSlotsJson);
+    if (overrides && typeof overrides[slotIdx] === "boolean") {
+      return overrides[slotIdx];
+    }
+    if (qt.orChoiceMode === "REQUIRED") return true;
+    if (qt.orChoiceMode === "NOT_REQUIRED") return false;
+    return boardDefault;
+  }
+
+  function hasExplicitSlotOverride(qt: QuestionTypeItem, slotIdx: number): boolean {
+    const overrides = parseSlotOverrides(qt.orSlotsJson);
+    return Boolean(overrides && typeof overrides[slotIdx] === "boolean");
+  }
+
+  function toggleSlotOverride(
+    grpKey: string,
+    qtKey: string,
+    totalCount: number,
+    slotIdx: number,
+    currentVal: boolean,
+  ) {
+    const grp = sectionGroups.find((g) => g.key === grpKey);
+    const qt = grp?.questionTypes.find((q) => q.key === qtKey);
+    if (!qt) return;
+    const overrides = parseSlotOverrides(qt.orSlotsJson) || {};
+    overrides[slotIdx] = !currentVal;
+    const list = Object.entries(overrides)
+      .filter(([k]) => Number(k) < totalCount)
+      .map(([k, v]) => ({ slotIndex: Number(k), required: v }));
+    patchQuestionType(grpKey, qtKey, { orSlotsJson: JSON.stringify(list) });
+  }
+
+  function setAllSlotsRequirement(
+    grpKey: string,
+    qtKey: string,
+    totalCount: number,
+    required: boolean,
+  ) {
+    const list = Array.from({ length: totalCount }, (_, i) => ({
+      slotIndex: i,
+      required,
+    }));
+    patchQuestionType(grpKey, qtKey, { orSlotsJson: JSON.stringify(list) });
+  }
+
+  function resetSlotsToDefault(grpKey: string, qtKey: string) {
+    patchQuestionType(grpKey, qtKey, { orSlotsJson: undefined });
+  }
+
   function handleImportedBlueprint(imported: {
     name: string;
     examType: string;
@@ -405,6 +538,9 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
         type: qt.type,
         count: qt.count,
         marksEach: qt.marksEach,
+        orChoiceMode: (qt as any).orChoiceMode ?? "BOARD_DEFAULT",
+        orAlternativeCount: (qt as any).orAlternativeCount ?? null,
+        orSlotsJson: (qt as any).orSlotsJson ?? null,
       })),
     }));
     setSectionGroups(newGroups);
@@ -448,6 +584,9 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
           type: s.type,
           count: s.count,
           marksEach: s.marksEach,
+          orChoiceMode: (s as any).orChoiceMode ?? "BOARD_DEFAULT",
+          orAlternativeCount: (s as any).orAlternativeCount ?? null,
+          orSlotsJson: (s as any).orSlotsJson ?? null,
         })),
       };
       let savedBlueprintId = id;
@@ -805,6 +944,25 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
             {sectionGroups.map((grp, i) => {
               const grpCount = grp.questionTypes.reduce((s, qt) => s + qt.count, 0);
               const grpMarks = grp.questionTypes.reduce((s, qt) => s + qt.count * qt.marksEach, 0);
+              const grpOrCount = grp.questionTypes.reduce((acc, q) => {
+                const bRule = getBoardDefaultChoiceRequirement({
+                  board: "MPBSE",
+                  className: book?.className,
+                  subject: book?.subject,
+                  subjectCode,
+                  academicSession,
+                  examType,
+                  questionType: q.type,
+                  marksEach: q.marksEach,
+                  sectionTitle: grp.title,
+                });
+                return (
+                  acc +
+                  Array.from({ length: q.count }).filter((_, idx) =>
+                    isSlotChoiceRequired(q, idx, bRule.required)
+                  ).length
+                );
+              }, 0);
 
               return (
                 <fieldset key={grp.key} className="space-y-3 rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs">
@@ -819,7 +977,7 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
                       aria-label="Section title"
                     />
                     <span className="badge bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold text-xs py-1 px-2.5 whitespace-nowrap shadow-2xs">
-                      {grpCount} Qs · {grpMarks} marks
+                      {grpCount} Qs {grpOrCount > 0 ? `(+${grpOrCount} OR)` : ""} · {grpMarks} marks
                     </span>
                     {!isReadOnly && (
                       <div className="flex items-center gap-1">
@@ -871,82 +1029,255 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
                     <div className="flex items-center justify-between text-xs font-semibold text-slate-700 border-b border-slate-100 pb-1">
                       <span>Question Types in {grp.title || `Section ${String.fromCharCode(65 + i)}`}</span>
                       <span className="badge badge-indigo text-[10px] font-bold">
-                        {grpCount} Qs · {grpMarks} Marks
+                        {grpCount} Qs {grpOrCount > 0 ? `(+${grpOrCount} OR)` : ""} · {grpMarks} Marks
                       </span>
                     </div>
 
                     <div className="space-y-2">
-                      {grp.questionTypes.map((qt) => (
-                        <div
-                          key={qt.key}
-                          className="rounded-lg border border-slate-200/90 bg-slate-50/70 p-2.5 space-y-2 text-xs"
-                        >
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 min-w-0">
-                              <select
-                                className="input text-xs py-1.5 w-full font-medium text-slate-800"
-                                value={qt.type}
-                                onChange={(e) => patchQuestionType(grp.key, qt.key, { type: e.target.value })}
-                                aria-label="Question type"
-                              >
-                                {QUESTION_TYPES.map((t) => (
-                                  <option key={t} value={t}>
-                                    {QUESTION_TYPE_LABEL[t]}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
+                      {grp.questionTypes.map((qt) => {
+                        const boardDefaultReq = getBoardDefaultChoiceRequirement({
+                          board: "MPBSE",
+                          className: book?.className,
+                          subject: book?.subject,
+                          subjectCode,
+                          academicSession,
+                          examType,
+                          questionType: qt.type,
+                          marksEach: qt.marksEach,
+                          sectionTitle: grp.title,
+                        });
 
-                            {!isReadOnly && grp.questionTypes.length > 1 && (
-                              <button
-                                type="button"
-                                className="btn btn-sm btn-ghost hover:bg-red-50 hover:text-red-700 text-slate-400 p-1.5 shrink-0"
-                                onClick={() => removeQuestionType(grp.key, qt.key)}
-                                title="Remove this question type"
-                                aria-label="Remove question type"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            )}
-                          </div>
+                        const conflict = detectBoardRuleConflict({
+                          board: "MPBSE",
+                          className: book?.className,
+                          subject: book?.subject,
+                          subjectCode,
+                          academicSession,
+                          examType,
+                          questionType: qt.type,
+                          marksEach: qt.marksEach,
+                          sectionTitle: grp.title,
+                          orChoiceMode: qt.orChoiceMode,
+                        });
 
-                          <div className="flex items-center justify-between text-slate-600 pt-0.5">
+                        const effectiveAltCount = Array.from({ length: qt.count }).filter((_, slotIdx) =>
+                          isSlotChoiceRequired(qt, slotIdx, boardDefaultReq.required)
+                        ).length;
+
+                        return (
+                          <div
+                            key={qt.key}
+                            className="rounded-lg border border-slate-200/90 bg-slate-50/70 p-2.5 space-y-2 text-xs"
+                          >
                             <div className="flex items-center gap-2">
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-[11px] text-slate-500 font-medium">Count:</span>
-                                <input
-                                  type="number"
-                                  min={1}
-                                  style={{ width: "3.75rem" }}
-                                  className="input text-xs py-1 px-2 text-center font-medium"
-                                  value={qt.count}
-                                  onChange={(e) => patchQuestionType(grp.key, qt.key, { count: num(e.target.value) })}
-                                  aria-label="Question count"
-                                />
+                              <div className="flex-1 min-w-0">
+                                <select
+                                  className="input text-xs py-1.5 w-full font-medium text-slate-800"
+                                  value={qt.type}
+                                  onChange={(e) => patchQuestionType(grp.key, qt.key, { type: e.target.value })}
+                                  aria-label="Question type"
+                                >
+                                  {QUESTION_TYPES.map((t) => (
+                                    <option key={t} value={t}>
+                                      {QUESTION_TYPE_LABEL[t]}
+                                    </option>
+                                  ))}
+                                </select>
                               </div>
 
-                              <span className="text-slate-400 text-xs">×</span>
+                              {!isReadOnly && grp.questionTypes.length > 1 && (
+                                <button
+                                  type="button"
+                                  className="btn btn-sm btn-ghost hover:bg-red-50 hover:text-red-700 text-slate-400 p-1.5 shrink-0"
+                                  onClick={() => removeQuestionType(grp.key, qt.key)}
+                                  title="Remove this question type"
+                                  aria-label="Remove question type"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              )}
+                            </div>
 
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-[11px] text-slate-500 font-medium">Marks:</span>
-                                <input
-                                  type="number"
-                                  min={1}
-                                  style={{ width: "3.75rem" }}
-                                  className="input text-xs py-1 px-2 text-center font-medium"
-                                  value={qt.marksEach}
-                                  onChange={(e) => patchQuestionType(grp.key, qt.key, { marksEach: num(e.target.value) })}
-                                  aria-label="Marks each"
-                                />
+                            <div className="flex items-center justify-between text-slate-600 pt-0.5">
+                              <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[11px] text-slate-500 font-medium">Count:</span>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    style={{ width: "3.75rem" }}
+                                    className="input text-xs py-1 px-2 text-center font-medium"
+                                    value={qt.count}
+                                    onChange={(e) => patchQuestionType(grp.key, qt.key, { count: num(e.target.value) })}
+                                    aria-label="Question count"
+                                  />
+                                </div>
+
+                                <span className="text-slate-400 text-xs">×</span>
+
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[11px] text-slate-500 font-medium">Marks:</span>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    style={{ width: "3.75rem" }}
+                                    className="input text-xs py-1 px-2 text-center font-medium"
+                                    value={qt.marksEach}
+                                    onChange={(e) => patchQuestionType(grp.key, qt.key, { marksEach: num(e.target.value) })}
+                                    aria-label="Marks each"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="font-semibold text-slate-800 text-xs bg-white px-2 py-1 rounded border border-slate-200">
+                                = {qt.count * qt.marksEach} marks
                               </div>
                             </div>
 
-                            <div className="font-semibold text-slate-800 text-xs bg-white px-2 py-1 rounded border border-slate-200">
-                              = {qt.count * qt.marksEach} marks
+                            {/* Internal Choice (OR / अथवा) Configuration */}
+                            <div className="pt-2 border-t border-slate-200/80 space-y-2">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <span className="text-[11px] font-semibold text-slate-700">
+                                    Internal Choice (OR / अथवा):
+                                  </span>
+                                  <select
+                                    className={`input text-xs py-1 px-2 font-medium ${
+                                      qt.orChoiceMode === "REQUIRED"
+                                        ? "border-purple-300 text-purple-900 bg-purple-50/60"
+                                        : qt.orChoiceMode === "NOT_REQUIRED"
+                                        ? "border-slate-300 text-slate-600 bg-slate-50"
+                                        : "border-indigo-300 text-indigo-900 bg-indigo-50/40"
+                                    }`}
+                                    value={qt.orChoiceMode || "BOARD_DEFAULT"}
+                                    onChange={(e) =>
+                                      patchQuestionType(grp.key, qt.key, {
+                                        orChoiceMode: e.target.value as "BOARD_DEFAULT" | "REQUIRED" | "NOT_REQUIRED",
+                                      })
+                                    }
+                                    disabled={isReadOnly}
+                                    aria-label="Internal choice configuration"
+                                  >
+                                    <option value="BOARD_DEFAULT">
+                                      Use Board Default ({boardDefaultReq.required ? "Required" : "Not Required"})
+                                    </option>
+                                    <option value="REQUIRED">Required (OR / अथवा)</option>
+                                    <option value="NOT_REQUIRED">Not Required</option>
+                                  </select>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[11px] font-medium">
+                                    {effectiveAltCount > 0 ? (
+                                      <span className="text-purple-700 font-semibold bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                                        {effectiveAltCount} OR {effectiveAltCount === 1 ? "alternative" : "alternatives"}
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-400">No alternatives</span>
+                                    )}
+                                  </span>
+
+                                  {qt.count > 1 && (
+                                    <button
+                                      type="button"
+                                      className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 underline flex items-center gap-1"
+                                      onClick={() => toggleSlotCustomizer(qt.key)}
+                                    >
+                                      <span>{expandedSlotCustomizers[qt.key] ? "Hide Slots ▲" : "Customize Slots ▼"}</span>
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Board Rule Pattern source */}
+                              <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500 bg-white/80 p-1.5 rounded border border-slate-200/60">
+                                <span className="font-semibold text-slate-600">Rule Pattern:</span>
+                                <span>{boardDefaultReq.patternVersion} ({boardDefaultReq.reason})</span>
+                                {boardDefaultReq.circularReference && (
+                                  <span className="text-slate-400 font-mono">[{boardDefaultReq.circularReference}]</span>
+                                )}
+                              </div>
+
+                              {/* Conflict warning banner if school override conflicts with board circular */}
+                              {conflict.hasConflict && (
+                                <div className="text-[11px] bg-amber-50 text-amber-900 border border-amber-200 rounded p-1.5 flex items-start gap-1.5">
+                                  <span className="font-bold shrink-0">⚠️ Conflict Notice:</span>
+                                  <div className="flex-1">
+                                    <span>{conflict.message}</span>
+                                    {conflict.ruleReference && (
+                                      <span className="block text-[10px] text-amber-700/90 font-mono mt-0.5">
+                                        Ref: {conflict.ruleReference}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Collapsible Question Slot Customizer */}
+                              {expandedSlotCustomizers[qt.key] && (
+                                <div className="mt-2 p-2 bg-white rounded border border-slate-200 space-y-2">
+                                  <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] font-semibold text-slate-700 border-b border-slate-100 pb-1">
+                                    <span>Question Slot Overrides ({qt.count} slots):</span>
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        className="px-1.5 py-0.5 text-[10px] rounded bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 font-medium"
+                                        onClick={() => setAllSlotsRequirement(grp.key, qt.key, qt.count, true)}
+                                        disabled={isReadOnly}
+                                      >
+                                        All OR
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="px-1.5 py-0.5 text-[10px] rounded bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 font-medium"
+                                        onClick={() => setAllSlotsRequirement(grp.key, qt.key, qt.count, false)}
+                                        disabled={isReadOnly}
+                                      >
+                                        None
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="px-1.5 py-0.5 text-[10px] rounded bg-slate-50 text-slate-500 hover:bg-slate-100 border border-slate-200 font-medium"
+                                        onClick={() => resetSlotsToDefault(grp.key, qt.key)}
+                                        disabled={isReadOnly}
+                                      >
+                                        Reset to Default
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-1.5 pt-1">
+                                    {Array.from({ length: qt.count }).map((_, slotIdx) => {
+                                      const isReq = isSlotChoiceRequired(qt, slotIdx, boardDefaultReq.required);
+                                      const hasCustom = hasExplicitSlotOverride(qt, slotIdx);
+
+                                      return (
+                                        <button
+                                          key={slotIdx}
+                                          type="button"
+                                          className={`flex items-center justify-between px-2 py-1 rounded text-[11px] font-medium border transition ${
+                                            isReq
+                                              ? "bg-purple-50 border-purple-300 text-purple-900 hover:bg-purple-100"
+                                              : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                                          } ${hasCustom ? "ring-1 ring-purple-400 font-semibold" : ""}`}
+                                          onClick={() => toggleSlotOverride(grp.key, qt.key, qt.count, slotIdx, isReq)}
+                                          disabled={isReadOnly}
+                                          title={hasCustom ? "Custom slot override applied" : "Inherited from section default"}
+                                        >
+                                          <span>Slot {slotIdx + 1}</span>
+                                          <span className={`text-[10px] px-1 rounded ${isReq ? "bg-purple-200/80 text-purple-950 font-bold" : "bg-slate-200 text-slate-600"}`}>
+                                            {isReq ? "OR" : "No"}
+                                          </span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
 
                     {!isReadOnly && (
@@ -964,8 +1295,13 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
             })}
           </div>
 
-          <div className="text-sm font-semibold text-slate-900 pt-1 border-t border-slate-100 flex items-center justify-between">
-            <span>Total Sections Marks:</span>
+          <div className="text-sm font-semibold text-slate-900 pt-1 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span>Total Sections:</span>
+              <span className="text-xs font-normal text-slate-500">
+                {totalLogicalQuestions} Questions {totalAlternativeQuestions > 0 ? `(+${totalAlternativeQuestions} OR alternatives)` : ""}
+              </span>
+            </div>
             <span className="badge badge-indigo text-xs font-bold px-3 py-1">{total} marks</span>
           </div>
         </section>
@@ -1138,6 +1474,20 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
       <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-slate-200/90 bg-white/95 backdrop-blur-md px-4 py-2.5 shadow-lg">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-3 text-xs">
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-500 font-medium">Logical Qs:</span>
+              <span className="font-mono font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                {totalLogicalQuestions}
+              </span>
+            </div>
+            {totalAlternativeQuestions > 0 && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-purple-600 font-medium">OR Choices:</span>
+                <span className="font-mono font-bold text-purple-800 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                  +{totalAlternativeQuestions}
+                </span>
+              </div>
+            )}
             <div className="flex items-center gap-1.5">
               <span className="text-slate-500 font-medium">Sections Target:</span>
               <span className="font-mono font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">

@@ -44,6 +44,9 @@ export const POST = route(async (req, { id }, user) => {
       marksEach: sec.marksEach,
       sectionTitle: sec.title,
       sectionInstructions: sec.instructions,
+      orChoiceMode: (sec as any).orChoiceMode,
+      orAlternativeCount: (sec as any).orAlternativeCount,
+      orSlotsJson: (sec as any).orSlotsJson,
     });
     if (reqRule.required) internalChoiceSectionIds.add(sec.id);
     if (reqRule.forbidden) forbiddenChoiceSectionIds.add(sec.id);
@@ -52,10 +55,31 @@ export const POST = route(async (req, { id }, user) => {
   // Determine whether existing items in the target scope have internal choice violations
   const itemsToRepairChoice = paper.items.filter((item) => {
     if (targetSectionId && item.sectionId !== targetSectionId) return false;
-    if (forbiddenChoiceSectionIds.has(item.sectionId) && item.orQuestion) return true;
-    if (internalChoiceSectionIds.has(item.sectionId)) {
+    const sec = paper.blueprint.sections.find((s) => s.id === item.sectionId);
+    if (!sec) return false;
+    const secItems = paper.items.filter((i) => i.sectionId === item.sectionId);
+    const slotIndex = secItems.indexOf(item);
+    const slotReq = resolveInternalChoiceRequirement({
+      schoolName: paper.schoolName,
+      blueprintName: paper.blueprint.name,
+      className: paper.blueprint.book.className,
+      academicSession: paper.academicSession || paper.blueprint.academicSession,
+      subject: paper.blueprint.book.subject,
+      subjectCode: paper.subjectCode || paper.blueprint.subjectCode,
+      questionType: sec.type,
+      marksEach: sec.marksEach,
+      sectionTitle: sec.title,
+      sectionInstructions: sec.instructions,
+      slotIndex: slotIndex >= 0 ? slotIndex : undefined,
+      orChoiceMode: (sec as any).orChoiceMode,
+      orAlternativeCount: (sec as any).orAlternativeCount,
+      orSlotsJson: (sec as any).orSlotsJson,
+    });
+
+    if (slotReq.forbidden && item.orQuestion) return true;
+    if (slotReq.required) {
       if (!item.orQuestion || !item.orQuestion.text?.trim()) return true;
-      if (isParaphraseOrDuplicateChoice(item.question.text, item.orQuestion.text)) return true;
+      if (isParaphraseOrDuplicateChoice(item.question.text, item.orQuestion.text).isDuplicateOrParaphrase) return true;
     }
     return false;
   });
@@ -140,7 +164,32 @@ export const POST = route(async (req, { id }, user) => {
     toPlacedItems(paper.blueprint.sections, paper.items),
     candidatePool,
     orQuestionIds,
-    { targetSectionId, preferredDifficulty, internalChoiceSectionIds },
+    {
+      targetSectionId,
+      preferredDifficulty,
+      internalChoiceSectionIds,
+      isSlotChoiceRequired: (sectionId, slotIndex, defaultRequired) => {
+        const sec = paper.blueprint.sections.find((s) => s.id === sectionId);
+        if (!sec) return defaultRequired;
+        const slotReq = resolveInternalChoiceRequirement({
+          schoolName: paper.schoolName,
+          blueprintName: paper.blueprint.name,
+          className: paper.blueprint.book.className,
+          academicSession: paper.academicSession || paper.blueprint.academicSession,
+          subject: paper.blueprint.book.subject,
+          subjectCode: paper.subjectCode || paper.blueprint.subjectCode,
+          questionType: sec.type,
+          marksEach: sec.marksEach,
+          sectionTitle: sec.title,
+          sectionInstructions: sec.instructions,
+          slotIndex,
+          orChoiceMode: (sec as any).orChoiceMode,
+          orAlternativeCount: (sec as any).orAlternativeCount,
+          orSlotsJson: (sec as any).orSlotsJson,
+        });
+        return slotReq.required;
+      },
+    },
   );
 
   const unfilledSummary = result.unfilled.length > 0

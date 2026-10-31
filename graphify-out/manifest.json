@@ -54,15 +54,15 @@
     "semantic_hash": ""
   },
   "src/app/(app)/blueprints/[id]/page.tsx": {
-    "mtime": 1793340405.2177744,
-    "seen": 1793340694.0657105,
-    "ast_hash": "2b5c24dce37c8ebf1c21fdb25d10edac",
+    "mtime": 1793424642.6270707,
+    "seen": 1793424724.083891,
+    "ast_hash": "24ce3cc6f305c924d09979a738021c53",
     "semantic_hash": ""
   },
   "src/app/(app)/blueprints/page.tsx": {
-    "mtime": 1792763042.0839689,
-    "seen": 1792763617.7547061,
-    "ast_hash": "b82976d1e52b5dcce475ee1fc6a0c6b9",
+    "mtime": 1793424253.9846475,
+    "seen": 1793424724.083891,
+    "ast_hash": "2b5bc8524cdff28e598123cb15d5ec0f",
     "semantic_hash": ""
   },
   "src/app/(app)/books/page.tsx": {
@@ -198,21 +198,21 @@
     "semantic_hash": ""
   },
   "src/app/api/blueprints/[id]/route.ts": {
-    "mtime": 1792836959.4013784,
-    "seen": 1792837643.074992,
-    "ast_hash": "bb8defde146ba5733d054c25392338e9",
+    "mtime": 1793423265.5302618,
+    "seen": 1793424724.083891,
+    "ast_hash": "8e4a01b03237a358c957d1fa9c0d0076",
     "semantic_hash": ""
   },
   "src/app/api/blueprints/rollover/route.ts": {
-    "mtime": 1792682778.5006335,
-    "seen": 1792685467.5911267,
-    "ast_hash": "1b45e440216b2e3c1ac60f844aabc678",
+    "mtime": 1793423313.1106083,
+    "seen": 1793424724.083891,
+    "ast_hash": "2acea14896cf3eca0f09309183c0ce8e",
     "semantic_hash": ""
   },
   "src/app/api/blueprints/route.ts": {
-    "mtime": 1792837312.9812787,
-    "seen": 1792837643.074992,
-    "ast_hash": "09328acfcf1d81c96269b591fbbdd4ca",
+    "mtime": 1793423258.5308802,
+    "seen": 1793424724.083891,
+    "ast_hash": "888ddf035dff07f3e23a96e3e6debb89",
     "semantic_hash": ""
   },
   "src/app/api/books/[id]/chapters/route.ts": {
@@ -318,9 +318,9 @@
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/ai-generate-section/route.ts": {
-    "mtime": 1793416978.290841,
-    "seen": 1793417171.1905072,
-    "ast_hash": "d21c2fd7d7e668caf210e1466476a7cc",
+    "mtime": 1793423930.1061277,
+    "seen": 1793424724.083891,
+    "ast_hash": "ce2484e8ed7d1deccab3b0f444a51cf7",
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/ai-plan/route.ts": {
@@ -330,9 +330,9 @@
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/autofill/route.ts": {
-    "mtime": 1793416989.1828609,
-    "seen": 1793417171.1905072,
-    "ast_hash": "ad4b58a46de3fd1e5e19c20b260cef68",
+    "mtime": 1793423873.1623347,
+    "seen": 1793424724.083891,
+    "ast_hash": "71d82e83bc254f35b8cdcb01fd16c77e",
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/clear-questions/route.ts": {
@@ -732,9 +732,9 @@
     "semantic_hash": ""
   },
   "src/lib/autofill.ts": {
-    "mtime": 1793366433.247404,
-    "seen": 1793417171.191507,
-    "ast_hash": "25c40c1cc2c23505e518e5c6467b173e",
+    "mtime": 1793423837.8109589,
+    "seen": 1793424724.0848901,
+    "ast_hash": "4c1adcbf7f6ea5970c9d7668806c2ec0",
     "semantic_hash": ""
   },
   "src/lib/batchQuestionIo.ts": {
@@ -750,15 +750,15 @@
     "semantic_hash": ""
   },
   "src/lib/blueprint.ts": {
-    "mtime": 1793416048.886445,
-    "seen": 1793417171.191507,
-    "ast_hash": "f1ce8d2f9b69e5241a5986367d497583",
+    "mtime": 1793424663.7672975,
+    "seen": 1793424724.0848901,
+    "ast_hash": "2bce1d3ab858a9c6abd37a97447da329",
     "semantic_hash": ""
   },
   "src/lib/blueprintExport.ts": {
-    "mtime": 1792508474.811573,
-    "seen": 1792685467.5911267,
-    "ast_hash": "e70883a13f9271424ca35c55c88860b0",
+    "mtime": 1793424436.0281777,
+    "seen": 1793424724.0848901,
+    "ast_hash": "e2a92cab771dd56be7c78b7c39781f15",
     "semantic_hash": ""
   },
   "src/lib/blueprintImport.test.ts": {
@@ -768,9 +768,9 @@
     "semantic_hash": ""
   },
   "src/lib/blueprintImport.ts": {
-    "mtime": 1792574820.0186377,
-    "seen": 1792685467.5911267,
-    "ast_hash": "36e41bce361ee1434bfa3cc7c87e352a",
+    "mtime": 1793423445.2028868,
+    "seen": 1793424724.0848901,
+    "ast_hash": "41e0ba633d363b7e2289eb4b3e5b65b7",
     "semantic_hash": ""
   },
   "src/lib/blueprints.ts": {
@@ -1104,9 +1104,9 @@
     "semantic_hash": ""
   },
   "src/lib/papers.ts": {
-    "mtime": 1793417093.6054325,
-    "seen": 1793417171.191507,
-    "ast_hash": "d34519ddd48bdf2e656cbe12e9de97ba",
+    "mtime": 1793423620.8629405,
+    "seen": 1793424724.0848901,
+    "ast_hash": "692e2b6db49a9df748598a5434e86185",
     "semantic_hash": ""
   },
   "src/lib/print-logistics.test.ts": {
@@ -1158,9 +1158,9 @@
     "semantic_hash": ""
   },
   "src/lib/schemas.ts": {
-    "mtime": 1793367169.632692,
-    "seen": 1793417171.191507,
-    "ast_hash": "d2865ece7b61138cbbab829c89ca1b47",
+    "mtime": 1793424422.334671,
+    "seen": 1793424724.0848901,
+    "ast_hash": "d90fdcdd592cec2363d5fcffc6102b5a",
     "semantic_hash": ""
   },
   "src/lib/schoolCurriculum.ts": {
@@ -1194,9 +1194,9 @@
     "semantic_hash": ""
   },
   "src/lib/types.ts": {
-    "mtime": 1793366699.904974,
-    "seen": 1793417171.191507,
-    "ast_hash": "d8ffef8d2b192dc0da347c79d38cde1a",
+    "mtime": 1793423045.8957748,
+    "seen": 1793424724.0848901,
+    "ast_hash": "8f6180c6b7f23a04ba79f1a324edf544",
     "semantic_hash": ""
   },
   "src/lib/uploads.ts": {
@@ -1458,9 +1458,9 @@
     "semantic_hash": ""
   },
   "src/lib/curriculumTemplates.ts": {
-    "mtime": 1792761858.8000553,
-    "seen": 1792763617.7547061,
-    "ast_hash": "e00d9da60631899f6472109e31417edc",
+    "mtime": 1793423461.6524782,
+    "seen": 1793424724.0848901,
+    "ast_hash": "2dea7495161a988d008c760abbb456e4",
     "semantic_hash": ""
   },
   "src/lib/newFeatures.test.ts": {
@@ -1560,15 +1560,21 @@
     "semantic_hash": ""
   },
   "src/lib/internalChoiceRules.ts": {
-    "mtime": 1793419659.5477154,
-    "seen": 1793419764.6714537,
-    "ast_hash": "c85eba52b47d4a12d504f133e5d50a55",
+    "mtime": 1793424632.1113207,
+    "seen": 1793424724.0848901,
+    "ast_hash": "37e57e780152b5f2d07765fd5ba44656",
     "semantic_hash": ""
   },
   "src/lib/academicSessionUtils.ts": {
     "mtime": 1793419632.9286547,
     "seen": 1793419764.6714537,
     "ast_hash": "3be01fc07d694009a9b91d3b226435d0",
+    "semantic_hash": ""
+  },
+  "src/lib/blueprint-internal-choice.test.ts": {
+    "mtime": 1793424531.014346,
+    "seen": 1793424724.0848901,
+    "ast_hash": "05a15662e676947454ce005aad938b31",
     "semantic_hash": ""
   }
 }

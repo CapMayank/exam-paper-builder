@@ -7,6 +7,9 @@ export interface ImportedSection {
   count: number;
   marksEach: number;
   instructions: string;
+  orChoiceMode?: "BOARD_DEFAULT" | "REQUIRED" | "NOT_REQUIRED";
+  orAlternativeCount?: number;
+  orSlotsJson?: string;
 }
 
 export interface ImportedChapterQuota {
@@ -578,12 +581,26 @@ function parseJsonBlueprint(parsed: any): BlueprintImportResult {
           const marksEach = Math.max(1, Math.floor(Number(qt.marksEach || qt.marks || qt.markEach || 1)));
           const itemInstructions = (qt.instructions || qt.instruction || instructions).toString().trim();
 
+          const rawMode = (qt.orChoiceMode || s.orChoiceMode || "").toString().trim().toUpperCase();
+          const orChoiceMode = (rawMode === "REQUIRED" || rawMode === "NOT_REQUIRED" || rawMode === "BOARD_DEFAULT")
+            ? (rawMode as "REQUIRED" | "NOT_REQUIRED" | "BOARD_DEFAULT")
+            : "BOARD_DEFAULT";
+          const orAlternativeCount = Math.max(1, Math.min(5, Number(qt.orAlternativeCount || s.orAlternativeCount || 1)));
+          let orSlotsJson = "[]";
+          if (Array.isArray(qt.orSlots)) orSlotsJson = JSON.stringify(qt.orSlots);
+          else if (typeof qt.orSlotsJson === "string") orSlotsJson = qt.orSlotsJson;
+          else if (Array.isArray(s.orSlots)) orSlotsJson = JSON.stringify(s.orSlots);
+          else if (typeof s.orSlotsJson === "string") orSlotsJson = s.orSlotsJson;
+
           sections.push({
             title,
             type,
             count,
             marksEach,
             instructions: itemInstructions,
+            orChoiceMode,
+            orAlternativeCount,
+            orSlotsJson,
           });
         });
       } else {
@@ -591,12 +608,24 @@ function parseJsonBlueprint(parsed: any): BlueprintImportResult {
         const count = Math.max(1, Math.floor(Number(s.count || s.questions || s.totalQuestions || 1)));
         const marksEach = Math.max(1, Math.floor(Number(s.marksEach || s.marks || s.markEach || 1)));
 
+        const rawMode = (s.orChoiceMode || "").toString().trim().toUpperCase();
+        const orChoiceMode = (rawMode === "REQUIRED" || rawMode === "NOT_REQUIRED" || rawMode === "BOARD_DEFAULT")
+          ? (rawMode as "REQUIRED" | "NOT_REQUIRED" | "BOARD_DEFAULT")
+          : "BOARD_DEFAULT";
+        const orAlternativeCount = Math.max(1, Math.min(5, Number(s.orAlternativeCount || 1)));
+        let orSlotsJson = "[]";
+        if (Array.isArray(s.orSlots)) orSlotsJson = JSON.stringify(s.orSlots);
+        else if (typeof s.orSlotsJson === "string") orSlotsJson = s.orSlotsJson;
+
         sections.push({
           title,
           type,
           count,
           marksEach,
           instructions,
+          orChoiceMode,
+          orAlternativeCount,
+          orSlotsJson,
         });
       }
     });

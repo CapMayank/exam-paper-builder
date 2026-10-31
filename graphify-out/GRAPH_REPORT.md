@@ -1,29 +1,29 @@
 # Graph Report - exam-paper-builder  (2026-10-31)
 
 ## Corpus Check
-- 255 files · ~387,794 words
+- 256 files · ~391,400 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 6 file(s) not represented in the graph (top: (none) 3, .prisma 1, .ico 1)
 
 ## Summary
-- 1565 nodes · 5823 edges · 65 communities (62 shown, 3 thin omitted)
+- 1579 nodes · 5876 edges · 59 communities (55 shown, 4 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 46 edges (avg confidence: 0.88)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `3c733b26`
+- Built from commit: `44332966`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - kindergarten/types.ts
-- print-logistics.ts
+- lib/types.ts
 - paperImport.ts
-- api.ts
+- body
 - FigureStudio.tsx
 - geometry.ts
 - package.json
-- body
+- toQuestionDto
 - dto.ts
 - syllabusImport.ts
 - blueprints/page.tsx
@@ -31,18 +31,18 @@
 - time
 - classes/route.ts
 - vitest
-- blueprintImport.ts
+- schemas.ts
 - diagram-search.ts
 - logic.test.ts
 - QuestionImportModal
-- react
+- classes/page.tsx
 - render.ts
 - devDependencies
-- FigureStudio
+- hitTest
 - batchQuestionIo.ts
 - blueprints/[id]/route.ts
 - AppShell.tsx
-- session.ts
+- recordAudit
 - useToast
 - constants.ts
 - compilerOptions
@@ -55,31 +55,25 @@
 - reconcileBlueprint.ts
 - studio.test.ts
 - text.ts
-- Modal
-- (app)/page.tsx
+- ErrorBanner
+- multiset.ts
 - internalChoiceRules.ts
 - HttpError
-- PaperData
+- eslint.config.mjs
 - blueprintExport.ts
-- math.ts
+- seed-kindergarten.mjs
 - papers/[id]/page.tsx
-- curriculumContract.ts
-- BlueprintImportModal
 - README.md
 - PaperBuilderPage
 - AGENTS.md
 - deploy.sh
-- Project: Sarvodaya School Examination Portal — Production Business Logic
+- Interface Contracts
 - QuestionForm.tsx
 - export-docx/route.ts
 - api
 - gemini.ts
-- cleanOptionText
-- mpbse-class12-math-regression.test.ts
-- SubjectWorkspaceDrawer.tsx
-- generationObservability.ts
-- generateCurriculumGroundedSectionQuestions
-- mandatory-workflows.spec.ts
+- isSubpartQuestionType
+- MathText
 
 ## God Nodes (most connected - your core abstractions)
 1. `HttpError` - 133 edges
@@ -91,7 +85,7 @@
 7. `Modal()` - 60 edges
 8. `react` - 59 edges
 9. `loadPaperView()` - 57 edges
-10. `lucide-react` - 49 edges
+10. `vitest` - 50 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `Milestones` --references--> `isExhaustedUsage()`  [INFERRED]
@@ -108,23 +102,23 @@
 ## Import Cycles
 - None detected.
 
-## Communities (65 total, 3 thin omitted)
+## Communities (59 total, 4 thin omitted)
 
 ### Community 0 - "kindergarten/types.ts"
 Cohesion: 0.07
 Nodes (47): CircleTargetEditor(), circleTargetPlugin, CircleTargetPrint(), CountItemsEditor(), countItemsPlugin, CountItemsPrint(), numberGridPlugin, NumberGridPrint() (+39 more)
 
-### Community 1 - "print-logistics.ts"
-Cohesion: 0.33
-Nodes (9): calculatePrintLogistics(), calculateSheetsPerCopy(), distributeSetsEvenly(), generatePackagingSlips(), getSectionsForClass(), PrintLogisticsMetrics, SectionPackagingSlip, ClassSectionInput (+1 more)
+### Community 1 - "lib/types.ts"
+Cohesion: 0.13
+Nodes (21): PaperImplication, PrintDensity, calculatePrintLogistics(), calculateSheetsPerCopy(), distributeSetsEvenly(), generatePackagingSlips(), getSectionsForClass(), PrintLogisticsMetrics (+13 more)
 
 ### Community 2 - "paperImport.ts"
-Cohesion: 0.11
-Nodes (31): POST, AIBlueprintModalProps, PaperImportModal(), PaperImportModalProps, inferExamTypeFromText(), BlueprintSectionCandidate, ChapterVerificationResult, getQuestionTypeTier() (+23 more)
+Cohesion: 0.07
+Nodes (48): POST, BlueprintImportModal(), copyExample(), downloadSampleFile(), getTemplateContent(), PaperImportModal(), PaperImportModalProps, BlueprintImportData (+40 more)
 
-### Community 3 - "api.ts"
-Cohesion: 0.11
-Nodes (26): server-only, zod, auditSchema, improveSchema, parseBlueprintSchema, parseSchema, figureSchema, GET (+18 more)
+### Community 3 - "body"
+Cohesion: 0.08
+Nodes (41): bcryptjs, zod, POST, auditSchema, POST, generateSchema, POST, improveSchema (+33 more)
 
 ### Community 4 - "FigureStudio.tsx"
 Cohesion: 0.08
@@ -132,99 +126,99 @@ Nodes (46): ActiveHandle, COLOR_SWATCHES, FILL_SWATCHES, MATH_SYMBOLS, Tool, BOX
 
 ### Community 5 - "geometry.ts"
 Cohesion: 0.07
-Nodes (52): AlignMode, angleLabelPos(), angleLabelText(), ArcGeom, arcPoints(), arcThrough(), axesLayout(), boundsCache (+44 more)
+Nodes (45): AlignMode, alignObjects(), angleLabelPos(), angleLabelText(), ArcGeom, arcPoints(), arcThrough(), boundsCache (+37 more)
 
 ### Community 6 - "package.json"
-Cohesion: 0.12
-Nodes (15): eslintConfig, name, private, version, eslint, eslint-config-next, prisma, react-dom (+7 more)
+Cohesion: 0.13
+Nodes (13): name, private, version, @playwright/test, prisma, react-dom, tailwindcss, @tailwindcss/turbopack (+5 more)
 
-### Community 7 - "body"
-Cohesion: 0.10
-Nodes (35): Feature Inventory, generateSchema, POST, POST, POST, POST, POST, POST (+27 more)
+### Community 7 - "toQuestionDto"
+Cohesion: 0.13
+Nodes (19): Feature Inventory, GET, bulkDeleteSchema, bulkRequestSchema, DELETE, legacyBulkSchema, modernBulkSchema, POST (+11 more)
 
 ### Community 8 - "dto.ts"
-Cohesion: 0.07
-Nodes (51): @prisma/client, prisma, AuditAction, DEFAULT_ACADEMIC_SESSION, DEFAULT_MARKS_STYLE, DEFAULT_NUMBERING_STYLE, DEFAULT_PRINT_DENSITY, MARKS_STYLES (+43 more)
+Cohesion: 0.16
+Nodes (24): @prisma/client, DEFAULT_MARKS_STYLE, DEFAULT_NUMBERING_STYLE, DEFAULT_PRINT_DENSITY, MARKS_STYLES, NUMBERING_STYLES, PRINT_DENSITIES, QUESTION_TYPES (+16 more)
 
 ### Community 9 - "syllabusImport.ts"
-Cohesion: 0.09
-Nodes (38): POST, openBookDialog(), EditableBook, EditableChapter, ImportFormat, SAMPLE_JSON, SyllabusImportModal(), handleAiScan() (+30 more)
+Cohesion: 0.11
+Nodes (28): parseSchema, POST, POST, openBookDialog(), SyllabusImportModal(), handleAiScan(), handleImport(), STANDARD_CURRICULUM_PRESETS (+20 more)
 
 ### Community 10 - "blueprints/page.tsx"
-Cohesion: 0.12
-Nodes (28): BlueprintsPage(), subjectMatches(), emptyBook, Filter, PapersPage(), handleBatchDelete(), handleBatchFinalize(), remove() (+20 more)
+Cohesion: 0.13
+Nodes (26): BlueprintsPage(), remove(), subjectMatches(), emptyBook, Filter, AcademicRolloverModal(), handleSubmit(), AcademicRolloverModalProps (+18 more)
 
 ### Community 11 - "recordAudit"
-Cohesion: 0.15
-Nodes (32): POST, POST, POST, GET, POST, POST, POST, POST (+24 more)
+Cohesion: 0.18
+Nodes (26): POST, POST, GET, POST, POST, POST, DELETE, editableItem() (+18 more)
 
 ### Community 12 - "time"
 Cohesion: 0.18
 Nodes (20): generate_session_cookie(), run_e2e_tests(), generate_session_cookie(), run_visual_verification(), generate_session_cookie(), run_flow_test(), generate_session_cookie(), run_complete_board_flow() (+12 more)
 
 ### Community 13 - "classes/route.ts"
-Cohesion: 0.25
-Nodes (17): POST, GET, POST, PATCH, GET, POST, postClassUnionSchema, ensureClassAndSubject() (+9 more)
+Cohesion: 0.27
+Nodes (16): GET, POST, PATCH, GET, POST, postClassUnionSchema, ensureClassAndSubject(), normalizeAcademicSession() (+8 more)
 
 ### Community 14 - "vitest"
-Cohesion: 0.12
-Nodes (27): M3 (Question Exhaustion Tagging), vitest, CATEGORY_STYLES, CompactExamTagInfo, CurrentPaperContext, ExamCategory, findFreshnessConflicts(), isExhaustedUsage() (+19 more)
+Cohesion: 0.29
+Nodes (11): M3 (Question Exhaustion Tagging), vitest, CATEGORY_STYLES, CompactExamTagInfo, CurrentPaperContext, ExamCategory, findFreshnessConflicts(), isExhaustedUsage() (+3 more)
 
-### Community 15 - "blueprintImport.ts"
-Cohesion: 0.24
-Nodes (14): BlueprintImportData, BlueprintImportResult, ImportedChapterQuota, ImportedSection, normalizeExamType(), normalizeQuestionType(), parseBlueprintImport(), parseCsvBlueprint() (+6 more)
+### Community 15 - "schemas.ts"
+Cohesion: 0.08
+Nodes (28): AuditAction, MAX_OPTIONS, MIN_OPTIONS, addItemSchema, changePasswordSchema, classSectionInputSchema, classSubjectSchema, combineBooksSchema (+20 more)
 
 ### Community 16 - "diagram-search.ts"
-Cohesion: 0.11
-Nodes (21): prisma, UPLOAD_DIR, GET, POST, GET, TYPE_BY_EXT, EXT_BY_TYPE, POST (+13 more)
+Cohesion: 0.07
+Nodes (34): Architecture, Code Layout, Milestones, Project: Sarvodaya School Examination Portal — Production Business Logic, prisma, UPLOAD_DIR, GET, POST (+26 more)
 
 ### Community 17 - "logic.test.ts"
-Cohesion: 0.24
-Nodes (9): autoFillPaper(), solve(), AutoFillResult, CandidateQuestion, getItemMarks(), getItemUnits(), Slot, BlueprintDef (+1 more)
+Cohesion: 0.11
+Nodes (19): assert(), runServerChecks(), MultiSetGeneratorModal(), AutoFillOptions, autoFillPaper(), solve(), AutoFillResult, CandidateQuestion (+11 more)
 
 ### Community 18 - "QuestionImportModal"
 Cohesion: 0.50
 Nodes (3): QuestionImportModal(), handleFileChange(), validateContent()
 
-### Community 19 - "react"
-Cohesion: 0.12
-Nodes (22): nextConfig, lucide-react, next, react, PrintPage(), ChapterDraft, SectionDraft, AIPaperAuditModalProps (+14 more)
+### Community 19 - "classes/page.tsx"
+Cohesion: 0.14
+Nodes (18): SectionRosterItem(), subjectMatches(), AIQuestionGeneratorModalProps, BlueprintImportModalProps, CombineBooksModalProps, EditableBook, EditableChapter, ImportFormat (+10 more)
 
 ### Community 20 - "render.ts"
-Cohesion: 0.22
-Nodes (20): boxCenter(), boxCorners(), hatchGeometry(), applyStyle(), drawArrowhead(), drawParallelMarks(), drawTicks(), renderAngle() (+12 more)
+Cohesion: 0.19
+Nodes (24): FigureStudio(), hasBoxFields(), angleGeom, boxCenter(), boxCorners(), boxHandlePos(), hatchGeometry(), applyStyle() (+16 more)
 
 ### Community 21 - "devDependencies"
 Cohesion: 0.15
 Nodes (13): devDependencies, eslint, eslint-config-next, @playwright/test, prisma, tailwindcss, @tailwindcss/turbopack, @types/katex (+5 more)
 
-### Community 22 - "FigureStudio"
-Cohesion: 0.14
-Nodes (21): FigureStudio(), hasBoxFields(), alignObjects(), angleGeom, boxHandlePos(), contentBounds(), deg(), distributeObjects() (+13 more)
+### Community 22 - "hitTest"
+Cohesion: 0.13
+Nodes (24): axesLayout(), boxToWorld(), clamp(), constrainAngle(), deg(), dist(), distToPolyline(), distToSeg() (+16 more)
 
 ### Community 23 - "batchQuestionIo.ts"
-Cohesion: 0.08
-Nodes (46): RFC-4180, GET, QuestionDuplicateModalProps, BatchImportError, BatchImportOptions, BatchImportReport, BatchIoFormat, BatchParseOptions (+38 more)
+Cohesion: 0.13
+Nodes (30): RFC-4180, QuestionDuplicateModalProps, BatchImportError, BatchImportOptions, BatchImportReport, BatchIoFormat, BatchParseOptions, ChapterResolver (+22 more)
 
 ### Community 24 - "blueprints/[id]/route.ts"
-Cohesion: 0.25
-Nodes (11): DELETE, GET, PUT, POST, GET, POST, diagnosePaperImplications(), assertBlueprintValid() (+3 more)
+Cohesion: 0.21
+Nodes (15): GET, PUT, POST, GET, POST, diagnosePaperImplications(), assertBlueprintValid(), blueprintInclude (+7 more)
 
 ### Community 25 - "AppShell.tsx"
-Cohesion: 0.14
-Nodes (17): AppLayout(), AcademicSessionSelector(), handleAddCustom(), handleSelectSession(), AcademicSessionSelectorProps, AppShell(), signOut(), isActive() (+9 more)
+Cohesion: 0.12
+Nodes (20): AppLayout(), LoginPage(), submit(), AcademicSessionSelector(), handleAddCustom(), handleSelectSession(), AcademicSessionSelectorProps, AppShell() (+12 more)
 
-### Community 26 - "session.ts"
-Cohesion: 0.24
-Nodes (11): POST, POST, codeMatches(), POST, endSession(), parseRawSessionCookie(), secret(), sessionUserId() (+3 more)
+### Community 26 - "recordAudit"
+Cohesion: 0.12
+Nodes (18): server-only, POST, GET, POST, DELETE, PATCH, POST, POST (+10 more)
 
 ### Community 27 - "useToast"
-Cohesion: 0.09
-Nodes (20): QuestionExportModal(), QuestionsPage(), remove(), AIQuestionGeneratorModal(), AIQuestionGeneratorModalProps, GeneratedQuestionPayload, TabMode, AIQuestionImproverModal() (+12 more)
+Cohesion: 0.08
+Nodes (36): lucide-react, react, QuestionExportModal(), QuestionsPage(), remove(), AIPaperAuditModalProps, AIQuestionGeneratorModal(), GeneratedQuestionPayload (+28 more)
 
 ### Community 28 - "constants.ts"
-Cohesion: 0.05
-Nodes (45): assert(), runServerChecks(), MultiSetGeneratorModal(), DEFAULT_SPACE, parseBulkQuestions(), ParsedQuestionItem, AcademicSession, DerangedMatchColumnResult (+37 more)
+Cohesion: 0.08
+Nodes (33): nextConfig, next, ExamCellPage(), getSectionsForClass(), Tab, BlueprintTemplateModal(), BlueprintTemplateModalProps, AcademicSession (+25 more)
 
 ### Community 29 - "compilerOptions"
 Cohesion: 0.11
@@ -239,144 +233,116 @@ Cohesion: 0.20
 Nodes (7): katex, deva, heading, metadata, noto, ui, viewport
 
 ### Community 32 - "blueprint.ts"
-Cohesion: 0.18
-Nodes (14): GET, blueprintTotalMarks(), ChapterQuota, checkBlueprintFeasibility(), DiagnosticItem, getItemMarks(), getItemUnits(), PaperImplication (+6 more)
+Cohesion: 0.16
+Nodes (16): handleImportedBlueprint(), blueprintTotalMarks(), ChapterQuota, checkBlueprintFeasibility(), DiagnosticItem, flattenSectionGroups(), getItemMarks(), getItemUnits() (+8 more)
 
 ### Community 33 - "scripts"
 Cohesion: 0.25
 Nodes (8): scripts, build, dev, lint, seed, start, test, test:e2e
 
 ### Community 34 - "BlueprintEditorPage"
-Cohesion: 0.14
-Nodes (13): BlueprintEditorPage(), addQuestionTypeToGroup(), addSectionGroup(), handleImportedBlueprint(), moveSectionGroup(), removeSectionGroup(), save(), newQuestionType() (+5 more)
+Cohesion: 0.13
+Nodes (17): BlueprintEditorPage(), addQuestionTypeToGroup(), addSectionGroup(), hasExplicitSlotOverride(), isSlotChoiceRequired(), moveSectionGroup(), parseSlotOverrides(), patchQuestionType() (+9 more)
 
 ### Community 35 - "e2e.mjs"
 Cohesion: 0.14
 Nodes (14): add(), call(), fd, forkedItem, itemToReplace, mk(), notImg, origQ (+6 more)
 
 ### Community 36 - "reconcileBlueprint.ts"
-Cohesion: 0.22
-Nodes (6): ReassignmentResult, ReconcileBlueprintOutput, reconcileBlueprintQuestions(), ReconcileChapterInput, ReconcileItemInput, ReconcileSectionInput
+Cohesion: 0.21
+Nodes (8): POST, getEffectiveQuestionMarks(), ReassignmentResult, ReconcileBlueprintOutput, reconcileBlueprintQuestions(), ReconcileChapterInput, ReconcileItemInput, ReconcileSectionInput
 
 ### Community 37 - "studio.test.ts"
-Cohesion: 0.20
+Cohesion: 0.18
 Nodes (12): rotateAround(), snapPoint(), crc32(), crcTable, embedSceneInPng(), extractSceneFromPng(), isPng(), makeTextChunk() (+4 more)
 
 ### Community 38 - "text.ts"
 Cohesion: 0.17
 Nodes (13): textBoxSize(), cssVar(), fontCss(), fontStack(), layoutText(), Measurer, measureWidth(), setMeasurer() (+5 more)
 
-### Community 39 - "Modal"
-Cohesion: 0.12
-Nodes (29): UsersAdminPage(), ExamCellPage(), getSectionsForClass(), Tab, MathCategory, MathSnippet, SNIPPETS, ConfirmContext (+21 more)
+### Community 39 - "ErrorBanner"
+Cohesion: 0.19
+Nodes (20): UsersAdminPage(), DashboardPage(), Data, PaperRow(), Progress(), ErrorBanner(), ListSkeleton(), Skeleton() (+12 more)
 
-### Community 40 - "(app)/page.tsx"
-Cohesion: 0.23
-Nodes (13): remove(), DashboardPage(), Data, LoginPage(), submit(), BrandMark(), PaperRow(), Progress() (+5 more)
+### Community 40 - "multiset.ts"
+Cohesion: 0.16
+Nodes (19): duplicateSetSchema, POST, parallelSetsSchema, POST, BlueprintSectionDef, calculateSectionOverlap(), CandidateQuestionDef, formatSetIdentifier() (+11 more)
 
 ### Community 41 - "internalChoiceRules.ts"
-Cohesion: 0.13
-Nodes (20): detectExaminationBoard(), EXAMINATION_PATTERN_REGISTRY, ExaminationPatternRuleSet, ExaminationPatternVersionId, InternalChoiceIssue, InternalChoicePolicy, InternalChoiceResolutionContext, isLegacy2025Session() (+12 more)
+Cohesion: 0.10
+Nodes (27): BoardRuleConflictResult, detectBoardRuleConflict(), detectExaminationBoard(), evaluatePaperInternalChoiceCompliance(), EXAMINATION_PATTERN_REGISTRY, ExaminationPatternRuleSet, ExaminationPatternVersionId, getBoardDefaultChoiceRequirement() (+19 more)
 
 ### Community 42 - "HttpError"
-Cohesion: 0.09
-Nodes (30): bcryptjs, GET, POST, DELETE, GET, PATCH, POST, DELETE (+22 more)
-
-### Community 43 - "PaperData"
 Cohesion: 0.16
-Nodes (15): AIPaperGeneratorModalProps, PaperPreflightModal(), PaperPreflightModalProps, PaperSnapshotDrawerProps, handleGenerateAiQuestion(), evaluatePaperInternalChoiceCompliance(), resolveInternalChoiceRequirement(), PaperAutogenInput (+7 more)
+Nodes (14): DELETE, POST, DELETE, GET, PATCH, DELETE, PATCH, GET (+6 more)
+
+### Community 43 - "eslint.config.mjs"
+Cohesion: 0.50
+Nodes (3): eslintConfig, eslint, eslint-config-next
 
 ### Community 44 - "blueprintExport.ts"
-Cohesion: 0.44
-Nodes (8): BlueprintJsonModal(), BlueprintJsonModalProps, BlueprintWithExportRelations, downloadBlueprintJson(), exportBlueprintToJsonObject(), exportBlueprintToJsonString(), ExportedBlueprintJson, getBlueprintJsonFilename()
-
-### Community 45 - "math.ts"
-Cohesion: 0.21
-Nodes (15): splitOutsideMath(), cleanLatexToUnicode(), convertNaturalMathToTex(), ExtractedTableResult, extractTableFromText(), findMatchingBrace(), INLINE_PATTERNS, INLINE_REGEX (+7 more)
+Cohesion: 0.40
+Nodes (9): BlueprintJsonModal(), BlueprintJsonModalProps, groupSectionsFromFlat(), BlueprintWithExportRelations, downloadBlueprintJson(), exportBlueprintToJsonObject(), exportBlueprintToJsonString(), ExportedBlueprintJson (+1 more)
 
 ### Community 46 - "papers/[id]/page.tsx"
-Cohesion: 0.18
-Nodes (28): AIPaperGeneratorModal(), MathText(), QuestionPicker(), add(), handleAcceptAiQuestion(), handleEditAiQuestion(), LETTERS_LIST, QuestionRenderMode (+20 more)
-
-### Community 47 - "curriculumContract.ts"
-Cohesion: 0.15
-Nodes (16): buildAndValidateGenerationContract(), CBSE_SECONDARY_CODES, CBSE_SENIOR_CODES, ChapterCurriculumSpec, CLASS_12_MATH_CHAPTER_SPECS, cleanChapterTitleForLookup(), detectEducationBoard(), GenerationContractValidationResult (+8 more)
-
-### Community 48 - "BlueprintImportModal"
-Cohesion: 0.38
-Nodes (5): BlueprintImportModal(), copyExample(), downloadSampleFile(), getTemplateContent(), matchChaptersToBook()
+Cohesion: 0.11
+Nodes (36): AIPaperGeneratorModal(), AIPaperGeneratorModalProps, PaperPreflightModal(), PaperPreflightModalProps, PaperSnapshotDrawerProps, QuestionPicker(), add(), handleAcceptAiQuestion() (+28 more)
 
 ### Community 49 - "README.md"
 Cohesion: 0.50
 Nodes (3): Deploy on Vercel, Getting Started, Learn More
 
 ### Community 50 - "PaperBuilderPage"
-Cohesion: 0.15
-Nodes (3): Bar(), PaperBuilderPage(), handleAutofill()
+Cohesion: 0.12
+Nodes (6): Bar(), PaperBuilderPage(), handleAutofill(), AIPaperAuditModal(), handleApplyAllFixes(), handleApplyFix()
 
-### Community 54 - "Project: Sarvodaya School Examination Portal — Production Business Logic"
-Cohesion: 0.22
-Nodes (8): Architecture, Code Layout, Interface Contracts, M1 (RBAC & Ownership), M2 (Section Enrollment & Print Logistics), Milestones, Project: Sarvodaya School Examination Portal — Production Business Logic, SectionDetail
+### Community 54 - "Interface Contracts"
+Cohesion: 0.50
+Nodes (4): Interface Contracts, M1 (RBAC & Ownership), M2 (Section Enrollment & Print Logistics), SectionDetail
 
 ### Community 55 - "QuestionForm.tsx"
-Cohesion: 0.11
-Nodes (22): DiagramSearchModal(), DiagramSearchModalProps, MathToolbar(), DEFAULT_ASSERTION_OPTIONS_EN, DEFAULT_ASSERTION_OPTIONS_HI, DEFAULT_SPACE, getDefaultSubpartsForType(), getSubpartLabel() (+14 more)
+Cohesion: 0.12
+Nodes (21): AIQuestionImproverModal(), DiagramSearchModal(), DiagramSearchModalProps, DEFAULT_ASSERTION_OPTIONS_EN, DEFAULT_ASSERTION_OPTIONS_HI, DEFAULT_SPACE, getDefaultSubpartsForType(), getSubpartLabel() (+13 more)
 
 ### Community 56 - "export-docx/route.ts"
-Cohesion: 0.16
-Nodes (29): docx, buildPaperDocx(), GET, renderQuestionOptions(), renderQuestionTextWithTable(), renderSubpartsDocx(), openCreate(), BlankPage() (+21 more)
+Cohesion: 0.10
+Nodes (43): docx, buildPaperDocx(), GET, renderQuestionOptions(), renderQuestionTextWithTable(), renderSubpartsDocx(), OmrSheetPage(), PrintPage() (+35 more)
 
 ### Community 57 - "api"
 Cohesion: 0.14
-Nodes (23): BooksPage(), removeBook(), removeChapter(), run(), saveBook(), saveChapter(), ClassesHierarchyPage(), addMissingStandardSubjects() (+15 more)
+Nodes (22): BooksPage(), removeBook(), removeChapter(), run(), saveBook(), saveChapter(), ClassesHierarchyPage(), addMissingStandardSubjects() (+14 more)
 
 ### Community 58 - "gemini.ts"
-Cohesion: 0.14
-Nodes (26): GET, derangeMatchColumnPairs(), extractMatchPairsFromExplanation(), auditPaperWithGemini(), callGeminiApi(), FigureStudioPromptResult, GeminiContentPart, GeneratedQuestionItem (+18 more)
+Cohesion: 0.05
+Nodes (84): GET, openCreate(), ParsedQuestionItem, derangeMatchColumnPairs(), extractMatchPairsFromExplanation(), QuestionType, splitOutsideMath(), buildAndValidateGenerationContract() (+76 more)
 
-### Community 59 - "cleanOptionText"
-Cohesion: 0.44
-Nodes (11): OmrSheetPage(), getMarksRubric(), QuestionSolutionItem(), SolutionsPage(), imageUrl(), cleanOptionText(), isMcqLikeType(), normalizeMcqAnswer() (+3 more)
+### Community 59 - "isSubpartQuestionType"
+Cohesion: 0.29
+Nodes (15): getMarksRubric(), QuestionSolutionItem(), SolutionsPage(), LETTERS_LIST, QuestionRenderMode, QuestionView(), ROMAN_LOWER, SingleQuestionBody() (+7 more)
 
-### Community 60 - "mpbse-class12-math-regression.test.ts"
-Cohesion: 0.27
-Nodes (10): isParaphraseOrDuplicateChoice(), BIOLOGY_CONTAMINATION_PATTERNS, checkDeletedSyllabusTopics(), CHEMISTRY_TEMPLATE_PATTERNS, doesMcqAnswerMatchOptions(), GENERIC_TEMPLATE_PATTERNS, QuestionValidationResult, SectionValidationResult (+2 more)
-
-### Community 61 - "SubjectWorkspaceDrawer.tsx"
-Cohesion: 0.43
-Nodes (5): COMMON_FORMULA_SNIPPETS, FormulaSnippet, InstructionPreset, STANDARD_INSTRUCTION_PRESETS, SubjectWorkspaceDrawerProps
-
-### Community 62 - "generationObservability.ts"
-Cohesion: 0.43
-Nodes (6): GenerationContract, GeminiCallResult, GenerationJobTrace, getRecentGenerationTraces(), recentTraces, QuestionValidationIssue
-
-### Community 63 - "generateCurriculumGroundedSectionQuestions"
-Cohesion: 0.60
-Nodes (4): generateCurriculumGroundedSectionQuestions(), getMaxPaperDiagramBudget(), isSectionVisuallyEligible(), isSubjectChapterVisual()
-
-### Community 64 - "mandatory-workflows.spec.ts"
-Cohesion: 0.50
-Nodes (3): @playwright/test, applySessionCookie(), generateSessionCookie()
+### Community 61 - "MathText"
+Cohesion: 0.18
+Nodes (11): MathText(), MathCategory, MathSnippet, MathToolbar(), SNIPPETS, COMMON_FORMULA_SNIPPETS, FormulaSnippet, InstructionPreset (+3 more)
 
 ## Knowledge Gaps
 - **9 isolated node(s):** `@tailwindcss/turbopack`, `@types/katex`, `@types/node`, `@types/react`, `@types/react-dom` (+4 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 417 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **3 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 418 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **4 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `vitest` connect `vitest` to `print-logistics.ts`, `paperImport.ts`, `package.json`, `body`, `dto.ts`, `syllabusImport.ts`, `recordAudit`, `classes/route.ts`, `blueprintImport.ts`, `diagram-search.ts`, `batchQuestionIo.ts`, `constants.ts`, `BlueprintEditorPage`, `reconcileBlueprint.ts`, `studio.test.ts`, `HttpError`, `PaperData`, `math.ts`, `papers/[id]/page.tsx`, `QuestionForm.tsx`, `export-docx/route.ts`, `gemini.ts`, `mpbse-class12-math-regression.test.ts`, `generateCurriculumGroundedSectionQuestions`?**
-  _High betweenness centrality (0.064) - this node is a cross-community bridge._
+- **Why does `api()` connect `api` to `BlueprintEditorPage`, `paperImport.ts`, `ErrorBanner`, `isSubpartQuestionType`, `blueprints/page.tsx`, `syllabusImport.ts`, `papers/[id]/page.tsx`, `PaperBuilderPage`, `classes/page.tsx`, `QuestionForm.tsx`, `export-docx/route.ts`, `AppShell.tsx`, `useToast`, `constants.ts`?**
+  _High betweenness centrality (0.061) - this node is a cross-community bridge._
 - **What connects `@tailwindcss/turbopack`, `@types/katex`, `@types/node` to the rest of the system?**
   _9 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `kindergarten/types.ts` be split into smaller, more focused modules?**
   _Cohesion score 0.0670807453416149 - nodes in this community are weakly interconnected._
-- **Why does `react` connect `react` to `kindergarten/types.ts`, `paperImport.ts`, `FigureStudio.tsx`, `package.json`, `Modal`, `(app)/page.tsx`, `cleanOptionText`, `blueprints/page.tsx`, `PaperData`, `blueprintExport.ts`, `syllabusImport.ts`, `papers/[id]/page.tsx`, `QuestionForm.tsx`, `export-docx/route.ts`, `AppShell.tsx`, `useToast`, `SubjectWorkspaceDrawer.tsx`?**
-  _High betweenness centrality (0.063) - this node is a cross-community bridge._
+- **Why does `react` connect `useToast` to `kindergarten/types.ts`, `paperImport.ts`, `FigureStudio.tsx`, `package.json`, `ErrorBanner`, `blueprints/page.tsx`, `blueprintExport.ts`, `papers/[id]/page.tsx`, `classes/page.tsx`, `QuestionForm.tsx`, `export-docx/route.ts`, `AppShell.tsx`, `isSubpartQuestionType`, `constants.ts`, `MathText`?**
+  _High betweenness centrality (0.059) - this node is a cross-community bridge._
+- **Should `lib/types.ts` be split into smaller, more focused modules?**
+  _Cohesion score 0.13 - nodes in this community are weakly interconnected._
+- **Why does `vitest` connect `vitest` to `lib/types.ts`, `paperImport.ts`, `body`, `package.json`, `dto.ts`, `syllabusImport.ts`, `recordAudit`, `classes/route.ts`, `schemas.ts`, `diagram-search.ts`, `logic.test.ts`, `batchQuestionIo.ts`, `constants.ts`, `blueprint.ts`, `reconcileBlueprint.ts`, `studio.test.ts`, `multiset.ts`, `papers/[id]/page.tsx`, `QuestionForm.tsx`, `export-docx/route.ts`, `gemini.ts`?**
+  _High betweenness centrality (0.050) - this node is a cross-community bridge._
 - **Should `paperImport.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.11033681765389082 - nodes in this community are weakly interconnected._
-- **Why does `HttpError` connect `HttpError` to `paperImport.ts`, `api.ts`, `export-docx/route.ts`, `body`, `syllabusImport.ts`, `recordAudit`, `classes/route.ts`, `diagram-search.ts`, `batchQuestionIo.ts`, `blueprints/[id]/route.ts`, `session.ts`?**
-  _High betweenness centrality (0.046) - this node is a cross-community bridge._
-- **Should `api.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.11233766233766233 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.06758832565284179 - nodes in this community are weakly interconnected._

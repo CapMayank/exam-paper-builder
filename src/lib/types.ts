@@ -48,6 +48,9 @@ export type Section = {
   type: string;
   count: number;
   marksEach: number;
+  orChoiceMode?: "BOARD_DEFAULT" | "REQUIRED" | "NOT_REQUIRED";
+  orAlternativeCount?: number;
+  orSlotsJson?: string;
 };
 
 export type Blueprint = {

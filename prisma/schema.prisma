@@ -108,10 +108,13 @@ model BlueprintSection {
   position      Int
   title         String
   instructions  String          @default("")
-  type          String // question type, see constants.ts
-  count         Int
-  marksEach     Int
-  blueprint     Blueprint       @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+  type               String // question type, see constants.ts
+  count              Int
+  marksEach          Int
+  orChoiceMode       String          @default("BOARD_DEFAULT") // BOARD_DEFAULT | REQUIRED | NOT_REQUIRED
+  orAlternativeCount Int             @default(1)
+  orSlotsJson        String          @default("[]") // JSON array of booleans per slot e.g. [true, false]
+  blueprint          Blueprint       @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
   paperQuestions PaperQuestion[]
 }
 

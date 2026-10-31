@@ -21,6 +21,9 @@ export interface BlueprintWithExportRelations {
     type: string;
     count: number;
     marksEach: number;
+    orChoiceMode?: string;
+    orAlternativeCount?: number;
+    orSlotsJson?: string;
   }>;
   chapters: Array<{
     id?: string;
@@ -48,6 +51,9 @@ export interface ExportedBlueprintJson {
       type: string;
       count: number;
       marksEach: number;
+      orChoiceMode?: string;
+      orAlternativeCount?: number;
+      orSlots?: boolean[];
     }>;
   }>;
   chapters: Array<{
@@ -73,11 +79,25 @@ export function exportBlueprintToJsonObject(
   const sections = grouped.map((g) => ({
     title: g.title,
     instructions: g.instructions || "",
-    questionTypes: g.questionTypes.map((qt) => ({
-      type: qt.type,
-      count: qt.count,
-      marksEach: qt.marksEach,
-    })),
+    questionTypes: g.questionTypes.map((qt) => {
+      let orSlots: boolean[] | undefined;
+      if (qt.orSlotsJson) {
+        try {
+          const parsed = JSON.parse(qt.orSlotsJson);
+          if (Array.isArray(parsed) && parsed.length > 0) orSlots = parsed;
+        } catch {
+          // ignore
+        }
+      }
+      return {
+        type: qt.type,
+        count: qt.count,
+        marksEach: qt.marksEach,
+        orChoiceMode: qt.orChoiceMode || "BOARD_DEFAULT",
+        orAlternativeCount: qt.orAlternativeCount ?? 1,
+        orSlots,
+      };
+    }),
   }));
 
   // Map chapter allocations with chapter numbers and titles
@@ -156,3 +176,5 @@ export function downloadBlueprintJson(
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+
+export const buildBlueprintExportPayload = exportBlueprintToJsonObject;

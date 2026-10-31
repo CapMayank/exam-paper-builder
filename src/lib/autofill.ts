@@ -57,22 +57,19 @@ function getItemMarks(item: PlacedItem, secMarksEach: number): number {
  * 3. Chapter max marks weightage constraints.
  * 4. No duplicate questions.
  */
+export type AutoFillOptions = {
+  targetSectionId?: string;
+  preferredDifficulty?: string;
+  internalChoiceSectionIds?: Set<string>;
+  isSlotChoiceRequired?: (sectionId: string, slotIndex: number, defaultRequired: boolean) => boolean;
+};
+
 export function autoFillPaper(
   bp: BlueprintDef,
   currentItems: (PlacedItem & { questionId?: string })[],
   candidatePool: CandidateQuestion[],
-  excludedQuestionIds:
-    | string[]
-    | {
-        targetSectionId?: string;
-        preferredDifficulty?: string;
-        internalChoiceSectionIds?: Set<string>;
-      } = [],
-  options?: {
-    targetSectionId?: string;
-    preferredDifficulty?: string;
-    internalChoiceSectionIds?: Set<string>;
-  },
+  excludedQuestionIds: string[] | AutoFillOptions = [],
+  options?: AutoFillOptions,
 ): AutoFillResult {
   const actualExcluded: string[] = Array.isArray(excludedQuestionIds) ? excludedQuestionIds : [];
   const actualOptions = Array.isArray(excludedQuestionIds) ? options : excludedQuestionIds;
@@ -111,8 +108,38 @@ export function autoFillPaper(
     }
     const placed = placedCount.get(sec.id) ?? 0;
     const needed = Math.max(0, sec.count - placed);
-    const requiresInternalChoice = Boolean(actualOptions?.internalChoiceSectionIds?.has(sec.id));
+
+    let slotOverrides: Record<number, boolean> | null = null;
+    if (sec.orSlotsJson) {
+      try {
+        const parsed = JSON.parse(sec.orSlotsJson);
+        if (Array.isArray(parsed)) {
+          slotOverrides = {};
+          parsed.forEach((s: any) => {
+            if (typeof s?.slotIndex === "number" && typeof s?.required === "boolean") {
+              slotOverrides![s.slotIndex] = s.required;
+            }
+          });
+        }
+      } catch {}
+    }
+
+    const defaultRequires = sec.orChoiceMode === "REQUIRED"
+      ? true
+      : sec.orChoiceMode === "NOT_REQUIRED"
+        ? false
+        : Boolean(actualOptions?.internalChoiceSectionIds?.has(sec.id));
+
     for (let i = 0; i < needed; i++) {
+      const slotIndex = placed + i;
+      let requiresInternalChoice = defaultRequires;
+      if (slotOverrides && typeof slotOverrides[slotIndex] === "boolean") {
+        requiresInternalChoice = slotOverrides[slotIndex];
+      }
+      if (actualOptions?.isSlotChoiceRequired) {
+        requiresInternalChoice = actualOptions.isSlotChoiceRequired(sec.id, slotIndex, requiresInternalChoice);
+      }
+
       slots.push({
         sectionId: sec.id,
         title: sec.title,
