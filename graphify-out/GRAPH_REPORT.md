@@ -1,17 +1,17 @@
 # Graph Report - exam-paper-builder  (2026-10-31)
 
 ## Corpus Check
-- 260 files · ~396,640 words
+- 260 files · ~396,900 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 6 file(s) not represented in the graph (top: (none) 3, .prisma 1, .ico 1)
 
 ## Summary
-- 1602 nodes · 5985 edges · 61 communities (58 shown, 3 thin omitted)
+- 1602 nodes · 5990 edges · 61 communities (58 shown, 3 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 46 edges (avg confidence: 0.88)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `064003c9`
+- Built from commit: `70c591ff`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 

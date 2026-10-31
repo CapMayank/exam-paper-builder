@@ -233,21 +233,27 @@ function doesMcqAnswerMatchOptions(answer: string, options: string[]): boolean {
     }
   }
 
-  // 2. Option letter match: "A", "(a)", "Option B", "(c) ..."
-  const letterMatch = rawAns.match(/^\s*(?:option\s*)?\(?([a-dA-D1-4])\)?(?:[\s.:)\-]|$)/i);
+  // 2. Option letter match: "A", "(a)", "Option B", "(c) ...", or Devanagari "(क)", "(ख)", "(ग)", "(घ)"
+  const letterMatch = rawAns.match(/^\s*(?:option\s*|विकल्प\s*)?\(?([a-dA-D1-4कखगघ])\)?(?:[\s.:)\-]|$)/i);
   if (letterMatch) {
-    const token = letterMatch[1].toUpperCase();
-    const idx =
-      token === "A" || token === "1"
-        ? 0
-        : token === "B" || token === "2"
-        ? 1
-        : token === "C" || token === "3"
-        ? 2
-        : 3;
+    const rawToken = letterMatch[1];
+    let idx = -1;
+    if (/[a-dA-D1-4]/.test(rawToken)) {
+      const token = rawToken.toUpperCase();
+      idx =
+        token === "A" || token === "1"
+          ? 0
+          : token === "B" || token === "2"
+          ? 1
+          : token === "C" || token === "3"
+          ? 2
+          : 3;
+    } else if (/[कखगघ]/.test(rawToken)) {
+      idx = rawToken === "क" ? 0 : rawToken === "ख" ? 1 : rawToken === "ग" ? 2 : 3;
+    }
     if (idx >= 0 && idx < options.length) {
       const remainder = cleanOptionText(rawAns).toLowerCase().trim();
-      // If answer is just "(a)" or "A", or if remainder matches the option at idx
+      // If answer is just "(a)" or "(क)", or if remainder matches the option at idx
       if (!remainder || remainder.length <= 2 || normalizedOptions[idx].includes(remainder) || remainder.includes(normalizedOptions[idx])) {
         return true;
       }
@@ -397,8 +403,8 @@ export function validateGeneratedQuestion(
     }
 
     if (qType === "ASSERTION_REASON") {
-      const hasAssertion = /assertion\s*\(a\)|अभिकथन\s*\(a\)/i.test(text);
-      const hasReason = /reason\s*\(r\)|कारण\s*\(r\)|तर्क\s*\(r\)/i.test(text);
+      const hasAssertion = /assertion\s*\(a\)|अभिकथन\s*\(a\)|कथनम्?\s*\(a\)/i.test(text);
+      const hasReason = /reason\s*\(r\)|कारण\s*\(r\)|तर्क\s*\(r\)|हेतुः?\s*\(r\)/i.test(text);
       if (!hasAssertion || !hasReason) {
         issues.push({
           code: "QUESTION_TYPE_MISMATCH",
@@ -442,11 +448,14 @@ export function validateGeneratedQuestion(
       });
     }
   } else if (qType === "TRUE_FALSE") {
-    if (!answer || !/\b(true|false|t|f)\b|सत्य|असत्य|सही|गलत/i.test(answer)) {
+    const isStandardTrueFalse =
+      /\b(true|false|t|f)\b/i.test(answer) ||
+      /सत्य|असत्य|सही|गलत|आम्|न|सत्यम्|असत्यम्/.test(answer);
+    if (!answer || !isStandardTrueFalse) {
       issues.push({
         code: "ANSWER_OPTION_MISMATCH",
         severity: "ERROR",
-        message: `Slot ${slotIdx + 1}: TRUE_FALSE answer "${answer}" must clearly state True/False (or सत्य/असत्य).`,
+        message: `Slot ${slotIdx + 1}: TRUE_FALSE answer "${answer}" must clearly state True/False (or सत्य/असत्य or आम्/न).`,
         slotIndex: slotIdx,
       });
     }
@@ -509,11 +518,12 @@ export function validateGeneratedQuestion(
   }
 
   // 5. Language consistency check
-  if (contract.language === "hi" && !/[\u0900-\u097F]/.test(text)) {
+  if ((contract.language === "hi" || contract.language === "sa") && !/[\u0900-\u097F]/.test(text)) {
+    const langName = contract.language === "sa" ? "Sanskrit (\"sa\")" : "Hindi (\"hi\")";
     issues.push({
       code: "LANGUAGE_MISMATCH",
       severity: "ERROR",
-      message: `Slot ${slotIdx + 1}: Requested Hindi language ("hi"), but question text contains no Devanagari script.`,
+      message: `Slot ${slotIdx + 1}: Requested ${langName}, but question text contains no Devanagari script.`,
       slotIndex: slotIdx,
     });
   }

@@ -12,6 +12,8 @@ import {
 } from "./constants";
 import { getInternalChoiceSeparatorLabel } from "./internalChoiceRules";
 import { reconcileSectionGroupInstruction, resolveGroupedExerciseInstruction } from "./layout";
+import { validateGeneratedQuestion, validateGeneratedSection } from "./questionValidator";
+import type { GenerationContract } from "./curriculumContract";
 import type { PaperData, QuestionDto } from "./types";
 
 describe("Comprehensive Question Paper Localization Architecture", () => {
@@ -241,7 +243,7 @@ describe("Comprehensive Question Paper Localization Architecture", () => {
     });
   });
 
-  describe("5. Sanskrit True/False Question View Formatting", () => {
+  describe("5. Sanskrit True/False Question View & Validation", () => {
     it("normalizes True/False answers to 'आम्' and 'न' in Sanskrit", () => {
       const saLocale = getPaperLocale("sa");
       expect(saLocale.questionTypes.TRUE_FALSE).toBe("शुद्ध/अशुद्ध-वाक्यनिरूपणम् (सत्यासत्यम्)");
@@ -251,6 +253,44 @@ describe("Comprehensive Question Paper Localization Architecture", () => {
         "TRUE_FALSE"
       );
       expect(cleaned).toBe("सत्यमेव जयते नानृतम्।");
+    });
+
+    it("validates that Sanskrit TRUE_FALSE questions with answers 'आम्' and 'न' pass curriculum validation", () => {
+      const contract: any = {
+        board: "MPBSE",
+        academicSession: "2025-26",
+        className: "Class 10",
+        rawSubject: "Sanskrit",
+        canonicalSubject: "Sanskrit",
+        sectionTitle: "खण्डः 'ग' : सत्यासत्यनिरूपणम्",
+        questionType: "TRUE_FALSE",
+        marksEach: 1,
+        totalMarks: 6,
+        language: "sa",
+        slots: Array.from({ length: 6 }, (_, i) => ({
+          slotIndex: i,
+          chapterTitle: "शुचिपर्यावरणम्",
+          chapterOrder: 1,
+          marks: 1,
+          difficulty: "EASY",
+          requiresInternalChoice: false,
+        })),
+      };
+
+      const generatedQuestions: any[] = [
+        { type: "TRUE_FALSE", text: "दुर्दान्तैर्दशनैरमुना स्यान्नैव जनग्रसनम्।", answer: "आम्", options: ["आम्", "न"], slotIndex: 0 },
+        { type: "TRUE_FALSE", text: "वायुमण्डलं भृशं दूषितं नास्ति।", answer: "न", options: ["आम्", "न"], slotIndex: 1 },
+        { type: "TRUE_FALSE", text: "महानगरेषु वाहनानाम् अनन्ताः पङ्क्तयः धावन्ति।", answer: "आम्", options: ["आम्", "न"], slotIndex: 2 },
+        { type: "TRUE_FALSE", text: "प्रकृत्याः संनिधौ वास्तविकं सुखं नास्ति।", answer: "न", options: ["आम्", "न"], slotIndex: 3 },
+        { type: "TRUE_FALSE", text: "शुचिपर्यावरणम् एव अस्माकं शरणम्।", answer: "आम्", options: ["आम्", "न"], slotIndex: 4 },
+        { type: "TRUE_FALSE", text: "धूमं मुञ्चति शतशकटीयानम्।", answer: "आम्", options: ["आम्", "न"], slotIndex: 5 },
+      ];
+
+      const validation = validateGeneratedSection(generatedQuestions, contract);
+      expect(validation.valid).toBe(true);
+      expect(validation.issues).toHaveLength(0);
+      expect(validation.acceptedQuestions).toHaveLength(6);
+      expect(validation.rejectedSlotIndices).toHaveLength(0);
     });
   });
 });
