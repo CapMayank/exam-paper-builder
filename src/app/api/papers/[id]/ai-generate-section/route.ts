@@ -1,6 +1,7 @@
 import { HttpError, route } from "@/lib/api";
 import { generatePaperSectionWithGemini, type GeneratePaperSectionSlot } from "@/lib/gemini";
 import { resolveInternalChoiceRequirement } from "@/lib/internalChoiceRules";
+import { detectPaperLanguage, type PaperLanguage } from "@/lib/localization";
 import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
 
 export const POST = route(async (req, { id }, user) => {
@@ -70,6 +71,11 @@ export const POST = route(async (req, { id }, user) => {
     };
   });
 
+  const resolvedLanguage: PaperLanguage =
+    language && language !== "en"
+      ? (language as PaperLanguage)
+      : detectPaperLanguage(paper, paper.items);
+
   const res = await generatePaperSectionWithGemini({
     className: paper.blueprint.book.className,
     subject: paper.blueprint.book.subject,
@@ -77,7 +83,7 @@ export const POST = route(async (req, { id }, user) => {
     sectionType: sectionType || matchedSection?.type || "MCQ",
     sectionInstructions: effectiveInstructions,
     marksEach: Number(marksEach) || matchedSection?.marksEach || 1,
-    language,
+    language: resolvedLanguage,
     difficulty,
     model,
     teacherFocus,

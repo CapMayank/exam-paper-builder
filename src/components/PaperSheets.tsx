@@ -381,6 +381,10 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
       sectionGroupCounter += 1;
     }
 
+    const sectionItems = paper.items.filter((item) => item.sectionId === s.id);
+    const isGroupedObjective =
+      (s.type === "TRUE_FALSE" || s.type === "FILL_BLANK") && sectionItems.length > 1;
+
     // Only render the main SECTION header if it's the first in this title group!
     if (!isSameAsPrev) {
       const allInGroup = blueprint.sections.filter(
@@ -394,7 +398,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
         secRange?.groupStartQ ?? 0,
         secRange?.groupEndQ ?? 0
       );
-      const isEnglishInstruction = /^[A-Za-z0-9\s.,'":;()\-–?!/]+$/.test((rawReconciled || "").trim());
+      const isEnglishInstruction = !/[\u0900-\u097F]/.test((rawReconciled || "").trim());
       const reconciledMainInstruction =
         (paperLang === "sa" || paperLang === "hi") && isEnglishInstruction
           ? getSharedInstruction(s.type, paperLang)
@@ -424,7 +428,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
                 {groupRightLabel}
               </span>
             </div>
-            {reconciledMainInstruction && (
+            {reconciledMainInstruction && !isGroupedObjective && (
               <div style={{ fontStyle: "italic", marginTop: "0.8mm", fontSize: "8.5pt", color: "#334155" }}>
                 {reconciledMainInstruction}
               </div>
@@ -462,10 +466,6 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
         ),
       });
     }
-
-    const sectionItems = paper.items.filter((item) => item.sectionId === s.id);
-    const isGroupedObjective =
-      (s.type === "TRUE_FALSE" || s.type === "FILL_BLANK") && sectionItems.length > 1;
 
     if (isGroupedObjective) {
       const exerciseN = n;

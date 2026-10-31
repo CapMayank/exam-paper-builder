@@ -112,6 +112,7 @@ export function detectPaperLanguage(
     subjectCode?: string | null;
     generalInstructions?: string | null;
     blueprint?: {
+      language?: string | null;
       subjectCode?: string | null;
       book?: { subject?: string | null; title?: string | null } | null;
       sections?: Array<{ title?: string | null; instructions?: string | null }> | null;
@@ -119,15 +120,10 @@ export function detectPaperLanguage(
   } | null,
   items?: Array<{ question?: { text?: string | null; options?: string[] } | null }> | null
 ): PaperLanguage {
-  // 1. Explicit override on paper record
-  if (
-    paper?.language === "sa" ||
-    paper?.language === "hi" ||
-    paper?.language === "bilingual" ||
-    paper?.language === "en"
-  ) {
-    return paper.language;
-  }
+  // 1. Explicit override on paper or blueprint record when non-default
+  if (paper?.language === "sa" || paper?.blueprint?.language === "sa") return "sa";
+  if (paper?.language === "hi" || paper?.blueprint?.language === "hi") return "hi";
+  if (paper?.language === "bilingual" || paper?.blueprint?.language === "bilingual") return "bilingual";
 
   const rawSubject = paper?.blueprint?.book?.subject || "";
   const subjectPrimary = rawSubject.split("/")[0].trim().toLowerCase();
@@ -135,6 +131,7 @@ export function detectPaperLanguage(
   const subjectCode = (paper?.subjectCode || paper?.blueprint?.subjectCode || "").trim();
 
   // 2. Sanskrit detection via subject, code, or book title
+  // (Takes absolute precedence over DB default 'en' because Sanskrit is intrinsically Sanskrit)
   if (
     subjectPrimary.includes("sanskrit") ||
     subjectPrimary.includes("संस्कृत") ||
@@ -145,7 +142,7 @@ export function detectPaperLanguage(
     bookTitlePrimary.includes("रुचिरा") ||
     bookTitlePrimary.includes("deepakam") ||
     bookTitlePrimary.includes("दीपकम्") ||
-    subjectCode === "122" || // Class 10 Sanskrit
+    subjectCode === "122" || // Class 10 Sanskrit (MPBSE / CBSE)
     subjectCode === "512" || // MPBSE High School Sanskrit
     subjectCode === "022"    // Secondary Sanskrit
   ) {
@@ -153,6 +150,7 @@ export function detectPaperLanguage(
   }
 
   // 3. Hindi detection via subject or book title
+  // (Takes precedence over DB default 'en' because Hindi literature is intrinsically Hindi)
   if (
     subjectPrimary.includes("hindi") ||
     subjectPrimary.includes("हिंदी") ||
@@ -198,12 +196,15 @@ export function detectPaperLanguage(
     }
   }
 
+  // 5. Title / General Instructions inspection
+  if (cleanTitle.toLowerCase().includes("sanskrit") || cleanTitle.includes("संस्कृत") || isTextPredominantlySanskrit(paper?.generalInstructions)) {
+    return "sa";
+  }
+
   if (devanagariRegex.test(cleanTitle) || devanagariRegex.test(subjectPrimary)) {
-    if (cleanTitle.toLowerCase().includes("sanskrit") || cleanTitle.includes("संस्कृत")) {
-      return "sa";
-    }
     return "hi";
   }
 
-  return "en";
+  // 6. Explicit 'en' or default
+  return paper?.language === "en" ? "en" : "en";
 }

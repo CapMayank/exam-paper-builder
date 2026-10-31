@@ -113,6 +113,10 @@ export function AIPaperGeneratorModal({
       .then((res) => {
         if (!mounted) return;
         setPlan(res.plan);
+        if (res.plan.language) {
+          setLanguage(res.plan.language);
+          return;
+        }
         const sub = (res.plan.subject || "").split("/")[0].trim().toLowerCase();
         const bTitle = (res.plan.bookTitle || "").split("/")[0].trim().toLowerCase();
         const pTitle = (res.plan.title || "").split("/")[0].trim().toLowerCase();

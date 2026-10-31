@@ -1017,7 +1017,7 @@ ${contract.forbiddenCrossSubjectDomains.length > 0 ? `2. FORBIDDEN CROSS-SUBJECT
    - Both (A) and (R) are true, but (R) is not the correct explanation of (A).
    - (A) is true, but (R) is false.
    - (A) is false, but (R) is true.
-6. For Match the Columns (MATCH_COLUMN): Generate EXACTLY 1 combined question containing all matching pairs across the section slots. Clearly list Column I items in 'text' and Column II items in 'options', with correct pairings in 'answer'.
+6. For Match the Columns (MATCH_COLUMN): Generate EXACTLY 1 combined question containing all matching pairs across the section slots. Clearly list Column I items in 'text' and Column II items in 'options', with correct pairings in 'answer'. For Sanskrit use "स्तम्भ 'अ'" / "स्तम्भ 'ब'". For Hindi use "स्तम्भ 'क'" / "स्तम्भ 'ख'".
 7. For Case Study / Passage (CASE_STUDY, UNSEEN_PASSAGE, REFERENCE_CONTEXT): Provide a domain-authentic scenario/passage, followed by labeled subparts ((i), (ii), etc.) whose marks sum up exactly to ${marksEach}.
 8. For subjective questions (VERY_SHORT, SHORT, LONG, NUMERICAL): Provide a detailed step-wise model answer and marking scheme breakdown.
 9. LaTeX Math: Enclose all mathematical expressions, equations, symbols, and formulas in standard LaTeX $...$ delimiters.
@@ -1031,7 +1031,16 @@ ${contract.forbiddenCrossSubjectDomains.length > 0 ? `2. FORBIDDEN CROSS-SUBJECT
        ? `Internal choice (OR / अथवा) is STRICTLY FORBIDDEN for this section. Do NOT generate "orQuestion" on any item.`
        : `Do not include "orQuestion" unless explicitly required by a slot.`
    }
-12. Return ONLY a valid JSON array of question objects. No markdown wrapping or conversational commentary.`;
+12. QUESTION STEM & CLEAN FORMATTING RULES:
+   - DO NOT prepend question numbers, Roman numerals, or letter bullets (like "1.", "(a)", "(i)", "(क)") to the "text" field. All question numbering is automatically formatted by the exam layout engine.
+   - DO NOT append marks annotations (like "[1 Mark]", "[2 Marks]", "[1 अंक]", "[1 अङ्कः]") inside the "text" field. Marks are rendered dynamically in the right margin.
+   - For FILL_BLANK: Write ONLY the statement with blank(s) indicated as "________" (at least 8 underscores). NEVER append meta-instructions like "इति रिक्तस्थानं पूरयत", "fill in the blanks", or "रिक्त स्थान भरिए" to the "text" field.
+   - For TRUE_FALSE: Write ONLY a single declarative factual statement. NEVER append questions or prompt wrappers like "अयम् आशयः सत्यः अस्ति वा?", "सत्यं वा असत्यं", or "state whether true or false". The answer field MUST be "आम्" or "न" for Sanskrit, "सत्य" or "असत्य" for Hindi, "True" or "False" for English.
+13. LANGUAGE PURITY & ANTI-BILINGUAL LEAKAGE:
+   - When language is "sa" (Sanskrit), generate 100% authentic Sanskrit in Devanagari script. Never leak English or Hindi words.
+   - When language is "hi" (Hindi), generate 100% standard Hindi in Devanagari script. Never leak English words.
+   - When language is "en" (English), generate 100% English.
+14. Return ONLY a valid JSON array of question objects. No markdown wrapping or conversational commentary.`;
 
   const slotsDescription = contract.slots
     .map((s, idx) => {
@@ -1064,16 +1073,16 @@ ${contract.forbiddenCrossSubjectDomains.length > 0 ? `2. FORBIDDEN CROSS-SUBJECT
 - Total Marks: ${slots.length * marksEach} (${slots.length} pairs × ${marksEach} mark each)
 - Language: ${
         language === "sa"
-          ? "Pure Sanskrit in authentic Devanagari script (संस्कृतम्). Follow NCERT/MPBSE Shemushi standards. Use proper sandhi, vibhakti, and Sanskrit terminology. Do NOT write in English or Hindi."
+          ? "Pure Sanskrit in authentic Devanagari script (संस्कृतम्). Follow NCERT/MPBSE Shemushi standards. Use proper sandhi, vibhakti, and Sanskrit terminology. Do NOT write in English or Hindi. TRUE_FALSE answers must be 'आम्' or 'न'. Match columns must use 'स्तम्भ अ' / 'स्तम्भ ब'. Never output English column names or marks inside question text."
+          : language === "hi"
+          ? "Hindi in Devanagari script. Follow MP Board standards. Do NOT write in English. TRUE_FALSE answers must be 'सत्य' or 'असत्य'. Match columns must use 'स्तम्भ क' / 'स्तम्भ ख'. Never output English column names or marks inside question text."
           : language === "bilingual"
           ? "Bilingual (English with Hindi translation in parentheses)"
-          : language === "hi"
-          ? "Hindi (Devanagari script)"
           : "English"
       }
 - Instructions:
   1. Return a JSON array containing EXACTLY ONE question object.
-  2. The 'text' field must contain the instruction prompt followed by the list of ${slots.length} Column I items labeled (A), (B), (C), etc., derived from the assigned ${contract.canonicalSubject} chapters.
+  2. The 'text' field must contain the instruction prompt followed by the list of ${slots.length} Column I items labeled (A), (B), (C), etc., derived from the assigned ${contract.canonicalSubject} chapters. For Sanskrit use 'स्तम्भ अ' / 'स्तम्भ ब', for Hindi use 'स्तम्भ क' / 'स्तम्भ ख'.
   3. The 'options' array must contain the corresponding ${slots.length} Column II matching items/expressions.
   4. The 'answer' field must specify all correct pairings (e.g. '(A)-(ii), (B)-(i), (C)-(iv), (D)-(iii)').
 
@@ -1112,11 +1121,11 @@ JSON Array Output Schema:
       }
 - Language: ${
         language === "sa"
-          ? "Pure Sanskrit in authentic Devanagari script (संस्कृतम्). Follow NCERT/MPBSE Shemushi standards. Use proper sandhi, vibhakti, and Sanskrit terminology. Do NOT write in English or Hindi."
+          ? "Pure Sanskrit in authentic Devanagari script (संस्कृतम्). Follow NCERT/MPBSE Shemushi standards. Use proper sandhi, vibhakti, and Sanskrit terminology. Do NOT write in English or Hindi. TRUE_FALSE answers must be 'आम्' or 'न'. Never append [1 Mark] or instructions like 'इति रिक्तस्थानं पूरयत' or 'अयम् आशयः सत्यः अस्ति वा?'."
+          : language === "hi"
+          ? "Hindi in Devanagari script. Follow MP Board standards. Do NOT write in English. TRUE_FALSE answers must be 'सत्य' or 'असत्य'. Never append [1 अंक] or instructions."
           : language === "bilingual"
           ? "Bilingual (English with Hindi translation in parentheses)"
-          : language === "hi"
-          ? "Hindi (Devanagari script)"
           : "English"
       }
 - Difficulty Policy: ${
@@ -3941,6 +3950,11 @@ CRITICAL REQUIREMENTS:
    - Distribute the examination marks across the provided chapter IDs.
    - CRITICAL INVARIANT: The sum of marks in "chapters" MUST EXACTLY EQUAL the sum of (count * marksEach) across all "sections".
    - Only assign marks to chapter IDs provided in the chapter list. Do not invent non-existent IDs.
+8. LANGUAGE MEDIUM POLICY:
+   - For Sanskrit (or codes 122/512): All section titles MUST be in authentic Sanskrit in Devanagari script (e.g. "खण्डः 'क' : बहुविकल्पीयप्रश्नाः", "खण्डः 'ख' : रिक्तस्थानपूर्तिः", "खण्डः 'ग' : सत्यासत्यनिरूपणम्", "खण्डः 'घ' : उचितयुग्ममेलनम्", "खण्डः 'ङ' : एकपदेन उत्तराणि", "खण्डः 'च' : लघूत्तरीयप्रश्नाः", "खण्डः 'छ' : पाठ्यांश-अवबोधनम्", "खण्डः 'ज' : दीर्घोत्तरीय-रचनात्मककार्यम्"). Instructions must also be in Sanskrit.
+   - For Hindi: All section titles and instructions MUST be in standard Hindi (e.g. "खण्ड 'क' : सही विकल्प चुनिए", "खण्ड 'ख' : रिक्त स्थानों की पूर्ति", "खण्ड 'ग' : सत्य / असत्य", "खण्ड 'घ' : सही जोड़ी मिलाइए").
+   - For English: Use standard English ("Section A: Multiple Choice Questions", etc.).
+   - NEVER generate English section titles for Sanskrit or Hindi papers.
 
 RETURN ONLY VALID JSON matching this schema:
 {
@@ -3996,8 +4010,31 @@ ${input.rawText || "Please inspect the attached blueprint document/image and ext
 
   const mockFallback = (): ParsedBlueprintResponse => {
     // Intelligent fallback modeled on MP Board / State Board 80-mark standard pattern
-    const isLang = /english|hindi|sanskrit/i.test(subject);
-    const sections = isLang
+    const isSanskrit = /sanskrit|संस्कृत/i.test(subject);
+    const isHindi = /hindi|हिंदी|हिन्दी/i.test(subject);
+    const sections = isSanskrit
+      ? [
+          { title: "खण्डः 'क' : बहुविकल्पीयप्रश्नाः", instructions: "उचितविकल्पं चित्वा लिखत", type: "MCQ", count: 6, marksEach: 1 },
+          { title: "खण्डः 'ख' : रिक्तस्थानपूर्तिः", instructions: "कोष्ठकेषु प्रदत्तशब्दैः रिक्तस्थानानि पूरयत", type: "FILL_BLANK", count: 6, marksEach: 1 },
+          { title: "खण्डः 'ग' : शुद्ध/अशुद्धवाक्यनिरूपणम्", instructions: "शुद्धवाक्यानां समक्षम् 'आम्' अशुद्धवाक्यानां समक्षं 'न' इति लिखत", type: "TRUE_FALSE", count: 6, marksEach: 1 },
+          { title: "खण्डः 'घ' : उचितयुग्ममेलनम्", instructions: "स्तम्भ 'अ' सह स्तम्भ 'ब' इत्यस्य समुचितं मेलनं कुरुत", type: "MATCH_COLUMN", count: 6, marksEach: 1 },
+          { title: "खण्डः 'ङ' : एकपदेन उत्तराणि", instructions: "एकपदेन उत्तरं संस्कृतभाषया लिखत", type: "VERY_SHORT", count: 6, marksEach: 1 },
+          { title: "खण्डः 'च' : लघूत्तरीयप्रश्नाः", instructions: "अधोलिखितानां प्रश्नानाम् उत्तराणि संस्कृतभाषया संक्षेपेण लिखत", type: "SHORT", count: 12, marksEach: 2 },
+          { title: "खण्डः 'छ' : पाठ्यांश-अवबोधनम्", instructions: "प्रदत्तं गद्यांशं/पद्यांशं/नाट्यांशं पठित्वा प्रश्नानाम् उत्तराणि लिखत", type: "SHORT", count: 3, marksEach: 3 },
+          { title: "खण्डः 'ज' : दीर्घोत्तरीय-रचनात्मककार्यम्", instructions: "पत्रलेखनम्, अपठितगद्यांशः, तथा निबन्धलेखनं कुरुत", type: "LONG", count: 3, marksEach: 4 },
+        ]
+      : isHindi
+      ? [
+          { title: "खण्ड 'क' : सही विकल्प चुनिए", instructions: "सही विकल्प चुनकर लिखिए", type: "MCQ", count: 6, marksEach: 1 },
+          { title: "खण्ड 'ख' : रिक्त स्थानों की पूर्ति", instructions: "रिक्त स्थानों की पूर्ति कीजिए", type: "FILL_BLANK", count: 6, marksEach: 1 },
+          { title: "खण्ड 'ग' : सत्य / असत्य", instructions: "सत्य या असत्य लिखिए", type: "TRUE_FALSE", count: 6, marksEach: 1 },
+          { title: "खण्ड 'घ' : सही जोड़ी मिलाइए", instructions: "स्तम्भ 'अ' का स्तम्भ 'ब' से सही मिलान कीजिए", type: "MATCH_COLUMN", count: 6, marksEach: 1 },
+          { title: "खण्ड 'ङ' : एक शब्द / वाक्य में उत्तर", instructions: "एक शब्द या एक वाक्य में उत्तर दीजिए", type: "VERY_SHORT", count: 6, marksEach: 1 },
+          { title: "खण्ड 'च' : अति लघु उत्तरीय प्रश्न", instructions: "लगभग 30 शब्दों में उत्तर दीजिए", type: "VERY_SHORT", count: 10, marksEach: 2 },
+          { title: "खण्ड 'छ' : लघु उत्तरीय प्रश्न", instructions: "लगभग 75 शब्दों में उत्तर दीजिए", type: "SHORT", count: 4, marksEach: 3 },
+          { title: "खण्ड 'ज' : दीर्घ उत्तरीय प्रश्न", instructions: "लगभग 120 शब्दों में उत्तर दीजिए", type: "LONG", count: 4, marksEach: 4 },
+        ]
+      : /english/i.test(subject)
       ? [
           { title: "Section A – Objective: Multiple Choice", instructions: "Choose the correct option", type: "MCQ", count: 6, marksEach: 1 },
           { title: "Section A – Objective: Fill in Blanks", instructions: "Fill in the correct blanks", type: "FILL_BLANK", count: 6, marksEach: 1 },

@@ -213,7 +213,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
       examDate: p.examDate,
       paperSet: p.paperSet ?? "",
       subjectCode: p.subjectCode ?? "",
-      language: ((p.language as PaperLanguage) || detectPaperLanguage(p, p.items)) ?? "en",
+      language: detectPaperLanguage(p, p.items),
       generalInstructions: p.generalInstructions ?? "",
       printDensity: (p.printDensity as PrintDensity) ?? "STANDARD",
       showCandidateDetails: p.showCandidateDetails !== false,

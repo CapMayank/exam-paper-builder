@@ -60,6 +60,32 @@ describe("Comprehensive Question Paper Localization Architecture", () => {
       expect(detectPaperLanguage(sanskritPaper as PaperData)).toBe("sa");
     });
 
+    it("detects Sanskrit even when paper.language is defaulted to 'en' in SQLite DB", () => {
+      const dbDefaultPaper = {
+        ...sanskritPaper,
+        language: "en", // DB default
+      };
+      expect(detectPaperLanguage(dbDefaultPaper as PaperData)).toBe("sa");
+    });
+
+    it("localizes multi-part section titles like (PART 1) and (PART 2) to authentic Sanskrit (भागः १)", () => {
+      expect(localizeSectionTitle("SECTION F: SHORT ANSWER QUESTIONS (PART 1)", "sa")).toBe(
+        "खण्डः 'च' : लघूत्तरीयप्रश्नाः (भागः १)"
+      );
+      expect(localizeSectionTitle("SECTION G: SHORT ANSWER QUESTIONS (PART 2)", "sa")).toBe(
+        "खण्डः 'छ' : लघूत्तरीयप्रश्नाः (भागः २)"
+      );
+    });
+
+    it("converts Hindi section titles to authentic Sanskrit for Sanskrit papers", () => {
+      expect(localizeSectionTitle("खण्ड 'क' : सही विकल्प चुनिए", "sa")).toBe(
+        "खण्डः 'क' : बहुविकल्पीयप्रश्नाः"
+      );
+      expect(localizeSectionTitle("खण्ड 'ख' : रिक्त स्थानों की पूर्ति", "sa")).toBe(
+        "खण्डः 'ख' : रिक्तस्थानपूर्तिः"
+      );
+    });
+
     it("renders authentic Sanskrit section titles dynamically without English leakage", () => {
       const saLocale = getPaperLocale("sa");
       const expectedSections = [
@@ -255,7 +281,21 @@ describe("Comprehensive Question Paper Localization Architecture", () => {
       expect(cleaned).toBe("सत्यमेव जयते नानृतम्।");
     });
 
-    it("validates that Sanskrit TRUE_FALSE questions with answers 'आम्' and 'न' pass curriculum validation", () => {
+    it("strips trailing meta-prompts like 'इति रिक्तस्थानं पूरयत' and 'अयम् आशयः सत्यः अस्ति वा?' from stems", () => {
+      const fbClean = cleanQuestionStatement(
+        "काकः ________ जलं पिबति इति रिक्तस्थानं पूरयत। [१ अङ्कः]",
+        "FILL_BLANK"
+      );
+      expect(fbClean).toBe("काकः ________ जलं पिबति");
+
+      const tfClean = cleanQuestionStatement(
+        "सूर्यः पूर्वदिशायाम् उदेति अयम् आशयः सत्यः अस्ति वा? (1 Mark)",
+        "TRUE_FALSE"
+      );
+      expect(tfClean).toBe("सूर्यः पूर्वदिशायाम् उदेति");
+    });
+
+    it("validates that Sanskrit TRUE_FALSE questions with answers 'आम्', 'न', 'शुद्धम्', 'अशुद्धम्' pass curriculum validation", () => {
       const contract: any = {
         board: "MPBSE",
         academicSession: "2025-26",
@@ -280,10 +320,10 @@ describe("Comprehensive Question Paper Localization Architecture", () => {
       const generatedQuestions: any[] = [
         { type: "TRUE_FALSE", text: "दुर्दान्तैर्दशनैरमुना स्यान्नैव जनग्रसनम्।", answer: "आम्", options: ["आम्", "न"], slotIndex: 0 },
         { type: "TRUE_FALSE", text: "वायुमण्डलं भृशं दूषितं नास्ति।", answer: "न", options: ["आम्", "न"], slotIndex: 1 },
-        { type: "TRUE_FALSE", text: "महानगरेषु वाहनानाम् अनन्ताः पङ्क्तयः धावन्ति।", answer: "आम्", options: ["आम्", "न"], slotIndex: 2 },
-        { type: "TRUE_FALSE", text: "प्रकृत्याः संनिधौ वास्तविकं सुखं नास्ति।", answer: "न", options: ["आम्", "न"], slotIndex: 3 },
-        { type: "TRUE_FALSE", text: "शुचिपर्यावरणम् एव अस्माकं शरणम्।", answer: "आम्", options: ["आम्", "न"], slotIndex: 4 },
-        { type: "TRUE_FALSE", text: "धूमं मुञ्चति शतशकटीयानम्।", answer: "आम्", options: ["आम्", "न"], slotIndex: 5 },
+        { type: "TRUE_FALSE", text: "महानगरेषु वाहनानाम् अनन्ताः पङ्क्तयः धावन्ति।", answer: "शुद्धम्", options: ["आम्", "न"], slotIndex: 2 },
+        { type: "TRUE_FALSE", text: "प्रकृत्याः संनिधौ वास्तविकं सुखं नास्ति।", answer: "अशुद्धम्", options: ["आम्", "न"], slotIndex: 3 },
+        { type: "TRUE_FALSE", text: "शुचिपर्यावरणम् एव अस्माकं शरणम्।", answer: "सत्यम्", options: ["आम्", "न"], slotIndex: 4 },
+        { type: "TRUE_FALSE", text: "धूमं मुञ्चति शतशकटीयानम्।", answer: "असत्यम्", options: ["आम्", "न"], slotIndex: 5 },
       ];
 
       const validation = validateGeneratedSection(generatedQuestions, contract);

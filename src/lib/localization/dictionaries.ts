@@ -1,9 +1,10 @@
 import type { PaperLocaleDictionary, PaperLanguage } from "./types";
 
-const DEVANAGARI_LETTERS = ["क", "ख", "ग", "घ", "ङ", "च", "छ", "ज", "झ", "ञ", "ट", "ठ", "ड", "ढ", "ण"];
+const DEVANAGARI_LETTERS = ["क", "ख", "ग", "घ", "ङ", "च", "छ", "ज", "झ", "ञ", "ट", "ठ", "ड", "ढ", "ण", "त", "थ", "द", "ध", "न"];
 
 export function toDevanagariLetter(letter: string): string {
-  const upper = letter.toUpperCase();
+  if (!letter) return "क";
+  const upper = letter.toUpperCase().trim();
   const code = upper.charCodeAt(0);
   if (code >= 65 && code <= 90) {
     const idx = code - 65;
@@ -15,15 +16,22 @@ export function toDevanagariLetter(letter: string): string {
 const ENGLISH_SECTION_TYPE_MAP: Record<string, { sa: string; hi: string }> = {
   "MULTIPLE CHOICE QUESTIONS": { sa: "बहुविकल्पीयप्रश्नाः", hi: "सही विकल्प चुनिए" },
   "MULTIPLE CHOICE": { sa: "बहुविकल्पीयप्रश्नाः", hi: "सही विकल्प चुनिए" },
+  "OBJECTIVE: MULTIPLE CHOICE": { sa: "बहुविकल्पीयप्रश्नाः", hi: "सही विकल्प चुनिए" },
   "FILL IN THE BLANKS": { sa: "रिक्तस्थानपूर्तिः", hi: "रिक्त स्थानों की पूर्ति" },
   "FILL IN BLANKS": { sa: "रिक्तस्थानपूर्तिः", hi: "रिक्त स्थानों की पूर्ति" },
+  "FILL BLANKS": { sa: "रिक्तस्थानपूर्तिः", hi: "रिक्त स्थानों की पूर्ति" },
+  "OBJECTIVE: FILL IN BLANKS": { sa: "रिक्तस्थानपूर्तिः", hi: "रिक्त स्थानों की पूर्ति" },
   "TRUE OR FALSE": { sa: "सत्यासत्यनिरूपणम्", hi: "सत्य / असत्य" },
   "TRUE / FALSE": { sa: "सत्यासत्यनिरूपणम्", hi: "सत्य / असत्य" },
+  "TRUE/FALSE": { sa: "सत्यासत्यनिरूपणम्", hi: "सत्य / असत्य" },
+  "OBJECTIVE: TRUE / FALSE": { sa: "सत्यासत्यनिरूपणम्", hi: "सत्य / असत्य" },
   "MATCH THE FOLLOWING": { sa: "उचितयुग्ममेलनम्", hi: "सही जोड़ी मिलाइए" },
   "MATCH THE COLUMNS": { sa: "उचितयुग्ममेलनम्", hi: "सही जोड़ी मिलाइए" },
   "MATCH COLUMN": { sa: "उचितयुग्ममेलनम्", hi: "सही जोड़ी मिलाइए" },
+  "OBJECTIVE: MATCH COLUMN": { sa: "उचितयुग्ममेलनम्", hi: "सही जोड़ी मिलाइए" },
   "ONE WORD ANSWERS": { sa: "एकपदेन उत्तराणि", hi: "एक शब्द / वाक्य में उत्तर" },
   "ONE WORD ANSWER": { sa: "एकपदेन उत्तराणि", hi: "एक शब्द / वाक्य में उत्तर" },
+  "OBJECTIVE: ONE WORD ANSWER": { sa: "एकपदेन उत्तराणि", hi: "एक शब्द / वाक्य में उत्तर" },
   "VERY SHORT ANSWER QUESTIONS": { sa: "अतिलघूत्तरीयप्रश्नाः", hi: "अति लघु उत्तरीय प्रश्न" },
   "VERY SHORT ANSWER": { sa: "अतिलघूत्तरीयप्रश्नाः", hi: "अति लघु उत्तरीय प्रश्न" },
   "SHORT ANSWER QUESTIONS": { sa: "लघूत्तरीयप्रश्नाः", hi: "लघु उत्तरीय प्रश्न" },
@@ -38,60 +46,151 @@ const ENGLISH_SECTION_TYPE_MAP: Record<string, { sa: string; hi: string }> = {
   "GRAMMAR": { sa: "अनुप्रयुक्त-व्याकरणम्", hi: "व्याकरण" },
 };
 
-export function localizeSectionTitle(title: string | null | undefined, lang: PaperLanguage, fallbackLetter = "A"): string {
+function resolvePartSuffix(desc: string, lang: PaperLanguage): { cleanedDesc: string; partSuffix: string } {
+  const partMatch = desc.match(/\s*[([]?(?:part|भागः?)\s*([0-9ivx]+|[१-९]+)[)\]]?\s*$/i);
+  if (!partMatch) return { cleanedDesc: desc, partSuffix: "" };
+
+  const rawNum = partMatch[1].toUpperCase();
+  const numMap: Record<string, { sa: string; hi: string }> = {
+    "1": { sa: "(भागः १)", hi: "(भाग 1)" },
+    "I": { sa: "(भागः १)", hi: "(भाग 1)" },
+    "१": { sa: "(भागः १)", hi: "(भाग 1)" },
+    "2": { sa: "(भागः २)", hi: "(भाग 2)" },
+    "II": { sa: "(भागः २)", hi: "(भाग 2)" },
+    "२": { sa: "(भागः २)", hi: "(भाग 2)" },
+    "3": { sa: "(भागः ३)", hi: "(भाग 3)" },
+    "III": { sa: "(भागः ३)", hi: "(भाग 3)" },
+    "३": { sa: "(भागः ३)", hi: "(भाग 3)" },
+    "4": { sa: "(भागः ४)", hi: "(भाग 4)" },
+    "IV": { sa: "(भागः ४)", hi: "(भाग 4)" },
+    "४": { sa: "(भागः ४)", hi: "(भाग 4)" },
+  };
+
+  const suffix =
+    lang === "sa"
+      ? numMap[rawNum]?.sa || `(भागः ${rawNum})`
+      : lang === "hi"
+      ? numMap[rawNum]?.hi || `(भाग ${rawNum})`
+      : `(Part ${rawNum})`;
+  const cleanedDesc = desc.slice(0, partMatch.index).trim();
+  return { cleanedDesc, partSuffix: suffix };
+}
+
+function resolveTypeTranslation(desc: string): { sa: string; hi: string } | null {
+  const normalized = desc.trim().toUpperCase().replace(/^OBJECTIVE:\s*/i, "");
+  if (ENGLISH_SECTION_TYPE_MAP[normalized]) {
+    return ENGLISH_SECTION_TYPE_MAP[normalized];
+  }
+
+  // Fuzzy regex matching
+  if (/MULTIPLE\s+CHOICE|MCQ/i.test(normalized)) return { sa: "बहुविकल्पीयप्रश्नाः", hi: "सही विकल्प चुनिए" };
+  if (/FILL\s+(?:IN\s+)?(?:THE\s+)?BLANKS?/i.test(normalized)) return { sa: "रिक्तस्थानपूर्तिः", hi: "रिक्त स्थानों की पूर्ति" };
+  if (/TRUE\s*(?:\/|OR|AND)\s*FALSE/i.test(normalized)) return { sa: "सत्यासत्यनिरूपणम्", hi: "सत्य / असत्य" };
+  if (/MATCH\s*(?:THE)?\s*(?:COLUMN|COLUMNS|FOLLOWING)/i.test(normalized)) return { sa: "उचितयुग्ममेलनम्", hi: "सही जोड़ी मिलाइए" };
+  if (/ONE\s+(?:WORD|SENTENCE)/i.test(normalized)) return { sa: "एकपदेन उत्तराणि", hi: "एक शब्द / वाक्य में उत्तर" };
+  if (/VERY\s+SHORT/i.test(normalized)) return { sa: "अतिलघूत्तरीयप्रश्नाः", hi: "अति लघु उत्तरीय प्रश्न" };
+  if (/SHORT\s+ANSWER/i.test(normalized)) return { sa: "लघूत्तरीयप्रश्नाः", hi: "लघु उत्तरीय प्रश्न" };
+  if (/LONG\s+ANSWER/i.test(normalized)) return { sa: "दीर्घोत्तरीयप्रश्नाः", hi: "दीर्घ उत्तरीय प्रश्न" };
+  if (/CASE\s*STUDY|CASE\s*BASED/i.test(normalized)) return { sa: "केस-आधारितप्रश्नाः", hi: "केस आधारित प्रश्न" };
+  if (/UNSEEN|READING|PASSAGE/i.test(normalized)) return { sa: "अपठित-अवबोधनम्", hi: "अपठित बोध" };
+  if (/WRITING/i.test(normalized)) return { sa: "रचनात्मक-कार्यम्", hi: "रचनात्मक लेखन" };
+  if (/GRAMMAR|VYAKARAN/i.test(normalized)) return { sa: "अनुप्रयुक्त-व्याकरणम्", hi: "व्याकरण" };
+
+  return null;
+}
+
+export function localizeSectionTitle(
+  title: string | null | undefined,
+  lang: PaperLanguage,
+  fallbackLetter = "A"
+): string {
+  const fallbackDeva = toDevanagariLetter(fallbackLetter);
+
   if (!title) {
-    if (lang === "sa") return `खण्डः '${toDevanagariLetter(fallbackLetter)}'`;
-    if (lang === "hi") return `खण्ड '${toDevanagariLetter(fallbackLetter)}'`;
-    if (lang === "bilingual") return `SECTION ${fallbackLetter} / खण्ड '${toDevanagariLetter(fallbackLetter)}'`;
+    if (lang === "sa") return `खण्डः '${fallbackDeva}'`;
+    if (lang === "hi") return `खण्ड '${fallbackDeva}'`;
+    if (lang === "bilingual") return `SECTION ${fallbackLetter} / खण्ड '${fallbackDeva}'`;
     return `SECTION ${fallbackLetter}`;
   }
 
   const trimmed = title.trim();
 
-  // If already predominantly in Devanagari
+  // If already predominantly in Devanagari script
   const hasDevanagari = /[\u0900-\u097F]/.test(trimmed);
   if (hasDevanagari) {
-    if (lang === "sa") {
-      // If it has Hindi-style "खण्ड 'क'" without visarga, normalize to Sanskrit "खण्डः 'क'"
-      return trimmed.replace(/^खण्ड\s+(['"][अ-ह]['"]|[अ-ह])(?:\s*[:–-])?/i, (match, letter) => {
-        return `खण्डः ${letter}`;
-      });
+    const devaSecMatch = trimmed.match(/^खण्डः?\s*(?:['"]?([अ-ह])['"]?)\s*(?:[:–-]\s*(.*))?$/i);
+    if (devaSecMatch) {
+      const letter = devaSecMatch[1] || fallbackDeva;
+      const desc = (devaSecMatch[2] || "").trim();
+      if (lang === "sa") {
+        let saDesc = desc
+          .replace(/सही विकल्प चुनिए|सही विकल्प चुनकर लिखिए/g, "बहुविकल्पीयप्रश्नाः")
+          .replace(/रिक्त स्थानों की पूर्ति(?:\s*कीजिए)?/g, "रिक्तस्थानपूर्तिः")
+          .replace(/सत्य\s*\/\s*असत्य/g, "सत्यासत्यनिरूपणम्")
+          .replace(/सही जोड़ी मिलाइए/g, "उचितयुग्ममेलनम्")
+          .replace(/एक शब्द\s*\/\s*वाक्य में उत्तर/g, "एकपदेन उत्तराणि")
+          .replace(/अति लघु उत्तरीय प्रश्न/g, "अतिलघूत्तरीयप्रश्नाः")
+          .replace(/लघु उत्तरीय प्रश्न/g, "लघूत्तरीयप्रश्नाः")
+          .replace(/दीर्घ उत्तरीय प्रश्न/g, "दीर्घोत्तरीयप्रश्नाः");
+        return saDesc ? `खण्डः '${letter}' : ${saDesc}` : `खण्डः '${letter}'`;
+      }
+      if (lang === "hi") {
+        let hiDesc = desc
+          .replace(/बहुविकल्पीयप्रश्नाः/g, "सही विकल्प चुनिए")
+          .replace(/रिक्तस्थानपूर्तिः/g, "रिक्त स्थानों की पूर्ति")
+          .replace(/सत्यासत्यनिरूपणम्/g, "सत्य / असत्य")
+          .replace(/उचितयुग्ममेलनम्/g, "सही जोड़ी मिलाइए")
+          .replace(/एकपदेन उत्तराणि/g, "एक शब्द / वाक्य में उत्तर")
+          .replace(/अतिलघूत्तरीयप्रश्नाः/g, "अति लघु उत्तरीय प्रश्न")
+          .replace(/लघूत्तरीयप्रश्नाः/g, "लघु उत्तरीय प्रश्न")
+          .replace(/दीर्घोत्तरीयप्रश्नाः/g, "दीर्घ उत्तरीय प्रश्न");
+        return hiDesc ? `खण्ड '${letter}' : ${hiDesc}` : `खण्ड '${letter}'`;
+      }
+    }
+
+    if (lang === "sa" && !trimmed.startsWith("खण्डः")) {
+      return `खण्डः '${fallbackDeva}' : ${trimmed}`;
+    }
+    if (lang === "hi" && !trimmed.startsWith("खण्ड")) {
+      return `खण्ड '${fallbackDeva}' : ${trimmed}`;
     }
     return trimmed;
   }
 
-  // Parse English pattern like "SECTION A: MULTIPLE CHOICE QUESTIONS" or "Section A – Objective: Multiple Choice"
+  // Parse English pattern like "SECTION A: MULTIPLE CHOICE QUESTIONS", "SECTION F: SHORT ANSWER QUESTIONS (PART 1)", or "Section A – Objective: Multiple Choice"
   const secMatch = trimmed.match(/^(?:section|sec|part)\s+([a-z0-9]+)(?:\s*[:–-]\s*(.*))?$/i);
-  if (secMatch) {
-    const rawLetter = secMatch[1].toUpperCase();
-    const rawDesc = (secMatch[2] || "").trim().toUpperCase().replace(/^OBJECTIVE:\s*/i, "");
-    const devaLetter = toDevanagariLetter(rawLetter);
+  const rawLetter = secMatch ? secMatch[1].toUpperCase() : fallbackLetter.toUpperCase();
+  const rawDescWithPart = secMatch ? (secMatch[2] || "").trim() : trimmed;
+  const devaLetter = toDevanagariLetter(rawLetter);
 
-    if (lang === "sa") {
-      const typeTrans = ENGLISH_SECTION_TYPE_MAP[rawDesc]?.sa;
-      if (typeTrans) {
-        return `खण्डः '${devaLetter}' : ${typeTrans}`;
-      }
-      return `खण्डः '${devaLetter}'`;
+  const { cleanedDesc, partSuffix } = resolvePartSuffix(rawDescWithPart, lang);
+  const translation = resolveTypeTranslation(cleanedDesc);
+
+  if (lang === "sa") {
+    if (translation?.sa) {
+      const suffixStr = partSuffix ? ` ${partSuffix}` : "";
+      return `खण्डः '${devaLetter}' : ${translation.sa}${suffixStr}`;
     }
+    const suffixStr = partSuffix ? ` ${partSuffix}` : "";
+    return cleanedDesc ? `खण्डः '${devaLetter}'${suffixStr}` : `खण्डः '${devaLetter}'`;
+  }
 
-    if (lang === "hi") {
-      const typeTrans = ENGLISH_SECTION_TYPE_MAP[rawDesc]?.hi;
-      if (typeTrans) {
-        return `खण्ड '${devaLetter}' : ${typeTrans}`;
-      }
-      return `खण्ड '${devaLetter}'`;
+  if (lang === "hi") {
+    if (translation?.hi) {
+      const suffixStr = partSuffix ? ` ${partSuffix}` : "";
+      return `खण्ड '${devaLetter}' : ${translation.hi}${suffixStr}`;
     }
+    const suffixStr = partSuffix ? ` ${partSuffix}` : "";
+    return cleanedDesc ? `खण्ड '${devaLetter}'${suffixStr}` : `खण्ड '${devaLetter}'`;
+  }
 
-    if (lang === "bilingual") {
-      const typeTrans = ENGLISH_SECTION_TYPE_MAP[rawDesc]?.hi;
-      if (typeTrans) {
-        return `SECTION ${rawLetter} : ${rawDesc} / खण्ड '${devaLetter}' : ${typeTrans}`;
-      }
-      return `SECTION ${rawLetter} / खण्ड '${devaLetter}'`;
+  if (lang === "bilingual") {
+    const hiDesc = translation?.hi || cleanedDesc;
+    const suffixStr = partSuffix ? ` ${partSuffix}` : "";
+    if (cleanedDesc) {
+      return `SECTION ${rawLetter} : ${cleanedDesc} / खण्ड '${devaLetter}' : ${hiDesc}${suffixStr}`;
     }
-
-    return trimmed;
+    return `SECTION ${rawLetter} / खण्ड '${devaLetter}'`;
   }
 
   return trimmed;

@@ -528,7 +528,7 @@ export async function buildPaperDocx(
         ? `${groupCount} Questions / प्रश्न · ${groupMarks} Marks / अंक`
         : `${groupCount} Questions · ${groupMarks} Marks`;
 
-      const sectionTitleDisplay = locale.section.formatSectionHeader(section.title, sectionLetter);
+      const sectionTitleDisplay = locale.section.formatSectionHeader(sectionLetter, section.title);
 
       paragraphs.push(
         new Paragraph({
@@ -552,14 +552,21 @@ export async function buildPaperDocx(
       );
     }
 
+    const isGroupedObjective = (section.type === "TRUE_FALSE" || section.type === "FILL_BLANK") && items.length > 1;
+
     // Sub-heading for specific question type within grouped section
-    if (!isSameAsPrev && section.instructions) {
+    if (!isSameAsPrev && section.instructions && !isGroupedObjective) {
       const secRange = numbering.sectionRanges[section.id];
-      const reconciledInstruction = reconcileSectionGroupInstruction(
+      const rawReconciled = reconcileSectionGroupInstruction(
         section.instructions,
         secRange?.groupStartQ ?? 0,
         secRange?.groupEndQ ?? 0
       );
+      const isEnglishInstruction = !/[\u0900-\u097F]/.test((rawReconciled || "").trim());
+      const reconciledInstruction =
+        (paperLang === "sa" || paperLang === "hi") && isEnglishInstruction
+          ? getSharedInstruction(section.type, paperLang)
+          : rawReconciled;
       if (reconciledInstruction) {
         paragraphs.push(
           new Paragraph({
@@ -599,8 +606,6 @@ export async function buildPaperDocx(
     }
 
     // Render questions in section
-    const isGroupedObjective = (section.type === "TRUE_FALSE" || section.type === "FILL_BLANK") && items.length > 1;
-
     if (isGroupedObjective) {
       const qNum = globalQNum++;
       const currentSecRelNum = sectionRelativeNum++;

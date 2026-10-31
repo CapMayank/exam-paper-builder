@@ -134,9 +134,8 @@ export function cleanQuestionStatement(text?: string | null, type?: string | nul
   // Strip leading question number prefixes like (a), a., 1., (1), i., (i), (क), क.
   cleaned = cleaned.replace(/^[\s\u200B]*(\([A-Za-z0-9ivxIVX\u0900-\u097F]{1,6}\)|(?:[A-Za-z]|\d{1,2}|[ivxIVX]{1,4}|[\u0900-\u097F]{1,2})\s*[.)\]:-])\s*/, "");
 
-  // Strip trailing marks annotations like [1 Mark], [2 Marks], [1 अंक], [1 अङ्कः], [2 अङ्कौ], [3 अङ्काः], (1 Mark)
-  cleaned = cleaned.replace(/\s*\[\s*\d+\s*(?:marks?|mark|अङ्क[ःौा]*|अंक|m)\s*\]\s*$/i, "");
-  cleaned = cleaned.replace(/\s*\(\s*\d+\s*(?:marks?|mark|अङ्क[ःौा]*|अंक|m)\s*\)\s*$/i, "");
+  // Strip trailing marks annotations like [1 Mark], [2 Marks], [1 अंक], [1 अङ्कः], [2 अङ्कौ], [3 अङ्काः], (1 Mark), [१ अङ्कः]
+  cleaned = cleaned.replace(/\s*[\[(]\s*[\d\u0966-\u096F]+\s*(?:marks?|mark|अङ्क[ःौा]*|अंक|m)\s*[\])]\s*[।.]?\s*$/i, "");
 
   if (type === "TRUE_FALSE") {
     // English True/False prefixes
@@ -153,10 +152,17 @@ export function cleanQuestionStatement(text?: string | null, type?: string | nul
       .replace(/^(?:सत्य\s*\/\s*असत्य\s*[:.-]?\s*)/i, "")
       .replace(/^(?:सही\s*\/\s*गलत\s*[:.-]?\s*)/i, "")
       // Sanskrit True/False prefixes
-      .replace(/^(?:शुद्धवाक्यानां\s+समक्ष(?:म्|ं)\s+['"‘“]?आम्['"’”]?\s+(?:च\s+)?अशुद्धवाक्यानां\s+समक्ष(?:म्|ं)\s+['"‘“]?न['"’”]?\s*इति\s+लिखत\s*[:.-]?\s*)/i, "")
+      .replace(/^(?:शुद्धवाक्यानां\s+समक्ष(?:म्|ं)\s+['"‘“]?आम्['"’”]?\s+(?:च\s+)?अशुद्धवाक्यानां\s+समक्ष(?:म्|ं)\s+['"‘“]?न['"’”]?\s*(?:इति\s+लिखत)?\s*[:.-]?\s*)/i, "")
       .replace(/^(?:सत्यासत्यं\s+लिखत\s*[:.-]?\s*)/i, "")
       .replace(/^(?:सत्यम्\s*\/\s*असत्यम्\s*[:.-]?\s*)/i, "")
-      .replace(/^(?:आम्\s*\/\s*न\s*[:.-]?\s*)/i, "");
+      .replace(/^(?:आम्\s*(?:वा|अथवा|या|\/)\s*न\s*[:.-]?\s*)/i, "");
+
+    // Strip trailing meta-questions/prompts in True/False
+    cleaned = cleaned
+      .replace(/[\s,;–-]*(?:अयम्\s+आशयः\s+)?सत्यः?\s+अस्ति\s+वा\s*\??\s*[।.]?\s*$/i, "")
+      .replace(/[\s,;–-]*सत्य(?:म्|ं)?\s*(?:वा|अथवा|या|\/)\s*असत्य(?:म्|ं)?(?:\s*इति\s+लिखत|\s*लिखत|\s*बताइए)?\s*\??\s*[।.]?\s*$/i, "")
+      .replace(/[\s,;–-]*आम्\s*(?:वा|अथवा|या|\/)\s*न(?:\s*इति\s+लिखत)?\s*\??\s*[।.]?\s*$/i, "")
+      .replace(/[\s,;–-]*(?:state\s+whether\s+true\s+or\s+false|true\s+or\s+false|is\s+this\s+true\s+or\s+false)\s*\??\s*[.]?\s*$/i, "");
   } else if (type === "FILL_BLANK") {
     // English Fill in the Blanks prefixes
     cleaned = cleaned
@@ -170,6 +176,11 @@ export function cleanQuestionStatement(text?: string | null, type?: string | nul
       .replace(/^(?:उचितपदैः\s+रिक्तस्थानानि\s+पूरयत\s*[:.-]?\s*)/i, "")
       .replace(/^(?:रिक्तस्थानानि\s+पूरयत\s*[:.-]?\s*)/i, "");
 
+    // Strip trailing meta-prompts in Fill in the Blanks
+    cleaned = cleaned
+      .replace(/[\s,;–-]*(?:इति\s+)?(?:उचितपदैः\s+|कोष्ठकेषु\s+प्रदत्तशब्दैः\s+)?रिक्तस्थान(?:ं|म्|ानि)?\s*(?:पूरयत|भरिए)\s*[।.]?\s*$/i, "")
+      .replace(/[\s,;–-]*(?:fill\s+in\s+the\s+blanks?|fill\s+the\s+blanks?)\s*[.]?\s*$/i, "");
+
     // Normalize blank lines: 3 or more underscores into standard 8 underscores
     cleaned = cleaned.replace(/_{3,}/g, "________");
   } else if (type === "MCQ") {
@@ -181,6 +192,11 @@ export function cleanQuestionStatement(text?: string | null, type?: string | nul
       // Sanskrit MCQ prefixes
       .replace(/^(?:उचितविकल्पं\s+चित्वा\s+लिखत\s*[:.-]?\s*)/i, "")
       .replace(/^(?:उचितं\s+विकल्पं\s+चिनुत\s*[:.-]?\s*)/i, "");
+
+    // Strip trailing MCQ instructions
+    cleaned = cleaned
+      .replace(/[\s,;–-]*(?:इति\s+)?उचित(?:ं|म्)?\s*विकल्प(?:ं|म्)?\s*(?:चित्वा|चिनुत|लिखत)\s*[।.]?\s*$/i, "")
+      .replace(/[\s,;–-]*(?:choose|select)\s+(?:the\s+)?correct\s+option\s*[.]?\s*$/i, "");
   }
 
   return cleaned.trim();

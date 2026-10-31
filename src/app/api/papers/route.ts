@@ -3,6 +3,7 @@ import { recordAudit } from "@/lib/audit";
 import { paperStatus } from "@/lib/blueprint";
 import { resolvePaperExamType } from "@/lib/constants";
 import { resolveBoardAndSubjectCode } from "@/lib/curriculumContract";
+import { detectPaperLanguage, type PaperLanguage } from "@/lib/localization";
 import { loadPaperView, toPlacedItems } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { paperCreateSchema } from "@/lib/schemas";
@@ -73,6 +74,7 @@ export const POST = route(async (req, _params, user) => {
       name: true,
       examType: true,
       subjectCode: true,
+      language: true,
       academicSession: true,
       book: { select: { subject: true, className: true } },
     },
@@ -93,9 +95,21 @@ export const POST = route(async (req, _params, user) => {
     blueprintName: bp.name,
     academicSession: input.academicSession || bp.academicSession,
   });
+  const resolvedLanguage: PaperLanguage =
+    input.language && input.language !== "en"
+      ? input.language
+      : bp.language && bp.language !== "en"
+      ? (bp.language as PaperLanguage)
+      : detectPaperLanguage({
+          title: input.title,
+          subjectCode: input.subjectCode || bp.subjectCode,
+          blueprint: bp,
+        });
+
   const paper = await prisma.paper.create({
     data: {
       ...input,
+      language: resolvedLanguage,
       subjectCode: resolvedBoardSubject.subjectCode || input.subjectCode || bp.subjectCode || undefined,
       examType: resolvedExamType,
       createdById: user.id,

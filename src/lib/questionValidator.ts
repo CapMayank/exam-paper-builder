@@ -450,7 +450,7 @@ export function validateGeneratedQuestion(
   } else if (qType === "TRUE_FALSE") {
     const isStandardTrueFalse =
       /\b(true|false|t|f)\b/i.test(answer) ||
-      /सत्य|असत्य|सही|गलत|आम्|न|सत्यम्|असत्यम्/.test(answer);
+      /सत्य|असत्य|सही|गलत|आम्|न|सत्यम्|असत्यम्|शुद्धम्|अशुद्धम्|शुद्ध|अशुद्ध/.test(answer);
     if (!answer || !isStandardTrueFalse) {
       issues.push({
         code: "ANSWER_OPTION_MISMATCH",

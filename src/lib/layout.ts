@@ -368,9 +368,9 @@ export function resolveGroupedExerciseInstruction(
   const trimmed = (sectionInstruction || "").trim();
   if (!trimmed) return shared;
 
-  const isEnglishInstruction = /^[A-Za-z0-9\s.,'":;()\-–?!/]+$/.test(trimmed);
-  // If paper language is Sanskrit or Hindi, but sectionInstruction is purely English (e.g. from blueprint defaults), replace with shared localized instruction!
-  if ((paperLang === "sa" || paperLang === "hi") && isEnglishInstruction) {
+  const hasDevanagari = /[\u0900-\u097F]/.test(trimmed);
+  // If paper language is Sanskrit or Hindi, but sectionInstruction contains no Devanagari (e.g. from English blueprint defaults), replace with shared localized instruction!
+  if ((paperLang === "sa" || paperLang === "hi") && !hasDevanagari) {
     return shared || trimmed;
   }
 

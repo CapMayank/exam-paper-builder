@@ -2,6 +2,7 @@ import {
   resolveInternalChoiceRequirement,
   type InternalChoiceRequirement,
 } from "./internalChoiceRules";
+import { detectPaperLanguage, type PaperLanguage } from "./localization";
 import type { PaperData, Section } from "./types";
 
 export interface PaperAutogenSlot {
@@ -32,6 +33,7 @@ export interface PaperAutogenPlan {
   className: string;
   subject: string;
   bookTitle: string;
+  language: PaperLanguage;
   totalMarksNeeded: number;
   totalQuestionsNeeded: number;
   sections: PaperAutogenSectionPlan[];
@@ -84,6 +86,8 @@ export interface PaperAutogenInput {
     sectionId: string;
     question: {
       chapterId: string;
+      text?: string | null;
+      options?: string[];
     };
   }>;
 }
@@ -321,6 +325,7 @@ export function planPaperSlotAssignments(paper: PaperAutogenInput): PaperAutogen
     className: blueprint.book?.className || "Class",
     subject: blueprint.book?.subject || "Subject",
     bookTitle: blueprint.book?.title || "",
+    language: detectPaperLanguage(paper, paper.items),
     totalMarksNeeded,
     totalQuestionsNeeded,
     sections: sectionPlans,
