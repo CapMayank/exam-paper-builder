@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { rolloverBlueprintsSchema, rolloverBookSchema } from "@/lib/schemas";
-import { normalizeSession } from "@/lib/academicSession";
+import { normalizeSession } from "@/lib/academicSessionUtils";
 import { STANDARD_CURRICULUM_PRESETS } from "@/lib/syllabusImport";
 
 describe("Academic Session Rollover Schemas", () => {

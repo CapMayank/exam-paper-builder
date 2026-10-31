@@ -1,4 +1,4 @@
-import { normalizeSession } from "./academicSession";
+import { normalizeSession } from "./academicSessionUtils";
 import { isMcqLikeType } from "./constants";
 import { getCanonicalSubjectName } from "./schoolCurriculum";
 

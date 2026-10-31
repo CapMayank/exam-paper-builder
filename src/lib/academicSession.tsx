@@ -2,14 +2,9 @@
 
 import React, { createContext, useContext, useEffect, useState, useTransition } from "react";
 import { ACADEMIC_SESSIONS, DEFAULT_ACADEMIC_SESSION } from "./constants";
+import { normalizeSession, SESSION_STORAGE_KEY, CUSTOM_SESSIONS_STORAGE_KEY } from "./academicSessionUtils";
 
-export const SESSION_STORAGE_KEY = "epb:activeAcademicSession";
-export const CUSTOM_SESSIONS_STORAGE_KEY = "epb:customAcademicSessions";
-
-export function normalizeSession(session?: string | null): string {
-  if (!session || !session.trim()) return DEFAULT_ACADEMIC_SESSION;
-  return session.trim().replace(/-/g, "–");
-}
+export { normalizeSession, SESSION_STORAGE_KEY, CUSTOM_SESSIONS_STORAGE_KEY };
 
 export interface AcademicSessionContextType {
   currentSession: string;

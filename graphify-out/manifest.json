@@ -522,14 +522,14 @@
     "semantic_hash": ""
   },
   "src/components/AcademicSessionSelector.tsx": {
-    "mtime": 1793341121.9320252,
-    "seen": 1793341462.1109204,
+    "mtime": 1793419649.2574666,
+    "seen": 1793419764.6714537,
     "ast_hash": "a4e891b8a3780a493a96a45c5f5dd08b",
     "semantic_hash": ""
   },
   "src/components/AppShell.tsx": {
-    "mtime": 1792688000.5816638,
-    "seen": 1792688767.781631,
+    "mtime": 1793419645.209418,
+    "seen": 1793419764.6714537,
     "ast_hash": "a1651e44ccaa00014e893f536d7a119d",
     "semantic_hash": ""
   },
@@ -624,8 +624,8 @@
     "semantic_hash": ""
   },
   "src/components/SyllabusImportModal.tsx": {
-    "mtime": 1792574532.241422,
-    "seen": 1792685467.5911267,
+    "mtime": 1793419652.765435,
+    "seen": 1793419764.6714537,
     "ast_hash": "9951fa2877afd2c9635c40b6a6176bd0",
     "semantic_hash": ""
   },
@@ -702,15 +702,15 @@
     "semantic_hash": ""
   },
   "src/lib/academic-rollover.test.ts": {
-    "mtime": 1792334264.905622,
-    "seen": 1792685467.5911267,
-    "ast_hash": "4a2c0820919b69f816b4658b9ddaddc5",
+    "mtime": 1793419667.5306404,
+    "seen": 1793419764.6714537,
+    "ast_hash": "c1ae4bd40586692f7e5bcf99307f8b26",
     "semantic_hash": ""
   },
   "src/lib/academicSession.tsx": {
-    "mtime": 1792254108.222938,
-    "seen": 1792685467.5911267,
-    "ast_hash": "bc2931c83f1a42e8b8dadd9fee4260f3",
+    "mtime": 1793419641.5330367,
+    "seen": 1793419764.6714537,
+    "ast_hash": "73060abc5f6a3f0c1294c1a4fed99451",
     "semantic_hash": ""
   },
   "src/lib/aiPaperAutogenApi.test.ts": {
@@ -1560,9 +1560,15 @@
     "semantic_hash": ""
   },
   "src/lib/internalChoiceRules.ts": {
-    "mtime": 1793416943.827508,
-    "seen": 1793417171.191507,
-    "ast_hash": "f360cb0e4bbdb815f7d8b76d71031f35",
+    "mtime": 1793419659.5477154,
+    "seen": 1793419764.6714537,
+    "ast_hash": "c85eba52b47d4a12d504f133e5d50a55",
+    "semantic_hash": ""
+  },
+  "src/lib/academicSessionUtils.ts": {
+    "mtime": 1793419632.9286547,
+    "seen": 1793419764.6714537,
+    "ast_hash": "3be01fc07d694009a9b91d3b226435d0",
     "semantic_hash": ""
   }
 }
