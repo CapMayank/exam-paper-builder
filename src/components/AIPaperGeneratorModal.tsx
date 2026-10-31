@@ -307,16 +307,13 @@ export function AIPaperGeneratorModal({
         // Ensure displayed subpart mark allocations in the preview feed match the calculated values before commit
         const rawQuestions = genRes.questions || [];
         const questions = rawQuestions.map((q) => {
-          if (isSubpartQuestionType(q.type) && q.subparts && q.subparts.length > 0) {
+          if (q.subparts && q.subparts.length > 0) {
             return {
               ...q,
-              subparts: normalizeSubpartMarks(q.subparts, sec.marksEach),
+              subparts: normalizeSubpartMarks(q.subparts, sec.marksEach, (q as any).attemptCount),
             };
           }
-          return {
-            ...q,
-            subparts: [],
-          };
+          return q;
         });
 
         const hasDiagrams = questions.some(
@@ -910,8 +907,10 @@ export function AIPaperGeneratorModal({
                                 const matchPairs =
                                   isMatch && q.options ? parseMatchColumnPairs(q.options, q.text, q.explanation) : [];
                                 const subpartsTotal =
-                                  isSubpartQuestionType(q.type) && q.subparts && q.subparts.length > 0
-                                    ? q.subparts.reduce((sum, sp) => sum + (Number(sp.marks) || 0), 0)
+                                  q.subparts && q.subparts.length > 0
+                                    ? (q as any).attemptCount
+                                      ? (q as any).attemptCount * (Number(q.subparts[0]?.marks) || 1)
+                                      : q.subparts.reduce((sum, sp) => sum + (Number(sp.marks) || 0), 0)
                                     : 0;
                                 const totalM =
                                   matchPairs.length > 0
@@ -1015,8 +1014,8 @@ export function AIPaperGeneratorModal({
                             </div>
                           )}
 
-                          {/* Subparts if Case Study */}
-                          {isSubpartQuestionType(q.type) && q.subparts && q.subparts.length > 0 && (
+                          {/* Subparts */}
+                          {q.subparts && q.subparts.length > 0 && (
                             <div className="space-y-1 pt-1 border-t border-slate-100 text-xs">
                               {q.subparts.map((sp, spIdx) => (
                                 <div key={spIdx} className="text-[11px] text-slate-700 flex items-start gap-1">
@@ -1039,8 +1038,7 @@ export function AIPaperGeneratorModal({
                               <div className="text-xs text-slate-900 font-medium leading-relaxed">
                                 <MathText text={q.orQuestion.text} />
                               </div>
-                              {isSubpartQuestionType(q.orQuestion.type || q.type) &&
-                                q.orQuestion.subparts &&
+                              {q.orQuestion.subparts &&
                                 q.orQuestion.subparts.length > 0 && (
                                   <div className="space-y-1 pt-1 border-t border-slate-100 text-xs">
                                     {q.orQuestion.subparts.map((sp, spIdx) => (

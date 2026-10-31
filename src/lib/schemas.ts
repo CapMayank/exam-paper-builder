@@ -119,14 +119,27 @@ export const bookSchema = z.object({
 });
 export const chapterSchema = z.object({ number: z.number().int().min(1).max(999), title: text() });
 
-export const subPartSchema = z.object({
-  id: z.string().optional(),
-  label: z.string().trim().min(1, "Subpart label required (e.g. (a), (i))").max(20),
-  text: z.string().trim().min(1, "Subpart text required").max(3000),
-  marks: z.number().int().min(1, "Marks must be at least 1").max(50),
-  answer: z.string().trim().max(3000).optional().default(""),
-  options: z.array(z.string().trim().min(1).max(500)).max(MAX_OPTIONS).optional().default([]),
-});
+export type SubPartInput = {
+  id?: string;
+  label: string;
+  text: string;
+  marks: number;
+  answer?: string;
+  options?: string[];
+  subparts?: SubPartInput[];
+};
+
+export const subPartSchema: z.ZodType<SubPartInput> = z.lazy(() =>
+  z.object({
+    id: z.string().optional(),
+    label: z.string().trim().min(1, "Subpart label required (e.g. (a), (i))").max(20),
+    text: z.string().trim().min(1, "Subpart text required").max(3000),
+    marks: z.number().int().min(1, "Marks must be at least 1").max(50),
+    answer: z.string().trim().max(3000).optional().default(""),
+    options: z.array(z.string().trim().min(1).max(500)).max(MAX_OPTIONS).optional().default([]),
+    subparts: z.array(subPartSchema).optional().default([]),
+  })
+);
 
 export const questionSchema = z
   .object({
@@ -136,6 +149,7 @@ export const questionSchema = z
     text: text(5000),
     options: z.array(z.string().max(20000)).default([]),
     subparts: z.array(subPartSchema).optional().default([]),
+    attemptCount: z.number().int().min(1).max(100).optional(),
     answer: z.string().max(5000).default(""),
     difficulty: z.enum(DIFFICULTIES).default("MEDIUM"),
     imagePath: z
@@ -168,6 +182,7 @@ export const questionPatchSchema = z.object({
   text: text(5000).optional(),
   options: z.array(z.string().max(20000)).optional(),
   subparts: z.array(subPartSchema).optional(),
+  attemptCount: z.number().int().min(1).max(100).optional(),
   answer: z.string().max(5000).optional(),
   difficulty: z.enum(DIFFICULTIES).optional(),
   spaceMm: z.number().int().min(0).max(250).optional(),

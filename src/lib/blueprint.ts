@@ -1,7 +1,7 @@
 // Pure blueprint rules. Used by the API (to reject) and the UI (to explain). No I/O here.
 
 import { isSubpartQuestionType, parseMatchColumnPairs } from "./constants";
-import { parseSubparts, subpartsTotalMarks } from "./types";
+import { parseSubparts, parseSubpartsPayload, subpartsTotalMarks } from "./types";
 
 export type SectionDef = {
   id: string;
@@ -522,12 +522,14 @@ export function toPlacedItems(
       }
       matchCount = parseMatchColumnPairs(opts, i.question.text, (i.question as any).explanation).length;
     }
-    const subparts = isSubpartQuestionType(i.question.type)
-      ? Array.isArray(i.question.subparts) && i.question.subparts.length > 0
-        ? i.question.subparts
-        : parseSubparts(i.question.subpartsJson)
-      : [];
-    const submarks = subpartsTotalMarks(subparts as any);
+    const parsedPayload = parseSubpartsPayload(i.question.subpartsJson);
+    const subparts = Array.isArray(i.question.subparts) && i.question.subparts.length > 0
+      ? i.question.subparts
+      : parsedPayload.subparts;
+    const attemptCount = (i.question as any).attemptCount || parsedPayload.attemptCount;
+    const submarks = attemptCount
+      ? attemptCount * (subparts[0]?.marks || 1)
+      : subpartsTotalMarks(subparts as any);
     const sec = sections.find((s) => s.id === i.sectionId);
     const secMarksEach = sec?.marksEach ?? 1;
     const secCount = sec?.count ?? 1;

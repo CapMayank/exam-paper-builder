@@ -1,5 +1,6 @@
 import "server-only";
 import {
+  canHaveSubparts,
   cleanMatchItem,
   cleanOptionText,
   cleanQuestionStatement,
@@ -13,6 +14,7 @@ import {
   parseMatchColumnPairs,
   QUESTION_TYPES,
 } from "./constants";
+import { decomposeStemSubparts } from "./subpartExtractor";
 import {
   findEligibleDiagrams,
   isSectionVisuallyEligible,
@@ -38,7 +40,7 @@ import { isParaphraseOrDuplicateChoice } from "./internalChoiceRules";
 import { normalizeQuestionType } from "./paperImport";
 import { ensureLanguageNonChapterUnits } from "./syllabusImport";
 import { parseGeminiJsonWithLatexSafety, repairLatex } from "./math";
-import { normalizeSubpartMarks } from "./types";
+import { normalizeSubpartMarks, type SubPart } from "./types";
 
 export interface GeminiCallResult<T> {
   success: boolean;
@@ -228,7 +230,8 @@ export interface GeneratedQuestionItem {
   type: string;
   text: string;
   options: string[];
-  subparts: Array<{ label: string; text: string; marks: number; answer: string; options?: string[] }>;
+  subparts: Array<SubPart>;
+  attemptCount?: number;
   answer: string;
   marks: number;
   difficulty: "EASY" | "MEDIUM" | "HARD";
@@ -242,7 +245,8 @@ export interface GeneratedQuestionItem {
     type: string;
     text: string;
     options: string[];
-    subparts: Array<{ label: string; text: string; marks: number; answer: string; options?: string[] }>;
+    subparts: Array<SubPart>;
+    attemptCount?: number;
     answer: string;
     marks: number;
     difficulty: "EASY" | "MEDIUM" | "HARD";
@@ -416,15 +420,15 @@ Strict requirements:
    (b) Both (A) and (R) are true, but (R) is not the correct explanation of (A).
    (c) (A) is true, but (R) is false.
    (d) (A) is false, but (R) is true.
-3. For CASE_STUDY: Provide a domain-authentic ${contract.canonicalSubject} scenario/passage for "${chapter}", followed by 3-4 subparts with label (e.g. "(i)", "(ii)", "(iii)"), question text, marks distribution totaling ${marks} marks, and answers.
-4. For VERY_SHORT, SHORT, LONG, NUMERICAL: Provide step-wise model answer and marking scheme breakdown.
+3. For CASE_STUDY, UNSEEN_PASSAGE, REFERENCE_CONTEXT: Provide an authentic ${contract.canonicalSubject} passage/scenario for "${chapter}", followed by graded subparts matching the question's target marks (${marks} marks) and blueprint pattern with labels (e.g. "(i)", "(ii)" or "(a)", "(b)"), question text, marks distribution, and answers.
+4. For VERY_SHORT, SHORT, LONG, NUMERICAL, GRAMMAR: Provide step-wise model answer and marking scheme breakdown.
 5. For FILL_BLANK: Provide question text containing one or more blanks indicated by "________" (at least 8 underscores). Options should be empty []. The answer should be the exact word(s) or value filling the blank.
 6. For TRUE_FALSE: Provide a clear declarative statement. Options should be ["True", "False"] (or ["आम्", "न"] for Sanskrit, or ["सत्य", "असत्य"] for Hindi). Answer must be "True", "False", "आम्", "न", "सत्य", or "असत्य".
 7. Use standard LaTeX math $...$ for any mathematical expressions, formulas, chemical reactions, or units.
 8. Subparts rule: ${
     isSubpartQuestionType(normalizedType)
-      ? `Provide 3-4 graded subparts in "subparts" whose marks sum strictly to ${marks}.`
-      : `For ${normalizedType} questions, "subparts" MUST BE an empty array [] (never add subparts to ${normalizedType}).`
+      ? `Provide graded subparts in "subparts" whose marks sum to ${marks}.`
+      : `If this question tests multiple distinct sentences, components, equations, or sub-questions (e.g., 'Correct the following sentences', 'Solve (a) and (b)', 'Differentiate between (i) and (ii)'), output each item in "subparts" with label, text, and marks. If the question has internal choice across subparts (e.g. 'Answer any 4 of 5'), include all 5 subparts (each 1 mark) and specify "attemptCount": 4. Otherwise, if it is a single unified essay or paragraph without distinct sub-items, keep "subparts": [].`
   }
 
 Return a JSON array strictly matching this TypeScript structure:
@@ -436,7 +440,7 @@ Return a JSON array strictly matching this TypeScript structure:
     "subparts": ${
       isSubpartQuestionType(normalizedType)
         ? '[\n      { "label": "(i)", "text": "Subpart text", "marks": 1, "answer": "Answer" }\n    ]'
-        : "[]"
+        : '[] // or list of subparts if multi-component'
     },
     "answer": "Detailed model answer / step marking scheme",
     "marks": ${marks},
@@ -724,9 +728,9 @@ Return a JSON array strictly matching this TypeScript structure:
         }
       }
 
-      // Parse and normalize subparts ONLY for passage/case-study question types
-      const rawSubparts =
-        isSubpartQuestionType(qType) && Array.isArray(item.subparts)
+      // Parse and normalize subparts
+      let rawSubparts: SubPart[] =
+        canHaveSubparts(qType) && Array.isArray(item.subparts) && item.subparts.length > 0
           ? item.subparts.map((sp, spIdx) => ({
               label: String(sp.label || `(${spIdx + 1})`),
               text: repairLatex(String(sp.text || "")),
@@ -736,17 +740,33 @@ Return a JSON array strictly matching this TypeScript structure:
             }))
           : [];
 
-      const normalizedSubparts = rawSubparts.length > 0 ? normalizeSubpartMarks(rawSubparts, marks) : [];
+      let attemptCount = typeof (item as any).attemptCount === "number" && (item as any).attemptCount > 0
+        ? (item as any).attemptCount
+        : undefined;
+
+      // Safe fallback: if AI generated plain text with inlined subparts, decompose it safely
+      if (rawSubparts.length === 0 && canHaveSubparts(qType)) {
+        const decomp = decomposeStemSubparts(qText);
+        if (decomp) {
+          qText = decomp.stem;
+          rawSubparts = decomp.subparts;
+          if (decomp.attemptCount && !attemptCount) {
+            attemptCount = decomp.attemptCount;
+          }
+        }
+      }
+
+      const normalizedSubparts = rawSubparts.length > 0 ? normalizeSubpartMarks(rawSubparts, marks, attemptCount) : [];
 
       let normalizedOrQuestion: GeneratedQuestionItem["orQuestion"] = undefined;
       if (!contract.internalChoiceRequirement.forbidden && slot?.requiresInternalChoice) {
         if (item.orQuestion && typeof item.orQuestion.text === "string" && item.orQuestion.text.trim()) {
-          const orText = repairLatex(cleanQuestionStatement(item.orQuestion.text.trim(), qType));
+          let orText = repairLatex(cleanQuestionStatement(item.orQuestion.text.trim(), qType));
           const orOpts = Array.isArray(item.orQuestion.options)
             ? item.orQuestion.options.map((o) => repairLatex(cleanOptionText(String(o).trim())))
             : [];
-          const orSubpartsRaw =
-            isSubpartQuestionType(qType) && Array.isArray(item.orQuestion.subparts)
+          let orSubpartsRaw: SubPart[] =
+            Array.isArray(item.orQuestion.subparts) && item.orQuestion.subparts.length > 0
               ? item.orQuestion.subparts.map((sp, spIdx) => ({
                   label: String(sp.label || `(${spIdx + 1})`),
                   text: repairLatex(String(sp.text || "")),
@@ -761,7 +781,23 @@ Return a JSON array strictly matching this TypeScript structure:
                     : "",
                 }))
               : [];
-          const orSubparts = orSubpartsRaw.length > 0 ? normalizeSubpartMarks(orSubpartsRaw, marks) : [];
+          let orAttemptCount =
+            typeof (item.orQuestion as any).attemptCount === "number" && (item.orQuestion as any).attemptCount > 0
+              ? (item.orQuestion as any).attemptCount
+              : undefined;
+
+          if (orSubpartsRaw.length === 0 && canHaveSubparts(qType)) {
+            const decompOr = decomposeStemSubparts(orText);
+            if (decompOr) {
+              orText = decompOr.stem;
+              orSubpartsRaw = decompOr.subparts;
+              if (decompOr.attemptCount && !orAttemptCount) {
+                orAttemptCount = decompOr.attemptCount;
+              }
+            }
+          }
+
+          const orSubparts = orSubpartsRaw.length > 0 ? normalizeSubpartMarks(orSubpartsRaw, marks, orAttemptCount) : [];
           const orAnswer = isMcqLikeType(qType)
             ? repairLatex(cleanOptionText(item.orQuestion.answer || ""))
             : repairLatex(String(item.orQuestion.answer || "").trim());
@@ -901,7 +937,8 @@ export interface GeneratedPaperQuestion {
   type: string;
   text: string;
   options: string[];
-  subparts: Array<{ label: string; text: string; marks: number; answer?: string; options?: string[] }>;
+  subparts: Array<SubPart>;
+  attemptCount?: number;
   answer: string;
   difficulty: "EASY" | "MEDIUM" | "HARD";
   cognitiveLevel?: string;
@@ -923,7 +960,8 @@ export interface GeneratedPaperQuestion {
     type: string;
     text: string;
     options: string[];
-    subparts: Array<{ label: string; text: string; marks: number; answer?: string; options?: string[] }>;
+    subparts: Array<SubPart>;
+    attemptCount?: number;
     answer: string;
     marks: number;
     difficulty: "EASY" | "MEDIUM" | "HARD";
@@ -1164,8 +1202,10 @@ ${
 SUBPARTS RULE:
 ${
   isSubpartQuestionType(normalizedType)
-    ? `- Every ${normalizedType} item MUST include 3-4 graded "subparts" whose marks sum strictly to ${marksEach}.`
-    : `- For ${normalizedType} questions, "subparts" MUST BE an empty array [] (NEVER add subparts to ${normalizedType} questions).`
+    ? `- Every ${normalizedType} item MUST include graded "subparts" whose marks sum to ${marksEach}.`
+    : `- If a question comprises multiple distinct sentences, tasks, or sub-questions (e.g. 'Correct the following sentences', 'Solve (a) and (b)', grammar drills, translation items), you MUST output them in the "subparts" array with label, text, and marks. NEVER inline labels like (क), (ख) or (a), (b) into the main question text.
+- If there is an internal choice across subparts (e.g. 'Answer any 4 of 5'), include all 5 in "subparts" (1 mark each) and specify "attemptCount": 4.
+- If the question is a unified single narrative/essay without sub-items, set "subparts": [].`
 }
 
 JSON Array Output Schema:
@@ -1180,8 +1220,9 @@ JSON Array Output Schema:
     "subparts": ${
       isSubpartQuestionType(normalizedType)
         ? '[\n      { "label": "(i)", "text": "Subpart question", "marks": 1, "answer": "Model answer" }\n    ]'
-        : "[]"
+        : '[] // or array of subparts if multi-component'
     },
+    "attemptCount": 4, // only when question specifies internal choice among subparts (e.g. answer any 4 of 5)
     "answer": "Detailed model answer and marking scheme breakdown",
     "difficulty": "EASY" | "MEDIUM" | "HARD",
     "cognitiveLevel": "REMEMBERING" | "UNDERSTANDING" | "APPLYING" | "ANALYZING" | "EVALUATING",
@@ -1198,8 +1239,9 @@ JSON Array Output Schema:
       "subparts": ${
         isSubpartQuestionType(normalizedType)
           ? '[\n        { "label": "(i)", "text": "Alternative subpart question", "marks": 1, "answer": "Model answer" }\n      ]'
-          : "[]"
+          : '[] // or array of subparts if multi-component'
       },
+      "attemptCount": 4, // only if OR question has internal subpart choice
       "answer": "Complete independent model answer and step-marking scheme for the OR question",
       "difficulty": "EASY" | "MEDIUM" | "HARD",
       "cognitiveLevel": "APPLYING",
@@ -1359,8 +1401,8 @@ JSON Array Output Schema:
         }
       }
       const targetSlotMarks = slot.marks || marksEach;
-      const rawSubparts =
-        isSubpartQuestionType(qType) && Array.isArray(rawQ.subparts)
+      let rawSubparts: SubPart[] =
+        canHaveSubparts(qType) && Array.isArray(rawQ.subparts) && rawQ.subparts.length > 0
           ? rawQ.subparts.map((sp: any, spIdx: number) => ({
               label: String(sp.label || `(${spIdx + 1})`),
               text: repairLatex(cleanQuestionStatement(String(sp.text || ""))),
@@ -1375,7 +1417,25 @@ JSON Array Output Schema:
                 : undefined,
             }))
           : [];
-      const qSubparts = rawSubparts.length > 0 ? normalizeSubpartMarks(rawSubparts, targetSlotMarks) : [];
+
+      let attemptCount =
+        typeof (rawQ as any).attemptCount === "number" && (rawQ as any).attemptCount > 0
+          ? (rawQ as any).attemptCount
+          : undefined;
+
+      let effectiveQText = qText;
+      if (rawSubparts.length === 0 && canHaveSubparts(qType)) {
+        const decomp = decomposeStemSubparts(effectiveQText);
+        if (decomp) {
+          effectiveQText = decomp.stem;
+          rawSubparts = decomp.subparts;
+          if (decomp.attemptCount && !attemptCount) {
+            attemptCount = decomp.attemptCount;
+          }
+        }
+      }
+
+      const qSubparts = rawSubparts.length > 0 ? normalizeSubpartMarks(rawSubparts, targetSlotMarks, attemptCount) : [];
       let qAnswer =
         typeof rawQ.answer === "string"
           ? isMcqLikeType(qType)
@@ -1409,8 +1469,8 @@ JSON Array Output Schema:
         if (qType === "TRUE_FALSE") {
           orOptions = [...qOptions];
         }
-        const rawOrSubparts =
-          isSubpartQuestionType(qType) && Array.isArray(rawQ.orQuestion.subparts)
+        let rawOrSubparts: SubPart[] =
+          canHaveSubparts(qType) && Array.isArray(rawQ.orQuestion.subparts) && rawQ.orQuestion.subparts.length > 0
             ? rawQ.orQuestion.subparts.map((sp: any, spIdx: number) => ({
                 label: String(sp.label || `(${spIdx + 1})`),
                 text: repairLatex(cleanQuestionStatement(String(sp.text || ""))),
@@ -1425,7 +1485,24 @@ JSON Array Output Schema:
                   : undefined,
               }))
             : [];
-        const orSubparts = rawOrSubparts.length > 0 ? normalizeSubpartMarks(rawOrSubparts, targetSlotMarks) : [];
+        let orAttemptCount =
+          typeof (rawQ.orQuestion as any).attemptCount === "number" && (rawQ.orQuestion as any).attemptCount > 0
+            ? (rawQ.orQuestion as any).attemptCount
+            : undefined;
+
+        let effectiveOrText = orText;
+        if (rawOrSubparts.length === 0 && canHaveSubparts(qType)) {
+          const decompOr = decomposeStemSubparts(effectiveOrText);
+          if (decompOr) {
+            effectiveOrText = decompOr.stem;
+            rawOrSubparts = decompOr.subparts;
+            if (decompOr.attemptCount && !orAttemptCount) {
+              orAttemptCount = decompOr.attemptCount;
+            }
+          }
+        }
+
+        const orSubparts = rawOrSubparts.length > 0 ? normalizeSubpartMarks(rawOrSubparts, targetSlotMarks, orAttemptCount) : [];
         let orAnswer =
           typeof rawQ.orQuestion.answer === "string"
             ? isMcqLikeType(qType)
@@ -1450,9 +1527,10 @@ JSON Array Output Schema:
           chapterNumber: slot.chapterNumber,
           chapterTitle: slot.chapterTitle,
           type: qType,
-          text: orText,
+          text: effectiveOrText,
           options: orOptions,
           subparts: orSubparts,
+          attemptCount: orAttemptCount,
           answer: orAnswer,
           marks: targetSlotMarks,
           difficulty: orDiff as "EASY" | "MEDIUM" | "HARD",
@@ -1467,9 +1545,10 @@ JSON Array Output Schema:
         chapterNumber: slot.chapterNumber,
         chapterTitle: slot.chapterTitle,
         type: qType,
-        text: qText,
+        text: effectiveQText,
         options: qOptions,
         subparts: qSubparts,
+        attemptCount,
         answer: qAnswer,
         difficulty: qDiff as "EASY" | "MEDIUM" | "HARD",
         cognitiveLevel: rawQ.cognitiveLevel || "APPLYING",

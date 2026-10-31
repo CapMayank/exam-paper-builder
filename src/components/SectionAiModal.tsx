@@ -514,7 +514,12 @@ export function SectionAiModal({
                   </span>
                   <span className="rounded-md bg-indigo-50 border border-indigo-200/60 px-2 py-0.5 text-[11px] font-bold text-indigo-700">
                     {generatedQuestions.reduce((sum, q) => {
-                      if (isSubpartQuestionType(q.type || section.type) && q.subparts && q.subparts.length > 0) return sum + subpartsTotalMarks(q.subparts);
+                      if (q.subparts && q.subparts.length > 0) {
+                        const m = (q as any).attemptCount
+                          ? (q as any).attemptCount * (q.subparts[0]?.marks || 1)
+                          : subpartsTotalMarks(q.subparts);
+                        return sum + (section.marksEach > 0 && m > section.marksEach ? section.marksEach : m);
+                      }
                       return sum + targetSlotMarks;
                     }, 0)} Marks Total
                   </span>
@@ -617,8 +622,8 @@ export function SectionAiModal({
                       </div>
                     )}
 
-                    {/* Subparts Layout (Case Study / Multi-part / Unseen Passage) */}
-                    {isSubpartQuestionType(q.type || section.type) && q.subparts && q.subparts.length > 0 && (
+                    {/* Subparts Layout (Case Study / Multi-part / Unseen Passage / Composite) */}
+                    {q.subparts && q.subparts.length > 0 && (
                       <div className="mt-2 space-y-1.5 border-t border-slate-100 pt-2">
                         <div className="font-semibold text-slate-700 text-[11px]">
                           Sub-questions ({q.subparts.length}):

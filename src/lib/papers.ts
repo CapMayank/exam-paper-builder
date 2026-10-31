@@ -6,7 +6,7 @@ import { diagnosePaperImplications, paperStatus, toPlacedItems } from "./bluepri
 import { blueprintInclude } from "./blueprints";
 import { evaluatePaperInternalChoiceCompliance } from "./internalChoiceRules";
 import { prisma } from "./prisma";
-import { parseSubparts, subpartsTotalMarks } from "./types";
+import { parseSubparts, parseSubpartsPayload, subpartsTotalMarks } from "./types";
 
 export { toPlacedItems };
 
@@ -147,10 +147,10 @@ export async function loadPaperView(id: string) {
         } catch {}
         matchCount = parseMatchColumnPairs(opts, i.question.text, (i.question as any).explanation).length;
       }
-      const subparts = isSubpartQuestionType(i.question.type)
-        ? parseSubparts(i.question.subpartsJson)
-        : [];
-      const submarks = subpartsTotalMarks(subparts);
+      const { subparts, attemptCount } = parseSubpartsPayload(i.question.subpartsJson);
+      const submarks = attemptCount
+        ? attemptCount * (subparts[0]?.marks || 1)
+        : subpartsTotalMarks(subparts);
       const sec = blueprint.sections.find((s) => s.id === i.sectionId);
       const secMarksEach = sec?.marksEach ?? 1;
       const secCount = sec?.count ?? 1;

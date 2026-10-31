@@ -8,7 +8,7 @@ import {
 import { cleanChapterTitleForLookup, type GenerationContract } from "./curriculumContract";
 import { isParaphraseOrDuplicateChoice } from "./internalChoiceRules";
 import { getCanonicalSubjectName } from "./schoolCurriculum";
-import { subpartsTotalMarks, type SubPart } from "./types";
+import { subpartsTotalMarks, validateSubPartsSum, type SubPart } from "./types";
 
 export interface ValidatableQuestion {
   slotIndex?: number;
@@ -320,7 +320,7 @@ export function validateGeneratedQuestion(
   const text = (question.text || "").trim();
   const answer = (question.answer || "").trim();
   const options = Array.isArray(question.options) ? question.options.map((o) => String(o).trim()) : [];
-  const subparts = isSubpartQuestionType(qType) && Array.isArray(question.subparts) ? question.subparts : [];
+  const subparts = Array.isArray(question.subparts) && question.subparts.length > 0 ? question.subparts : [];
 
   // 1. Content completeness check
   if (!text || text.length < 5) {
@@ -485,22 +485,24 @@ export function validateGeneratedQuestion(
         slotIndex: slotIdx,
       });
     }
-  } else if (isSubpartQuestionType(qType)) {
+  } else if (isSubpartQuestionType(qType) || subparts.length > 0) {
     const targetMarks = slot?.marks || contract.marksEach || 4;
-    if (subparts.length === 0) {
+    if (isSubpartQuestionType(qType) && subparts.length === 0) {
       issues.push({
         code: "QUESTION_TYPE_MISMATCH",
         severity: "ERROR",
         message: `Slot ${slotIdx + 1}: ${qType} requires graded subparts.`,
         slotIndex: slotIdx,
       });
-    } else {
-      const sum = subpartsTotalMarks(subparts);
-      if (sum !== targetMarks) {
+    } else if (subparts.length > 0) {
+      const attemptCount = (question as any).attemptCount;
+      const isValid = validateSubPartsSum(subparts, targetMarks, attemptCount);
+      if (!isValid) {
+        const sum = subpartsTotalMarks(subparts);
         issues.push({
           code: "MARKS_MISMATCH",
           severity: "ERROR",
-          message: `Slot ${slotIdx + 1}: ${qType} subparts sum to ${sum} marks, but slot requires ${targetMarks} marks.`,
+          message: `Slot ${slotIdx + 1}: ${qType} subparts sum to ${sum} marks${attemptCount ? ` (attempt count: ${attemptCount})` : ""}, but slot requires ${targetMarks} marks.`,
           slotIndex: slotIdx,
         });
       }

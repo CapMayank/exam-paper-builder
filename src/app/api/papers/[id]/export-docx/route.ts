@@ -22,6 +22,7 @@ import { getInternalChoiceSeparatorLabel } from "@/lib/internalChoiceRules";
 import { getPaperLocale, type PaperLanguage } from "@/lib/localization";
 import { extractTableFromText } from "@/lib/math";
 import {
+  canHaveSubparts,
   cleanMatchItem,
   cleanOptionText,
   cleanQuestionStatement,
@@ -41,8 +42,9 @@ import {
   QUESTION_TYPE_LABEL,
   resolvePaperExamType,
 } from "@/lib/constants";
+import { decomposeStemSubparts } from "@/lib/subpartExtractor";
 import { prisma } from "@/lib/prisma";
-import { parseSubparts, subpartsTotalMarks, type SubPart } from "@/lib/types";
+import { parseSubparts, parseSubpartsPayload, subpartsTotalMarks, type SubPart } from "@/lib/types";
 import { UPLOAD_DIR } from "@/lib/uploads";
 import {
   computeDisplayedPaperNumbering,
@@ -95,16 +97,20 @@ function renderSubpartsDocx(
   paragraphs: (Paragraph | Table)[],
   isMarkingScheme: boolean,
   lang: PaperLanguage = "en",
+  indentLevel = 1,
 ) {
   const romans = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
   const font = lang === "sa" || lang === "hi" ? "Mangal" : "Times New Roman";
+  const baseIndent = 720 * indentLevel;
+  const childIndent = baseIndent + 360;
+
   for (let spIdx = 0; spIdx < subparts.length; spIdx++) {
     const sp = subparts[spIdx];
     const spLabel = sp.label && String(sp.label).trim() ? String(sp.label).trim() : (romans[spIdx] || `(${spIdx + 1})`);
     const spMarks = typeof sp.marks === "number" && Number.isFinite(sp.marks) ? sp.marks : 1;
     paragraphs.push(
       new Paragraph({
-        indent: { left: 720 },
+        indent: { left: baseIndent },
         spacing: { after: 40 },
         children: [
           new TextRun({ text: `${spLabel} `, bold: true, font }),
@@ -123,7 +129,7 @@ function renderSubpartsDocx(
           const optText = `(${letters[oIdx] ?? oIdx + 1}) ${cleanOptionText(String(sp.options[oIdx]))}`;
           paragraphs.push(
             new Paragraph({
-              indent: { left: 1080 },
+              indent: { left: childIndent },
               spacing: { after: 30 },
               children: formatMathTextRuns(optText, { font }),
             }),
@@ -135,7 +141,7 @@ function renderSubpartsDocx(
           const rightOpt = oIdx + 1 < sp.options.length ? `(${letters[oIdx + 1] ?? oIdx + 2}) ${cleanOptionText(String(sp.options[oIdx + 1]))}` : "";
           paragraphs.push(
             new Paragraph({
-              indent: { left: 1080 },
+              indent: { left: childIndent },
               spacing: { after: 30 },
               children: formatOptionPairRuns(leftOpt, rightOpt, { font }),
             }),
@@ -144,11 +150,15 @@ function renderSubpartsDocx(
       }
     }
 
+    if (Array.isArray(sp.subparts) && sp.subparts.length > 0) {
+      renderSubpartsDocx(sp.subparts, paragraphs, isMarkingScheme, lang, indentLevel + 1);
+    }
+
     if (isMarkingScheme && sp.answer) {
       const ansPrefix = lang === "sa" ? "उत्तरम्: " : lang === "hi" ? "उत्तर: " : "Ans: ";
       paragraphs.push(
         new Paragraph({
-          indent: { left: 1080 },
+          indent: { left: childIndent },
           spacing: { before: 20, after: 60 },
           children: [
             new TextRun({ text: ansPrefix, bold: true, color: "0B6623", font }),
@@ -679,14 +689,27 @@ export async function buildPaperDocx(
           matchCount = parseMatchColumnPairs(opts, q.text, (q as any).explanation).length;
         } catch {}
       }
-      const parsedSubparts = isSubpartQuestionType(q.type) ? parseSubparts(q.subpartsJson) : [];
-      const subpartsMarks = subpartsTotalMarks(parsedSubparts);
+      const { subparts: rawSubparts, attemptCount } = parseSubpartsPayload(q.subpartsJson);
+      let parsedSubparts = canHaveSubparts(q.type) ? rawSubparts : [];
+      let baseQText = isMatch ? getMatchColumnInstruction(q.text) : q.text;
+      if (parsedSubparts.length === 0 && canHaveSubparts(q.type)) {
+        const decomp = decomposeStemSubparts(baseQText);
+        if (decomp) {
+          baseQText = decomp.stem;
+          parsedSubparts = decomp.subparts;
+        }
+      }
+      const subpartsMarks = attemptCount
+        ? attemptCount * (parsedSubparts[0]?.marks || 1)
+        : subpartsTotalMarks(parsedSubparts);
       const qTotalMarks = isMatch
         ? (section.count === 1 ? section.marksEach : Math.min(matchCount * section.marksEach, section.count * section.marksEach))
+        : section.marksEach > 0 && subpartsMarks > section.marksEach
+        ? section.marksEach
         : subpartsMarks > 0
         ? subpartsMarks
         : section.marksEach;
-      const qText = isMatch ? getMatchColumnInstruction(q.text) : q.text;
+      const qText = baseQText;
 
       renderQuestionTextWithTable(
         qLabel,
@@ -888,14 +911,27 @@ export async function buildPaperDocx(
             orMatchCount = parseMatchColumnPairs(opts, orQ.text, (orQ as any).explanation).length;
           } catch {}
         }
-        const parsedOrSubparts = isSubpartQuestionType(orQ.type) ? parseSubparts(orQ.subpartsJson) : [];
-        const orSubpartsMarks = subpartsTotalMarks(parsedOrSubparts);
+        const { subparts: rawOrSubparts, attemptCount: orAttemptCount } = parseSubpartsPayload(orQ.subpartsJson);
+        let parsedOrSubparts = canHaveSubparts(orQ.type) ? rawOrSubparts : [];
+        let baseOrQText = isOrMatch ? getMatchColumnInstruction(orQ.text) : orQ.text;
+        if (parsedOrSubparts.length === 0 && canHaveSubparts(orQ.type)) {
+          const decompOr = decomposeStemSubparts(baseOrQText);
+          if (decompOr) {
+            baseOrQText = decompOr.stem;
+            parsedOrSubparts = decompOr.subparts;
+          }
+        }
+        const orSubpartsMarks = orAttemptCount
+          ? orAttemptCount * (parsedOrSubparts[0]?.marks || 1)
+          : subpartsTotalMarks(parsedOrSubparts);
         const orTotalMarks = isOrMatch
           ? (section.count === 1 ? section.marksEach : Math.min(orMatchCount * section.marksEach, section.count * section.marksEach))
+          : section.marksEach > 0 && orSubpartsMarks > section.marksEach
+          ? section.marksEach
           : orSubpartsMarks > 0
           ? orSubpartsMarks
           : section.marksEach;
-        const orQText = isOrMatch ? getMatchColumnInstruction(orQ.text) : orQ.text;
+        const orQText = baseOrQText;
         const orSeparatorLabel = getInternalChoiceSeparatorLabel(paperLang);
 
         paragraphs.push(

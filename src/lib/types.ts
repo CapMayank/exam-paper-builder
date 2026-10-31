@@ -77,6 +77,7 @@ export type SubPart = {
   marks: number;
   answer?: string;
   options?: string[];
+  subparts?: SubPart[];
 };
 
 export type QuestionUsageTag = {
@@ -255,6 +256,9 @@ export function parseSubparts(json?: unknown): SubPart[] {
         if (typeof sp?.id === "string") item.id = sp.id;
         if (typeof sp?.answer === "string") item.answer = sp.answer;
         if (Array.isArray(sp?.options)) item.options = sp.options.map((o: unknown) => String(o));
+        if (Array.isArray(sp?.subparts) && sp.subparts.length > 0) {
+          item.subparts = parseSubparts(sp.subparts);
+        }
         return item;
       });
   } catch {
@@ -262,11 +266,32 @@ export function parseSubparts(json?: unknown): SubPart[] {
   }
 }
 
+export function parseSubpartsPayload(json?: unknown): { subparts: SubPart[]; attemptCount?: number } {
+  if (!json) return { subparts: [] };
+  try {
+    const parsed = typeof json === "string" ? JSON.parse(json) : json;
+    let attemptCount: number | undefined = undefined;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      if (typeof (parsed as any).attemptCount === "number" && (parsed as any).attemptCount > 0) {
+        attemptCount = (parsed as any).attemptCount;
+      }
+    }
+    const subparts = parseSubparts(parsed);
+    return { subparts, attemptCount };
+  } catch {
+    return { subparts: [] };
+  }
+}
+
 export function subpartsTotalMarks(
-  subparts?: (Pick<SubPart, "marks"> | null | undefined)[] | null,
+  subparts?: (Pick<SubPart, "marks" | "subparts"> | null | undefined)[] | null,
 ): number {
   if (!subparts || !Array.isArray(subparts)) return 0;
   return subparts.reduce((sum, sp) => {
+    if (!sp) return sum;
+    if (Array.isArray(sp.subparts) && sp.subparts.length > 0) {
+      return sum + subpartsTotalMarks(sp.subparts);
+    }
     const m = sp?.marks;
     return sum + (typeof m === "number" && Number.isFinite(m) ? m : 0);
   }, 0);
@@ -275,24 +300,45 @@ export function subpartsTotalMarks(
 export const sumSubPartMarks = subpartsTotalMarks;
 
 export function validateSubPartsSum(
-  subparts: (Pick<SubPart, "marks"> | null | undefined)[] | null | undefined,
+  subparts: (Pick<SubPart, "marks" | "subparts"> | null | undefined)[] | null | undefined,
   expectedTotalMarks: number,
+  attemptCount?: number,
 ): boolean {
   if (!subparts || subparts.length === 0) return true;
+  if (typeof attemptCount === "number" && attemptCount > 0 && attemptCount <= subparts.length) {
+    const valid = subparts.filter(Boolean) as Pick<SubPart, "marks" | "subparts">[];
+    if (valid.length > 0) {
+      const allEqual = valid.every((sp) => sp.marks === valid[0]?.marks);
+      if (allEqual && (valid[0].marks * attemptCount) === expectedTotalMarks) {
+        return true;
+      }
+      const sumFirstK = subpartsTotalMarks(valid.slice(0, attemptCount));
+      if (sumFirstK === expectedTotalMarks) return true;
+    }
+  }
   return subpartsTotalMarks(subparts) === expectedTotalMarks;
 }
 
 /**
  * Deterministically balances subpart marks to guarantee that their sum
  * exactly equals expectedTotalMarks. Preserves minimum 1 mark per subpart.
+ * Supports attemptCount (e.g. answer any 4 of 5) to avoid artificial fractional mark scaling.
  */
-export function normalizeSubpartMarks<T extends { marks: number }>(
+export function normalizeSubpartMarks<T extends { marks: number; subparts?: any[] }>(
   subparts: T[],
   expectedTotalMarks: number,
+  attemptCount?: number,
 ): T[] {
   if (!Array.isArray(subparts) || subparts.length === 0 || !expectedTotalMarks || expectedTotalMarks <= 0) return subparts;
   const target = Math.max(1, Math.round(expectedTotalMarks || 1));
-  const n = subparts.length;
+
+  // If internal choice is specified (attemptCount of N items), preserve integer marks if match
+  if (typeof attemptCount === "number" && attemptCount > 0 && attemptCount <= subparts.length) {
+    const allEqual = subparts.every((sp) => sp.marks === subparts[0]?.marks);
+    if (allEqual && subparts[0] && subparts[0].marks * attemptCount === target) {
+      return subparts;
+    }
+  }
 
   let valid = [...subparts];
 

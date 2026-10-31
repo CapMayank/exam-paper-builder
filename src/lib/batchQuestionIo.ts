@@ -678,9 +678,9 @@ export function validateQuestionRow(
     }
     subparts = subRes.subparts;
 
-    if (isSubpartQuestionType(type) && subparts.length > 0 && marks !== undefined) {
+    if (subparts.length > 0 && marks !== undefined) {
       const sum = subpartsTotalMarks(subparts);
-      if (sum !== marks) {
+      if (isSubpartQuestionType(type) && sum !== marks) {
         return {
           error: {
             rowNumber,
@@ -690,7 +690,7 @@ export function validateQuestionRow(
           },
         };
       }
-    } else if (isSubpartQuestionType(type) && marks === undefined && subparts.length > 0) {
+    } else if (marks === undefined && subparts.length > 0) {
       marks = subpartsTotalMarks(subparts);
     }
   }

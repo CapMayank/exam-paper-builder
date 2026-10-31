@@ -244,6 +244,11 @@ export function isSubpartQuestionType(type?: string | null): boolean {
   return type === "CASE_STUDY" || type === "UNSEEN_PASSAGE" || type === "REFERENCE_CONTEXT";
 }
 
+export function canHaveSubparts(type?: string | null): boolean {
+  if (!type) return true;
+  return type !== "MCQ" && type !== "TRUE_FALSE" && type !== "ASSERTION_REASON";
+}
+
 export interface MatchColumnPair {
   left: string;
   right: string;

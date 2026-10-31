@@ -312,9 +312,9 @@
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/ai-commit-section/route.ts": {
-    "mtime": 1793366288.630425,
-    "seen": 1793417171.1905072,
-    "ast_hash": "0466da723ecc7ce95675d7ae09cc4914",
+    "mtime": 1793437280.8740342,
+    "seen": 1793438260.4130752,
+    "ast_hash": "989b67775d1431ffd46f9be6c620f800",
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/ai-generate-section/route.ts": {
@@ -348,9 +348,9 @@
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/export-docx/route.ts": {
-    "mtime": 1793434159.345494,
-    "seen": 1793434666.943221,
-    "ast_hash": "3a02e3c00348b50a09f7e5c35e729277",
+    "mtime": 1793437916.2202222,
+    "seen": 1793438260.4130752,
+    "ast_hash": "ccbaa1e05e339c7b4f5255ca2bf684a9",
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/import-questions/route.ts": {
@@ -498,9 +498,9 @@
     "semantic_hash": ""
   },
   "src/components/AIPaperGeneratorModal.tsx": {
-    "mtime": 1793434254.5373106,
-    "seen": 1793434666.943221,
-    "ast_hash": "4280fa7983903cc10523b8d3f7fa3f69",
+    "mtime": 1793437964.2755032,
+    "seen": 1793438260.4130752,
+    "ast_hash": "720727131da06a3fad783b1362c3fe55",
     "semantic_hash": ""
   },
   "src/components/AIQuestionGeneratorModal.tsx": {
@@ -594,15 +594,15 @@
     "semantic_hash": ""
   },
   "src/components/PaperSheets.tsx": {
-    "mtime": 1793434135.5945652,
-    "seen": 1793434666.9442203,
-    "ast_hash": "d657232cf8333e712b47a00a55d671c9",
+    "mtime": 1793437772.7329204,
+    "seen": 1793438260.4130752,
+    "ast_hash": "a6785c5615687bfa102a57dbd86b3682",
     "semantic_hash": ""
   },
   "src/components/QuestionForm.tsx": {
-    "mtime": 1792829366.340099,
-    "seen": 1792829430.3016438,
-    "ast_hash": "3cb9455aee9bfa8d8a48ae4b03d2e20e",
+    "mtime": 1793438028.0869846,
+    "seen": 1793438260.4130752,
+    "ast_hash": "af5c591dd6e3ed88c9ee9293cd458933",
     "semantic_hash": ""
   },
   "src/components/QuestionPicker.tsx": {
@@ -618,9 +618,9 @@
     "semantic_hash": ""
   },
   "src/components/QuestionView.tsx": {
-    "mtime": 1793427982.6007204,
-    "seen": 1793430179.0615995,
-    "ast_hash": "9fc58f22de692c8cde4677694e2eb19e",
+    "mtime": 1793437751.6300523,
+    "seen": 1793438260.4130752,
+    "ast_hash": "b6f1739774d286effc1af31b8c2ad5aa",
     "semantic_hash": ""
   },
   "src/components/SyllabusImportModal.tsx": {
@@ -738,9 +738,9 @@
     "semantic_hash": ""
   },
   "src/lib/batchQuestionIo.ts": {
-    "mtime": 1792837363.1920564,
-    "seen": 1792837643.074992,
-    "ast_hash": "3b526d196495694f6fb84f7cface951d",
+    "mtime": 1793437345.2398672,
+    "seen": 1793438260.4130752,
+    "ast_hash": "84c5b16bd8c8e1da7a1e258dadbbdd44",
     "semantic_hash": ""
   },
   "src/lib/blueprint-section-groups.test.ts": {
@@ -750,9 +750,9 @@
     "semantic_hash": ""
   },
   "src/lib/blueprint.ts": {
-    "mtime": 1793424663.7672975,
-    "seen": 1793424724.0848901,
-    "ast_hash": "2bce1d3ab858a9c6abd37a97447da329",
+    "mtime": 1793437315.7133439,
+    "seen": 1793438260.4130752,
+    "ast_hash": "4fd70b5de9fae4094492c58a74966c95",
     "semantic_hash": ""
   },
   "src/lib/blueprintExport.ts": {
@@ -804,9 +804,9 @@
     "semantic_hash": ""
   },
   "src/lib/constants.ts": {
-    "mtime": 1793434194.126966,
-    "seen": 1793434666.9442203,
-    "ast_hash": "10112a240e933c2d23fcfe65458238b4",
+    "mtime": 1793437073.9366262,
+    "seen": 1793438260.4130752,
+    "ast_hash": "a60cc437177efb4c773573abe7560e38",
     "semantic_hash": ""
   },
   "src/lib/curriculumPresets.ts": {
@@ -852,9 +852,9 @@
     "semantic_hash": ""
   },
   "src/lib/dto.ts": {
-    "mtime": 1793363411.5776303,
-    "seen": 1793363797.3504226,
-    "ast_hash": "f41ea1305234693a58d429eca2c19b70",
+    "mtime": 1793437642.9333875,
+    "seen": 1793438260.4130752,
+    "ast_hash": "6a82652f9ec22de409e4455bc067bc43",
     "semantic_hash": ""
   },
   "src/lib/format.ts": {
@@ -870,9 +870,9 @@
     "semantic_hash": ""
   },
   "src/lib/gemini.ts": {
-    "mtime": 1793434451.6684551,
-    "seen": 1793434666.9442203,
-    "ast_hash": "c44b07465227810aaafb71f7ddb7dd12",
+    "mtime": 1793438199.3244753,
+    "seen": 1793438260.4130752,
+    "ast_hash": "8c3541245e243854bc39a77e7fc75b97",
     "semantic_hash": ""
   },
   "src/lib/kindergarten.test.ts": {
@@ -1104,9 +1104,9 @@
     "semantic_hash": ""
   },
   "src/lib/papers.ts": {
-    "mtime": 1793423620.8629405,
-    "seen": 1793424724.0848901,
-    "ast_hash": "692e2b6db49a9df748598a5434e86185",
+    "mtime": 1793437335.2062204,
+    "seen": 1793438260.4130752,
+    "ast_hash": "41ce84f0c3f9d5a5615e364a6323bab3",
     "semantic_hash": ""
   },
   "src/lib/print-logistics.test.ts": {
@@ -1158,9 +1158,9 @@
     "semantic_hash": ""
   },
   "src/lib/schemas.ts": {
-    "mtime": 1793428718.6971383,
-    "seen": 1793430179.0615995,
-    "ast_hash": "48b8ecd88f4d526de0a59edd80bfb8d9",
+    "mtime": 1793437065.0345812,
+    "seen": 1793438260.4130752,
+    "ast_hash": "2e56d2d687600c21ade9f81c2908f119",
     "semantic_hash": ""
   },
   "src/lib/schoolCurriculum.ts": {
@@ -1194,9 +1194,9 @@
     "semantic_hash": ""
   },
   "src/lib/types.ts": {
-    "mtime": 1793428644.1822307,
-    "seen": 1793430179.0615995,
-    "ast_hash": "04f8b3ada1bd7ad0c02a1693519f876f",
+    "mtime": 1793437205.4834805,
+    "seen": 1793438260.4130752,
+    "ast_hash": "6ba95a7ac6b3c86ede9bae5d013d089e",
     "semantic_hash": ""
   },
   "src/lib/uploads.ts": {
@@ -1398,9 +1398,9 @@
     "semantic_hash": ""
   },
   "src/components/SectionAiModal.tsx": {
-    "mtime": 1793428948.9453943,
-    "seen": 1793430179.0615995,
-    "ast_hash": "c89400e3e04a018ec0e2162c1748340b",
+    "mtime": 1793437987.4449232,
+    "seen": 1793438260.4130752,
+    "ast_hash": "c62d0db88d9787f49f03ac8f27db1737",
     "semantic_hash": ""
   },
   "src/lib/preflight.ts": {
@@ -1554,9 +1554,9 @@
     "semantic_hash": ""
   },
   "src/lib/questionValidator.ts": {
-    "mtime": 1793434460.7387087,
-    "seen": 1793434666.9442203,
-    "ast_hash": "e2640acd53dc0f61b572a1f29ad1a87e",
+    "mtime": 1793437538.2537832,
+    "seen": 1793438260.4130752,
+    "ast_hash": "1b9489b0990ce0f222d24a4ea35b2c7d",
     "semantic_hash": ""
   },
   "src/lib/internalChoiceRules.ts": {
@@ -1599,6 +1599,24 @@
     "mtime": 1793428435.9916036,
     "seen": 1793430179.0615995,
     "ast_hash": "6c0fb610179c49e7e5dd88d30bb22f04",
+    "semantic_hash": ""
+  },
+  "src/lib/subpartExtractor.test.ts": {
+    "mtime": 1793437153.4440997,
+    "seen": 1793438260.4130752,
+    "ast_hash": "7e623d377a3f6d91e35988b6603beaa5",
+    "semantic_hash": ""
+  },
+  "src/lib/subpartExtractor.ts": {
+    "mtime": 1793437186.4878757,
+    "seen": 1793438260.4130752,
+    "ast_hash": "31080dc614c3cc3f61bbdd98df350451",
+    "semantic_hash": ""
+  },
+  "src/lib/subparts-hierarchy-regression.test.ts": {
+    "mtime": 1793438049.784746,
+    "seen": 1793438260.4130752,
+    "ast_hash": "fc7c4475a283f494dd408747220fef19",
     "semantic_hash": ""
   }
 }

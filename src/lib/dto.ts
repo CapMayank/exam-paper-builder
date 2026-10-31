@@ -1,5 +1,6 @@
 import type { Chapter, Question } from "@prisma/client";
 import {
+  canHaveSubparts,
   isSubpartQuestionType,
   MARKS_STYLES,
   NUMBERING_STYLES,
@@ -8,7 +9,7 @@ import {
   type NumberingStyle,
   type PrintDensity,
 } from "./constants";
-import { parseSubparts, type QuestionUsageTag, type SubPart } from "./types";
+import { parseSubparts, parseSubpartsPayload, type QuestionUsageTag, type SubPart } from "./types";
 
 export type QuestionDto = {
   id: string;
@@ -29,6 +30,7 @@ export type QuestionDto = {
   subparts: SubPart[];
   subpartsJson?: string;
   usages?: QuestionUsageTag[];
+  attemptCount?: number;
 };
 
 export type PaperSnapshotDto = {
@@ -123,12 +125,21 @@ export function toQuestionDto(
   }
 
   let subparts: SubPart[] = [];
+  let attemptCount: number | undefined = undefined;
   if (
-    isSubpartQuestionType(q.type) &&
+    canHaveSubparts(q.type) &&
     "subpartsJson" in q &&
-    typeof (q as { subpartsJson?: string | null }).subpartsJson === "string"
+    typeof (q as { subpartsJson?: string | null }).subpartsJson === "string" &&
+    (q as { subpartsJson?: string | null }).subpartsJson
   ) {
-    subparts = parseSubparts((q as { subpartsJson?: string | null }).subpartsJson);
+    const payload = parseSubpartsPayload((q as { subpartsJson?: string | null }).subpartsJson);
+    subparts = payload.subparts;
+    attemptCount = payload.attemptCount;
+  } else if (canHaveSubparts(q.type) && Array.isArray((q as any).subparts) && (q as any).subparts.length > 0) {
+    subparts = (q as any).subparts;
+  }
+  if (typeof (q as any).attemptCount === "number" && (q as any).attemptCount > 0) {
+    attemptCount = (q as any).attemptCount;
   }
 
   let usages: QuestionUsageTag[] | undefined = undefined;
@@ -204,6 +215,7 @@ export function toQuestionDto(
     subparts,
     subpartsJson: q.subpartsJson ?? undefined,
     usages,
+    attemptCount,
   };
 }
 

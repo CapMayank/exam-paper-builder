@@ -17,6 +17,7 @@ import {
   getSharedInstruction,
   isBookletLayout,
   isPrePrimaryClass,
+  canHaveSubparts,
   isSubpartQuestionType,
   localizeSectionTitle,
   parseMatchColumnPairs,
@@ -24,6 +25,7 @@ import {
   resolvePaperExamType,
   type PaperLanguage,
 } from "@/lib/constants";
+import { decomposeStemSubparts } from "@/lib/subpartExtractor";
 import { WorkbookHeader } from "@/lib/kindergarten/components/WorkbookHeader";
 import {
   computeDisplayedPaperNumbering,
@@ -575,15 +577,26 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
         n += 1;
         sectionRelativeCounter += 1;
 
-        const subparts = isSubpartQuestionType(it.question.type) ? it.question.subparts : [];
+        const subparts = it.question.subparts && it.question.subparts.length > 0
+          ? it.question.subparts
+          : canHaveSubparts(it.question.type)
+          ? decomposeStemSubparts(it.question.text)?.subparts ?? []
+          : [];
         const canDecompose = !isPrePrimary && !it.orQuestion && subparts && subparts.length > 1;
         const isMatch = s.type === "MATCH_COLUMN" || it.question.type === "MATCH_COLUMN";
         const matchPairCount = isMatch
           ? (parseMatchColumnPairs(it.question.options, it.question.text, (it.question as any).explanation).length || s.count)
           : 0;
-        const subpartsMarks = subparts && subparts.length > 0 ? subparts.reduce((sum, sp) => sum + (sp.marks || 1), 0) : 0;
+        const attemptCount = it.question.attemptCount;
+        const subpartsMarks = subparts && subparts.length > 0
+          ? attemptCount
+            ? attemptCount * (subparts[0]?.marks || 1)
+            : subparts.reduce((sum, sp) => sum + (sp.marks || 1), 0)
+          : 0;
         const totalQuestionMarks = isMatch
           ? (s.count === 1 ? s.marksEach : Math.min(matchPairCount * s.marksEach, s.count * s.marksEach))
+          : s.marksEach > 0 && subpartsMarks > s.marksEach
+          ? s.marksEach
           : subpartsMarks > 0
           ? subpartsMarks
           : s.marksEach;

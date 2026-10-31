@@ -4,6 +4,7 @@ import { ArrowDown, ArrowUp, ImagePlus, PencilRuler, Plus, Printer, RefreshCw, S
 import { useRef, useState } from "react";
 import { api, imageUrl, uploadImage } from "@/lib/client";
 import {
+  canHaveSubparts,
   DIFFICULTIES,
   isKindergartenType,
   isMcqLikeType,
@@ -479,8 +480,10 @@ export function QuestionForm({
                   setText("Match Column A with Column B and choose the correct match: / सही जोड़ी मिलाइए (स्तम्भ 'अ' को स्तम्भ 'ब' से सुमेलित कीजिए):");
                 }
               } else if (isSubpartQuestionType(newType)) {
-                setSubparts(getDefaultSubpartsForType(newType, targetMarks));
-              } else {
+                if (subparts.length === 0) {
+                  setSubparts(getDefaultSubpartsForType(newType, targetMarks));
+                }
+              } else if (!canHaveSubparts(newType)) {
                 setSubparts([]);
               }
             }}

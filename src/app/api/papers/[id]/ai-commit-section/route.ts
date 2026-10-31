@@ -143,11 +143,13 @@ export const POST = route(async (req, { id }, user) => {
         }
       }
 
-      // Balance subpart marks ONLY for passage/case-study question types
-      let normalizedSubparts = isSubpartQuestionType(qType) && Array.isArray(q.subparts) ? q.subparts : [];
+      // Balance subpart marks when subparts are present
+      let normalizedSubparts = Array.isArray(q.subparts) && q.subparts.length > 0 ? q.subparts : [];
+      const attemptCount = typeof (q as any).attemptCount === "number" && (q as any).attemptCount > 0 ? (q as any).attemptCount : undefined;
       if (normalizedSubparts.length > 0) {
-        normalizedSubparts = normalizeSubpartMarks(normalizedSubparts, section.marksEach);
+        normalizedSubparts = normalizeSubpartMarks(normalizedSubparts, section.marksEach, attemptCount);
       }
+      const subpartsData = attemptCount ? { attemptCount, subparts: normalizedSubparts } : normalizedSubparts;
 
       let chapterId = q.chapterId && q.chapterId.trim() ? q.chapterId.trim() : fallbackChapterId;
       if (!validChapterIds.has(chapterId)) {
@@ -166,7 +168,7 @@ export const POST = route(async (req, { id }, user) => {
           type: qType,
           text: q.text,
           optionsJson: JSON.stringify(processedOptions),
-          subpartsJson: JSON.stringify(normalizedSubparts),
+          subpartsJson: JSON.stringify(subpartsData),
           answer: q.answer || "",
           difficulty: q.difficulty || "MEDIUM",
           cognitiveLevel: q.cognitiveLevel || null,
@@ -183,12 +185,17 @@ export const POST = route(async (req, { id }, user) => {
         const orType = q.orQuestion.type || qType;
         const orOptions = Array.isArray(q.orQuestion.options) ? q.orQuestion.options : [];
         let orSubparts =
-          isSubpartQuestionType(orType) && Array.isArray(q.orQuestion.subparts)
+          Array.isArray(q.orQuestion.subparts) && q.orQuestion.subparts.length > 0
             ? q.orQuestion.subparts
             : [];
+        const orAttemptCount =
+          typeof (q.orQuestion as any).attemptCount === "number" && (q.orQuestion as any).attemptCount > 0
+            ? (q.orQuestion as any).attemptCount
+            : undefined;
         if (orSubparts.length > 0) {
-          orSubparts = normalizeSubpartMarks(orSubparts, section.marksEach);
+          orSubparts = normalizeSubpartMarks(orSubparts, section.marksEach, orAttemptCount);
         }
+        const orSubpartsData = orAttemptCount ? { attemptCount: orAttemptCount, subparts: orSubparts } : orSubparts;
 
         const createdOrQuestion = await tx.question.create({
           data: {
@@ -197,7 +204,7 @@ export const POST = route(async (req, { id }, user) => {
             type: orType,
             text: q.orQuestion.text,
             optionsJson: JSON.stringify(orOptions),
-            subpartsJson: JSON.stringify(orSubparts),
+            subpartsJson: JSON.stringify(orSubpartsData),
             answer: q.orQuestion.answer || "",
             difficulty: q.orQuestion.difficulty || q.difficulty || "MEDIUM",
             cognitiveLevel: q.orQuestion.cognitiveLevel || q.cognitiveLevel || null,

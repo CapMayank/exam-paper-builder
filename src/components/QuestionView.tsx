@@ -1,5 +1,6 @@
 import { imageUrl } from "@/lib/client";
 import {
+  canHaveSubparts,
   cleanMatchItem,
   cleanOptionText,
   formatMarksLabel,
@@ -12,6 +13,7 @@ import {
   parseMatchColumnPairs,
   type MarksStyle,
 } from "@/lib/constants";
+import { decomposeStemSubparts } from "@/lib/subpartExtractor";
 import {
   getKindergartenActivity,
   parseKindergartenConfig,
@@ -66,7 +68,12 @@ function SingleQuestionBody({
   const colLabels = getColumnLabels(effectiveLang);
 
   if (renderMode === "SUBPART_ONLY") {
-    const sp = q.subparts && subpartIndex !== undefined ? q.subparts[subpartIndex] : null;
+    const effectiveSubparts = q.subparts && q.subparts.length > 0
+      ? q.subparts
+      : canHaveSubparts(q.type)
+      ? decomposeStemSubparts(q.text)?.subparts ?? []
+      : [];
+    const sp = effectiveSubparts && subpartIndex !== undefined ? effectiveSubparts[subpartIndex] : null;
     if (!sp) return null;
     const contPrefix = effectiveLang === "sa" ? "प्रश्नः" : effectiveLang === "hi" ? "प्रश्न" : "Q.";
     const contLabel = displayLabel
@@ -181,7 +188,17 @@ function SingleQuestionBody({
 
   const normalizedMcq = isMcq ? normalizeMcqAnswer(q.answer, q.options) : null;
   const matchPairs = q.type === "MATCH_COLUMN" ? parseMatchColumnPairs(q.options, q.text, (q as any).explanation) : [];
-  const stemText = q.type === "MATCH_COLUMN" && matchPairs.length > 0 ? getMatchColumnInstruction(q.text) : q.text;
+  const baseStemText = q.type === "MATCH_COLUMN" && matchPairs.length > 0 ? getMatchColumnInstruction(q.text) : q.text;
+
+  const decomposed = (!q.subparts || q.subparts.length === 0) && canHaveSubparts(q.type)
+    ? decomposeStemSubparts(baseStemText)
+    : null;
+  const stemText = decomposed ? decomposed.stem : baseStemText;
+  const effectiveSubparts = q.subparts && q.subparts.length > 0
+    ? q.subparts
+    : decomposed
+    ? decomposed.subparts
+    : [];
 
   return (
     <div>
@@ -276,9 +293,9 @@ function SingleQuestionBody({
                 : "(True / False)"}
             </div>
           )}
-          {renderMode !== "STEM_ONLY" && isSubpartQuestionType(q.type) && q.subparts && q.subparts.length > 0 && (
+          {renderMode !== "STEM_ONLY" && effectiveSubparts.length > 0 && (
             <div style={{ marginTop: "2mm", display: "flex", flexDirection: "column", gap: isA5 ? "1.5mm" : "2.5mm" }}>
-              {q.subparts.map((sp, idx) => (
+              {effectiveSubparts.map((sp, idx) => (
                 <div
                   key={idx}
                   style={{
@@ -302,6 +319,33 @@ function SingleQuestionBody({
                           <div key={optIdx} className="opt-text" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", fontSize: optFontSize }}>
                             <span style={{ fontWeight: 600 }}>({LETTERS[optIdx].toLowerCase()})</span>{" "}
                             <MathText text={cleanOptionText(opt)} />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {/* Level 2 nested subparts support */}
+                    {sp.subparts && sp.subparts.length > 0 && (
+                      <div style={{ marginTop: "1.5mm", display: "flex", flexDirection: "column", gap: isA5 ? "1mm" : "1.5mm" }}>
+                        {sp.subparts.map((nested, nIdx) => (
+                          <div key={nIdx} style={{ display: "flex", gap: "2mm", alignItems: "flex-start", paddingLeft: "2mm", borderLeft: "1.5px solid #cbd5e1" }}>
+                            <span style={{ fontWeight: 600, minWidth: isA5 ? "5mm" : "6mm", color: "#475569" }}>
+                              {nested.label || `(${nIdx + 1})`}
+                            </span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight }}>
+                                <MathText text={nested.text} />
+                              </div>
+                              {showAnswer && nested.answer && (
+                                <div style={{ marginTop: "1mm", fontSize: isA5 ? "7.5pt" : "0.85em", color: "#166534" }}>
+                                  <span style={{ fontWeight: 600 }}>{effectiveLang === "sa" ? "उत्तरम्:" : effectiveLang === "hi" ? "उत्तर:" : "Answer:"}</span> <MathText text={nested.answer} />
+                                </div>
+                              )}
+                            </div>
+                            {nested.marks !== undefined && marksStyle !== "SUPPRESSED" && (
+                              <div style={{ whiteSpace: "nowrap", fontWeight: 700, fontSize: marksFontSize, paddingLeft: "2mm", color: "#475569" }}>
+                                {formatMarksLabel(nested.marks, effectiveLang)}
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
