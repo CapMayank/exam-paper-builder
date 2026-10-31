@@ -182,5 +182,20 @@ describe("Question Grouping and Language Quality Remediation", () => {
       expect(cleanQuestionStatement("1. First statement here", "TRUE_FALSE")).toBe("First statement here");
       expect(cleanQuestionStatement("(i) Subpart statement", "FILL_BLANK")).toBe("Subpart statement");
     });
+
+    it("strips trailing marks annotations from question stems (e.g. [1 Mark], [2 Marks], (1 Mark))", () => {
+      expect(cleanQuestionStatement("What is the degree of the differential equation? [1 Mark]", "MCQ")).toBe(
+        "What is the degree of the differential equation?"
+      );
+      expect(cleanQuestionStatement("Find the value of x. [2 Marks]", "SHORT_ANSWER")).toBe(
+        "Find the value of x."
+      );
+      expect(cleanQuestionStatement("Evaluate the integral. (3 Marks)", "SHORT_ANSWER")).toBe(
+        "Evaluate the integral."
+      );
+      expect(cleanQuestionStatement("सिद्ध कीजिए कि... [4 अंक]", "LONG_ANSWER")).toBe(
+        "सिद्ध कीजिए कि..."
+      );
+    });
   });
 });

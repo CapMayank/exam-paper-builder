@@ -199,6 +199,10 @@ export function cleanQuestionStatement(text?: string | null, type?: string | nul
   // Strip leading question number prefixes like (a), a., 1., (1), i., (i)
   cleaned = cleaned.replace(/^[\s\u200B]*(\([A-Za-z0-9ivxIVX\u0900-\u097F]{1,6}\)|(?:[A-Za-z]|\d{1,2}|[ivxIVX]{1,4}|[\u0900-\u097F]{1,2})\s*[.)\]:-])\s*/, "");
 
+  // Strip trailing marks annotations like [1 Mark], [2 Marks], [1 अंक], (1 Mark)
+  cleaned = cleaned.replace(/\s*\[\s*\d+\s*(?:marks?|mark|अंक|m)\s*\]\s*$/i, "");
+  cleaned = cleaned.replace(/\s*\(\s*\d+\s*(?:marks?|mark|अंक|m)\s*\)\s*$/i, "");
+
   if (type === "TRUE_FALSE") {
     // English True/False prefixes
     cleaned = cleaned
