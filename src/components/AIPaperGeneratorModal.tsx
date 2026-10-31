@@ -307,13 +307,17 @@ export function AIPaperGeneratorModal({
         // Ensure displayed subpart mark allocations in the preview feed match the calculated values before commit
         const rawQuestions = genRes.questions || [];
         const questions = rawQuestions.map((q) => {
-          if (q.subparts && q.subparts.length > 0) {
-            return {
-              ...q,
-              subparts: normalizeSubpartMarks(q.subparts, sec.marksEach, (q as any).attemptCount),
+          const updated = { ...q };
+          if (updated.subparts && updated.subparts.length > 0) {
+            updated.subparts = normalizeSubpartMarks(updated.subparts, sec.marksEach, (updated as any).attemptCount);
+          }
+          if (updated.orQuestion && updated.orQuestion.subparts && updated.orQuestion.subparts.length > 0) {
+            updated.orQuestion = {
+              ...updated.orQuestion,
+              subparts: normalizeSubpartMarks(updated.orQuestion.subparts, sec.marksEach, (updated.orQuestion as any).attemptCount),
             };
           }
-          return q;
+          return updated;
         });
 
         const hasDiagrams = questions.some(

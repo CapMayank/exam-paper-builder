@@ -26,7 +26,8 @@ import {
   serializeMatchColumnPair,
 } from "@/lib/constants";
 import type { GeneratedPaperQuestion } from "@/lib/gemini";
-import { type PaperData, type Section, subpartsTotalMarks } from "@/lib/types";
+import { planPaperSlotAssignments } from "@/lib/paperAutogen";
+import { type PaperData, type Section, subpartsTotalMarks, normalizeSubpartMarks } from "@/lib/types";
 
 interface SectionAiModalProps {
   isOpen: boolean;
@@ -97,9 +98,24 @@ export function SectionAiModal({
     return chapterQuotas.map((cq) => ({ id: cq.id, number: cq.number, title: cq.title }));
   }, [chapterQuotas]);
 
-  // Greedily plan chapter allocations for auto-distribution
+  // Globally balance chapter allocations using the blueprint quota planner
+  // to avoid quota fragmentation and ensure large marks (4m/3m) are matched to chapters with adequate quota.
   const plannedChapterAllocations = React.useMemo(() => {
     if (!section) return [];
+    try {
+      const plan = planPaperSlotAssignments(paper);
+      const secPlan = plan.sections.find((s) => s.sectionId === section.id);
+      if (secPlan && secPlan.slots && secPlan.slots.length > 0) {
+        return secPlan.slots.slice(0, questionCount).map((s) => ({
+          id: s.chapterId,
+          number: s.chapterNumber,
+          title: s.chapterTitle,
+          remainingMarks: targetSlotMarks,
+        }));
+      }
+    } catch {}
+
+    // Fallback if paper plan has no slots or throws
     const count = questionCount;
     const deficits = chapterQuotas.map((c) => ({ ...c }));
     const result: Array<{ id: string; number: number; title: string; remainingMarks: number }> = [];
@@ -123,7 +139,7 @@ export function SectionAiModal({
       }
     }
     return result;
-  }, [chapterQuotas, questionCount, section, targetSlotMarks]);
+  }, [paper, section, questionCount, chapterQuotas, targetSlotMarks]);
 
   useEffect(() => {
     if (isOpen && section) {
@@ -132,7 +148,7 @@ export function SectionAiModal({
       setError(null);
       setQuestionCount(Math.max(1, remainingQuestions));
       const paperLang = detectPaperLanguage(paper, paper.items);
-      setLanguage(paperLang === "hi" ? "hi" : "en");
+      setLanguage(paperLang === "sa" ? "sa" : paperLang === "hi" ? "hi" : "en");
       if (availableChapters.length > 0) {
         // Default to chapter with highest remaining deficit
         const topDeficit = [...chapterQuotas].sort((a, b) => b.remainingMarks - a.remainingMarks)[0];
@@ -232,9 +248,22 @@ export function SectionAiModal({
             opts = pairs.map((p) => serializeMatchColumnPair(p.left, p.right));
           }
         }
+        let updatedSubparts = q.subparts;
+        if (updatedSubparts && updatedSubparts.length > 0) {
+          updatedSubparts = normalizeSubpartMarks(updatedSubparts, section!.marksEach, (q as any).attemptCount);
+        }
+        let updatedOr = q.orQuestion;
+        if (updatedOr && updatedOr.subparts && updatedOr.subparts.length > 0) {
+          updatedOr = {
+            ...updatedOr,
+            subparts: normalizeSubpartMarks(updatedOr.subparts, section!.marksEach, (updatedOr as any).attemptCount),
+          };
+        }
         return {
           ...q,
           options: opts,
+          subparts: updatedSubparts,
+          orQuestion: updatedOr,
         };
       });
 

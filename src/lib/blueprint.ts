@@ -541,7 +541,14 @@ export function toPlacedItems(
           ? Math.min(matchCount || secCount, secCount) * secMarksEach
           : secMarksEach)
       : 0;
-    const effectiveMarks = isMatch ? matchMarks : (submarks > 0 ? submarks : secMarksEach);
+    // Cap question marks at the section quota so subparts (with or without attempt choices)
+    // never artificially inflate paper or chapter totals above blueprint specifications.
+    // Note: Internal choices (OR / अथवा) are alternatives for the same slot and contribute 0 extra marks.
+    const effectiveMarks = isMatch
+      ? matchMarks
+      : submarks > 0
+      ? (secMarksEach > 0 ? Math.min(submarks, secMarksEach) : submarks)
+      : secMarksEach;
     const effectiveUnits = isMultiUnitMatch
       ? Math.min(matchCount > 0 ? matchCount : secCount, secCount)
       : undefined;

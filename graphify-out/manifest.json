@@ -96,9 +96,9 @@
     "semantic_hash": ""
   },
   "src/app/(app)/papers/[id]/page.tsx": {
-    "mtime": 1793434342.235946,
-    "seen": 1793434666.943221,
-    "ast_hash": "d9d0d6d66cfca763d27366ea38b7f9d1",
+    "mtime": 1793443972.8433745,
+    "seen": 1793444277.945782,
+    "ast_hash": "a53b97c41bf9013f1e81a7a776921630",
     "semantic_hash": ""
   },
   "src/app/(app)/papers/page.tsx": {
@@ -366,21 +366,21 @@
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/questions/[itemId]/route.ts": {
-    "mtime": 1793415165.7486305,
-    "seen": 1793417171.1905072,
-    "ast_hash": "8f8440d83a643de4628fecb74af18dcb",
+    "mtime": 1793443853.1079555,
+    "seen": 1793444277.945782,
+    "ast_hash": "d05ebd70d8e0a3ad3bea839d10d2f673",
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/questions/route.ts": {
-    "mtime": 1793367183.3517642,
-    "seen": 1793417171.1905072,
-    "ast_hash": "b6a5e216cf6c9cdcefe48c6deddb310e",
+    "mtime": 1793443814.427529,
+    "seen": 1793444277.945782,
+    "ast_hash": "ad70e1ce5802edd0a65326729ca56697",
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/reconcile-blueprint/route.ts": {
-    "mtime": 1792836904.7906358,
-    "seen": 1792837643.074992,
-    "ast_hash": "57d315ed35c77ba58a086b0fb4be7d91",
+    "mtime": 1793443793.5634165,
+    "seen": 1793444277.945782,
+    "ast_hash": "68150b31d41729c2ee8e831cb5612bcc",
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/route.ts": {
@@ -498,9 +498,9 @@
     "semantic_hash": ""
   },
   "src/components/AIPaperGeneratorModal.tsx": {
-    "mtime": 1793437964.2755032,
-    "seen": 1793438260.4130752,
-    "ast_hash": "720727131da06a3fad783b1362c3fe55",
+    "mtime": 1793443986.0258567,
+    "seen": 1793444277.945782,
+    "ast_hash": "eec20bb70e7b7030145e4a8c221427e1",
     "semantic_hash": ""
   },
   "src/components/AIQuestionGeneratorModal.tsx": {
@@ -606,9 +606,9 @@
     "semantic_hash": ""
   },
   "src/components/QuestionPicker.tsx": {
-    "mtime": 1793428554.916021,
-    "seen": 1793430179.0615995,
-    "ast_hash": "5164a2099bdeb6949acee648f51f02f5",
+    "mtime": 1793444056.3656225,
+    "seen": 1793444277.945782,
+    "ast_hash": "8d3adb90982a583b91d52143dd0be3d4",
     "semantic_hash": ""
   },
   "src/components/QuestionUsageHistory.tsx": {
@@ -750,9 +750,9 @@
     "semantic_hash": ""
   },
   "src/lib/blueprint.ts": {
-    "mtime": 1793437315.7133439,
-    "seen": 1793438260.4130752,
-    "ast_hash": "4fd70b5de9fae4094492c58a74966c95",
+    "mtime": 1793443737.2552185,
+    "seen": 1793444277.9467785,
+    "ast_hash": "1d88e6abb83e89bf9d2bb4db97de32b1",
     "semantic_hash": ""
   },
   "src/lib/blueprintExport.ts": {
@@ -1104,9 +1104,9 @@
     "semantic_hash": ""
   },
   "src/lib/papers.ts": {
-    "mtime": 1793437335.2062204,
-    "seen": 1793438260.4130752,
-    "ast_hash": "41ce84f0c3f9d5a5615e364a6323bab3",
+    "mtime": 1793443750.5332885,
+    "seen": 1793444277.9467785,
+    "ast_hash": "2e31754caeb558a9786c0974872fa463",
     "semantic_hash": ""
   },
   "src/lib/print-logistics.test.ts": {
@@ -1152,9 +1152,9 @@
     "semantic_hash": ""
   },
   "src/lib/reconcileBlueprint.ts": {
-    "mtime": 1792828996.0614364,
-    "seen": 1792829430.3026407,
-    "ast_hash": "e750a4b8cf96d7d32587f3bee472b043",
+    "mtime": 1793444196.4973204,
+    "seen": 1793444277.9467785,
+    "ast_hash": "0e6e627e47efcc569162a19cdf0b7d16",
     "semantic_hash": ""
   },
   "src/lib/schemas.ts": {
@@ -1398,15 +1398,15 @@
     "semantic_hash": ""
   },
   "src/components/SectionAiModal.tsx": {
-    "mtime": 1793437987.4449232,
-    "seen": 1793438260.4130752,
-    "ast_hash": "c62d0db88d9787f49f03ac8f27db1737",
+    "mtime": 1793444020.180423,
+    "seen": 1793444277.945782,
+    "ast_hash": "6dce5d65569d52184725343a1f311cf7",
     "semantic_hash": ""
   },
   "src/lib/preflight.ts": {
-    "mtime": 1793366653.142776,
-    "seen": 1793417171.191507,
-    "ast_hash": "89238a05bcd3d9cef280a4480548b194",
+    "mtime": 1793443875.4187183,
+    "seen": 1793444277.9467785,
+    "ast_hash": "bf0a93da8bdf9b12227f28ded2e25ec6",
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/questions/[itemId]/siblings/route.ts": {
@@ -1617,6 +1617,12 @@
     "mtime": 1793438049.784746,
     "seen": 1793438260.4130752,
     "ast_hash": "fc7c4475a283f494dd408747220fef19",
+    "semantic_hash": ""
+  },
+  "src/lib/quota-or-choice-regression.test.ts": {
+    "mtime": 1793444221.431843,
+    "seen": 1793444277.9467785,
+    "ast_hash": "f2a70eed091a02ae36b97fda509e93de",
     "semantic_hash": ""
   }
 }

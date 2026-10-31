@@ -4,7 +4,7 @@ import { parseMatchColumnPairs } from "@/lib/constants";
 import { assertCanModifyPaper, loadPaperView, toPlacedItems } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { addItemSchema } from "@/lib/schemas";
-import { parseSubparts, subpartsTotalMarks } from "@/lib/types";
+import { parseSubpartsPayload, subpartsTotalMarks, validateSubPartsSum } from "@/lib/types";
 
 /** Add a question to a section. The blueprint rules are enforced here, not just in the UI. */
 export const POST = route(async (req, { id }, user) => {
@@ -24,15 +24,22 @@ export const POST = route(async (req, { id }, user) => {
   const targetSection = paper.blueprint.sections.find((s) => s.id === input.sectionId);
   if (!targetSection) throw new HttpError(404, "Section not found");
 
-  const candidateSubparts = parseSubparts(question.subpartsJson);
-  const candidateSubmarks = subpartsTotalMarks(candidateSubparts);
+  const parsedCandidatePayload = parseSubpartsPayload(question.subpartsJson);
+  const candidateSubparts = parsedCandidatePayload.subparts;
+  const attemptCount = (question as any).attemptCount || parsedCandidatePayload.attemptCount;
+  const isCandidateSubpartsValid = validateSubPartsSum(candidateSubparts, targetSection.marksEach, attemptCount);
 
-  if (candidateSubparts.length > 0 && candidateSubmarks !== targetSection.marksEach) {
+  if (candidateSubparts.length > 0 && !isCandidateSubpartsValid) {
+    const candidateSubmarks = attemptCount ? attemptCount * (candidateSubparts[0]?.marks || 1) : subpartsTotalMarks(candidateSubparts);
     throw new HttpError(
       400,
       `Board Guardrail Violation: Question total subpart marks (${candidateSubmarks}) must match section marks (${targetSection.marksEach}).`
     );
   }
+
+  const candidateSubmarks = attemptCount
+    ? attemptCount * (candidateSubparts[0]?.marks || 1)
+    : subpartsTotalMarks(candidateSubparts);
 
   const isTargetMatch = targetSection.type === "MATCH_COLUMN";
   const isMultiUnitMatch = isTargetMatch && targetSection.count > 1;
@@ -48,7 +55,7 @@ export const POST = route(async (req, { id }, user) => {
     ? (isMultiUnitMatch
         ? Math.min(matchPairsCount || targetSection.count, targetSection.count) * targetSection.marksEach
         : targetSection.marksEach)
-    : (candidateSubmarks > 0 ? candidateSubmarks : targetSection.marksEach);
+    : (candidateSubmarks > 0 ? Math.min(candidateSubmarks, targetSection.marksEach) : targetSection.marksEach);
   const candidateUnits = isMultiUnitMatch
     ? Math.min(matchPairsCount || targetSection.count, targetSection.count)
     : undefined;

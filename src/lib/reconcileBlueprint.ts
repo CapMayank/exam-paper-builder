@@ -1,5 +1,5 @@
 import { parseMatchColumnPairs } from "./constants";
-import { parseSubparts, subpartsTotalMarks } from "./types";
+import { parseSubparts, parseSubpartsPayload, subpartsTotalMarks } from "./types";
 
 export interface ReconcileItemInput {
   paperItemId: string;
@@ -59,8 +59,10 @@ export function getEffectiveQuestionMarks(
     if (pairs.length > 0) return pairs.length * sectionMarksEach;
   }
 
-  const subparts = parseSubparts(item.subpartsJson);
-  const subTotal = subpartsTotalMarks(subparts);
+  const { subparts, attemptCount } = parseSubpartsPayload(item.subpartsJson);
+  const subTotal = attemptCount
+    ? attemptCount * (subparts[0]?.marks || 1)
+    : subpartsTotalMarks(subparts);
   if (subTotal > 0) return subTotal;
 
   return sectionMarksEach;

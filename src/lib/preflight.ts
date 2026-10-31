@@ -1,6 +1,6 @@
 import { cleanOptionText, isMcqLikeType } from "./constants";
 import { evaluatePaperInternalChoiceCompliance } from "./internalChoiceRules";
-import type { PaperData } from "./types";
+import { validateSubPartsSum, subpartsTotalMarks, type PaperData } from "./types";
 
 export type PreflightIssue = {
   code: string;
@@ -90,9 +90,13 @@ export function validatePaperPreflight(paper: PaperData): PreflightReport {
 
     // 6. Subparts Marks Verification
     if (q.subparts && q.subparts.length > 0) {
-      const sum = q.subparts.reduce((total, sp) => total + (Number(sp.marks) || 0), 0);
       const sec = paper.blueprint.sections.find((s) => s.id === item.sectionId);
-      if (sec && sum !== sec.marksEach) {
+      const attemptCount = (q as any).attemptCount;
+      const isValid = validateSubPartsSum(q.subparts, sec?.marksEach ?? 1, attemptCount);
+      if (sec && !isValid) {
+        const sum = attemptCount
+          ? attemptCount * (q.subparts[0]?.marks || 1)
+          : subpartsTotalMarks(q.subparts);
         issues.push({
           code: "SUBPARTS_MARKS_MISMATCH",
           severity: "warning",

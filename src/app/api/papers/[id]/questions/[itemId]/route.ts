@@ -5,7 +5,7 @@ import { resolveInternalChoiceRequirement } from "@/lib/internalChoiceRules";
 import { assertCanModifyPaper, assertCanModifyQuestion, loadPaperView, toPlacedItems } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { editPaperItemSchema, moveItemSchema, replaceItemSchema } from "@/lib/schemas";
-import { parseSubparts, subpartsTotalMarks } from "@/lib/types";
+import { parseSubparts, parseSubpartsPayload, subpartsTotalMarks, validateSubPartsSum } from "@/lib/types";
 
 async function editableItem(paperId: string, itemId: string, user: SessionUser) {
   const item = await prisma.paperQuestion.findUnique({
@@ -78,15 +78,24 @@ export const PATCH = route(async (req, { id, itemId }, user) => {
       paper.items.filter((i) => i.id !== itemId),
     );
 
-    const candidateSubparts = parseSubparts(candidate.subpartsJson);
-    const candidateSubmarks = subpartsTotalMarks(candidateSubparts);
+    const parsedCandidatePayload = parseSubpartsPayload(candidate.subpartsJson);
+    const candidateSubparts = parsedCandidatePayload.subparts;
+    const candidateAttemptCount = (candidate as any).attemptCount || parsedCandidatePayload.attemptCount;
+    const isCandidateSubpartsValid = validateSubPartsSum(candidateSubparts, item.section.marksEach, candidateAttemptCount);
 
-    if (candidateSubparts.length > 0 && candidateSubmarks !== item.section.marksEach) {
+    if (candidateSubparts.length > 0 && !isCandidateSubpartsValid) {
+      const candidateSubmarks = candidateAttemptCount
+        ? candidateAttemptCount * (candidateSubparts[0]?.marks || 1)
+        : subpartsTotalMarks(candidateSubparts);
       throw new HttpError(
         400,
         `Board Guardrail Violation: Replacement question total subpart marks (${candidateSubmarks}) must match section marks (${item.section.marksEach}).`
       );
     }
+
+    const candidateSubmarks = candidateAttemptCount
+      ? candidateAttemptCount * (candidateSubparts[0]?.marks || 1)
+      : subpartsTotalMarks(candidateSubparts);
 
     const isTargetMatch = item.section.type === "MATCH_COLUMN";
     const isMultiUnitMatch = isTargetMatch && item.section.count > 1;
@@ -102,7 +111,7 @@ export const PATCH = route(async (req, { id, itemId }, user) => {
       ? (isMultiUnitMatch
           ? Math.min(matchPairsCount || item.section.count, item.section.count) * item.section.marksEach
           : item.section.marksEach)
-      : (candidateSubmarks > 0 ? candidateSubmarks : item.section.marksEach);
+      : (candidateSubmarks > 0 ? Math.min(candidateSubmarks, item.section.marksEach) : item.section.marksEach);
     const candidateUnits = isMultiUnitMatch
       ? Math.min(matchPairsCount || item.section.count, item.section.count)
       : undefined;
@@ -185,15 +194,17 @@ export const PATCH = route(async (req, { id, itemId }, user) => {
       );
     }
     if (candidate.subpartsJson && candidate.subpartsJson !== "[]") {
-      const subparts = parseSubparts(candidate.subpartsJson);
-      if (subparts.length > 0) {
-        const total = subpartsTotalMarks(subparts);
-        if (total !== item.section.marksEach) {
-          throw new HttpError(
-            400,
-            `Board Guardrail Violation: Alternate (OR) choice total marks (${total}) must match section marks (${item.section.marksEach}).`
-          );
-        }
+      const parsedOrPayload = parseSubpartsPayload(candidate.subpartsJson);
+      const subparts = parsedOrPayload.subparts;
+      const orAttemptCount = (candidate as any).attemptCount || parsedOrPayload.attemptCount;
+      if (subparts.length > 0 && !validateSubPartsSum(subparts, item.section.marksEach, orAttemptCount)) {
+        const total = orAttemptCount
+          ? orAttemptCount * (subparts[0]?.marks || 1)
+          : subpartsTotalMarks(subparts);
+        throw new HttpError(
+          400,
+          `Board Guardrail Violation: Alternate (OR) choice total marks (${total}) must match section marks (${item.section.marksEach}).`
+        );
       }
     }
     if (paper.items.some((i) => (i.question.id === candidate.id && i.id !== itemId) || (i.orQuestion?.id === candidate.id && i.id !== itemId))) {

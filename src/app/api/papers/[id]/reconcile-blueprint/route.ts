@@ -72,9 +72,37 @@ export const POST = route(async (_req, { id }, user) => {
             createdById: user.id,
           },
         });
+
+        const pq = await tx.paperQuestion.findUnique({
+          where: { id: r.paperItemId },
+          select: { orQuestionId: true },
+        });
+
+        let updatedOrId = pq?.orQuestionId ?? null;
+        if (pq?.orQuestionId) {
+          const origOr = await tx.question.findUnique({ where: { id: pq.orQuestionId } });
+          if (origOr) {
+            const forkedOr = await tx.question.create({
+              data: {
+                bookId: origOr.bookId,
+                chapterId: r.toChapterId,
+                type: origOr.type,
+                text: origOr.text,
+                optionsJson: origOr.optionsJson,
+                subpartsJson: origOr.subpartsJson,
+                answer: origOr.answer,
+                difficulty: origOr.difficulty,
+                imagePath: origOr.imagePath,
+                createdById: user.id,
+              },
+            });
+            updatedOrId = forkedOr.id;
+          }
+        }
+
         await tx.paperQuestion.update({
           where: { id: r.paperItemId },
-          data: { questionId: forked.id },
+          data: { questionId: forked.id, orQuestionId: updatedOrId },
         });
       }
       await tx.paper.update({

@@ -162,7 +162,11 @@ export async function loadPaperView(id: string) {
             ? Math.min(matchCount || secCount, secCount) * secMarksEach
             : secMarksEach)
         : 0;
-      const effectiveMarks = isMatch ? matchMarks : (submarks > 0 ? submarks : secMarksEach);
+      const effectiveMarks = isMatch
+        ? matchMarks
+        : submarks > 0
+        ? (secMarksEach > 0 ? Math.min(submarks, secMarksEach) : submarks)
+        : secMarksEach;
       const effectiveUnits = isMultiUnitMatch
         ? Math.min(matchCount > 0 ? matchCount : secCount, secCount)
         : undefined;

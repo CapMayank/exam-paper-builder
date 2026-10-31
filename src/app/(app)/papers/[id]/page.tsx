@@ -58,6 +58,7 @@ import {
   EXAM_TYPES,
   EXAM_TYPE_LABEL,
   inferExamTypeFromText,
+  canHaveSubparts,
   isSubpartQuestionType,
   LAYOUTS,
   LAYOUT_LABEL,
@@ -1632,10 +1633,14 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                 const pairs = parseMatchColumnPairs(it.question.options, it.question.text, (it.question as any).explanation);
                 return sum + (pairs.length > 0 ? Math.min(pairs.length, s.count) : s.count) * s.marksEach;
               }
-              const subTotal = isSubpartQuestionType(it.question.type) && it.question.subparts && it.question.subparts.length > 0
-                ? it.question.subparts.reduce((subSum, sp) => subSum + (sp.marks || 1), 0)
+              const hasSubparts = canHaveSubparts(it.question.type) && it.question.subparts && it.question.subparts.length > 0;
+              const subTotal = hasSubparts
+                ? (it.question as any).attemptCount
+                  ? (it.question as any).attemptCount * (it.question.subparts![0]?.marks || 1)
+                  : it.question.subparts!.reduce((subSum, sp) => subSum + (sp.marks || 1), 0)
                 : 0;
-              return sum + (subTotal > 0 ? subTotal : s.marksEach);
+              const effectiveQMarks = subTotal > 0 ? (s.marksEach > 0 ? Math.min(subTotal, s.marksEach) : subTotal) : s.marksEach;
+              return sum + effectiveQMarks;
             }, 0);
             const targetSectionMarks = s.count * s.marksEach;
             const isOverfilled = effectiveUnits > s.count;
@@ -1870,13 +1875,16 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                         const matchCount = isMatchQ
                           ? (parseMatchColumnPairs(it.question.options, it.question.text, (it.question as any).explanation).length || s.count)
                           : 0;
-                        const subpartsMarks = isSubpartQuestionType(it.question.type) && it.question.subparts && it.question.subparts.length > 0
-                          ? it.question.subparts.reduce((sum, sp) => sum + (sp.marks || 1), 0)
+                        const hasSubparts = canHaveSubparts(it.question.type) && it.question.subparts && it.question.subparts.length > 0;
+                        const subpartsMarks = hasSubparts
+                          ? (it.question as any).attemptCount
+                            ? (it.question as any).attemptCount * (it.question.subparts![0]?.marks || 1)
+                            : it.question.subparts!.reduce((sum, sp) => sum + (sp.marks || 1), 0)
                           : 0;
                         const questionTotalMarks = isMatchQ
                           ? (s.count === 1 ? s.marksEach : Math.min(matchCount * s.marksEach, s.count * s.marksEach))
                           : subpartsMarks > 0
-                          ? subpartsMarks
+                          ? (s.marksEach > 0 ? Math.min(subpartsMarks, s.marksEach) : subpartsMarks)
                           : s.marksEach;
                         const targetSlotMarksForQ = isMatchQ && s.count > 1
                           ? s.count * s.marksEach
@@ -1974,7 +1982,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                 )}
                                 <span className="badge font-bold !bg-indigo-50 !text-indigo-700 border border-indigo-200">
                                   {questionTotalMarks} Mark{questionTotalMarks > 1 ? "s" : ""}
-                                  {isSubpartQuestionType(it.question.type) && it.question.subparts && it.question.subparts.length > 0 && ` (${it.question.subparts.length} parts)`}
+                                  {canHaveSubparts(it.question.type) && it.question.subparts && it.question.subparts.length > 0 && ` (${it.question.subparts.length} parts)`}
                                 </span>
                                 <span className="badge font-semibold !bg-slate-100 !text-slate-700 border border-slate-200">{it.question.difficulty}</span>
                                 <span className="badge !bg-slate-100 text-slate-700 font-medium border border-slate-200">

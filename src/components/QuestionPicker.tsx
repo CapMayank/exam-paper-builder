@@ -377,7 +377,7 @@ export function QuestionPicker({
         answer: sp.answer || "",
         options: Array.isArray(sp.options) && sp.options.length > 0 ? sp.options.map((o: string) => cleanOptionText(String(o))) : undefined,
       }));
-      const normalizedSubparts = rawSubparts.length > 0 ? normalizeSubpartMarks(rawSubparts, marksToGenerate) : [];
+      const normalizedSubparts = rawSubparts.length > 0 ? normalizeSubpartMarks(rawSubparts, marksToGenerate, (aiGenerated as any).attemptCount) : [];
 
       const payload = {
         bookId: paper.blueprint.bookId,
@@ -407,7 +407,7 @@ export function QuestionPicker({
           answer: sp.answer || "",
           options: Array.isArray(sp.options) && sp.options.length > 0 ? sp.options.map((o: string) => cleanOptionText(String(o))) : undefined,
         }));
-        const orNormalizedSubparts = orRawSubparts.length > 0 ? normalizeSubpartMarks(orRawSubparts, marksToGenerate) : [];
+        const orNormalizedSubparts = orRawSubparts.length > 0 ? normalizeSubpartMarks(orRawSubparts, marksToGenerate, (aiGenerated.orQuestion as any).attemptCount) : [];
         const orPayload = {
           bookId: paper.blueprint.bookId,
           chapterId: aiChapterId,
@@ -454,7 +454,7 @@ export function QuestionPicker({
       answer: sp.answer || "",
       options: Array.isArray(sp.options) && sp.options.length > 0 ? sp.options.map((o: string) => cleanOptionText(String(o))) : undefined,
     }));
-    const normalizedSubparts = rawSubparts.length > 0 ? normalizeSubpartMarks(rawSubparts, marksToGenerate) : [];
+    const normalizedSubparts = rawSubparts.length > 0 ? normalizeSubpartMarks(rawSubparts, marksToGenerate, (aiGenerated as any).attemptCount) : [];
 
     const dummyDto: QuestionDto = {
       id: "",
