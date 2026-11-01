@@ -24,6 +24,8 @@ if [ ! -d "node_modules/.prisma/client" ] || [ -z "$PREV_COMMIT" ] || git diff -
   echo "🗄️ Generating Prisma client and syncing schema..."
   npx prisma generate
   npx prisma db push --skip-generate
+  echo "🌱 Seeding MPBSE curriculum and blueprint templates..."
+  npm run seed:mpbse
 else
   echo "🗄️ Database schema unchanged, skipping Prisma regeneration."
 fi
