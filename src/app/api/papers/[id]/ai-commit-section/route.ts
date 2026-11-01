@@ -7,6 +7,10 @@ import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { isQuestionContaminated, validateGeneratedQuestion } from "@/lib/questionValidator";
 import { normalizeSubpartMarks } from "@/lib/types";
+import {
+  verifyQuestionAcademicQuality,
+  repairOrRegenerateQuestion,
+} from "@/lib/questionVerificationEngine";
 
 export const POST = route(async (req, { id }, user) => {
   const paper = await loadPaperView(id);
@@ -110,7 +114,7 @@ export const POST = route(async (req, { id }, user) => {
       );
     }
 
-    const valRes = validateGeneratedQuestion(
+    let valRes = validateGeneratedQuestion(
       {
         ...q,
         type: q.type || section.type,
@@ -118,10 +122,48 @@ export const POST = route(async (req, { id }, user) => {
       contractRes.contract,
       { slotIndex: i },
     );
-    if (!valRes.valid) {
+
+    let vRes = verifyQuestionAcademicQuality(
+      {
+        ...q,
+        type: q.type || section.type,
+      } as any,
+      contractRes.contract,
+      { slotIndex: i },
+    );
+
+    if (!valRes.valid || vRes.status === "FAIL") {
+      // Attempt surgical repair
+      const repRes = await repairOrRegenerateQuestion(
+        {
+          ...q,
+          type: q.type || section.type,
+        } as any,
+        contractRes.contract,
+        { slotIndex: i, maxRetries: 1 },
+      );
+
+      if (repRes.success) {
+        questions[i] = {
+          ...q,
+          text: repRes.question.text,
+          options: repRes.question.options || q.options,
+          subparts: repRes.question.subparts || q.subparts,
+          answer: repRes.question.answer || q.answer,
+        } as any;
+        valRes = validateGeneratedQuestion(questions[i] as any, contractRes.contract, { slotIndex: i });
+        vRes = repRes.verificationResult;
+      }
+    }
+
+    if (!valRes.valid || vRes.status === "FAIL") {
+      const issuesCombined = [
+        ...valRes.issues.map((iss) => iss.message),
+        ...vRes.allIssues.map((iss) => iss.message),
+      ];
       throw new HttpError(
         422,
-        `Question ${i + 1} failed quality validation: ${valRes.issues.map((iss) => iss.message).join("; ")}`,
+        `Question ${i + 1} failed independent quality validation: ${issuesCombined.join("; ")}`,
       );
     }
   }

@@ -3543,23 +3543,25 @@ export function buildAndValidateGenerationContract(params: {
   requiredCount?: number | null;
   slots?: Array<{
     slotIndex: number;
-    chapterId: string;
-    chapterNumber: number;
+    chapterId?: string;
+    chapterNumber?: number;
     chapterTitle: string;
     marks: number;
     requiresInternalChoice?: boolean;
+    curriculumSpec?: any;
+    [key: string]: any;
   }>;
   validBookChapterIds?: Set<string>;
 }): GenerationContractValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  const rawSubject = (params.subject || "").trim();
+  const rawSubject = (params.subject || (params as any).canonicalSubject || "").trim();
   if (!rawSubject) {
     errors.push("Subject metadata is missing from the generation request.");
   }
 
-  const className = (params.className || "").trim();
+  const className = (params.className || (params as any).grade ? String(params.className || (params as any).grade).startsWith("Class") ? String(params.className || (params as any).grade) : `Class ${(params as any).grade}` : "").trim();
   if (!className) {
     errors.push("Class name is missing from the generation request.");
   }
@@ -3748,7 +3750,9 @@ export function buildAndValidateGenerationContract(params: {
       internalChoiceRequirement: slotChoiceReq,
       choicePolicy,
       curriculumPayload,
-      curriculumSpec: getChapterCurriculumSpec(rawSubject, s.chapterTitle || `Chapter ${idx + 1}`, className),
+      curriculumSpec: (s as any).curriculumSpec
+        ? { ...getChapterCurriculumSpec(rawSubject, s.chapterTitle || `Chapter ${idx + 1}`, className), ...(s as any).curriculumSpec }
+        : getChapterCurriculumSpec(rawSubject, s.chapterTitle || `Chapter ${idx + 1}`, className),
     };
   });
 

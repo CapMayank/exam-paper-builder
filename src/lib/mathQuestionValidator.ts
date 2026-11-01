@@ -191,6 +191,10 @@ export function evaluateArithmeticExpression(rawExpr: string): number | null {
  * Scans text for explicit arithmetic equality statements (e.g. "15 * 12 = 170" or "25 + 15 = 40")
  * and validates that LHS equals RHS within tolerance.
  */
+/**
+ * Scans text for explicit arithmetic equality statements (e.g. "15 * 12 = 170" or "25 + 15 = 40")
+ * and validates that LHS equals RHS within tolerance.
+ */
 export function validateArithmeticEquality(text: string): {
   isValid: boolean;
   statement?: string;
@@ -210,34 +214,50 @@ export function validateArithmeticEquality(text: string): {
       continue;
     }
 
-    // Matches arithmetic expressions: 15 \times 12 = 170, 25 + 15 = 40, 1/2 + 1/4 = 3/4
-    const eqRegex = /(?:^|[^a-zA-Z0-9_\\])([0-9+\-*/^().\s\\a-z{}×÷]+)\s*=\s*([0-9+\-*/^().\s\\a-z{}×÷]+)(?:$|[^a-zA-Z0-9_\\])/gi;
-    let match: RegExpExecArray | null;
+    // Split by '=' to inspect each adjacent equation step (supports chained equalities like A = B = 100 / 5 = 50 m/s)
+    const eqParts = trimmed.split("=");
+    if (eqParts.length >= 2) {
+      for (let p = 0; p < eqParts.length - 1; p++) {
+        let rawLhs = eqParts[p].trim();
+        let rawRhs = eqParts[p + 1].trim();
 
-    while ((match = eqRegex.exec(trimmed)) !== null) {
-      const rawLhs = match[1].trim();
-      const rawRhs = match[2].trim();
+        // Strip leading non-math words if LHS has prose context (e.g., "Solving gives 25 * 4", "The speed is 100 / 5")
+        if (p === 0) {
+          rawLhs = rawLhs.replace(/^.*?\b(?:is|as|gives|gives:|gives\s+\$|calculate:|solve:|evaluates to)\s*/i, "").trim();
+          rawLhs = rawLhs.replace(/^[^0-9+\-*/^().\\a-z{}×÷$]+/, "").trim();
+        }
 
-      // At least one side must contain an arithmetic operator (+, -, *, /, \times, \div, \cdot, \frac)
-      const hasArithmeticOp =
-        /[+\-*/×÷]|\\times|\\div|\\cdot|\\frac/i.test(rawLhs) ||
-        /[+\-*/×÷]|\\times|\\div|\\cdot|\\frac/i.test(rawRhs);
+        // Strip trailing units, punctuation, and prose from RHS (e.g., "50 m/s.", "115.", "20 units")
+        rawRhs = rawRhs.replace(/\s*(?:m\/s|km\/h|cm|mm|m|km|s|sec|seconds?|kg|g|mg|N|J|W|V|A|Hz|Pa|mol|hours?|hrs?|min|minutes?|days?|years?|units?|°[CcFf]?|%|[a-zA-Z]+)?[.,;?!]?$/, "").trim();
 
-      if (!hasArithmeticOp) continue;
+        // At least one side must contain an arithmetic operator or be an arithmetic computation
+        const hasArithmeticOp =
+          /[+\-*/×÷]|\\times|\\div|\\cdot|\\frac/i.test(rawLhs) ||
+          /[+\-*/×÷]|\\times|\\div|\\cdot|\\frac/i.test(rawRhs);
 
-      // Check if both sides only contain arithmetic tokens
-      const lhsVal = evaluateArithmeticExpression(rawLhs);
-      const rhsVal = evaluateArithmeticExpression(rawRhs);
+        if (!hasArithmeticOp) continue;
 
-      if (lhsVal !== null && rhsVal !== null && isFinite(lhsVal) && isFinite(rhsVal)) {
-        if (Math.abs(lhsVal - rhsVal) > 1e-4) {
-          return {
-            isValid: false,
-            statement: `${rawLhs} = ${rawRhs}`,
-            lhs: lhsVal,
-            rhs: rhsVal,
-            error: `Arithmetic calculation error: ${rawLhs} evaluates to ${lhsVal}, but is claimed to equal ${rhsVal}.`,
-          };
+        let lhsVal = evaluateArithmeticExpression(rawLhs);
+        if (lhsVal === null) {
+          const trailingMath = rawLhs.replace(/^.*?\b(?:is|as|=|gives|gives:)\s*/i, "").trim();
+          if (trailingMath && trailingMath !== rawLhs) {
+            lhsVal = evaluateArithmeticExpression(trailingMath);
+            if (lhsVal !== null) rawLhs = trailingMath;
+          }
+        }
+
+        const rhsVal = evaluateArithmeticExpression(rawRhs);
+
+        if (lhsVal !== null && rhsVal !== null && isFinite(lhsVal) && isFinite(rhsVal)) {
+          if (Math.abs(lhsVal - rhsVal) > 1e-4) {
+            return {
+              isValid: false,
+              statement: `${rawLhs} = ${rawRhs}`,
+              lhs: lhsVal,
+              rhs: rhsVal,
+              error: `Arithmetic calculation error: ${rawLhs} evaluates to ${lhsVal}, but is claimed to equal ${rhsVal}.`,
+            };
+          }
         }
       }
     }

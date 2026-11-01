@@ -42,6 +42,12 @@ import { normalizeQuestionType } from "./paperImport";
 import { ensureLanguageNonChapterUnits } from "./syllabusImport";
 import { parseGeminiJsonWithLatexSafety, repairLatex } from "./math";
 import { normalizeSubpartMarks, type SubPart } from "./types";
+import { getSubjectPromptDirectives } from "./subjectPrompts";
+import {
+  verifyQuestionAcademicQuality,
+  repairOrRegenerateQuestion,
+} from "./questionVerificationEngine";
+import { auditPaperEvidenceBased } from "./evidenceAuditEngine";
 
 export interface GeminiCallResult<T> {
   success: boolean;
@@ -328,14 +334,27 @@ export async function generateQuestionsWithGemini(params: {
 
   const contract = contractRes.contract;
   const chapterSpec = contract.slots[0].curriculumSpec;
+  const subjectDirectives = getSubjectPromptDirectives(
+    contract.canonicalSubject,
+    contract.className,
+    language,
+    (contract.subjectVariant as any) || "STANDARD",
+  );
 
   const systemPrompt = `You are a strict, experienced ${contract.boardDisplayName} Senior Examiner and ${contract.canonicalSubject} Curriculum Specialist.
 Your task is to generate authentic, mathematically/scientifically rigorous examination questions strictly aligned with the ${contract.className} ${contract.canonicalSubject} syllabus (${contract.academicSession}, Subject Code: ${contract.subjectCode}).
-STRICT DOMAIN ISOLATION:
+${subjectDirectives.systemDirective}
+
+STRICT DOMAIN ISOLATION & SUBJECT DIRECTIVES:
 - Generate questions ONLY for ${contract.canonicalSubject} (Chapter: "${chapter}").
 - Allowed syllabus topics: ${chapterSpec.includedTopics.join("; ")}
 ${chapterSpec.deletedTopics.length > 0 ? `- Deleted/Excluded topics (DO NOT ASK): ${chapterSpec.deletedTopics.join("; ")}` : ""}
 ${contract.forbiddenCrossSubjectDomains.length > 0 ? `- FORBIDDEN cross-subject domains (NEVER include): ${contract.forbiddenCrossSubjectDomains.join("; ")}` : ""}
+- Solvability & Validity:
+${subjectDirectives.solvabilityRules.map((r) => `  * ${r}`).join("\n")}
+- Completeness & Clear Conditions:
+${subjectDirectives.completenessRules.map((r) => `  * ${r}`).join("\n")}
+- Rubric: ${subjectDirectives.rubricDirective}
 - NEVER output generic placeholder templates or cross-subject content.
 Output format: JSON array of question objects only. No conversational wrapper.`;
 
@@ -1037,6 +1056,13 @@ export async function generatePaperSectionWithGemini(
   const anySlotRequiresChoice = contract.slots.some((s) => s.requiresInternalChoice);
   const choiceForbidden = contract.internalChoiceRequirement.forbidden;
 
+  const subjectDirectives = getSubjectPromptDirectives(
+    contract.canonicalSubject,
+    contract.className,
+    language,
+    (contract.subjectVariant as any) || "STANDARD",
+  );
+
   // Check section and chapter visual eligibility
   const sectionEligible = isSectionVisuallyEligible(normalizedType, contract.rawSubject);
   const visualSlotIndices = slots
@@ -1048,6 +1074,7 @@ export async function generatePaperSectionWithGemini(
 
   const systemPrompt = `You are an elite, senior board examiner, question paper setter, and ${contract.canonicalSubject} curriculum specialist for ${contract.boardDisplayName}.
 Your objective is to generate rigorous, authentic, high-standard ${contract.canonicalSubject} examination questions for ${contract.className} (Session: ${contract.academicSession}, Syllabus: ${contract.syllabusVersion}, Subject Code: ${contract.subjectCode}).
+${subjectDirectives.systemDirective}
 
 STRICT CURRICULUM & DOMAIN INTEGRITY CONTRACT:
 1. Every question, option, distractor, and model answer MUST strictly belong to ${contract.canonicalSubject} (${contract.className}) and the exact chapter assigned to its slot.
@@ -1104,7 +1131,13 @@ ${contract.forbiddenCrossSubjectDomains.length > 0 ? `2. FORBIDDEN CROSS-SUBJECT
    - 5-mark questions: 100% mandatory internal choice. Target answer length: ~150 words.
    - Rubric: For all subjective questions, model answers MUST provide a step-wise mark distribution totaling the exact slot marks.
 17. Echo the stable "slotId" provided in each slot specification inside the returned JSON question object.
-18. Return ONLY a valid JSON array of question objects. No markdown wrapping or conversational commentary.`;
+18. Return ONLY a valid JSON array of question objects. No markdown wrapping or conversational commentary.
+19. SUBJECT-SPECIFIC ACADEMIC QUALITY DIRECTIVES (${subjectDirectives.subjectName}):
+- Solvability & Numerical Solvability:
+${subjectDirectives.solvabilityRules.map((r) => `  * ${r}`).join("\n")}
+- Completeness & Clear Conditions:
+${subjectDirectives.completenessRules.map((r) => `  * ${r}`).join("\n")}
+- Marking Scheme Rubric: ${subjectDirectives.rubricDirective}`;
 
   const slotsDescription = contract.slots
     .map((s, idx) => {
@@ -1720,6 +1753,31 @@ JSON Array Output Schema:
     }
 
     let normalizedQuestions = await normalizeRawSectionData(callResult.data);
+
+    // Multi-stage surgical question-level verification & repair
+    for (let i = 0; i < normalizedQuestions.length; i++) {
+      const q = normalizedQuestions[i];
+      const vRes = verifyQuestionAcademicQuality(q as any, contract, {
+        slotIndex: i,
+        existingQuestionTexts,
+      });
+      if (vRes.status === "FAIL") {
+        const repRes = await repairOrRegenerateQuestion(q as any, contract, {
+          slotIndex: i,
+          maxRetries: 1,
+        });
+        if (repRes.success) {
+          normalizedQuestions[i] = {
+            ...q,
+            text: repRes.question.text,
+            options: repRes.question.options || q.options,
+            subparts: repRes.question.subparts || q.subparts,
+            answer: repRes.question.answer || q.answer,
+          };
+        }
+      }
+    }
+
     let validation = validateGeneratedSection(
       normalizedQuestions,
       contract,
@@ -2040,160 +2098,13 @@ export async function auditPaperWithGemini(params: {
   }>;
   apiKey?: string | null;
 }): Promise<GeminiCallResult<PaperAuditReport>> {
-  const { paperTitle, className, subject, totalMarks, questions, apiKey } = params;
-
-  const systemPrompt = `You are the Chief Moderator of the CBSE Board Examination Cell.
-Audit the submitted examination paper thoroughly. Evaluate cognitive distribution across Bloom's Taxonomy, verify MCQ integrity (no duplicate/flawed options), verify calculation accuracy, check clarity of instructions, and flag potential student confusion.`;
-
-  const userPrompt = `Audit this complete examination paper:
-- Paper: "${paperTitle}"
-- Class: ${className}
-- Subject: ${subject}
-- Total Marks: ${totalMarks}
-- Total Questions: ${questions.length}
-
-Questions in Paper:
-${JSON.stringify(
-  questions.map((q) => ({
-    id: q.id,
-    number: q.number,
-    section: q.sectionTitle,
-    type: q.type,
-    marks: q.marks,
-    difficulty: q.difficulty,
-    text: (q.text || "").slice(0, 150),
-    options: q.options || [],
-    answer: (q.answer || "").slice(0, 80),
-  })),
-  null,
-  2,
-)}
-
-CBSE Standard Cognitive Norms:
-- Remembering: 20-25%
-- Understanding: 30-35%
-- Applying: 25-30%
-- Analyzing / Evaluating (HOTS): 10-15%
-
-Return a JSON object strictly matching this TypeScript structure:
-{
-  "paperTitle": "${paperTitle}",
-  "totalQuestions": ${questions.length},
-  "totalMarks": ${totalMarks},
-  "cognitiveBalance": {
-    "rememberingPct": 25,
-    "understandingPct": 35,
-    "applyingPct": 25,
-    "analyzingHotsPct": 15,
-    "cbseBenchmark": {
-      "remembering": "20-25%",
-      "understanding": "30-35%",
-      "applying": "25-30%",
-      "analyzingHots": "10-15%"
-    },
-    "rating": "EXCELLENT",
-    "summary": "Cognitive weightage closely mirrors official CBSE curriculum guidelines."
-  },
-  "issues": [
-    {
-      "questionId": "q_id",
-      "questionNumber": 1,
-      "sectionTitle": "Section A",
-      "severity": "HIGH", // HIGH | MEDIUM | LOW
-      "type": "FLAWED_MCQ", // FLAWED_MCQ | AMBIGUITY | CALCULATION_MISMATCH | SYLLABUS_OUTLIER | DIFFICULTY_IMBALANCE
-      "description": "Specific issue description",
-      "suggestedFix": "How the teacher should modify this question",
-      "fixedText": "Proposed reworded question text",
-      "fixedOptions": ["Option A", "Option B", "Option C", "Option D"] // optional if MCQ
-    }
-  ],
-  "overallVerdict": "Summary report on paper quality, exam cell readiness, and print approval."
-}`;
-
-  const mockFallback = (): PaperAuditReport => {
-    const issues: PaperAuditReport["issues"] = [];
-
-    // Scan for obvious empty, duplicate, or flawed MCQ options
-    questions.forEach((q) => {
-      if (q.type === "MCQ") {
-        const uniqueOpts = new Set((q.options || []).map((o) => (o || "").trim().toLowerCase()));
-        if ((q.options || []).length < 4 || uniqueOpts.size < (q.options || []).length) {
-          issues.push({
-            questionId: q.id,
-            questionNumber: q.number,
-            sectionTitle: q.sectionTitle,
-            severity: "HIGH",
-            type: "FLAWED_MCQ",
-            description: "MCQ contains duplicate options or fewer than 4 choices.",
-            suggestedFix: "Provide 4 distinct, plausible distractors for standard board alignment.",
-            fixedText: q.text,
-            fixedOptions: [
-              q.options[0] || "Distinct Option A",
-              q.options[1] || "Distinct Option B",
-              "Alternative Option C",
-              "Alternative Option D",
-            ],
-          });
-        } else if (q.options.some((o) => !o || o.trim().length === 0)) {
-          issues.push({
-            questionId: q.id,
-            questionNumber: q.number,
-            sectionTitle: q.sectionTitle,
-            severity: "HIGH",
-            type: "FLAWED_MCQ",
-            description: "MCQ contains empty or missing option text.",
-            suggestedFix: "Fill in all 4 options (A, B, C, D) before sending to printing.",
-            fixedText: q.text,
-            fixedOptions: q.options.map((o, idx) => (o && o.trim()) || `Verified Option ${String.fromCharCode(65 + idx)}`),
-          });
-        }
-      }
-      if (q.text.length < 15) {
-        issues.push({
-          questionId: q.id,
-          questionNumber: q.number,
-          sectionTitle: q.sectionTitle,
-          severity: "MEDIUM",
-          type: "AMBIGUITY",
-          description: "Question statement is unusually brief and may lack sufficient context.",
-          suggestedFix: "Expand the problem statement with specific conditions and required units.",
-          fixedText: `${q.text} (Provide your answer with appropriate units and justification).`,
-        });
-      }
-    });
-
-    return {
-      paperTitle,
-      totalQuestions: questions.length,
-      totalMarks,
-      cognitiveBalance: {
-        rememberingPct: 22,
-        understandingPct: 38,
-        applyingPct: 26,
-        analyzingHotsPct: 14,
-        cbseBenchmark: {
-          remembering: "20-25%",
-          understanding: "30-35%",
-          applying: "25-30%",
-          analyzingHots: "10-15%",
-        },
-        rating: issues.length > 0 ? "BALANCED" : "EXCELLENT",
-        summary:
-          "The question paper presents an admirable distribution across Bloom's cognitive tiers. Section A builds confidence with foundational recall, while Sections C and D effectively test higher-order synthesis.",
-      },
-      issues,
-      overallVerdict:
-        issues.length === 0
-          ? "Certified Ready for Print: Fully compliant with CBSE board pattern and school exam cell standards."
-          : `Review Needed: ${issues.length} minor item(s) recommended for teacher refinement prior to print run.`,
-    };
+  const auditReport = await auditPaperEvidenceBased(params);
+  return {
+    success: true,
+    isMock: false,
+    modelUsed: "evidence-audit-engine",
+    data: auditReport as unknown as PaperAuditReport,
   };
-
-  return callGeminiApi<PaperAuditReport>(userPrompt, systemPrompt, {
-    json: true,
-    apiKey,
-    mockFallback,
-  });
 }
 
 /* ------------------------------------------------------------------ */
