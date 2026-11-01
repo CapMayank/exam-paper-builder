@@ -202,7 +202,7 @@ describe("MP Board Subject-Based Heading Language & Application Seeding", () => 
   });
 
   describe("5. Deployment Script Hygiene", () => {
-    it("ensures scripts/deploy.sh contains NO blueprint seeding logic", () => {
+    it("ensures scripts/deploy.sh follows professional standards without destructive reset or seeding logic", () => {
       const deployScriptPath = path.resolve(process.cwd(), "scripts/deploy.sh");
       expect(fs.existsSync(deployScriptPath)).toBe(true);
 
@@ -210,6 +210,9 @@ describe("MP Board Subject-Based Heading Language & Application Seeding", () => 
       expect(content).not.toContain("seed:mpbse");
       expect(content).not.toContain("seed-mpbse");
       expect(content).not.toContain("prisma/seed");
+      expect(content).not.toContain("reset --hard");
+      expect(content).toContain("--ff-only");
+      expect(content).toContain("pm2 reload");
     });
   });
 });
