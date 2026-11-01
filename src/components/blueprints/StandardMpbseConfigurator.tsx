@@ -83,6 +83,13 @@ export function StandardMpbseConfigurator({
     );
   }, [filteredTemplates, selectedSubjectCode, selectedVariant]);
 
+  const isApplied = Boolean(
+    matchedTemplate && (
+      currentTemplateId === matchedTemplate.id ||
+      currentTemplateId === matchedTemplate.templateCode
+    )
+  );
+
   const hasVariants = Boolean(matchedTemplate?.variant);
 
   return (
@@ -123,6 +130,7 @@ export function StandardMpbseConfigurator({
               if (firstTpl && firstTpl.subjectCode) {
                 setSelectedSubjectCode(firstTpl.subjectCode);
                 setSelectedVariant(firstTpl.variant || "Standard");
+                onLoadTemplate(firstTpl);
               }
             }}
             disabled={isReadOnly}
@@ -144,7 +152,19 @@ export function StandardMpbseConfigurator({
             <select
               value={selectedStream}
               onChange={(e) => {
-                setSelectedStream(e.target.value);
+                const str = e.target.value;
+                setSelectedStream(str);
+                const tpl = classTemplates.find((t) => {
+                  if (str === "SCIENCE_BIO") return t.stream === "SCIENCE" || t.stream === "SCIENCE_BIO";
+                  if (str === "SCIENCE_PCM") return t.stream === "SCIENCE" || t.stream === "SCIENCE_PCM";
+                  if (str === "SECONDARY_GENERAL") return t.stream === "SECONDARY_GENERAL";
+                  return true;
+                });
+                if (tpl && tpl.subjectCode) {
+                  setSelectedSubjectCode(tpl.subjectCode);
+                  if (tpl.variant) setSelectedVariant(tpl.variant);
+                  onLoadTemplate(tpl);
+                }
               }}
               disabled={isReadOnly}
               className="select select-sm w-full bg-white border-slate-200 text-xs font-semibold rounded-lg shadow-2xs"
@@ -170,6 +190,7 @@ export function StandardMpbseConfigurator({
               setSelectedSubjectCode(code);
               const tpl = filteredTemplates.find((t) => t.subjectCode === code);
               if (tpl?.variant) setSelectedVariant(tpl.variant);
+              if (tpl) onLoadTemplate(tpl);
             }}
             disabled={isReadOnly}
             className="select select-sm w-full bg-white border-slate-200 text-xs font-semibold rounded-lg shadow-2xs"
@@ -190,7 +211,12 @@ export function StandardMpbseConfigurator({
             </label>
             <select
               value={selectedVariant}
-              onChange={(e) => setSelectedVariant(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value;
+                setSelectedVariant(v);
+                const tpl = filteredTemplates.find((t) => t.subjectCode === selectedSubjectCode && t.variant?.toLowerCase() === v.toLowerCase());
+                if (tpl) onLoadTemplate(tpl);
+              }}
               disabled={isReadOnly}
               className="select select-sm w-full bg-white border-slate-200 text-xs font-semibold rounded-lg shadow-2xs"
             >
@@ -228,9 +254,21 @@ export function StandardMpbseConfigurator({
             type="button"
             onClick={() => onLoadTemplate(matchedTemplate)}
             disabled={isReadOnly}
-            className="btn btn-sm btn-primary bg-emerald-600 hover:bg-emerald-700 border-emerald-600 text-white font-bold text-xs px-4 shrink-0 flex items-center gap-1.5 shadow-xs"
+            className={`btn btn-sm text-xs font-bold px-4 shrink-0 flex items-center gap-1.5 shadow-xs transition ${
+              isApplied
+                ? "bg-emerald-50 border border-emerald-300 text-emerald-800 hover:bg-emerald-100"
+                : "btn-primary bg-emerald-600 hover:bg-emerald-700 border-emerald-600 text-white"
+            }`}
           >
-            <Sparkles size={14} /> 1-Click Load Official Blueprint
+            {isApplied ? (
+              <>
+                <Check size={14} className="text-emerald-600" /> 1-Click Load Official Blueprint (Active)
+              </>
+            ) : (
+              <>
+                <Sparkles size={14} /> 1-Click Load Official Blueprint
+              </>
+            )}
           </button>
         </div>
       )}

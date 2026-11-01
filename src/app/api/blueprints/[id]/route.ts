@@ -40,6 +40,35 @@ export const PUT = route(async (req, { id }, user) => {
 
   await assertBlueprintValid(input);
 
+  // Safely resolve foreign key IDs so template codes never trigger constraint violations
+  let validTemplateId: string | null = null;
+  if (input.curriculumTemplateId) {
+    const tmpl = await prisma.curriculumBlueprintTemplate.findFirst({
+      where: {
+        OR: [
+          { id: input.curriculumTemplateId },
+          { templateCode: input.curriculumTemplateId },
+        ],
+      },
+      select: { id: true },
+    });
+    validTemplateId = tmpl?.id || null;
+  }
+
+  let validVariantId: string | null = null;
+  if (input.curriculumVariantId) {
+    const v = await prisma.curriculumSubjectVariant.findFirst({
+      where: {
+        OR: [
+          { id: input.curriculumVariantId },
+          { code: input.curriculumVariantId },
+        ],
+      },
+      select: { id: true },
+    });
+    validVariantId = v?.id || null;
+  }
+
   const existingSectionIds = new Set(existing.sections.map((s) => s.id));
   const inputSectionIds = new Set(input.sections.map((s) => s.id).filter((sid): sid is string => Boolean(sid)));
   const removedSections = existing.sections.filter((s) => !inputSectionIds.has(s.id));
@@ -142,8 +171,8 @@ export const PUT = route(async (req, { id }, user) => {
         subjectCode: input.subjectCode ?? "",
         language: input.language || "en",
         curriculumMode: input.curriculumMode || "BLANK_CUSTOM",
-        curriculumTemplateId: input.curriculumTemplateId || null,
-        curriculumVariantId: input.curriculumVariantId || null,
+        curriculumTemplateId: validTemplateId,
+        curriculumVariantId: validVariantId,
       },
     });
   });

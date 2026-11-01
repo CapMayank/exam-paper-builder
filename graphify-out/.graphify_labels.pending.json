@@ -7,7 +7,7 @@
   "5": "geometry.ts",
   "6": "package.json",
   "7": "parseMatchColumnPairs",
-  "8": "questionValidator.ts",
+  "8": "sanskrit-academic-quality.test.ts",
   "9": "SyllabusImportModal.tsx",
   "10": "HttpError",
   "11": "papers.ts",
@@ -63,6 +63,5 @@
   "66": "blueprintExport.ts",
   "67": "reconcileBlueprint.ts",
   "70": "SubjectWorkspaceDrawer.tsx",
-  "71": "quota-or-choice-regression.test.ts",
-  "72": "generationObservability.ts"
+  "71": "quota-or-choice-regression.test.ts"
 }

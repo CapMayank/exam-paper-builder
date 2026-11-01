@@ -19,6 +19,36 @@ export const POST = route(async (req) => {
   const input = await body(req, blueprintSchema);
   input.chapters = input.chapters.filter((c) => c.marks > 0);
   await assertBlueprintValid(input);
+
+  // Safely resolve foreign key IDs so template codes never trigger constraint violations
+  let validTemplateId: string | null = null;
+  if (input.curriculumTemplateId) {
+    const tmpl = await prisma.curriculumBlueprintTemplate.findFirst({
+      where: {
+        OR: [
+          { id: input.curriculumTemplateId },
+          { templateCode: input.curriculumTemplateId },
+        ],
+      },
+      select: { id: true },
+    });
+    validTemplateId = tmpl?.id || null;
+  }
+
+  let validVariantId: string | null = null;
+  if (input.curriculumVariantId) {
+    const v = await prisma.curriculumSubjectVariant.findFirst({
+      where: {
+        OR: [
+          { id: input.curriculumVariantId },
+          { code: input.curriculumVariantId },
+        ],
+      },
+      select: { id: true },
+    });
+    validVariantId = v?.id || null;
+  }
+
   const created = await prisma.blueprint.create({
     data: {
       name: input.name,
@@ -29,8 +59,8 @@ export const POST = route(async (req) => {
       subjectCode: input.subjectCode ?? "",
       language: input.language || "en",
       curriculumMode: input.curriculumMode || "BLANK_CUSTOM",
-      curriculumTemplateId: input.curriculumTemplateId || null,
-      curriculumVariantId: input.curriculumVariantId || null,
+      curriculumTemplateId: validTemplateId,
+      curriculumVariantId: validVariantId,
       chapters: { create: input.chapters },
       sections: {
         create: input.sections.map((s, position) => ({

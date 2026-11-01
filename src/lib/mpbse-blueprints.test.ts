@@ -422,4 +422,71 @@ describe("MPBSE Blueprint Engine & Circular 465 Logic", () => {
       expect(errors).toEqual([]);
     });
   });
+
+  // ===========================================================================
+  // SUITE 7: SAFE FOREIGN KEY RESOLUTION & DB SEED COHERENCE
+  // ===========================================================================
+  describe("Suite 7: Safe Foreign Key Resolution for Curriculum Templates", () => {
+    it("safely creates blueprint when curriculumTemplateId is a templateCode string", async () => {
+      const book = await prisma.book.findFirst({
+        where: { className: "Class 10", subject: "Mathematics Standard" },
+        include: { chapters: true },
+      }) || await prisma.book.findFirst({
+        where: { className: "Class 10" },
+        include: { chapters: true },
+      });
+      if (!book || book.chapters.length === 0) return;
+
+      const templateCode = "mpbse-10th-mathematics-standard-100-75m";
+      const tmpl = await prisma.curriculumBlueprintTemplate.findFirst({
+        where: { OR: [{ id: templateCode }, { templateCode }] },
+        select: { id: true },
+      });
+
+      // Validates that template exists in seeded database
+      expect(tmpl).not.toBeNull();
+
+      // Test database creation with template's real ID
+      const created = await prisma.blueprint.create({
+        data: {
+          name: "Test Blueprint Safe FK",
+          bookId: book.id,
+          academicSession: "2026-27",
+          examType: "ANNUAL",
+          durationMin: 180,
+          curriculumMode: "STANDARD_MPBSE",
+          curriculumTemplateId: tmpl?.id || null,
+          sections: {
+            create: [
+              {
+                title: "Section A",
+                type: "MCQ",
+                count: 5,
+                marksEach: 1,
+                position: 0,
+              },
+            ],
+          },
+          chapters: {
+            create: [
+              {
+                chapterId: book.chapters[0].id,
+                marks: 5,
+              },
+            ],
+          },
+        },
+        include: {
+          curriculumTemplate: true,
+        },
+      });
+
+      expect(created.id).toBeDefined();
+      expect(created.curriculumTemplateId).toBe(tmpl!.id);
+      expect(created.curriculumTemplate?.templateCode).toBe(templateCode);
+
+      // Cleanup test blueprint
+      await prisma.blueprint.delete({ where: { id: created.id } });
+    });
+  });
 });

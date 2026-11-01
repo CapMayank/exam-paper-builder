@@ -19,16 +19,11 @@ else
   echo "📦 Dependencies unchanged, skipping npm ci (saves ~3 minutes)."
 fi
 
-# Only run Prisma generate/sync if schema changed or client is missing
-if [ ! -d "node_modules/.prisma/client" ] || [ -z "$PREV_COMMIT" ] || git diff --name-only "$PREV_COMMIT" HEAD | grep -q 'prisma/schema.prisma'; then
-  echo "🗄️ Generating Prisma client and syncing schema..."
-  npx prisma generate
-  npx prisma db push --skip-generate
-  echo "🌱 Seeding MPBSE curriculum and blueprint templates..."
-  npm run seed:mpbse
-else
-  echo "🗄️ Database schema unchanged, skipping Prisma regeneration."
-fi
+echo "🗄️ Generating Prisma client and syncing schema..."
+npx prisma generate
+npx prisma db push --skip-generate
+echo "🌱 Ensuring MPBSE curriculum and blueprint templates are seeded..."
+npm run seed:mpbse
 
 echo "⚙️ Building Next.js production bundle..."
 NODE_OPTIONS='--max-old-space-size=2048' npm run build

@@ -1,17 +1,17 @@
 # Graph Report - exam-paper-builder  (2026-11-01)
 
 ## Corpus Check
-- 298 files · ~1,124,685 words
+- 298 files · ~493,363 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 6 file(s) not represented in the graph (top: (none) 3, .prisma 1, .ico 1)
 
 ## Summary
-- 1778 nodes · 6662 edges · 66 communities (62 shown, 4 thin omitted)
+- 1778 nodes · 6663 edges · 65 communities (61 shown, 4 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 46 edges (avg confidence: 0.88)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `fc3ec1e2`
+- Built from commit: `77bd9db9`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -24,7 +24,7 @@
 - geometry.ts
 - package.json
 - parseMatchColumnPairs
-- questionValidator.ts
+- sanskrit-academic-quality.test.ts
 - SyllabusImportModal.tsx
 - HttpError
 - papers.ts
@@ -80,7 +80,6 @@
 - reconcileBlueprint.ts
 - SubjectWorkspaceDrawer.tsx
 - quota-or-choice-regression.test.ts
-- generationObservability.ts
 
 ## God Nodes (most connected - your core abstractions)
 1. `HttpError` - 137 edges
@@ -109,7 +108,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (66 total, 4 thin omitted)
+## Communities (65 total, 4 thin omitted)
 
 ### Community 0 - "kindergarten/types.ts"
 Cohesion: 0.07
@@ -143,9 +142,9 @@ Nodes (12): name, private, version, prisma, react-dom, tailwindcss, @tailwindcss
 Cohesion: 0.22
 Nodes (21): QuestionPicker(), add(), handleAcceptAiQuestion(), handleEditAiQuestion(), handleGenerateAiQuestion(), SectionAiModal(), handleCommit(), SectionAiModalProps (+13 more)
 
-### Community 8 - "questionValidator.ts"
-Cohesion: 0.20
-Nodes (13): BIOLOGY_CONTAMINATION_PATTERNS, checkDeletedSyllabusTopics(), CHEMISTRY_DELETED_RULES, CHEMISTRY_TEMPLATE_PATTERNS, ChemistryDeletedRule, doesMcqAnswerMatchOptions(), GENERIC_TEMPLATE_PATTERNS, QuestionValidationResult (+5 more)
+### Community 8 - "sanskrit-academic-quality.test.ts"
+Cohesion: 0.23
+Nodes (9): evaluateSanskritCompetencyCoverage(), SANSKRIT_COMPETENCY_TAXONOMY, RAW_OFFICIAL_2026_ITEMS, RAW_SANSKRIT_ITEMS, SANSKRIT_CLASS10_BLUEPRINT, SANSKRIT_CLASS10_PAPER, SANSKRIT_MPBSE_2026_BLUEPRINT, SANSKRIT_MPBSE_2026_PAPER (+1 more)
 
 ### Community 9 - "SyllabusImportModal.tsx"
 Cohesion: 0.10
@@ -208,16 +207,16 @@ Cohesion: 0.06
 Nodes (52): RFC-4180, assert(), runServerChecks(), MultiSetGeneratorModal(), QuestionDuplicateModalProps, BatchImportError, BatchImportOptions, BatchImportReport (+44 more)
 
 ### Community 24 - "questionValidator.ts"
-Cohesion: 0.20
-Nodes (13): vitest, buildAndValidateGenerationContract(), getForbiddenDomainsForSubject(), createSubjectContract(), createSubjectContract(), createSubjectContract(), createTestContract(), createTestContract() (+5 more)
+Cohesion: 0.12
+Nodes (25): buildAndValidateGenerationContract(), getForbiddenDomainsForSubject(), createSubjectContract(), createSubjectContract(), createSubjectContract(), createTestContract(), createTestContract(), createTestContract() (+17 more)
 
 ### Community 25 - "AppShell.tsx"
 Cohesion: 0.12
 Nodes (20): AppLayout(), LoginPage(), submit(), AcademicSessionSelector(), handleAddCustom(), handleSelectSession(), AcademicSessionSelectorProps, AppShell() (+12 more)
 
 ### Community 26 - "curriculumContract.ts"
-Cohesion: 0.07
-Nodes (36): QuestionType, CBSE_SECONDARY_CODES, CBSE_SENIOR_CODES, ChapterCurriculumSpec, ChoicePolicy, ChoicePolicyType, CLASS_10_SANSKRIT_SPECS, CLASS_12_MATH_CHAPTER_SPECS (+28 more)
+Cohesion: 0.09
+Nodes (28): CBSE_SECONDARY_CODES, CBSE_SENIOR_CODES, ChapterCurriculumSpec, ChoicePolicy, ChoicePolicyType, CLASS_10_SANSKRIT_SPECS, CLASS_12_MATH_CHAPTER_SPECS, CurriculumGenerationPayload (+20 more)
 
 ### Community 27 - "blueprints/page.tsx"
 Cohesion: 0.10
@@ -272,8 +271,8 @@ Cohesion: 0.10
 Nodes (32): UsersAdminPage(), ExamCellPage(), QuestionExportModal(), QuestionImportModal(), handleFileChange(), validateContent(), QuestionsPage(), remove() (+24 more)
 
 ### Community 40 - "m3-forensic-adversarial.test.ts"
-Cohesion: 0.38
-Nodes (15): GenerationContract, CoordinatePoint, evaluateArithmeticExpression(), extractCoordinatePoints(), MathToken, normalizeMathString(), parseQuadraticEquation(), QuadraticCoefficients (+7 more)
+Cohesion: 0.37
+Nodes (16): vitest, GenerationContract, CoordinatePoint, evaluateArithmeticExpression(), extractCoordinatePoints(), MathToken, normalizeMathString(), parseQuadraticEquation() (+8 more)
 
 ### Community 41 - "internalChoiceRules.ts"
 Cohesion: 0.13
@@ -320,8 +319,8 @@ Cohesion: 0.18
 Nodes (28): docx, buildPaperDocx(), GET, renderQuestionOptions(), renderQuestionTextWithTable(), renderSubpartsDocx(), openCreate(), Block (+20 more)
 
 ### Community 58 - "gemini.ts"
-Cohesion: 0.14
-Nodes (30): GET, derangeMatchColumnPairs(), extractMatchPairsFromExplanation(), cleanChapterTitleForLookup(), generateCurriculumGroundedSectionQuestions(), getChapterCurriculumSpec(), getMaxPaperDiagramBudget(), isSectionVisuallyEligible() (+22 more)
+Cohesion: 0.13
+Nodes (32): GET, derangeMatchColumnPairs(), extractMatchPairsFromExplanation(), cleanChapterTitleForLookup(), generateCurriculumGroundedSectionQuestions(), getChapterCurriculumSpec(), auditPaperWithGemini(), callGeminiApi() (+24 more)
 
 ### Community 59 - "layout.ts"
 Cohesion: 0.08
@@ -332,8 +331,8 @@ Cohesion: 0.10
 Nodes (29): server-only, GET, POST, GET, POST, DELETE, PATCH, GET (+21 more)
 
 ### Community 61 - "subpartExtractor.ts"
-Cohesion: 0.17
-Nodes (13): GeneratedPaperQuestion, GeneratedQuestionItem, DecomposedSubpartsResult, detectAttemptCount(), DEVANAGARI_CONSONANTS, DEVANAGARI_DIGITS, findSequenceMatches(), isFalsePositiveParenthesis() (+5 more)
+Cohesion: 0.14
+Nodes (15): QuestionType, GroundedGeneratedQuestion, GeneratedPaperQuestion, GeneratedQuestionItem, DecomposedSubpartsResult, detectAttemptCount(), DEVANAGARI_CONSONANTS, DEVANAGARI_DIGITS (+7 more)
 
 ### Community 63 - "eslint.config.mjs"
 Cohesion: 0.50
@@ -355,10 +354,6 @@ Nodes (5): COMMON_FORMULA_SNIPPETS, FormulaSnippet, InstructionPreset, STANDARD_
 Cohesion: 0.52
 Nodes (4): evaluatePaperInternalChoiceCompliance(), PreflightReport, validatePaperPreflight(), validateSubPartsSum()
 
-### Community 72 - "generationObservability.ts"
-Cohesion: 0.47
-Nodes (5): GeminiCallResult, GenerationJobTrace, getRecentGenerationTraces(), recentTraces, QuestionValidationIssue
-
 ## Knowledge Gaps
 - **9 isolated node(s):** `@tailwindcss/turbopack`, `@types/katex`, `@types/node`, `@types/react`, `@types/react-dom` (+4 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 465 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
@@ -367,8 +362,8 @@ Nodes (5): GeminiCallResult, GenerationJobTrace, getRecentGenerationTraces(), re
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `vitest` connect `questionValidator.ts` to `kindergarten/types.ts`, `blueprintImport.ts`, `paperImport.ts`, `blueprints.ts`, `package.json`, `parseMatchColumnPairs`, `SyllabusImportModal.tsx`, `HttpError`, `papers.ts`, `dto.ts`, `diagram-search.ts`, `blueprint.ts`, `schemas.ts`, `batchQuestionIo.ts`, `curriculumContract.ts`, `toQuestionDto`, `studio.test.ts`, `m3-forensic-adversarial.test.ts`, `vitest`, `print-logistics.ts`, `math.ts`, `m1-rbac-adversarial-stress.test.ts`, `export-docx/route.ts`, `gemini.ts`, `layout.ts`, `subpartExtractor.ts`, `reconcileBlueprint.ts`, `quota-or-choice-regression.test.ts`?**
-  _High betweenness centrality (0.083) - this node is a cross-community bridge._
+- **Why does `vitest` connect `m3-forensic-adversarial.test.ts` to `kindergarten/types.ts`, `blueprintImport.ts`, `paperImport.ts`, `blueprints.ts`, `package.json`, `parseMatchColumnPairs`, `sanskrit-academic-quality.test.ts`, `SyllabusImportModal.tsx`, `HttpError`, `papers.ts`, `dto.ts`, `diagram-search.ts`, `blueprint.ts`, `schemas.ts`, `batchQuestionIo.ts`, `questionValidator.ts`, `curriculumContract.ts`, `toQuestionDto`, `studio.test.ts`, `vitest`, `print-logistics.ts`, `math.ts`, `m1-rbac-adversarial-stress.test.ts`, `export-docx/route.ts`, `gemini.ts`, `layout.ts`, `subpartExtractor.ts`, `reconcileBlueprint.ts`, `quota-or-choice-regression.test.ts`?**
+  _High betweenness centrality (0.082) - this node is a cross-community bridge._
 - **What connects `@tailwindcss/turbopack`, `@types/katex`, `@types/node` to the rest of the system?**
   _9 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `kindergarten/types.ts` be split into smaller, more focused modules?**

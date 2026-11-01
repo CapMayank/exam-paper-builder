@@ -8,7 +8,7 @@ import { ErrorBanner, Field, useConfirm, useToast } from "@/components/ui";
 import { BlueprintImportModal } from "@/components/BlueprintImportModal";
 import { BlueprintJsonModal } from "@/components/BlueprintJsonModal";
 import { BlueprintTemplateModal } from "@/components/BlueprintTemplateModal";
-import { STANDARD_BLUEPRINT_TEMPLATES, type BlueprintTemplate, type ExaminationTerm, adaptChaptersHamiltonHare } from "@/lib/curriculumTemplates";
+import { MPBSE_BLUEPRINT_TEMPLATES, STANDARD_BLUEPRINT_TEMPLATES, type BlueprintTemplate, type ExaminationTerm, adaptChaptersHamiltonHare } from "@/lib/curriculumTemplates";
 import { StandardMpbseConfigurator } from "@/components/blueprints/StandardMpbseConfigurator";
 import { CustomSchoolTermConfigurator } from "@/components/blueprints/CustomSchoolTermConfigurator";
 import { FeasibilityStatusAlert } from "@/components/blueprints/FeasibilityStatusAlert";
@@ -170,34 +170,28 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
           }
           setAcademicSession(currentSession);
           const urlTemplateId = typeof sp.templateId === "string" ? sp.templateId : undefined;
-          const matchedTmpl = urlTemplateId ? STANDARD_BLUEPRINT_TEMPLATES.find((t) => t.id === urlTemplateId) : null;
+          const matchedTmpl = urlTemplateId ? (STANDARD_BLUEPRINT_TEMPLATES.find((t) => t.id === urlTemplateId) || MPBSE_BLUEPRINT_TEMPLATES.find((t) => t.id === urlTemplateId)) : null;
           if (matchedTmpl) {
-            setExamType(matchedTmpl.examType);
-            setDurationMin(matchedTmpl.durationMin);
-            setSectionGroups(
-              matchedTmpl.sections.map((sec, idx) => ({
-                key: `sec_tmpl_${idx}`,
-                title: sec.title,
-                instructions: sec.instructions,
-                questionTypes: sec.questionTypes.map((qt, qIdx) => ({
-                  key: `qt_tmpl_${idx}_${qIdx}`,
-                  type: qt.type,
-                  count: qt.count,
-                  marksEach: qt.marksEach,
-                })),
-              }))
-            );
+            void handleLoadOfficialTemplate(matchedTmpl as any, bs);
           } else {
-            setSectionGroups([
-              newSectionGroup(
-                {
-                  title: "Section A",
-                  instructions: "All questions are compulsory.",
-                  questionTypes: [newQuestionType({ type: "MCQ", count: 10, marksEach: 1 })],
-                },
-                0
-              ),
-            ]);
+            setCurriculumMode("STANDARD_MPBSE");
+            const targetClassNum = urlClassName
+              ? (parseInt(urlClassName.replace(/[^0-9]/g, ""), 10) || 10)
+              : (initialBook?.className ? (parseInt(initialBook.className.replace(/[^0-9]/g, ""), 10) || 10) : 10);
+            const targetSubCode = urlCode || matchingSubject?.code || "100";
+            const defaultTmpl =
+              MPBSE_BLUEPRINT_TEMPLATES.find(
+                (t) => t.classLevel === targetClassNum && (t.subjectCode === targetSubCode || isSubjectMatching(t.subjectName || "", activeSub))
+              ) ||
+              MPBSE_BLUEPRINT_TEMPLATES.find(
+                (t) => t.classLevel === targetClassNum
+              ) ||
+              MPBSE_BLUEPRINT_TEMPLATES.find((t) => t.templateCode === "mpbse-10th-mathematics-standard-100-75m") ||
+              MPBSE_BLUEPRINT_TEMPLATES[0];
+
+            if (defaultTmpl) {
+              void handleLoadOfficialTemplate(defaultTmpl, bs);
+            }
           }
         }
         setLoaded(true);
@@ -577,10 +571,9 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
     toast.success(`Applied template "${template.title}" (${template.totalMarks} marks)`);
   }
 
-  async function handleLoadOfficialTemplate(template: BlueprintTemplate) {
+  async function handleLoadOfficialTemplate(template: BlueprintTemplate, availableBooks?: Book[]) {
+    const bookList = availableBooks || books;
     setCurriculumMode("STANDARD_MPBSE");
-    setCurriculumTemplateId(template.id);
-    setCurriculumVariantId(null);
     setName(`${template.subjectName || template.title} Class ${template.classLevel} (MPBSE ${academicSession})`);
     setExamType(template.examType);
     setDurationMin(template.durationMin);
@@ -588,16 +581,11 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
       setSubjectCode(template.subjectCode);
     }
 
-    const matchedBook = books.find(
+    let matchedBook = bookList.find(
       (b) =>
         (b.className.includes(String(template.classLevel)) || b.className.toLowerCase() === `class ${template.classLevel}`.toLowerCase()) &&
         isSubjectMatching(b.subject, template.subjectName || template.title)
     );
-    if (matchedBook) {
-      setBookId(matchedBook.id);
-      setSelectedClassFilter(matchedBook.className);
-      setSelectedSubjectFilter(matchedBook.subject);
-    }
 
     const newGroups: SectionGroup[] = template.sections.map((sec, idx) => ({
       key: `sec_mpbse_${Date.now()}_${idx}`,
@@ -617,21 +605,53 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
 
     try {
       const tData = await api<any>(`/api/curriculum/templates/${template.templateCode || template.id}`);
+      if (tData?.id) {
+        setCurriculumTemplateId(tData.id);
+      } else {
+        setCurriculumTemplateId(null);
+      }
+
+      // If tData has textbooks with legacyBookId, try to match book directly
+      const officialTb = tData?.subject?.textbooks?.[0];
+      if (officialTb?.legacyBookId) {
+        const legacyMatch = bookList.find((b) => b.id === officialTb.legacyBookId);
+        if (legacyMatch) matchedBook = legacyMatch;
+      }
+
+      if (matchedBook) {
+        setBookId(matchedBook.id);
+        setSelectedClassFilter(matchedBook.className);
+        setSelectedSubjectFilter(matchedBook.subject);
+      }
+
       const targetBook = matchedBook || book;
-      if (tData?.marksSchemes?.[0]?.chapters && targetBook?.chapters?.length) {
-        const officialChapters = tData.marksSchemes[0].chapters;
+      const officialChapters: any[] = tData?.subject?.textbooks?.flatMap((tb: any) => tb.chapters || []) || [];
+
+      if (officialChapters.length > 0 && targetBook?.chapters?.length) {
         const newMarks: Record<string, number> = {};
         targetBook.chapters.forEach((bc: any) => {
           const match = officialChapters.find((oc: any) =>
+            (oc.legacyChapterId && oc.legacyChapterId === bc.id) ||
             oc.chapterNumber === bc.number ||
-            oc.chapterTitle.trim().toLowerCase() === bc.title.trim().toLowerCase()
+            oc.title.trim().toLowerCase() === bc.title.trim().toLowerCase()
           );
           if (match) {
-            newMarks[bc.id] = match.marks;
+            newMarks[bc.id] = match.isDeleted ? 0 : (typeof match.officialMarks === "number" ? match.officialMarks : 0);
           }
         });
-        if (Object.keys(newMarks).length > 0) {
+
+        const currentSum = Object.values(newMarks).reduce((a, b) => a + b, 0);
+        if (currentSum === template.totalMarks) {
           setMarks(newMarks);
+        } else if (currentSum > 0) {
+          // Proportionally distribute remainder to reach exact target
+          const activeChs = targetBook.chapters
+            .filter((c: any) => (newMarks[c.id] ?? 0) > 0 || newMarks[c.id] === undefined)
+            .map((c: any) => ({ chapterId: c.id, marks: newMarks[c.id] || 4 }));
+          const adapted = adaptChaptersHamiltonHare(activeChs, template.totalMarks);
+          const dist: Record<string, number> = { ...newMarks };
+          adapted.forEach((a) => { dist[a.chapterId] = a.marks; });
+          setMarks(dist);
         } else {
           const adapted = adaptChaptersHamiltonHare(
             targetBook.chapters.map((c: any) => ({ chapterId: c.id, marks: 5 })),
@@ -641,8 +661,22 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
           adapted.forEach((a) => { dist[a.chapterId] = a.marks; });
           setMarks(dist);
         }
+      } else if (targetBook?.chapters?.length) {
+        const adapted = adaptChaptersHamiltonHare(
+          targetBook.chapters.map((c: any) => ({ chapterId: c.id, marks: 5 })),
+          template.totalMarks
+        );
+        const dist: Record<string, number> = {};
+        adapted.forEach((a) => { dist[a.chapterId] = a.marks; });
+        setMarks(dist);
       }
     } catch {
+      setCurriculumTemplateId(null);
+      if (matchedBook) {
+        setBookId(matchedBook.id);
+        setSelectedClassFilter(matchedBook.className);
+        setSelectedSubjectFilter(matchedBook.subject);
+      }
       const targetBook = matchedBook || book;
       if (targetBook?.chapters?.length) {
         const adapted = adaptChaptersHamiltonHare(
@@ -837,39 +871,6 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
         </div>
       )}
 
-      {id === "new" && (
-        <div className="rounded-xl border border-slate-200 bg-white p-3.5 text-xs text-slate-800 flex flex-wrap items-center justify-between gap-2 shadow-2xs">
-          <div className="flex items-center gap-2">
-            <Sparkles size={16} className="text-amber-600 shrink-0" />
-            <span>
-              <strong>Have an official syllabus circular or blueprint file ready?</strong> Use AI extraction or import JSON/CSV to configure sections and chapter marks instantly.
-            </span>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => {
-                setImportModalTab("ai");
-                setImportModalOpen(true);
-              }}
-              className="btn btn-sm btn-ghost bg-indigo-50 border border-indigo-200 text-indigo-900 hover:bg-indigo-100 text-xs font-semibold flex items-center gap-1.5"
-            >
-              <Sparkles size={13} className="text-indigo-600" /> Extract with AI
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setImportModalTab("import");
-                setImportModalOpen(true);
-              }}
-              className="btn btn-sm btn-ghost bg-slate-50 border border-slate-200 text-slate-900 hover:bg-slate-100 text-xs font-semibold flex items-center gap-1.5"
-            >
-              <Upload size={13} /> Import file
-            </button>
-          </div>
-        </div>
-      )}
-      
       {hasPapers && (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-800 shadow-2xs space-y-1.5">
           <div className="flex items-center gap-2 font-bold text-slate-900">
@@ -926,41 +927,93 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
 
       <ErrorBanner message={error} />
 
-      {/* 3 UI Modes Selector */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-2 shadow-xs">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5">
+      {/* Blueprint Mode Selector */}
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden">
+        <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+          <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+            <Layers size={14} className="text-indigo-600" /> Blueprint Creation Mode
+          </span>
+          <span className="text-[11px] text-slate-500">
+            {curriculumMode === "STANDARD_MPBSE"
+              ? "Official MPBSE Board blueprint with Circular 465 rules"
+              : curriculumMode === "CUSTOM_SCHOOL"
+              ? "Adapted for School Examination Terms (Quarterly/Half-Yearly/Pre-Board)"
+              : "Manual blueprint configuration"}
+          </span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-slate-100">
           <button
             type="button"
             onClick={() => setCurriculumMode("STANDARD_MPBSE")}
-            className={`flex-1 py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition ${
+            className={`flex items-start gap-3 p-3.5 text-left transition ${
               curriculumMode === "STANDARD_MPBSE"
-                ? "bg-emerald-600 text-white shadow-xs"
-                : "text-slate-700 hover:bg-slate-100"
+                ? "bg-emerald-50/70 border-l-4 border-l-emerald-600"
+                : "hover:bg-slate-50"
             }`}
           >
-            <ShieldCheck size={16} /> Mode 1: Standard MPBSE Pattern
+            <ShieldCheck size={20} className={curriculumMode === "STANDARD_MPBSE" ? "text-emerald-600 shrink-0 mt-0.5" : "text-slate-400 shrink-0 mt-0.5"} />
+            <div>
+              <div className={`text-xs font-bold flex items-center gap-1.5 ${curriculumMode === "STANDARD_MPBSE" ? "text-emerald-950" : "text-slate-800"}`}>
+                <span>Mode 1: Standard MPBSE Pattern</span>
+                <span className="bg-emerald-200/80 text-emerald-900 text-[10px] font-bold px-1.5 py-0.2 rounded">Recommended</span>
+              </div>
+              <div className="text-[11px] text-slate-600 mt-1 leading-relaxed">
+                Auto-configures official Board question denominations, marks per chapter, and Circular 465 statutory choice rules.
+              </div>
+            </div>
           </button>
+
           <button
             type="button"
             onClick={() => setCurriculumMode("CUSTOM_SCHOOL")}
-            className={`flex-1 py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition ${
+            className={`flex items-start gap-3 p-3.5 text-left transition ${
               curriculumMode === "CUSTOM_SCHOOL"
-                ? "bg-indigo-600 text-white shadow-xs"
-                : "text-slate-700 hover:bg-slate-100"
+                ? "bg-indigo-50/70 border-l-4 border-l-indigo-600"
+                : "hover:bg-slate-50"
             }`}
           >
-            <Scale size={16} /> Mode 2: Custom School Exam
+            <Scale size={20} className={curriculumMode === "CUSTOM_SCHOOL" ? "text-indigo-600 shrink-0 mt-0.5" : "text-slate-400 shrink-0 mt-0.5"} />
+            <div>
+              <div className={`text-xs font-bold ${curriculumMode === "CUSTOM_SCHOOL" ? "text-indigo-950" : "text-slate-800"}`}>
+                Mode 2: Custom School Exam
+              </div>
+              <div className="text-[11px] text-slate-600 mt-1 leading-relaxed">
+                Quarterly, Half-Yearly, or Pre-Board with syllabus reduction and proportional mark scaling.
+              </div>
+            </div>
           </button>
+
           <button
             type="button"
-            onClick={() => setCurriculumMode("BLANK_CUSTOM")}
-            className={`flex-1 py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition ${
+            onClick={() => {
+              setCurriculumMode("BLANK_CUSTOM");
+              setSectionGroups([
+                newSectionGroup(
+                  {
+                    title: "Section A",
+                    instructions: "All questions are compulsory.",
+                    questionTypes: [newQuestionType({ type: "MCQ", count: 10, marksEach: 1 })],
+                  },
+                  0
+                ),
+              ]);
+              setMarks({});
+            }}
+            className={`flex items-start gap-3 p-3.5 text-left transition ${
               curriculumMode === "BLANK_CUSTOM"
-                ? "bg-slate-800 text-white shadow-xs"
-                : "text-slate-700 hover:bg-slate-100"
+                ? "bg-slate-100 border-l-4 border-l-slate-700"
+                : "hover:bg-slate-50"
             }`}
           >
-            <Code2 size={16} /> Mode 3: Blank Custom Blueprint
+            <Code2 size={20} className={curriculumMode === "BLANK_CUSTOM" ? "text-slate-800 shrink-0 mt-0.5" : "text-slate-400 shrink-0 mt-0.5"} />
+            <div>
+              <div className={`text-xs font-bold ${curriculumMode === "BLANK_CUSTOM" ? "text-slate-900" : "text-slate-800"}`}>
+                Mode 3: Blank Custom Blueprint
+              </div>
+              <div className="text-[11px] text-slate-600 mt-1 leading-relaxed">
+                Build completely custom sections, question types, and manual chapter allocations from scratch.
+              </div>
+            </div>
           </button>
         </div>
       </div>
@@ -1007,70 +1060,75 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
             ))}
           </select>
         </Field>
-        <Field label="Class">
-          <select
-            className="input"
-            value={selectedClassFilter}
-            disabled={hasPapers}
-            onChange={(e) => {
-              const cls = e.target.value;
-              setSelectedClassFilter(cls);
-              setSelectedSubjectFilter("");
-              const firstMatch = books.find((b) => !cls || b.className.trim().toLowerCase() === cls.trim().toLowerCase());
-              if (firstMatch) {
-                setBookId(firstMatch.id);
-                setMarks({});
-              } else {
-                setBookId("");
-                setMarks({});
-              }
-            }}
-          >
-            <option value="">All Classes</option>
-            {availableClasses.map((cls) => (
-              <option key={cls} value={cls}>
-                {cls}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Subject">
-          <select
-            className="input"
-            value={selectedSubjectFilter}
-            disabled={hasPapers}
-            onChange={(e) => {
-              const sub = e.target.value;
-              setSelectedSubjectFilter(sub);
-              const firstMatch = books.find(
-                (b) =>
-                  (!selectedClassFilter || b.className.trim().toLowerCase() === selectedClassFilter.trim().toLowerCase()) &&
-                  (!sub || isSubjectMatching(b.subject, sub))
-              );
-              if (firstMatch) {
-                setBookId(firstMatch.id);
-                setMarks({});
-              } else {
-                setBookId("");
-                setMarks({});
-              }
-              const matchedCls = classes.find(
-                (c) => !selectedClassFilter || c.name.trim().toLowerCase() === selectedClassFilter.trim().toLowerCase()
-              );
-              const matchedSub = matchedCls?.subjects.find((s) => isSubjectMatching(s.name, sub));
-              if (matchedSub?.code) {
-                setSubjectCode(matchedSub.code);
-              }
-            }}
-          >
-            <option value="">All Subjects</option>
-            {availableSubjects.map((sub) => (
-              <option key={sub} value={sub}>
-                {sub}
-              </option>
-            ))}
-          </select>
-        </Field>
+
+        {curriculumMode === "BLANK_CUSTOM" && (
+          <>
+            <Field label="Class">
+              <select
+                className="input"
+                value={selectedClassFilter}
+                disabled={hasPapers}
+                onChange={(e) => {
+                  const cls = e.target.value;
+                  setSelectedClassFilter(cls);
+                  setSelectedSubjectFilter("");
+                  const firstMatch = books.find((b) => !cls || b.className.trim().toLowerCase() === cls.trim().toLowerCase());
+                  if (firstMatch) {
+                    setBookId(firstMatch.id);
+                    setMarks({});
+                  } else {
+                    setBookId("");
+                    setMarks({});
+                  }
+                }}
+              >
+                <option value="">All Classes</option>
+                {availableClasses.map((cls) => (
+                  <option key={cls} value={cls}>
+                    {cls}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Subject">
+              <select
+                className="input"
+                value={selectedSubjectFilter}
+                disabled={hasPapers}
+                onChange={(e) => {
+                  const sub = e.target.value;
+                  setSelectedSubjectFilter(sub);
+                  const firstMatch = books.find(
+                    (b) =>
+                      (!selectedClassFilter || b.className.trim().toLowerCase() === selectedClassFilter.trim().toLowerCase()) &&
+                      (!sub || isSubjectMatching(b.subject, sub))
+                  );
+                  if (firstMatch) {
+                    setBookId(firstMatch.id);
+                    setMarks({});
+                  } else {
+                    setBookId("");
+                    setMarks({});
+                  }
+                  const matchedCls = classes.find(
+                    (c) => !selectedClassFilter || c.name.trim().toLowerCase() === selectedClassFilter.trim().toLowerCase()
+                  );
+                  const matchedSub = matchedCls?.subjects.find((s) => isSubjectMatching(s.name, sub));
+                  if (matchedSub?.code) {
+                    setSubjectCode(matchedSub.code);
+                  }
+                }}
+              >
+                <option value="">All Subjects</option>
+                {availableSubjects.map((sub) => (
+                  <option key={sub} value={sub}>
+                    {sub}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </>
+        )}
         <Field label="Textbook / Syllabus" helper={hasPapers ? "Book cannot be changed while papers use this blueprint." : undefined}>
           <select
             className="input"
@@ -1417,15 +1475,6 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
                                 </div>
                               </div>
 
-                              {/* Board Rule Pattern source */}
-                              <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500 bg-white/80 p-1.5 rounded border border-slate-200/60">
-                                <span className="font-semibold text-slate-600">Rule Pattern:</span>
-                                <span>{boardDefaultReq.patternVersion} ({boardDefaultReq.reason})</span>
-                                {boardDefaultReq.circularReference && (
-                                  <span className="text-slate-400 font-mono">[{boardDefaultReq.circularReference}]</span>
-                                )}
-                              </div>
-
                               {/* Conflict warning banner if school override conflicts with board circular */}
                               {conflict.hasConflict && (
                                 <div className="text-[11px] bg-amber-50 text-amber-900 border border-amber-200 rounded p-1.5 flex items-start gap-1.5">
@@ -1537,9 +1586,9 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
         <section className="card space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <h2 className="font-semibold text-slate-900">Chapter weightage (marks)</h2>
+              <h2 className="font-semibold text-slate-900">Chapter Marks</h2>
               <span
-                className={`badge text-xs font-bold py-0.5 px-2 border ${
+                className={`badge text-xs font-bold py-0.5 px-2.5 border ${
                   chapterTotal === total && total > 0
                     ? "bg-emerald-50 text-emerald-800 border-emerald-300"
                     : chapterTotal > total
@@ -1547,7 +1596,7 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
                     : "bg-amber-50 text-amber-800 border-amber-300"
                 }`}
               >
-                {chapterTotal}/{total}m {chapterTotal === total && total > 0 ? "✓" : chapterTotal < total ? `(${total - chapterTotal}m needed)` : `(${chapterTotal - total}m over)`}
+                {chapterTotal}/{total}m {chapterTotal === total && total > 0 ? "✓ Balanced" : chapterTotal < total ? `(${total - chapterTotal}m needed)` : `(${chapterTotal - total}m over)`}
               </span>
             </div>
             {!isReadOnly && book && book.chapters.length > 0 && total > 0 && (
@@ -1644,16 +1693,13 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
         </div>
       )}
 
-      {(problems.length > 0 || feasibilityWarnings.length > 0) && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-4 text-xs text-amber-900 shadow-2xs space-y-1">
-          <div className="font-bold text-amber-950">Blueprint Validation Checklist:</div>
+      {feasibilityWarnings.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-3.5 text-xs text-amber-900 shadow-2xs space-y-1">
+          <div className="font-bold text-amber-950">Mathematical Feasibility Notice:</div>
           <ul className="list-disc pl-5 space-y-0.5">
-            {problems.map((p) => (
-              <li key={p}>{p}</li>
-            ))}
             {feasibilityWarnings.map((w) => (
-              <li key={w} className="text-amber-800 font-semibold">
-                ⚠ Feasibility notice: {w}
+              <li key={w} className="text-amber-800 font-medium">
+                {w}
               </li>
             ))}
           </ul>
@@ -1691,30 +1737,49 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
           </button>
         </div>
       ) : (
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={(e) => void save(e, true)}
-            className="btn btn-primary flex items-center gap-1.5"
-            disabled={busy || problems.length > 0}
-            title="Save blueprint and open immediately in Paper Studio to generate exam paper"
-          >
-            <FileText size={15} /> Save &amp; Build Exam Paper
-          </button>
-          <button
-            type="submit"
-            className="btn btn-ghost border border-slate-300 bg-white text-slate-900 hover:bg-slate-50 font-semibold"
-            disabled={busy || problems.length > 0}
-          >
-            {busy ? "Saving…" : "Save Blueprint"}
-          </button>
-          <button
-            type="button"
-            className="btn btn-ghost border border-slate-200"
-            onClick={() => router.push("/blueprints")}
-          >
-            Cancel
-          </button>
+        <div className="space-y-3">
+          {problems.length > 0 && (
+            <div className="rounded-xl border border-amber-300 bg-amber-50/90 p-3 text-xs text-amber-950 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
+              <div className="flex items-center gap-2">
+                <span className="font-bold">⚠️ To save blueprint:</span>
+                <span>{problems.join(" • ")}</span>
+              </div>
+              {book && book.chapters.length > 0 && total > 0 && chapterTotal !== total && (
+                <button
+                  type="button"
+                  className="btn btn-xs bg-amber-600 hover:bg-amber-700 text-white font-bold px-3 py-1 rounded shadow-2xs shrink-0"
+                  onClick={autoDistributeMarks}
+                >
+                  ⚡ Auto-Balance Chapter Marks ({total}m)
+                </button>
+              )}
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={(e) => void save(e, true)}
+              className="btn btn-primary flex items-center gap-1.5"
+              disabled={busy || problems.length > 0}
+              title="Save blueprint and open immediately in Paper Studio to generate exam paper"
+            >
+              <FileText size={15} /> Save &amp; Build Exam Paper
+            </button>
+            <button
+              type="submit"
+              className="btn btn-ghost border border-slate-300 bg-white text-slate-900 hover:bg-slate-50 font-semibold"
+              disabled={busy || problems.length > 0}
+            >
+              {busy ? "Saving…" : "Save Blueprint"}
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost border border-slate-200"
+              onClick={() => router.push("/blueprints")}
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 

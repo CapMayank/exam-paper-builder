@@ -14,6 +14,9 @@ export function FeasibilityStatusAlert({
   totalSectionMarks,
   totalChapterMarks,
 }: FeasibilityStatusAlertProps) {
+  // Don't show feasibility status on unconfigured blueprints
+  if (totalSectionMarks === 0) return null;
+
   const isMatch = totalSectionMarks === totalChapterMarks;
   const isFeasible = warnings.length === 0 && isMatch;
 
