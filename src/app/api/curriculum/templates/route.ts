@@ -1,9 +1,14 @@
 import { route } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { MPBSE_BLUEPRINT_TEMPLATES } from "@/lib/curriculumTemplates";
+import { ensureCurriculumSeeded } from "@/lib/curriculumInit";
 
 export const GET = route(
   async (req) => {
+    await ensureCurriculumSeeded().catch((err) => {
+      console.error("❌ Failed to ensure curriculum is seeded:", err);
+    });
+
     const url = new URL(req.url);
     const classLevelParam = url.searchParams.get("classLevel") || url.searchParams.get("class");
     const streamParam = url.searchParams.get("stream");

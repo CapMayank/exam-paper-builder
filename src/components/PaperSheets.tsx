@@ -404,12 +404,15 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
       const rawReconciled = reconcileSectionGroupInstruction(
         s.instructions,
         secRange?.groupStartQ ?? 0,
-        secRange?.groupEndQ ?? 0
+        secRange?.groupEndQ ?? 0,
+        paperLang
       );
-      const isEnglishInstruction = !/[\u0900-\u097F]/.test((rawReconciled || "").trim());
+      const hasDevanagari = /[\u0900-\u097F]/.test((rawReconciled || "").trim());
       const reconciledMainInstruction =
-        (paperLang === "sa" || paperLang === "hi") && isEnglishInstruction
+        (paperLang === "sa" || paperLang === "hi") && !hasDevanagari
           ? getSharedInstruction(s.type, paperLang)
+          : paperLang === "en" && hasDevanagari
+          ? getSharedInstruction(s.type, "en")
           : rawReconciled;
 
       const groupRightLabel = locale.section.formatGroupSummary(groupCount, groupMarks, {

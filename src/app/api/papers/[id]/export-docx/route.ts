@@ -580,12 +580,15 @@ export async function buildPaperDocx(
       const rawReconciled = reconcileSectionGroupInstruction(
         section.instructions,
         secRange?.groupStartQ ?? 0,
-        secRange?.groupEndQ ?? 0
+        secRange?.groupEndQ ?? 0,
+        paperLang
       );
-      const isEnglishInstruction = !/[\u0900-\u097F]/.test((rawReconciled || "").trim());
+      const hasDevanagari = /[\u0900-\u097F]/.test((rawReconciled || "").trim());
       const reconciledInstruction =
-        (paperLang === "sa" || paperLang === "hi") && isEnglishInstruction
+        (paperLang === "sa" || paperLang === "hi") && !hasDevanagari
           ? getSharedInstruction(section.type, paperLang)
+          : paperLang === "en" && hasDevanagari
+          ? getSharedInstruction(section.type, "en")
           : rawReconciled;
       if (reconciledInstruction) {
         paragraphs.push(

@@ -99,6 +99,114 @@ function resolveTypeTranslation(desc: string): { sa: string; hi: string } | null
   return null;
 }
 
+export function toEnglishLetter(deva: string): string {
+  if (!deva) return "A";
+  const idx = DEVANAGARI_LETTERS.indexOf(deva.trim());
+  if (idx >= 0 && idx < 26) {
+    return String.fromCharCode(65 + idx);
+  }
+  return deva;
+}
+
+export function localizeSectionInstruction(
+  instruction: string | null | undefined,
+  lang: PaperLanguage
+): string {
+  if (!instruction) return "";
+  const trimmed = instruction.trim();
+
+  if (lang === "en") {
+    // If predominantly in English already, return as is
+    if (!/[\u0900-\u097F]/.test(trimmed)) {
+      return trimmed;
+    }
+    // Translate standard Hindi/Sanskrit instructions to English
+    if (/विकल्प(?:ं|ेभ्यः)?\s*(?:चुनकर|चित्वा|चिनुत)/.test(trimmed)) {
+      return "Choose and write the correct option for each question.";
+    }
+    if (/रिक्त\s*स्थान|रिक्तस्थानानि/.test(trimmed)) {
+      return "Fill in the blanks with the correct words.";
+    }
+    if (/सत्य(?:\s*\/|\s*अथवा|\s*या)\s*असत्य|शुद्धवाक्यानां\s*समक्ष/.test(trimmed)) {
+      return "Write True or False for the following statements.";
+    }
+    if (/सही\s*जोड़ी|उचित\s*युग्म|युग्ममेलन/.test(trimmed)) {
+      return "Match the items in Column A with Column B correctly.";
+    }
+    if (/एक\s*शब्द|एकपदेन/.test(trimmed)) {
+      return "Answer the following questions in one word or one sentence.";
+    }
+    if (/30\s*शब्द|३०\s*शब्देषु/.test(trimmed)) {
+      return "Answer each question in about 30 words. All questions are compulsory.";
+    }
+    if (/75\s*शब्द|७५\s*शब्देषु/.test(trimmed)) {
+      return "Answer each question in about 75 words. Internal choice is provided.";
+    }
+    if (/120\s*शब्द|१२०\s*शब्देषु/.test(trimmed)) {
+      return "Answer each question in about 120 words. Internal choice is provided.";
+    }
+    return trimmed;
+  }
+
+  if (lang === "sa") {
+    if (/विकल्प|multiple\s*choice|mcq/i.test(trimmed)) {
+      return "प्रत्येकं प्रश्नस्य कृते प्रदत्तविकल्पेभ्यः उचितं विकल्पं चित्वा लिखत।";
+    }
+    if (/रिक्त\s*स्थान|fill\s*(?:in)?\s*(?:the)?\s*blank/i.test(trimmed)) {
+      return "प्रदत्तैः उचितपदैः रिक्तस्थानानि पूरयत।";
+    }
+    if (/सत्य|true\s*(?:\/|or)\s*false/i.test(trimmed)) {
+      return "शुद्धवाक्यानां समक्षम् 'आम्' अशुद्धवाक्यानां समक्षं च 'न' इति लिखत।";
+    }
+    if (/जोड़ी|match/i.test(trimmed)) {
+      return "स्तम्भ 'अ' इत्यस्य स्तम्भ 'ब' इत्यनेन सह उचितं मेलनं कुरुत।";
+    }
+    if (/एक\s*शब्द|one\s*word/i.test(trimmed)) {
+      return "अधोलिखितानां प्रश्नानाम् उत्तराणि एकपदेन अथवा एकवाक्येन लिखत।";
+    }
+    if (/30\s*words?|३०\s*शब्देषु|30\s*शब्द/i.test(trimmed)) {
+      return "प्रत्येकं प्रश्नस्य उत्तरं प्रायः ३० शब्देषु लिखत। सर्वे प्रश्नाः अनिवार्याः सन्ति।";
+    }
+    if (/75\s*words?|७५\s*शब्देषु|75\s*शब्द/i.test(trimmed)) {
+      return "प्रत्येकं प्रश्नस्य उत्तरं प्रायः ७५ शब्देषु लिखत। आन्तरिकविकल्पः प्रदत्तः अस्ति।";
+    }
+    if (/120\s*words?|१२०\s*शब्देषु|120\s*शब्द/i.test(trimmed)) {
+      return "प्रत्येकं प्रश्नस्य उत्तरं प्रायः १२० शब्देषु लिखत। आन्तरिकविकल्पः प्रदत्तः अस्ति।";
+    }
+    return trimmed;
+  }
+
+  if (lang === "hi") {
+    if (/multiple\s*choice|mcq|विकल्पं\s*चित्वा/i.test(trimmed)) {
+      return "प्रत्येक प्रश्न के लिए दिए गए विकल्पों में से सही विकल्प चुनकर लिखिए।";
+    }
+    if (/fill\s*(?:in)?\s*(?:the)?\s*blank|रिक्तस्थानानि/i.test(trimmed)) {
+      return "दिए गए रिक्त स्थानों की सही शब्दों द्वारा पूर्ति कीजिए।";
+    }
+    if (/true\s*(?:\/|or)\s*false|शुद्धवाक्यानां/i.test(trimmed)) {
+      return "निम्नलिखित कथनों में सत्य अथवा असत्य चुनकर लिखिए।";
+    }
+    if (/match|युग्ममेलन/i.test(trimmed)) {
+      return "स्तम्भ 'अ' के सम्मुख स्तम्भ 'ब' से सही मिलान कीजिए।";
+    }
+    if (/one\s*word|एकपदेन/i.test(trimmed)) {
+      return "निम्नलिखित प्रश्नों के उत्तर एक शब्द अथवा एक वाक्य में लिखिए।";
+    }
+    if (/30\s*words?|३०\s*शब्देषु/i.test(trimmed)) {
+      return "प्रत्येक प्रश्न का उत्तर लगभग 30 शब्दों में दीजिए। सभी प्रश्न अनिवार्य हैं।";
+    }
+    if (/75\s*words?|७५\s*शब्देषु/i.test(trimmed)) {
+      return "प्रत्येक प्रश्न का उत्तर लगभग 75 शब्दों में दीजिए। आंतरिक विकल्प उपलब्ध हैं।";
+    }
+    if (/120\s*words?|१२०\s*शब्देषु/i.test(trimmed)) {
+      return "प्रत्येक प्रश्न का उत्तर लगभग 120 शब्दों में दीजिए। आंतरिक विकल्प उपलब्ध हैं।";
+    }
+    return trimmed;
+  }
+
+  return trimmed;
+}
+
 export function localizeSectionTitle(
   title: string | null | undefined,
   lang: PaperLanguage,
@@ -115,6 +223,99 @@ export function localizeSectionTitle(
 
   const trimmed = title.trim();
 
+  // Pattern A: Match "Questions X to Y: Description" or "प्रश्न X से Y: Description"
+  const rangeMatch = trimmed.match(/^(?:questions?\s*(\d+)\s*to\s*(\d+)|प्रश्‍?न\s*(\d+)\s*(?:से|तः)\s*(\d+)(?:\s*पर्यन्तम्)?)\s*[:–-]\s*(.*)$/i);
+  if (rangeMatch) {
+    const startQ = rangeMatch[1] || rangeMatch[3];
+    const endQ = rangeMatch[2] || rangeMatch[4];
+    const desc = (rangeMatch[5] || "").trim();
+    const translation = resolveTypeTranslation(desc);
+
+    if (lang === "en") {
+      const enDesc = translation
+        ? (Object.keys(ENGLISH_SECTION_TYPE_MAP).find(k => ENGLISH_SECTION_TYPE_MAP[k].hi === translation.hi || ENGLISH_SECTION_TYPE_MAP[k].sa === translation.sa) || desc)
+        : desc.replace(/\([^)]+\)/g, "").trim();
+      // Capitalize title nicely
+      const cleanEnDesc = /VERY\s*SHORT/i.test(desc)
+        ? "Very Short Answer Questions"
+        : /SHORT\s*ANSWER/i.test(desc)
+        ? "Short Answer Questions"
+        : /LONG\s*ANSWER/i.test(desc)
+        ? "Long Answer Questions"
+        : enDesc || "Short Answer Questions";
+      return `Questions ${startQ} to ${endQ}: ${cleanEnDesc}`;
+    }
+
+    if (lang === "hi") {
+      const hiDesc = translation?.hi || (/दीर्घ/i.test(desc) ? "दीर्घउत्तरीय / विश्लेषणात्मक प्रश्न" : /लघु/i.test(desc) ? (/अति/i.test(desc) ? "अतिलघुउत्तरीय प्रश्न" : "लघुउत्तरीय प्रश्न") : desc);
+      return `प्रश्न ${startQ} से ${endQ}: ${hiDesc}`;
+    }
+
+    if (lang === "sa") {
+      const saDesc = translation?.sa || (/दीर्घ/i.test(desc) ? "दीर्घोत्तरीयप्रश्नाः" : /लघु/i.test(desc) ? (/अति/i.test(desc) ? "अतिलघूत्तरीयप्रश्नाः" : "लघूत्तरीयप्रश्नाः") : desc);
+      return `प्रश्नः ${startQ} तः ${endQ} पर्यन्तम् : ${saDesc}`;
+    }
+  }
+
+  // Pattern B: Match "Question X: Description" or "प्रश्न X: Description"
+  const singleQMatch = trimmed.match(/^(?:question\s*(\d+)|प्रश्‍?नः?\s*(\d+))\s*[:–-]\s*(.*)$/i);
+  if (singleQMatch) {
+    const qNum = singleQMatch[1] || singleQMatch[2];
+    const desc = (singleQMatch[3] || "").trim();
+    const translation = resolveTypeTranslation(desc);
+
+    if (lang === "en") {
+      const cleanEn = /MULTIPLE\s*CHOICE|MCQ|सही\s*विकल्प|बहुविकल्प/i.test(desc)
+        ? "Multiple Choice Questions"
+        : /FILL\s*(?:IN)?\s*(?:THE)?\s*BLANK|रिक्त\s*स्थान/i.test(desc)
+        ? "Fill in the Blanks"
+        : /TRUE\s*(?:\/|OR)\s*FALSE|सत्य\s*\/\s*असत्य|सत्यासत्य/i.test(desc)
+        ? "True / False"
+        : /MATCH\s*(?:THE)?\s*COLUMN|सही\s*जोड़ी|उचितयुग्म/i.test(desc)
+        ? "Match the Columns"
+        : /ONE\s*WORD|एक\s*शब्द|एकपदेन/i.test(desc)
+        ? "One Word / Sentence Answer"
+        : /VERY\s*SHORT|अतिलघु/i.test(desc)
+        ? "Very Short Answer Questions"
+        : /SHORT\s*ANSWER|लघु/i.test(desc)
+        ? "Short Answer Questions"
+        : /LONG\s*ANSWER|दीर्घ/i.test(desc)
+        ? "Long Answer Questions"
+        : desc.replace(/\([^)]+\)/g, "").trim();
+      return `Question ${qNum}: ${cleanEn}`;
+    }
+
+    if (lang === "hi") {
+      const hiDesc = /सही\s*विकल्प|MULTIPLE\s*CHOICE|बहुविकल्प/i.test(desc)
+        ? "सही विकल्प चुनिए"
+        : /रिक्त\s*स्थान|FILL/i.test(desc)
+        ? "रिक्त स्थानों की पूर्ति कीजिए"
+        : /सत्य\s*\/\s*असत्य|TRUE/i.test(desc)
+        ? "सत्य / असत्य लिखिए"
+        : /सही\s*जोड़ी|MATCH/i.test(desc)
+        ? "सही जोड़ी बनाइए"
+        : /एक\s*शब्द|ONE\s*WORD/i.test(desc)
+        ? "एक शब्द / एक वाक्य में उत्तर दीजिए"
+        : translation?.hi || desc;
+      return `प्रश्न ${qNum}: ${hiDesc}`;
+    }
+
+    if (lang === "sa") {
+      const saDesc = /विकल्प|MULTIPLE/i.test(desc)
+        ? "उचितं विकल्पं चित्वा लिखत (बहुविकल्पीयप्रश्नाः)"
+        : /रिक्त|FILL/i.test(desc)
+        ? "रिक्तस्थानानि पूरयत (रिक्तस्थानपूर्तिः)"
+        : /सत्य|TRUE/i.test(desc)
+        ? "सत्यासत्यनिरूपणम्"
+        : /जोड़ी|युग्म|MATCH/i.test(desc)
+        ? "उचितयुग्ममेलनम्"
+        : /एक\s*शब्द|ONE|एकपदेन/i.test(desc)
+        ? "एकपदेन / एकवाक्येन उत्तरं लिखत (एकपदेन उत्तराणि)"
+        : translation?.sa || desc;
+      return `प्रश्नः ${qNum} : ${saDesc}`;
+    }
+  }
+
   // If already predominantly in Devanagari script
   const hasDevanagari = /[\u0900-\u097F]/.test(trimmed);
   if (hasDevanagari) {
@@ -122,6 +323,30 @@ export function localizeSectionTitle(
     if (devaSecMatch) {
       const letter = devaSecMatch[1] || fallbackDeva;
       const desc = (devaSecMatch[2] || "").trim();
+      const engLetter = toEnglishLetter(letter);
+
+      if (lang === "en") {
+        const translation = resolveTypeTranslation(desc);
+        const enDesc = /बहुविकल्प|सही\s*विकल्प/i.test(desc)
+          ? "Multiple Choice Questions"
+          : /रिक्त/i.test(desc)
+          ? "Fill in the Blanks"
+          : /सत्य/i.test(desc)
+          ? "True / False"
+          : /युग्म|जोड़ी/i.test(desc)
+          ? "Match the Columns"
+          : /एकपदेन|एक\s*शब्द/i.test(desc)
+          ? "One Word / Sentence Answer"
+          : /अतिलघूत्तरीय|अति\s*लघु/i.test(desc)
+          ? "Very Short Answer Questions"
+          : /लघूत्तरीय|लघु/i.test(desc)
+          ? "Short Answer Questions"
+          : /दीर्घ/i.test(desc)
+          ? "Long Answer Questions"
+          : desc;
+        return `SECTION ${engLetter} : ${enDesc}`;
+      }
+
       if (lang === "sa") {
         let saDesc = desc
           .replace(/सही विकल्प चुनिए|सही विकल्प चुनकर लिखिए/g, "बहुविकल्पीयप्रश्नाः")
@@ -146,6 +371,29 @@ export function localizeSectionTitle(
           .replace(/दीर्घोत्तरीयप्रश्नाः/g, "दीर्घ उत्तरीय प्रश्न");
         return hiDesc ? `खण्ड '${letter}' : ${hiDesc}` : `खण्ड '${letter}'`;
       }
+    }
+
+    if (lang === "en") {
+      // Devanagari string with no section prefix -> translate to English SECTION A : ...
+      const translation = resolveTypeTranslation(trimmed);
+      const enDesc = /बहुविकल्प|सही\s*विकल्प/i.test(trimmed)
+        ? "Multiple Choice Questions"
+        : /रिक्त/i.test(trimmed)
+        ? "Fill in the Blanks"
+        : /सत्य/i.test(trimmed)
+        ? "True / False"
+        : /युग्म|जोड़ी/i.test(trimmed)
+        ? "Match the Columns"
+        : /एकपदेन|एक\s*शब्द/i.test(trimmed)
+        ? "One Word / Sentence Answer"
+        : /अतिलघूत्तरीय|अति\s*लघु/i.test(trimmed)
+        ? "Very Short Answer Questions"
+        : /लघूत्तरीय|लघु/i.test(trimmed)
+        ? "Short Answer Questions"
+        : /दीर्घ/i.test(trimmed)
+        ? "Long Answer Questions"
+        : trimmed.replace(/\([^)]+\)/g, "").trim();
+      return `SECTION ${fallbackLetter} : ${enDesc}`;
     }
 
     if (lang === "sa" && !trimmed.startsWith("खण्डः")) {

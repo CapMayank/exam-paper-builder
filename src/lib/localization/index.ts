@@ -105,6 +105,74 @@ export function isTextPredominantlySanskrit(text?: string | null): boolean {
   return matches >= 2;
 }
 
+export type HeadingLanguage = "sa" | "hi" | "en";
+
+/**
+ * Resolves the heading language strictly according to the official MP Board policy:
+ * - Sanskrit -> "sa"
+ * - Hindi -> "hi"
+ * - All other subjects (English, Mathematics, Science, Social Science, Physics, Chemistry, Biology, Commerce, Urdu, etc.) -> "en"
+ */
+export function resolveSubjectHeadingLanguage(
+  subject?: string | null,
+  subjectCode?: string | null,
+  bookTitle?: string | null
+): HeadingLanguage {
+  const rawSubject = (subject || "").trim();
+  const subjectLower = rawSubject.toLowerCase();
+  const subjectPrimary = subjectLower.split("/")[0].trim();
+  const code = (subjectCode || "").trim();
+  const titleLower = (bookTitle || "").toLowerCase();
+
+  // 1. Sanskrit
+  if (
+    subjectPrimary.includes("sanskrit") ||
+    subjectPrimary.includes("संस्कृत") ||
+    rawSubject.includes("संस्कृतम्") ||
+    code === "512" || // Class 9 & 10 Sanskrit
+    code === "122" || // Sanskrit secondary
+    code === "022" ||
+    titleLower.includes("shemushi") ||
+    titleLower.includes("शेमुषी") ||
+    titleLower.includes("ruchira") ||
+    titleLower.includes("रुचिरा") ||
+    titleLower.includes("deepakam") ||
+    titleLower.includes("दीपकम्")
+  ) {
+    return "sa";
+  }
+
+  // 2. Hindi
+  if (
+    subjectPrimary.includes("hindi") ||
+    subjectPrimary.includes("हिंदी") ||
+    subjectPrimary.includes("हिन्दी") ||
+    code === "401" || // Class 9 & 10 Hindi
+    code === "051" || // Class 11 & 12 Hindi
+    titleLower.includes("kshitij") ||
+    titleLower.includes("क्षितिज") ||
+    titleLower.includes("kritika") ||
+    titleLower.includes("कृतिका") ||
+    titleLower.includes("sparsh") ||
+    titleLower.includes("स्पर्श") ||
+    titleLower.includes("sanchayan") ||
+    titleLower.includes("संचयन") ||
+    titleLower.includes("aroh") ||
+    titleLower.includes("आरोह") ||
+    titleLower.includes("vitan") ||
+    titleLower.includes("वितान") ||
+    titleLower.includes("antaral") ||
+    titleLower.includes("अंतराल") ||
+    titleLower.includes("antara") ||
+    titleLower.includes("अंतरा")
+  ) {
+    return "hi";
+  }
+
+  // 3. All other subjects (English, Mathematics, Science, Social Science, Physics, Chemistry, Biology, Commerce, Urdu, etc.)
+  return "en";
+}
+
 export function detectPaperLanguage(
   paper?: {
     title?: string | null;
@@ -114,66 +182,59 @@ export function detectPaperLanguage(
     blueprint?: {
       language?: string | null;
       subjectCode?: string | null;
+      name?: string | null;
       book?: { subject?: string | null; title?: string | null } | null;
       sections?: Array<{ title?: string | null; instructions?: string | null }> | null;
     } | null;
   } | null,
   items?: Array<{ question?: { text?: string | null; options?: string[] } | null }> | null
 ): PaperLanguage {
-  // 1. Explicit override on paper or blueprint record when non-default
-  if (paper?.language === "sa" || paper?.blueprint?.language === "sa") return "sa";
-  if (paper?.language === "hi" || paper?.blueprint?.language === "hi") return "hi";
-  if (paper?.language === "bilingual" || paper?.blueprint?.language === "bilingual") return "bilingual";
+  // 1. Explicit bilingual override
+  if (paper?.language === "bilingual" || paper?.blueprint?.language === "bilingual") {
+    return "bilingual";
+  }
 
-  const rawSubject = paper?.blueprint?.book?.subject || "";
-  const subjectPrimary = rawSubject.split("/")[0].trim().toLowerCase();
-  const bookTitlePrimary = (paper?.blueprint?.book?.title || "").split("/")[0].trim().toLowerCase();
+  const rawSubject = (paper?.blueprint?.book?.subject || "").trim();
   const subjectCode = (paper?.subjectCode || paper?.blueprint?.subjectCode || "").trim();
+  const bookTitle = (paper?.blueprint?.book?.title || "").trim();
 
-  // 2. Sanskrit detection via subject, code, or book title
-  // (Takes absolute precedence over DB default 'en' because Sanskrit is intrinsically Sanskrit)
-  if (
-    subjectPrimary.includes("sanskrit") ||
-    subjectPrimary.includes("संस्कृत") ||
-    rawSubject.includes("संस्कृतम्") ||
-    bookTitlePrimary.includes("shemushi") ||
-    bookTitlePrimary.includes("शेमुषी") ||
-    bookTitlePrimary.includes("ruchira") ||
-    bookTitlePrimary.includes("रुचिरा") ||
-    bookTitlePrimary.includes("deepakam") ||
-    bookTitlePrimary.includes("दीपकम्") ||
-    subjectCode === "122" || // Class 10 Sanskrit (MPBSE / CBSE)
-    subjectCode === "512" || // MPBSE High School Sanskrit
-    subjectCode === "022"    // Secondary Sanskrit
-  ) {
-    return "sa";
+  // 2. Dynamic subject-based language resolution per MP Board rule
+  // (Sanskrit -> "sa", Hindi -> "hi", All others -> "en")
+  if (rawSubject || subjectCode || bookTitle) {
+    const headingLang = resolveSubjectHeadingLanguage(rawSubject, subjectCode, bookTitle);
+    if (headingLang === "sa") return "sa";
+    if (headingLang === "hi") return "hi";
+
+    const subjectLower = rawSubject.toLowerCase().split("/")[0].trim();
+    // If it's a known non-language/non-general subject, it's definitively English
+    if (
+      subjectLower &&
+      !subjectLower.includes("language") &&
+      !subjectLower.includes("general")
+    ) {
+      return "en";
+    }
   }
 
-  // 3. Hindi detection via subject or book title
-  // (Takes precedence over DB default 'en' because Hindi literature is intrinsically Hindi)
+  // 3. Title inspection for subject keywords
+  const title = (paper?.title || paper?.blueprint?.name || "").toLowerCase();
+  if (title.includes("sanskrit") || title.includes("संस्कृत")) return "sa";
+  if (title.includes("hindi") || title.includes("हिंदी") || title.includes("हिन्दी")) return "hi";
   if (
-    subjectPrimary.includes("hindi") ||
-    subjectPrimary.includes("हिंदी") ||
-    subjectPrimary.includes("हिन्दी") ||
-    bookTitlePrimary.includes("hindi") ||
-    bookTitlePrimary.includes("हिंदी") ||
-    bookTitlePrimary.includes("हिन्दी") ||
-    bookTitlePrimary.includes("kshitij") ||
-    bookTitlePrimary.includes("kritika") ||
-    bookTitlePrimary.includes("sparsh") ||
-    bookTitlePrimary.includes("sanchayan") ||
-    bookTitlePrimary.includes("aroh") ||
-    bookTitlePrimary.includes("vitan") ||
-    bookTitlePrimary.includes("antaral") ||
-    bookTitlePrimary.includes("antara")
+    title.includes("science") ||
+    title.includes("math") ||
+    title.includes("गणित") ||
+    title.includes("physics") ||
+    title.includes("chemistry") ||
+    title.includes("biology") ||
+    title.includes("social") ||
+    title.includes("english")
   ) {
-    return "hi";
+    return "en";
   }
 
+  // 4. Content inspection if items are present (for generic "Language" subjects)
   const devanagariRegex = /[\u0900-\u097F]/;
-  const cleanTitle = (paper?.title || "").replace(/\/\s*[\u0900-\u097F\s]+/g, "");
-
-  // 4. Content inspection if items are present
   if (items && items.length > 0) {
     let devanagariCount = 0;
     let sanskritScore = 0;
@@ -196,15 +257,9 @@ export function detectPaperLanguage(
     }
   }
 
-  // 5. Title / General Instructions inspection
-  if (cleanTitle.toLowerCase().includes("sanskrit") || cleanTitle.includes("संस्कृत") || isTextPredominantlySanskrit(paper?.generalInstructions)) {
-    return "sa";
-  }
+  // 5. Fallback explicit overrides or default
+  if (paper?.language === "sa" || paper?.blueprint?.language === "sa") return "sa";
+  if (paper?.language === "hi" || paper?.blueprint?.language === "hi") return "hi";
 
-  if (devanagariRegex.test(cleanTitle) || devanagariRegex.test(subjectPrimary)) {
-    return "hi";
-  }
-
-  // 6. Explicit 'en' or default
-  return paper?.language === "en" ? "en" : "en";
+  return "en";
 }

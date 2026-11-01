@@ -183,14 +183,163 @@ export function validateCircular465Blueprint(
 }
 
 // =============================================================================
-// ARCHETYPE GENERATORS
+// ARCHETYPE GENERATORS (SUBJECT-AWARE HEADINGS: EN, HI, SA)
 // =============================================================================
 
-export function generateStandard23Q75MSectionGroups(): BlueprintTemplateSectionGroup[] {
+function getArchetypeHeading(
+  position: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8,
+  rangeOrCountStr: string,
+  lang: "sa" | "hi" | "en" = "en"
+): { title: string; instructions: string } {
+  if (lang === "sa") {
+    switch (position) {
+      case 1:
+        return {
+          title: "प्रश्नः १ : उचितं विकल्पं चित्वा लिखत (बहुविकल्पीयप्रश्नाः)",
+          instructions: "प्रत्येकं प्रश्नस्य कृते प्रदत्तविकल्पेभ्यः उचितं विकल्पं चित्वा लिखत।",
+        };
+      case 2:
+        return {
+          title: "प्रश्नः २ : रिक्तस्थानानि पूरयत (रिक्तस्थानपूर्तिः)",
+          instructions: "प्रदत्तैः उचितपदैः रिक्तस्थानानि पूरयत।",
+        };
+      case 3:
+        return {
+          title: "प्रश्नः ३ : शुद्धवाक्यानां समक्षम् 'आम्' अशुद्धवाक्यानां समक्षं च 'न' इति लिखत (सत्यासत्यनिरूपणम्)",
+          instructions: "शुद्धवाक्यानां समक्षम् 'आम्' अशुद्धवाक्यानां समक्षं च 'न' इति लिखत।",
+        };
+      case 4:
+        return {
+          title: "प्रश्नः ४ : उचितयुग्ममेलनम्",
+          instructions: "स्तम्भ 'अ' इत्यस्य स्तम्भ 'ब' इत्यनेन सह उचितं मेलनं कुरुत।",
+        };
+      case 5:
+        return {
+          title: "प्रश्नः ५ : एकपदेन / एकवाक्येन उत्तरं लिखत (एकपदेन उत्तराणि)",
+          instructions: "अधोलिखितानां प्रश्नानाम् उत्तराणि एकपदेन अथवा एकवाक्येन लिखत।",
+        };
+      case 6:
+        return {
+          title: `प्रश्नः ${rangeOrCountStr.replace("to", "तः")} पर्यन्तम् : अतिलघूत्तरीयप्रश्नाः`,
+          instructions: "प्रत्येकं प्रश्नस्य उत्तरं प्रायः ३० शब्देषु लिखत। सर्वे प्रश्नाः अनिवार्याः सन्ति।",
+        };
+      case 7:
+        return {
+          title: `प्रश्नः ${rangeOrCountStr.replace("to", "तः")} पर्यन्तम् : लघूत्तरीयप्रश्नाः`,
+          instructions: "प्रत्येकं प्रश्नस्य उत्तरं प्रायः ७५ शब्देषु लिखत। आन्तरिकविकल्पः प्रदत्तः अस्ति।",
+        };
+      case 8:
+        return {
+          title: `प्रश्नः ${rangeOrCountStr.replace("to", "तः")} पर्यन्तम् : दीर्घोत्तरीयप्रश्नाः`,
+          instructions: "प्रत्येकं प्रश्नस्य उत्तरं प्रायः १२० शब्देषु लिखत। आन्तरिकविकल्पः प्रदत्तः अस्ति।",
+        };
+    }
+  }
+
+  if (lang === "hi") {
+    switch (position) {
+      case 1:
+        return {
+          title: "प्रश्न 1: सही विकल्प चुनिए (Multiple Choice Questions)",
+          instructions: "प्रत्येक प्रश्न के लिए दिए गए विकल्पों में से सही विकल्प चुनकर लिखिए।",
+        };
+      case 2:
+        return {
+          title: "प्रश्न 2: रिक्त स्थानों की पूर्ति कीजिए (Fill in the Blanks)",
+          instructions: "दिए गए रिक्त स्थानों की सही शब्दों द्वारा पूर्ति कीजिए।",
+        };
+      case 3:
+        return {
+          title: "प्रश्न 3: सत्य / असत्य लिखिए (True / False)",
+          instructions: "निम्नलिखित कथनों में सत्य अथवा असत्य चुनकर लिखिए।",
+        };
+      case 4:
+        return {
+          title: "प्रश्न 4: सही जोड़ी बनाइए (Match the Columns)",
+          instructions: "स्तम्भ 'अ' के सम्मुख स्तम्भ 'ब' से सही मिलान कीजिए।",
+        };
+      case 5:
+        return {
+          title: "प्रश्न 5: एक शब्द / एक वाक्य में उत्तर दीजिए (One Word / Sentence Answer)",
+          instructions: "निम्नलिखित प्रश्नों के उत्तर एक शब्द अथवा एक वाक्य में लिखिए।",
+        };
+      case 6:
+        return {
+          title: `प्रश्न ${rangeOrCountStr.replace("to", "से")}: अतिलघुउत्तरीय प्रश्न (Very Short Answer Questions)`,
+          instructions: "प्रत्येक प्रश्न का उत्तर लगभग 30 शब्दों में दीजिए। सभी प्रश्न अनिवार्य हैं।",
+        };
+      case 7:
+        return {
+          title: `प्रश्न ${rangeOrCountStr.replace("to", "से")}: लघुउत्तरीय प्रश्न (Short Answer Questions)`,
+          instructions: "प्रत्येक प्रश्न का उत्तर लगभग 75 शब्दों में दीजिए। आंतरिक विकल्प उपलब्ध हैं।",
+        };
+      case 8:
+        return {
+          title: `प्रश्न ${rangeOrCountStr.replace("to", "से")}: दीर्घउत्तरीय / विश्लेषणात्मक प्रश्न (Long Answer Questions)`,
+          instructions: "प्रत्येक प्रश्न का उत्तर लगभग 120 शब्दों में दीजिए। आंतरिक विकल्प उपलब्ध हैं।",
+        };
+    }
+  }
+
+  // Default: English for Mathematics, Science, Social Science, Physics, Chemistry, Biology, Commerce, etc.
+  switch (position) {
+    case 1:
+      return {
+        title: "Question 1: Multiple Choice Questions",
+        instructions: "Choose and write the correct option for each question.",
+      };
+    case 2:
+      return {
+        title: "Question 2: Fill in the Blanks",
+        instructions: "Fill in the blanks with the correct words.",
+      };
+    case 3:
+      return {
+        title: "Question 3: True / False",
+        instructions: "Write True or False for the following statements.",
+      };
+    case 4:
+      return {
+        title: "Question 4: Match the Columns",
+        instructions: "Match the items in Column A with Column B correctly.",
+      };
+    case 5:
+      return {
+        title: "Question 5: One Word / Sentence Answer",
+        instructions: "Answer the following questions in one word or one sentence.",
+      };
+    case 6:
+      return {
+        title: `Questions ${rangeOrCountStr}: Very Short Answer Questions`,
+        instructions: "Answer each question in about 30 words. All questions are compulsory.",
+      };
+    case 7:
+      return {
+        title: `Questions ${rangeOrCountStr}: Short Answer Questions`,
+        instructions: "Answer each question in about 75 words. Internal choice is provided.",
+      };
+    case 8:
+      return {
+        title: `Questions ${rangeOrCountStr}: Long Answer Questions`,
+        instructions: "Answer each question in about 120 words. Internal choice is provided.",
+      };
+  }
+}
+
+export function generateStandard23Q75MSectionGroups(lang: "sa" | "hi" | "en" = "en"): BlueprintTemplateSectionGroup[] {
+  const h1 = getArchetypeHeading(1, "1", lang);
+  const h2 = getArchetypeHeading(2, "2", lang);
+  const h3 = getArchetypeHeading(3, "3", lang);
+  const h4 = getArchetypeHeading(4, "4", lang);
+  const h5 = getArchetypeHeading(5, "5", lang);
+  const h6 = getArchetypeHeading(6, "6 to 17", lang);
+  const h7 = getArchetypeHeading(7, "18 to 20", lang);
+  const h8 = getArchetypeHeading(8, "21 to 23", lang);
+
   return [
     {
-      title: "प्रश्न 1: सही विकल्प चुनिए (Multiple Choice Questions)",
-      instructions: "प्रत्येक प्रश्न के लिए दिए गए विकल्पों में से सही विकल्प चुनकर लिखिए।",
+      title: h1.title,
+      instructions: h1.instructions,
       questionTypes: [
         {
           type: "MCQ",
@@ -202,8 +351,8 @@ export function generateStandard23Q75MSectionGroups(): BlueprintTemplateSectionG
       ],
     },
     {
-      title: "प्रश्न 2: रिक्त स्थानों की पूर्ति कीजिए (Fill in the Blanks)",
-      instructions: "दिए गए रिक्त स्थानों की सही शब्दों द्वारा पूर्ति कीजिए।",
+      title: h2.title,
+      instructions: h2.instructions,
       questionTypes: [
         {
           type: "FILL_BLANK",
@@ -215,8 +364,8 @@ export function generateStandard23Q75MSectionGroups(): BlueprintTemplateSectionG
       ],
     },
     {
-      title: "प्रश्न 3: सत्य / असत्य लिखिए (True / False)",
-      instructions: "निम्नलिखित कथनों में सत्य अथवा असत्य चुनकर लिखिए।",
+      title: h3.title,
+      instructions: h3.instructions,
       questionTypes: [
         {
           type: "TRUE_FALSE",
@@ -228,8 +377,8 @@ export function generateStandard23Q75MSectionGroups(): BlueprintTemplateSectionG
       ],
     },
     {
-      title: "प्रश्न 4: सही जोड़ी बनाइए (Match the Columns)",
-      instructions: "स्तम्भ 'अ' के सम्मुख स्तम्भ 'ब' से सही मिलान कीजिए।",
+      title: h4.title,
+      instructions: h4.instructions,
       questionTypes: [
         {
           type: "MATCH_COLUMN",
@@ -241,8 +390,8 @@ export function generateStandard23Q75MSectionGroups(): BlueprintTemplateSectionG
       ],
     },
     {
-      title: "प्रश्न 5: एक शब्द / एक वाक्य में उत्तर दीजिए (One Word / Sentence Answer)",
-      instructions: "निम्नलिखित प्रश्नों के उत्तर एक शब्द अथवा एक वाक्य में लिखिए।",
+      title: h5.title,
+      instructions: h5.instructions,
       questionTypes: [
         {
           type: "VERY_SHORT",
@@ -254,8 +403,8 @@ export function generateStandard23Q75MSectionGroups(): BlueprintTemplateSectionG
       ],
     },
     {
-      title: "प्रश्न 6 से 17: अतिलघुउत्तरीय प्रश्न (Very Short Answer Questions)",
-      instructions: "प्रत्येक प्रश्न का उत्तर लगभग 30 शब्दों में दीजिए। सभी प्रश्न अनिवार्य हैं।",
+      title: h6.title,
+      instructions: h6.instructions,
       questionTypes: [
         {
           type: "VERY_SHORT",
@@ -268,8 +417,8 @@ export function generateStandard23Q75MSectionGroups(): BlueprintTemplateSectionG
       ],
     },
     {
-      title: "प्रश्न 18 से 20: लघुउत्तरीय प्रश्न (Short Answer Questions)",
-      instructions: "प्रत्येक प्रश्न का उत्तर लगभग 75 शब्दों में दीजिए। आंतरिक विकल्प उपलब्ध हैं।",
+      title: h7.title,
+      instructions: h7.instructions,
       questionTypes: [
         {
           type: "SHORT",
@@ -282,8 +431,8 @@ export function generateStandard23Q75MSectionGroups(): BlueprintTemplateSectionG
       ],
     },
     {
-      title: "प्रश्न 21 से 23: दीर्घउत्तरीय / विश्लेषणात्मक प्रश्न (Long Answer Questions)",
-      instructions: "प्रत्येक प्रश्न का उत्तर लगभग 120 शब्दों में दीजिए। आंतरिक विकल्प उपलब्ध हैं।",
+      title: h8.title,
+      instructions: h8.instructions,
       questionTypes: [
         {
           type: "LONG",
@@ -298,11 +447,20 @@ export function generateStandard23Q75MSectionGroups(): BlueprintTemplateSectionG
   ];
 }
 
-export function generateScience20Q70MSectionGroups(): BlueprintTemplateSectionGroup[] {
+export function generateScience20Q70MSectionGroups(lang: "sa" | "hi" | "en" = "en"): BlueprintTemplateSectionGroup[] {
+  const h1 = getArchetypeHeading(1, "1", lang);
+  const h2 = getArchetypeHeading(2, "2", lang);
+  const h3 = getArchetypeHeading(3, "3", lang);
+  const h4 = getArchetypeHeading(4, "4", lang);
+  const h5 = getArchetypeHeading(5, "5", lang);
+  const h6 = getArchetypeHeading(6, "6 to 12", lang);
+  const h7 = getArchetypeHeading(7, "13 to 16", lang);
+  const h8 = getArchetypeHeading(8, "17 to 20", lang);
+
   return [
     {
-      title: "प्रश्न 1: सही विकल्प चुनिए (Multiple Choice Questions)",
-      instructions: "प्रत्येक प्रश्न के लिए दिए गए विकल्पों में से सही विकल्प चुनकर लिखिए।",
+      title: h1.title,
+      instructions: h1.instructions,
       questionTypes: [
         {
           type: "MCQ",
@@ -314,8 +472,8 @@ export function generateScience20Q70MSectionGroups(): BlueprintTemplateSectionGr
       ],
     },
     {
-      title: "प्रश्न 2: रिक्त स्थानों की पूर्ति कीजिए (Fill in the Blanks)",
-      instructions: "दिए गए रिक्त स्थानों की सही शब्दों द्वारा पूर्ति कीजिए।",
+      title: h2.title,
+      instructions: h2.instructions,
       questionTypes: [
         {
           type: "FILL_BLANK",
@@ -327,8 +485,8 @@ export function generateScience20Q70MSectionGroups(): BlueprintTemplateSectionGr
       ],
     },
     {
-      title: "प्रश्न 3: सत्य / असत्य लिखिए (True / False)",
-      instructions: "निम्नलिखित कथनों में सत्य अथवा असत्य चुनकर लिखिए।",
+      title: h3.title,
+      instructions: h3.instructions,
       questionTypes: [
         {
           type: "TRUE_FALSE",
@@ -340,8 +498,8 @@ export function generateScience20Q70MSectionGroups(): BlueprintTemplateSectionGr
       ],
     },
     {
-      title: "प्रश्न 4: सही जोड़ी बनाइए (Match the Columns)",
-      instructions: "स्तम्भ 'अ' के सम्मुख स्तम्भ 'ब' से सही मिलान कीजिए।",
+      title: h4.title,
+      instructions: h4.instructions,
       questionTypes: [
         {
           type: "MATCH_COLUMN",
@@ -353,8 +511,8 @@ export function generateScience20Q70MSectionGroups(): BlueprintTemplateSectionGr
       ],
     },
     {
-      title: "प्रश्न 5: एक शब्द / एक वाक्य में उत्तर दीजिए (One Word / Sentence Answer)",
-      instructions: "निम्नलिखित प्रश्नों के उत्तर एक शब्द अथवा एक वाक्य में लिखिए।",
+      title: h5.title,
+      instructions: h5.instructions,
       questionTypes: [
         {
           type: "VERY_SHORT",
@@ -366,8 +524,8 @@ export function generateScience20Q70MSectionGroups(): BlueprintTemplateSectionGr
       ],
     },
     {
-      title: "प्रश्न 6 से 12: अतिलघुउत्तरीय प्रश्न (Very Short Answer Questions)",
-      instructions: "प्रत्येक प्रश्न का उत्तर लगभग 30 शब्दों में दीजिए। सभी प्रश्न अनिवार्य हैं।",
+      title: h6.title,
+      instructions: h6.instructions,
       questionTypes: [
         {
           type: "VERY_SHORT",
@@ -380,8 +538,8 @@ export function generateScience20Q70MSectionGroups(): BlueprintTemplateSectionGr
       ],
     },
     {
-      title: "प्रश्न 13 से 16: लघुउत्तरीय प्रश्न (Short Answer Questions)",
-      instructions: "प्रत्येक प्रश्न का उत्तर लगभग 75 शब्दों में दीजिए। प्रत्येक प्रश्न में आंतरिक विकल्प दिया गया है।",
+      title: h7.title,
+      instructions: h7.instructions,
       questionTypes: [
         {
           type: "SHORT",
@@ -394,8 +552,8 @@ export function generateScience20Q70MSectionGroups(): BlueprintTemplateSectionGr
       ],
     },
     {
-      title: "प्रश्न 17 से 20: विश्लेषणात्मक / दीर्घउत्तरीय प्रश्न (Long Answer Questions)",
-      instructions: "प्रत्येक प्रश्न का उत्तर लगभग 120 शब्दों में दीजिए। प्रत्येक प्रश्न में आंतरिक विकल्प दिया गया है।",
+      title: h8.title,
+      instructions: h8.instructions,
       questionTypes: [
         {
           type: "LONG",
@@ -410,11 +568,20 @@ export function generateScience20Q70MSectionGroups(): BlueprintTemplateSectionGr
   ];
 }
 
-export function generateStandard23Q80MSectionGroups(): BlueprintTemplateSectionGroup[] {
+export function generateStandard23Q80MSectionGroups(lang: "sa" | "hi" | "en" = "en"): BlueprintTemplateSectionGroup[] {
+  const h1 = getArchetypeHeading(1, "1", lang);
+  const h2 = getArchetypeHeading(2, "2", lang);
+  const h3 = getArchetypeHeading(3, "3", lang);
+  const h4 = getArchetypeHeading(4, "4", lang);
+  const h5 = getArchetypeHeading(5, "5", lang);
+  const h6 = getArchetypeHeading(6, "6 to 15", lang);
+  const h7 = getArchetypeHeading(7, "16 to 19", lang);
+  const h8 = getArchetypeHeading(8, "20 to 23", lang);
+
   return [
     {
-      title: "प्रश्न 1: सही विकल्प चुनिए (Multiple Choice Questions)",
-      instructions: "प्रत्येक प्रश्न के लिए दिए गए विकल्पों में से सही विकल्प चुनकर लिखिए।",
+      title: h1.title,
+      instructions: h1.instructions,
       questionTypes: [
         {
           type: "MCQ",
@@ -426,8 +593,8 @@ export function generateStandard23Q80MSectionGroups(): BlueprintTemplateSectionG
       ],
     },
     {
-      title: "प्रश्न 2: रिक्त स्थानों की पूर्ति कीजिए (Fill in the Blanks)",
-      instructions: "दिए गए रिक्त स्थानों की सही शब्दों द्वारा पूर्ति कीजिए।",
+      title: h2.title,
+      instructions: h2.instructions,
       questionTypes: [
         {
           type: "FILL_BLANK",
@@ -439,8 +606,8 @@ export function generateStandard23Q80MSectionGroups(): BlueprintTemplateSectionG
       ],
     },
     {
-      title: "प्रश्न 3: सत्य / असत्य लिखिए (True / False)",
-      instructions: "निम्नलिखित कथनों में सत्य अथवा असत्य चुनकर लिखिए।",
+      title: h3.title,
+      instructions: h3.instructions,
       questionTypes: [
         {
           type: "TRUE_FALSE",
@@ -452,8 +619,8 @@ export function generateStandard23Q80MSectionGroups(): BlueprintTemplateSectionG
       ],
     },
     {
-      title: "प्रश्न 4: सही जोड़ी बनाइए (Match the Columns)",
-      instructions: "स्तम्भ 'अ' के सम्मुख स्तम्भ 'ब' से सही मिलान कीजिए।",
+      title: h4.title,
+      instructions: h4.instructions,
       questionTypes: [
         {
           type: "MATCH_COLUMN",
@@ -465,8 +632,8 @@ export function generateStandard23Q80MSectionGroups(): BlueprintTemplateSectionG
       ],
     },
     {
-      title: "प्रश्न 5: एक शब्द / एक वाक्य में उत्तर दीजिए (One Word / Sentence Answer)",
-      instructions: "निम्नलिखित प्रश्नों के उत्तर एक शब्द अथवा एक वाक्य में लिखिए।",
+      title: h5.title,
+      instructions: h5.instructions,
       questionTypes: [
         {
           type: "VERY_SHORT",
@@ -478,8 +645,8 @@ export function generateStandard23Q80MSectionGroups(): BlueprintTemplateSectionG
       ],
     },
     {
-      title: "प्रश्न 6 से 15: अतिलघुउत्तरीय प्रश्न (Very Short Answer Questions)",
-      instructions: "प्रत्येक प्रश्न का उत्तर लगभग 30 शब्दों में दीजिए। सभी प्रश्न अनिवार्य हैं।",
+      title: h6.title,
+      instructions: h6.instructions,
       questionTypes: [
         {
           type: "VERY_SHORT",
@@ -492,8 +659,8 @@ export function generateStandard23Q80MSectionGroups(): BlueprintTemplateSectionG
       ],
     },
     {
-      title: "प्रश्न 16 से 19: लघुउत्तरीय प्रश्न (Short Answer Questions)",
-      instructions: "प्रत्येक प्रश्न का उत्तर लगभग 75 शब्दों में दीजिए। प्रत्येक प्रश्न में आंतरिक विकल्प दिया गया है।",
+      title: h7.title,
+      instructions: h7.instructions,
       questionTypes: [
         {
           type: "SHORT",
@@ -506,8 +673,8 @@ export function generateStandard23Q80MSectionGroups(): BlueprintTemplateSectionG
       ],
     },
     {
-      title: "प्रश्न 20 से 23: विश्लेषणात्मक / दीर्घउत्तरीय प्रश्न (Long Answer Questions)",
-      instructions: "प्रत्येक प्रश्न का उत्तर लगभग 120 शब्दों में दीजिए। प्रत्येक प्रश्न में आंतरिक विकल्प दिया गया है।",
+      title: h8.title,
+      instructions: h8.instructions,
       questionTypes: [
         {
           type: "LONG",
@@ -760,7 +927,7 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     subjectName: "Hindi",
     language: "hi",
     archetype: "STANDARD_23Q_75M",
-    sections: generateStandard23Q75MSectionGroups(),
+    sections: generateStandard23Q75MSectionGroups("hi"),
     provenance: {
       documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
       circularReference: "465/विद्योचित/2026",
@@ -795,7 +962,7 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     id: "mpbse-9th-mathematics-standard-100-75m",
     templateCode: "mpbse-9th-mathematics-standard-100-75m",
     title: "MPBSE Class 9 Mathematics Standard Official Blueprint (75 Marks)",
-    description: "म.प्र. बोर्ड कक्षा 9 गणित (Standard) 23-प्रश्नीय अंकयोजना (30 वस्तुनिष्ठ, 12×2 अंक, 3×3 अंक, 3×4 अंक)।",
+    description: "Official MPBSE Class 9 Mathematics (Standard) 23-question examination blueprint (75 marks).",
     examType: "ANNUAL",
     durationMin: 180,
     totalMarks: 75,
@@ -805,9 +972,9 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     subjectCode: "100",
     subjectName: "Mathematics",
     variant: "Standard",
-    language: "hi",
+    language: "en",
     archetype: "STANDARD_23Q_75M",
-    sections: generateStandard23Q75MSectionGroups(),
+    sections: generateStandard23Q75MSectionGroups("en"),
     provenance: {
       documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
       circularReference: "465/विद्योचित/2026",
@@ -819,7 +986,7 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     id: "mpbse-9th-mathematics-basic-101-75m",
     templateCode: "mpbse-9th-mathematics-basic-101-75m",
     title: "MPBSE Class 9 Mathematics Basic Official Blueprint (75 Marks)",
-    description: "म.प्र. बोर्ड कक्षा 9 गणित (Basic) 23-प्रश्नीय अंकयोजना (आधारभूत अवधारणाओं पर केन्द्रित)।",
+    description: "Official MPBSE Class 9 Mathematics (Basic) 23-question examination blueprint (75 marks).",
     examType: "ANNUAL",
     durationMin: 180,
     totalMarks: 75,
@@ -829,9 +996,9 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     subjectCode: "101",
     subjectName: "Mathematics",
     variant: "Basic",
-    language: "hi",
+    language: "en",
     archetype: "STANDARD_23Q_75M",
-    sections: generateStandard23Q75MSectionGroups(),
+    sections: generateStandard23Q75MSectionGroups("en"),
     provenance: {
       documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
       circularReference: "465/विद्योचित/2026",
@@ -843,7 +1010,7 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     id: "mpbse-9th-science-200-75m",
     templateCode: "mpbse-9th-science-200-75m",
     title: "MPBSE Class 9 Science Official Blueprint (75 Marks)",
-    description: "म.प्र. बोर्ड कक्षा 9 विज्ञान आधिकारिक 23-प्रश्नीय अंकयोजना (75 अंक सैद्धांतिक + 25 अंक प्रायोगिक/प्रायोजना)।",
+    description: "Official MPBSE Class 9 Science 23-question examination pattern (75 marks theory + 25 marks practical/project).",
     examType: "ANNUAL",
     durationMin: 180,
     totalMarks: 75,
@@ -852,9 +1019,9 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     stream: "SECONDARY_GENERAL",
     subjectCode: "200",
     subjectName: "Science",
-    language: "hi",
+    language: "en",
     archetype: "STANDARD_23Q_75M",
-    sections: generateStandard23Q75MSectionGroups(),
+    sections: generateStandard23Q75MSectionGroups("en"),
     provenance: {
       documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
       circularReference: "465/विद्योचित/2026",
@@ -866,7 +1033,7 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     id: "mpbse-9th-social-science-300-75m",
     templateCode: "mpbse-9th-social-science-300-75m",
     title: "MPBSE Class 9 Social Science Official Blueprint (75 Marks)",
-    description: "म.प्र. बोर्ड कक्षा 9 सामाजिक विज्ञान 23-प्रश्नीय अंकयोजना (71 अंक अध्याय भार + 4 अंक भारत मानचित्र कार्य)।",
+    description: "Official MPBSE Class 9 Social Science 23-question pattern (71 marks chapter weightage + 4 marks map work).",
     examType: "ANNUAL",
     durationMin: 180,
     totalMarks: 75,
@@ -875,9 +1042,9 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     stream: "SECONDARY_GENERAL",
     subjectCode: "300",
     subjectName: "Social Science",
-    language: "hi",
+    language: "en",
     archetype: "STANDARD_23Q_75M",
-    sections: generateStandard23Q75MSectionGroups(),
+    sections: generateStandard23Q75MSectionGroups("en"),
     provenance: {
       documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
       circularReference: "465/विद्योचित/2026",
@@ -900,7 +1067,7 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     subjectName: "Sanskrit",
     language: "sa",
     archetype: "STANDARD_23Q_75M",
-    sections: generateStandard23Q75MSectionGroups(),
+    sections: generateStandard23Q75MSectionGroups("sa"),
     provenance: {
       documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
       circularReference: "465/विद्योचित/2026",
@@ -927,7 +1094,7 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     subjectName: "Hindi",
     language: "hi",
     archetype: "STANDARD_23Q_75M",
-    sections: generateStandard23Q75MSectionGroups(),
+    sections: generateStandard23Q75MSectionGroups("hi"),
     provenance: {
       documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
       circularReference: "465/विद्योचित/2026",
@@ -962,7 +1129,7 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     id: "mpbse-10th-mathematics-standard-100-75m",
     templateCode: "mpbse-10th-mathematics-standard-100-75m",
     title: "MPBSE Class 10 Mathematics Standard Official Blueprint (75 Marks)",
-    description: "म.प्र. बोर्ड कक्षा 10 गणित (Standard) 23-प्रश्नीय अंकयोजना (30 वस्तुनिष्ठ, 12×2 अंक, 3×3 अंक, 3×4 अंक)।",
+    description: "Official MPBSE Class 10 Mathematics (Standard) 23-question examination pattern (30 objective items, 12x2m, 3x3m, 3x4m).",
     examType: "ANNUAL",
     durationMin: 180,
     totalMarks: 75,
@@ -972,9 +1139,9 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     subjectCode: "100",
     subjectName: "Mathematics",
     variant: "Standard",
-    language: "hi",
+    language: "en",
     archetype: "STANDARD_23Q_75M",
-    sections: generateStandard23Q75MSectionGroups(),
+    sections: generateStandard23Q75MSectionGroups("en"),
     provenance: {
       documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
       circularReference: "465/विद्योचित/2026",
@@ -986,7 +1153,7 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     id: "mpbse-10th-mathematics-basic-101-75m",
     templateCode: "mpbse-10th-mathematics-basic-101-75m",
     title: "MPBSE Class 10 Mathematics Basic Official Blueprint (75 Marks)",
-    description: "म.प्र. बोर्ड कक्षा 10 गणित (Basic) 23-प्रश्नीय अंकयोजना (Circular 53/54 अनुसार)।",
+    description: "Official MPBSE Class 10 Mathematics (Basic) 23-question examination pattern per Circular 53/54.",
     examType: "ANNUAL",
     durationMin: 180,
     totalMarks: 75,
@@ -996,9 +1163,9 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     subjectCode: "101",
     subjectName: "Mathematics",
     variant: "Basic",
-    language: "hi",
+    language: "en",
     archetype: "STANDARD_23Q_75M",
-    sections: generateStandard23Q75MSectionGroups(),
+    sections: generateStandard23Q75MSectionGroups("en"),
     provenance: {
       documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
       circularReference: "465/विद्योचित/2026",
@@ -1010,7 +1177,7 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     id: "mpbse-10th-science-200-75m",
     templateCode: "mpbse-10th-science-200-75m",
     title: "MPBSE Class 10 Science Official Blueprint (75 Marks)",
-    description: "म.प्र. बोर्ड कक्षा 10 विज्ञान 23-प्रश्नीय आधिकारिक अंकयोजना (75 अंक सैद्धांतिक + 25 अंक प्रायोगिक)।",
+    description: "Official MPBSE Class 10 Science 23-question examination pattern (75 marks theory + 25 marks practical).",
     examType: "ANNUAL",
     durationMin: 180,
     totalMarks: 75,
@@ -1019,9 +1186,9 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     stream: "SECONDARY_GENERAL",
     subjectCode: "200",
     subjectName: "Science",
-    language: "hi",
+    language: "en",
     archetype: "STANDARD_23Q_75M",
-    sections: generateStandard23Q75MSectionGroups(),
+    sections: generateStandard23Q75MSectionGroups("en"),
     provenance: {
       documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
       circularReference: "465/विद्योचित/2026",
@@ -1033,7 +1200,7 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     id: "mpbse-10th-social-science-300-75m",
     templateCode: "mpbse-10th-social-science-300-75m",
     title: "MPBSE Class 10 Social Science Official Blueprint (75 Marks)",
-    description: "म.प्र. बोर्ड कक्षा 10 सामाजिक विज्ञान 23-प्रश्नीय बोर्ड अंकयोजना (इतिहास, भूगोल, राजनीति, अर्थशास्त्र)।",
+    description: "Official MPBSE Class 10 Social Science 23-question examination pattern (History, Geography, Political Science, Economics).",
     examType: "ANNUAL",
     durationMin: 180,
     totalMarks: 75,
@@ -1042,9 +1209,9 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     stream: "SECONDARY_GENERAL",
     subjectCode: "300",
     subjectName: "Social Science",
-    language: "hi",
+    language: "en",
     archetype: "STANDARD_23Q_75M",
-    sections: generateStandard23Q75MSectionGroups(),
+    sections: generateStandard23Q75MSectionGroups("en"),
     provenance: {
       documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
       circularReference: "465/विद्योचित/2026",
@@ -1067,7 +1234,7 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     subjectName: "Sanskrit",
     language: "sa",
     archetype: "STANDARD_23Q_75M",
-    sections: generateStandard23Q75MSectionGroups(),
+    sections: generateStandard23Q75MSectionGroups("sa"),
     provenance: {
       documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
       circularReference: "465/विद्योचित/2026",
@@ -1079,7 +1246,7 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     id: "mpbse-10th-urdu-508-75m",
     templateCode: "mpbse-10th-urdu-508-75m",
     title: "MPBSE Class 10 Urdu Official Blueprint (75 Marks)",
-    description: "म.प्र. बोर्ड कक्षा 10 उर्दू आधिकारिक 23-प्रश्नीय बोर्ड अंकयोजना (75 अंक सैद्धांतिक)।",
+    description: "Official MPBSE Class 10 Urdu 23-question examination pattern (75 marks theory).",
     examType: "ANNUAL",
     durationMin: 180,
     totalMarks: 75,
@@ -1088,9 +1255,9 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     stream: "SECONDARY_GENERAL",
     subjectCode: "508",
     subjectName: "Urdu",
-    language: "ur",
+    language: "en",
     archetype: "STANDARD_23Q_75M",
-    sections: generateStandard23Q75MSectionGroups(),
+    sections: generateStandard23Q75MSectionGroups("en"),
     provenance: {
       documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
       circularReference: "465/विद्योचित/2026",
@@ -1117,7 +1284,7 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     subjectName: "Hindi",
     language: "hi",
     archetype: "STANDARD_23Q_80M",
-    sections: generateStandard23Q80MSectionGroups(),
+    sections: generateStandard23Q80MSectionGroups("hi"),
     provenance: {
       documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
       circularReference: "465/विद्योचित/2026",
@@ -1152,7 +1319,7 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     id: "mpbse-11th-physics-210-70m",
     templateCode: "mpbse-11th-physics-210-70m",
     title: "MPBSE Class 11 Physics Official Blueprint (70 Marks)",
-    description: "म.प्र. बोर्ड कक्षा 11 भौतिक विज्ञान 20-प्रश्नीय अंकयोजना (70 अंक सैद्धांतिक + 30 अंक प्रायोगिक)।",
+    description: "Official MPBSE Class 11 Physics 20-question blueprint (70 marks theory + 30 marks practical).",
     examType: "ANNUAL",
     durationMin: 180,
     totalMarks: 70,
@@ -1161,9 +1328,9 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     stream: "SCIENCE",
     subjectCode: "210",
     subjectName: "Physics",
-    language: "hi",
+    language: "en",
     archetype: "SCIENCE_20Q_70M",
-    sections: generateScience20Q70MSectionGroups(),
+    sections: generateScience20Q70MSectionGroups("en"),
     provenance: {
       documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
       circularReference: "465/विद्योचित/2026",
@@ -1175,7 +1342,7 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     id: "mpbse-11th-chemistry-220-70m",
     templateCode: "mpbse-11th-chemistry-220-70m",
     title: "MPBSE Class 11 Chemistry Official Blueprint (70 Marks)",
-    description: "म.प्र. बोर्ड कक्षा 11 रसायन विज्ञान 20-प्रश्नीय अंकयोजना (70 अंक सैद्धांतिक + 30 अंक प्रायोगिक)।",
+    description: "Official MPBSE Class 11 Chemistry 20-question blueprint (70 marks theory + 30 marks practical).",
     examType: "ANNUAL",
     durationMin: 180,
     totalMarks: 70,
@@ -1184,9 +1351,9 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     stream: "SCIENCE",
     subjectCode: "220",
     subjectName: "Chemistry",
-    language: "hi",
+    language: "en",
     archetype: "SCIENCE_20Q_70M",
-    sections: generateScience20Q70MSectionGroups(),
+    sections: generateScience20Q70MSectionGroups("en"),
     provenance: {
       documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
       circularReference: "465/विद्योचित/2026",
@@ -1198,7 +1365,7 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     id: "mpbse-11th-biology-231-70m",
     templateCode: "mpbse-11th-biology-231-70m",
     title: "MPBSE Class 11 Biology Official Blueprint (70 Marks)",
-    description: "म.प्र. बोर्ड कक्षा 11 जीव विज्ञान 20-प्रश्नीय अंकयोजना (70 अंक सैद्धांतिक + 30 अंक प्रायोगिक)।",
+    description: "Official MPBSE Class 11 Biology 20-question blueprint (70 marks theory + 30 marks practical).",
     examType: "ANNUAL",
     durationMin: 180,
     totalMarks: 70,
@@ -1207,9 +1374,9 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     stream: "SCIENCE_BIO",
     subjectCode: "231",
     subjectName: "Biology",
-    language: "hi",
+    language: "en",
     archetype: "SCIENCE_20Q_70M",
-    sections: generateScience20Q70MSectionGroups(),
+    sections: generateScience20Q70MSectionGroups("en"),
     provenance: {
       documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
       circularReference: "465/विद्योचित/2026",
@@ -1221,7 +1388,7 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     id: "mpbse-11th-mathematics-150-80m",
     templateCode: "mpbse-11th-mathematics-150-80m",
     title: "MPBSE Class 11 Mathematics Official Blueprint (80 Marks)",
-    description: "म.प्र. बोर्ड कक्षा 11 उच्च गणित 23-प्रश्नीय अंकयोजना (80 अंक सैद्धांतिक + 20 अंक प्रायोजना)।",
+    description: "Official MPBSE Class 11 Mathematics 23-question blueprint (80 marks theory + 20 marks project).",
     examType: "ANNUAL",
     durationMin: 180,
     totalMarks: 80,
@@ -1230,9 +1397,9 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     stream: "SCIENCE_PCM",
     subjectCode: "150",
     subjectName: "Mathematics",
-    language: "hi",
+    language: "en",
     archetype: "STANDARD_23Q_80M",
-    sections: generateStandard23Q80MSectionGroups(),
+    sections: generateStandard23Q80MSectionGroups("en"),
     provenance: {
       documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
       circularReference: "465/विद्योचित/2026",
@@ -1259,7 +1426,7 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     subjectName: "Hindi",
     language: "hi",
     archetype: "STANDARD_23Q_80M",
-    sections: generateStandard23Q80MSectionGroups(),
+    sections: generateStandard23Q80MSectionGroups("hi"),
     provenance: {
       documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
       circularReference: "465/विद्योचित/2026",
@@ -1294,7 +1461,7 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     id: "mpbse-12th-physics-210-70m",
     templateCode: "mpbse-12th-physics-210-70m",
     title: "MPBSE Class 12 Physics Official Blueprint (70 Marks)",
-    description: "म.प्र. बोर्ड कक्षा 12 भौतिक विज्ञान 20-प्रश्नीय बोर्ड अंकयोजना (70 अंक सैद्धांतिक + 30 अंक प्रायोगिक)।",
+    description: "Official MPBSE Class 12 Physics 20-question examination pattern (70 marks theory + 30 marks practical).",
     examType: "ANNUAL",
     durationMin: 180,
     totalMarks: 70,
@@ -1303,9 +1470,9 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     stream: "SCIENCE",
     subjectCode: "210",
     subjectName: "Physics",
-    language: "hi",
+    language: "en",
     archetype: "SCIENCE_20Q_70M",
-    sections: generateScience20Q70MSectionGroups(),
+    sections: generateScience20Q70MSectionGroups("en"),
     provenance: {
       documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
       circularReference: "465/विद्योचित/2026",
@@ -1317,7 +1484,7 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     id: "mpbse-12th-chemistry-220-70m",
     templateCode: "mpbse-12th-chemistry-220-70m",
     title: "MPBSE Class 12 Chemistry Official Blueprint (70 Marks)",
-    description: "म.प्र. बोर्ड कक्षा 12 रसायन विज्ञान 20-प्रश्नीय बोर्ड अंकयोजना (70 अंक सैद्धांतिक + 30 अंक प्रायोगिक)।",
+    description: "Official MPBSE Class 12 Chemistry 20-question examination pattern (70 marks theory + 30 marks practical).",
     examType: "ANNUAL",
     durationMin: 180,
     totalMarks: 70,
@@ -1326,9 +1493,9 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     stream: "SCIENCE",
     subjectCode: "220",
     subjectName: "Chemistry",
-    language: "hi",
+    language: "en",
     archetype: "SCIENCE_20Q_70M",
-    sections: generateScience20Q70MSectionGroups(),
+    sections: generateScience20Q70MSectionGroups("en"),
     provenance: {
       documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
       circularReference: "465/विद्योचित/2026",
@@ -1340,7 +1507,7 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     id: "mpbse-12th-biology-231-70m",
     templateCode: "mpbse-12th-biology-231-70m",
     title: "MPBSE Class 12 Biology Official Blueprint (70 Marks)",
-    description: "म.प्र. बोर्ड कक्षा 12 जीव विज्ञान 20-प्रश्नीय बोर्ड अंकयोजना (70 अंक सैद्धांतिक + 30 अंक प्रायोगिक)।",
+    description: "Official MPBSE Class 12 Biology 20-question examination pattern (70 marks theory + 30 marks practical).",
     examType: "ANNUAL",
     durationMin: 180,
     totalMarks: 70,
@@ -1349,9 +1516,9 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     stream: "SCIENCE_BIO",
     subjectCode: "231",
     subjectName: "Biology",
-    language: "hi",
+    language: "en",
     archetype: "SCIENCE_20Q_70M",
-    sections: generateScience20Q70MSectionGroups(),
+    sections: generateScience20Q70MSectionGroups("en"),
     provenance: {
       documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
       circularReference: "465/विद्योचित/2026",
@@ -1363,7 +1530,7 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     id: "mpbse-12th-mathematics-150-80m",
     templateCode: "mpbse-12th-mathematics-150-80m",
     title: "MPBSE Class 12 Mathematics Official Blueprint (80 Marks)",
-    description: "म.प्र. बोर्ड कक्षा 12 उच्च गणित 23-प्रश्नीय बोर्ड अंकयोजना (80 अंक सैद्धांतिक + 20 अंक प्रायोजना)।",
+    description: "Official MPBSE Class 12 Mathematics 23-question examination pattern (80 marks theory + 20 marks project).",
     examType: "ANNUAL",
     durationMin: 180,
     totalMarks: 80,
@@ -1372,9 +1539,9 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     stream: "SCIENCE_PCM",
     subjectCode: "150",
     subjectName: "Mathematics",
-    language: "hi",
+    language: "en",
     archetype: "STANDARD_23Q_80M",
-    sections: generateStandard23Q80MSectionGroups(),
+    sections: generateStandard23Q80MSectionGroups("en"),
     provenance: {
       documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
       circularReference: "465/विद्योचित/2026",

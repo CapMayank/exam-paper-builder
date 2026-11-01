@@ -60,6 +60,8 @@ import {
   getPaperLocale,
   LOCALES,
   localizeSectionTitle,
+  resolveSubjectHeadingLanguage,
+  type HeadingLanguage,
   type PaperLanguage,
 } from "./localization";
 
@@ -68,6 +70,8 @@ export {
   getPaperLocale,
   LOCALES,
   localizeSectionTitle,
+  resolveSubjectHeadingLanguage,
+  type HeadingLanguage,
   type PaperLanguage,
 };
 

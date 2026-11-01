@@ -2,10 +2,13 @@ import { body, route } from "@/lib/api";
 import { assertBlueprintValid, blueprintInclude, loadBlueprint } from "@/lib/blueprints";
 import { prisma } from "@/lib/prisma";
 import { blueprintSchema } from "@/lib/schemas";
-
 import { DEFAULT_ACADEMIC_SESSION } from "@/lib/constants";
+import { ensureCurriculumSeeded } from "@/lib/curriculumInit";
 
 export const GET = route(async (req) => {
+  await ensureCurriculumSeeded().catch((err) => {
+    console.error("❌ Failed to ensure curriculum is seeded:", err);
+  });
   const url = new URL(req.url);
   const session = url.searchParams.get("session");
   const where =

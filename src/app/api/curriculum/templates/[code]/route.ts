@@ -1,9 +1,14 @@
 import { HttpError, route } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { MPBSE_BLUEPRINT_TEMPLATES } from "@/lib/curriculumTemplates";
+import { ensureCurriculumSeeded } from "@/lib/curriculumInit";
 
 export const GET = route(
   async (_req, params) => {
+    await ensureCurriculumSeeded().catch((err) => {
+      console.error("❌ Failed to ensure curriculum is seeded:", err);
+    });
+
     const code = params.code;
     if (!code) {
       throw new HttpError(400, "Missing template identifier parameter.");

@@ -126,7 +126,8 @@ export function imposeBooklet(realPages: number): Sheet[] {
   return sheets;
 }
 
-import { getSharedInstruction, type NumberingStyle, type PaperLanguage } from "./constants";
+import { getSharedInstruction, type NumberingStyle, type PaperLanguage, localizeSectionTitle } from "./constants";
+import { localizeSectionInstruction } from "./localization";
 
 
 export { NumberingStyle };
@@ -404,12 +405,16 @@ export function computeDisplayedPaperNumbering(
 export function reconcileSectionGroupInstruction(
   instruction: string | null | undefined,
   startQ: number,
-  endQ: number
+  endQ: number,
+  paperLang?: PaperLanguage
 ): string {
   if (!instruction) return "";
-  if (startQ <= 0 || endQ < startQ) return instruction;
-
   let updated = instruction;
+  if (paperLang) {
+    updated = localizeSectionInstruction(updated, paperLang);
+  }
+  if (startQ <= 0 || endQ < startQ) return updated;
+
   // Replace English "Question Nos. X to Y" or "Question No. X to Y" or "Questions X to Y"
   updated = updated.replace(
     /\b(Questions?\s*(?:Nos?\.?)?\s*)\d+\s*(?:to|[-–])\s*\d+/gi,
@@ -446,6 +451,10 @@ export function resolveGroupedExerciseInstruction(
   const hasDevanagari = /[\u0900-\u097F]/.test(trimmed);
   // If paper language is Sanskrit or Hindi, but sectionInstruction contains no Devanagari (e.g. from English blueprint defaults), replace with shared localized instruction!
   if ((paperLang === "sa" || paperLang === "hi") && !hasDevanagari) {
+    return shared || trimmed;
+  }
+  // If paper language is English, but sectionInstruction contains Devanagari (e.g. from older blueprint), replace with shared localized instruction!
+  if (paperLang === "en" && hasDevanagari) {
     return shared || trimmed;
   }
 

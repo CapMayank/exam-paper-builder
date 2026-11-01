@@ -22,8 +22,6 @@ fi
 echo "🗄️ Generating Prisma client and syncing schema..."
 npx prisma generate
 npx prisma db push --skip-generate
-echo "🌱 Ensuring MPBSE curriculum and blueprint templates are seeded..."
-npm run seed:mpbse
 
 echo "⚙️ Building Next.js production bundle..."
 NODE_OPTIONS='--max-old-space-size=2048' npm run build

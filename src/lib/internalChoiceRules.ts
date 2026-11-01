@@ -827,7 +827,7 @@ export function getInternalChoiceSeparatorLabel(
   if (normalizedLang === "hi" || normalizedLang === "hindi") {
     return "अथवा";
   }
-  if (normalizedLang === "bilingual" || String(board).toUpperCase() === "MPBSE") {
+  if (normalizedLang === "bilingual") {
     return "OR (अथवा)";
   }
   return "OR";
