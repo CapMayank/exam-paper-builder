@@ -484,7 +484,7 @@ export function verifyQuestionAcademicQuality(
   // -------------------------------------------------------------
   // 9. INTERNAL CHOICE VALIDATION
   // -------------------------------------------------------------
-  if (slot?.requiresInternalChoice && !contract.internalChoiceRequirement.forbidden) {
+  if (opts.isPrimary !== false && slot?.requiresInternalChoice && !contract.internalChoiceRequirement.forbidden) {
     if (!question.orQuestion) {
       addIssue(dimensions, "blueprintCompliance", {
         code: "MISSING_INTERNAL_CHOICE",

@@ -250,4 +250,56 @@ describe("Question Verification Engine (TDD)", () => {
       expect(repairResult.verificationResult.status).toBe("PASS");
     });
   });
+
+  describe("5. Internal Choice (OR / अथवा) Verification", () => {
+    it("verifies a 3-mark question with valid OR alternative without recursive missing-choice failure", () => {
+      const contract = makeDummyContract({
+        questionType: "SHORT",
+        marksEach: 3,
+        slots: [
+          {
+            slotIndex: 0,
+            slotId: "s0",
+            chapterId: "ch1",
+            chapterNumber: 1,
+            chapterTitle: "Real Numbers",
+            marks: 3,
+            requiresInternalChoice: true,
+            curriculumSpec: {
+              includedTopics: ["Revisiting Irrational Numbers"],
+              deletedTopics: [],
+              sampleMatchPairs: [],
+              keyFormulasOrConcepts: [],
+            } as any,
+          },
+        ],
+        internalChoiceRequirement: {
+          required: true,
+          forbidden: false,
+          patternVersion: "CIRCULAR_465_2026_27",
+          rationale: "3-mark questions require mandatory internal choice",
+        } as any,
+      });
+
+      const questionWithOr: ValidatableQuestion = {
+        type: "SHORT",
+        text: "Prove that $\\sqrt{5}$ is an irrational number.",
+        answer: "Let us assume to the contrary that $\\sqrt{5}$ is rational...",
+        marks: 3,
+        difficulty: "MEDIUM",
+        orQuestion: {
+          type: "SHORT",
+          text: "Prove that $3 + 2\\sqrt{5}$ is an irrational number.",
+          answer: "Let us assume that $3 + 2\\sqrt{5}$ is rational...",
+          marks: 3,
+          difficulty: "MEDIUM",
+        },
+      };
+
+      const result = verifyQuestionAcademicQuality(questionWithOr, contract, { slotIndex: 0 });
+      expect(result.status).toBe("PASS");
+      expect(result.dimensions.blueprintCompliance.passed).toBe(true);
+      expect(result.allIssues.some((i) => i.code.includes("MISSING_INTERNAL_CHOICE"))).toBe(false);
+    });
+  });
 });

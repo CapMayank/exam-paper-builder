@@ -371,7 +371,9 @@ export function extractTableFromText(text: string): ExtractedTableResult {
   }
 
   // 2. Check for Markdown table (with or without separator row)
-  const lines = text.split(/\r?\n/);
+  // Normalize single-line or inline-delimited tables where rows are separated by '| |' or '|\s*|'
+  const normalizedText = text.replace(/\|\s*\|/g, "|\n|");
+  const lines = normalizedText.split(/\r?\n/);
   let tableStart = -1;
   let tableEnd = -1;
   let hasSeparator = false;
@@ -416,16 +418,40 @@ export function extractTableFromText(text: string): ExtractedTableResult {
       return cells.filter((c, idx, arr) => (idx === 0 && !c ? false : idx === arr.length - 1 && !c ? false : true));
     };
 
-    const before = lines.slice(0, tableStart).join("\n").trim();
-    const after = lines.slice(tableEnd).join("\n").trim();
-    const headerLine = lines[tableStart].trim();
+    let before = lines.slice(0, tableStart).join("\n").trim();
+    let after = lines.slice(tableEnd).join("\n").trim();
+
+    // Check if the table header line contains prose before the first '|'
+    let headerLine = lines[tableStart].trim();
+    const firstPipeIdx = headerLine.indexOf("|");
+    if (firstPipeIdx > 0) {
+      const inlinePrefix = headerLine.slice(0, firstPipeIdx).trim();
+      before = before ? `${before}\n${inlinePrefix}` : inlinePrefix;
+      headerLine = headerLine.slice(firstPipeIdx).trim();
+    }
     const headers = splitTableRowCells(headerLine);
+
+    // Check if the final table row line contains suffix text (e.g. '[1 Mark]') after the last '|'
+    let lastRowLine = lines[tableEnd - 1].trim();
+    const lastPipeIdx = lastRowLine.lastIndexOf("|");
+    if (lastPipeIdx !== -1 && lastPipeIdx < lastRowLine.length - 1) {
+      const inlineSuffix = lastRowLine.slice(lastPipeIdx + 1).trim();
+      if (inlineSuffix) {
+        after = after ? `${inlineSuffix}\n${after}` : inlineSuffix;
+        lastRowLine = lastRowLine.slice(0, lastPipeIdx + 1).trim();
+        lines[tableEnd - 1] = lastRowLine;
+      }
+    }
 
     const rows: string[][] = [];
     const rowStartIdx = hasSeparator ? tableStart + 2 : tableStart + 1;
     for (let r = rowStartIdx; r < tableEnd; r++) {
-      const rowLine = lines[r].trim();
+      let rowLine = lines[r].trim();
       if (!rowLine) continue;
+      const pipeIdx = rowLine.lastIndexOf("|");
+      if (r === tableEnd - 1 && pipeIdx !== -1 && pipeIdx < rowLine.length - 1) {
+        rowLine = rowLine.slice(0, pipeIdx + 1).trim();
+      }
       const cells = splitTableRowCells(rowLine);
       rows.push(cells);
     }
@@ -600,7 +626,7 @@ export function safeRenderLatex(
     const html = katex.renderToString(trimmed, {
       displayMode: isDisplay,
       throwOnError: true,
-      output: "htmlAndMathml",
+      output: "html",
     });
     return { html, success: true, tex: trimmed };
   } catch {
@@ -613,7 +639,7 @@ export function safeRenderLatex(
     const html = katex.renderToString(repaired, {
       displayMode: isDisplay,
       throwOnError: true,
-      output: "htmlAndMathml",
+      output: "html",
     });
     return { html, success: true, tex: repaired };
   } catch {

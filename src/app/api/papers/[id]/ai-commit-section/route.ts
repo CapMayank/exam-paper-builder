@@ -1,7 +1,10 @@
 import { HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { isSubpartQuestionType, parseMatchColumnPairs, serializeMatchColumnPair } from "@/lib/constants";
-import { buildAndValidateGenerationContract } from "@/lib/curriculumContract";
+import {
+  buildAndValidateGenerationContract,
+  generateCurriculumGroundedSectionQuestions,
+} from "@/lib/curriculumContract";
 import type { GeneratedPaperQuestion } from "@/lib/gemini";
 import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
@@ -150,9 +153,35 @@ export const POST = route(async (req, { id }, user) => {
           options: repRes.question.options || q.options,
           subparts: repRes.question.subparts || q.subparts,
           answer: repRes.question.answer || q.answer,
+          orQuestion: repRes.question.orQuestion ?? q.orQuestion,
         } as any;
         valRes = validateGeneratedQuestion(questions[i] as any, contractRes.contract, { slotIndex: i });
         vRes = repRes.verificationResult;
+      }
+    }
+
+    if (!valRes.valid || vRes.status === "FAIL") {
+      // If surgical repair could not resolve all issues, recover using curriculum-grounded question
+      // rather than throwing a 422 that aborts whole-paper generation.
+      const grounded = generateCurriculumGroundedSectionQuestions(contractRes.contract, {
+        generateDiagrams: false,
+        existingQuestionTexts: questions.map((item) => item.text).filter((t): t is string => Boolean(t)),
+      })[i];
+      if (grounded) {
+        questions[i] = {
+          ...q,
+          text: grounded.text,
+          options: grounded.options || q.options,
+          subparts: grounded.subparts || q.subparts,
+          answer: grounded.answer || q.answer,
+          difficulty: grounded.difficulty || q.difficulty || "MEDIUM",
+          cognitiveLevel: grounded.cognitiveLevel || q.cognitiveLevel || "APPLYING",
+          explanation: grounded.explanation || q.explanation,
+          orQuestion: grounded.orQuestion ?? q.orQuestion,
+          requiresInternalChoice: grounded.requiresInternalChoice ?? q.requiresInternalChoice,
+        } as any;
+        valRes = validateGeneratedQuestion(questions[i] as any, contractRes.contract, { slotIndex: i });
+        vRes = verifyQuestionAcademicQuality(questions[i] as any, contractRes.contract, { slotIndex: i });
       }
     }
 

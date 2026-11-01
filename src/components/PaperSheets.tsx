@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { QuestionView } from "@/components/QuestionView";
 import { MathText } from "@/components/MathText";
+import { QuestionContent } from "@/components/QuestionContent";
 import { imageUrl } from "@/lib/client";
 import {
   cleanQuestionStatement,
@@ -562,7 +563,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
               <span style={{ fontWeight: 600, minWidth: isA5 ? "5.5mm" : "6.5mm" }}>{subLabel}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight: isA5 ? 1.35 : 1.45 }}>
-                  <MathText text={cleanQuestionStatement(it.question.text, s.type)} />
+                  <QuestionContent text={cleanQuestionStatement(it.question.text, s.type)} isA5={isA5} />
                 </div>
                 {s.type === "MCQ" && Array.isArray(it.question.options) && it.question.options.length > 0 && (
                   <div

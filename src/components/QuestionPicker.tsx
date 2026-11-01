@@ -24,6 +24,7 @@ import {
 import { type Book, type PaperData, type QuestionDto, type Section, subpartsTotalMarks, normalizeSubpartMarks } from "@/lib/types";
 import { resolveInternalChoiceRequirement } from "@/lib/internalChoiceRules";
 import { MathText } from "./MathText";
+import { QuestionContent } from "./QuestionContent";
 import type { GeneratedQuestionItem } from "@/lib/gemini";
 
 /**
@@ -979,11 +980,11 @@ export function QuestionPicker({
 
                   {/* Question Text */}
                   <div className="text-slate-900 text-sm leading-relaxed font-medium">
-                    <MathText
+                    <QuestionContent
                       text={
                         section.type === "MATCH_COLUMN"
-                          ? getMatchColumnInstruction(aiGenerated.text)
-                          : aiGenerated.text
+                            ? getMatchColumnInstruction(aiGenerated.text)
+                            : aiGenerated.text
                       }
                     />
                   </div>
@@ -1097,7 +1098,7 @@ export function QuestionPicker({
                             <span className="badge">{sp.marks} mark{sp.marks > 1 ? "s" : ""}</span>
                           </div>
                           <p className="text-slate-700">
-                            <MathText text={sp.text} />
+                            <QuestionContent text={sp.text} />
                           </p>
                           {sp.answer && (
                             <div className="pt-1 text-[11px] text-emerald-800">
@@ -1119,7 +1120,7 @@ export function QuestionPicker({
                         </span>
                       </div>
                       <div className="font-medium text-slate-900 leading-relaxed text-xs">
-                        <MathText text={aiGenerated.orQuestion.text} />
+                        <QuestionContent text={aiGenerated.orQuestion.text} />
                       </div>
                       {aiGenerated.orQuestion.answer && (
                         <div className="rounded-lg border border-indigo-100 bg-white p-2.5 text-xs text-indigo-950 font-normal">

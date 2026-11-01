@@ -196,16 +196,8 @@ export const POST = route(async (req, { id }, user) => {
     ? ` Unfilled: ${result.unfilled.map((u) => `${u.title} (${u.count} needed)`).join(", ")}.`
     : "";
 
-  if (result.added.length === 0 && itemsToRepairChoice.length === 0) {
-    return {
-      success: false,
-      addedCount: 0,
-      unfilled: result.unfilled,
-      complete: false,
-      message: `No matching questions found in question bank for remaining blueprint quotas.${unfilledSummary}`,
-      paper,
-    };
-  }
+  const chapterMap = new Map(paper.blueprint.chapters.map((c) => [c.chapterId, c.chapter]));
+  const sectionMap = new Map(paper.blueprint.sections.map((s) => [s.id, s]));
 
   // Track used IDs and texts for pairing/synthesizing distinct OR alternatives
   const usedIds = new Set<string>([
@@ -226,8 +218,141 @@ export const POST = route(async (req, { id }, user) => {
     }
   }
 
-  const chapterMap = new Map(paper.blueprint.chapters.map((c) => [c.chapterId, c.chapter]));
-  const sectionMap = new Map(paper.blueprint.sections.map((s) => [s.id, s]));
+  // Synthesize curriculum-grounded questions for any slots unfilled from the bank
+  const synthesizedItems: Array<{
+    sectionId: string;
+    chapterId: string;
+    question: any;
+    orQuestion?: any;
+  }> = [];
+
+  if (result.unfilled.length > 0) {
+    const chapterRemainingMarks = new Map<string, number>();
+    for (const c of paper.blueprint.chapters) {
+      chapterRemainingMarks.set(c.chapterId, c.marks);
+    }
+    for (const item of paper.items) {
+      const sec = sectionMap.get(item.sectionId);
+      const marks = (item as any).marks || sec?.marksEach || 1;
+      const chId = item.question.chapter?.id || (item.question as any).chapterId;
+      const cur = chapterRemainingMarks.get(chId) ?? 0;
+      chapterRemainingMarks.set(chId, Math.max(0, cur - marks));
+    }
+    for (const a of result.added) {
+      const sec = sectionMap.get(a.sectionId);
+      const cur = chapterRemainingMarks.get(a.chapterId) ?? 0;
+      chapterRemainingMarks.set(a.chapterId, Math.max(0, cur - (sec?.marksEach ?? 0)));
+    }
+
+    for (const u of result.unfilled) {
+      const sec = sectionMap.get(u.sectionId);
+      if (!sec) continue;
+
+      for (let slotI = 0; slotI < u.count; slotI++) {
+        // Find best chapter with quota deficit (preferring exact quota matches)
+        const sortedChapters = [...paper.blueprint.chapters].sort((a, b) => {
+          const remA = chapterRemainingMarks.get(a.chapterId) ?? 0;
+          const remB = chapterRemainingMarks.get(b.chapterId) ?? 0;
+
+          // 1. Exact match first (remaining quota exactly equals slot marks)
+          const exactA = remA === sec.marksEach ? 1 : 0;
+          const exactB = remB === sec.marksEach ? 1 : 0;
+          if (exactA !== exactB) return exactB - exactA;
+
+          // 2. Chapters that have enough quota (rem >= marksEach) prioritized
+          const enoughA = remA >= sec.marksEach ? 1 : 0;
+          const enoughB = remB >= sec.marksEach ? 1 : 0;
+          if (enoughA !== enoughB) return enoughB - enoughA;
+
+          // 3. Largest remaining quota
+          return remB - remA;
+        });
+
+        const chosenBpChapter = sortedChapters[0] || paper.blueprint.chapters[0];
+        if (!chosenBpChapter) break;
+
+        const currentPlacedInSection =
+          paper.items.filter((i) => i.sectionId === sec.id).length +
+          result.added.filter((a) => a.sectionId === sec.id).length +
+          synthesizedItems.filter((s) => s.sectionId === sec.id).length;
+
+        const slotReq = resolveInternalChoiceRequirement({
+          schoolName: paper.schoolName,
+          blueprintName: paper.blueprint.name,
+          className: paper.blueprint.book.className,
+          academicSession: paper.academicSession || paper.blueprint.academicSession,
+          subject: paper.blueprint.book.subject,
+          subjectCode: paper.subjectCode || paper.blueprint.subjectCode,
+          questionType: sec.type,
+          marksEach: sec.marksEach,
+          sectionTitle: sec.title,
+          sectionInstructions: sec.instructions,
+          slotIndex: currentPlacedInSection,
+          orChoiceMode: (sec as any).orChoiceMode,
+          orAlternativeCount: (sec as any).orAlternativeCount,
+          orSlotsJson: (sec as any).orSlotsJson,
+        });
+
+        const contractRes = buildAndValidateGenerationContract({
+          schoolName: paper.schoolName,
+          blueprintName: paper.blueprint.name,
+          className: paper.blueprint.book.className,
+          academicSession: paper.academicSession || paper.blueprint.academicSession,
+          examType: paper.examType || paper.blueprint.examType,
+          bookId: paper.blueprint.bookId,
+          subject: paper.blueprint.book.subject,
+          subjectCode: paper.subjectCode || paper.blueprint.subjectCode,
+          sectionTitle: sec.title,
+          sectionInstructions: sec.instructions,
+          questionType: sec.type,
+          marksEach: sec.marksEach,
+          slots: [
+            {
+              slotIndex: currentPlacedInSection,
+              chapterId: chosenBpChapter.chapterId,
+              chapterNumber: chosenBpChapter.chapter.number,
+              chapterTitle: chosenBpChapter.chapter.title,
+              marks: sec.marksEach,
+              requiresInternalChoice: slotReq.required,
+            },
+          ],
+        });
+
+        if (contractRes.valid && contractRes.contract) {
+          const grounded = generateCurriculumGroundedSectionQuestions(contractRes.contract, {
+            generateDiagrams: false,
+            existingQuestionTexts: Array.from(usedTexts),
+          })[0];
+
+          if (grounded) {
+            usedTexts.add(grounded.text);
+            if (grounded.orQuestion) usedTexts.add(grounded.orQuestion.text);
+
+            synthesizedItems.push({
+              sectionId: sec.id,
+              chapterId: chosenBpChapter.chapterId,
+              question: grounded,
+              orQuestion: slotReq.required ? grounded.orQuestion : undefined,
+            });
+
+            const cur = chapterRemainingMarks.get(chosenBpChapter.chapterId) ?? 0;
+            chapterRemainingMarks.set(chosenBpChapter.chapterId, Math.max(0, cur - sec.marksEach));
+          }
+        }
+      }
+    }
+  }
+
+  if (result.added.length === 0 && itemsToRepairChoice.length === 0 && synthesizedItems.length === 0) {
+    return {
+      success: false,
+      addedCount: 0,
+      unfilled: result.unfilled,
+      complete: false,
+      message: `No matching questions found in question bank for remaining blueprint quotas.${unfilledSummary}`,
+      paper,
+    };
+  }
 
   const pickOrSynthesizeOrQuestionId = async (
     tx: any,
@@ -378,18 +503,75 @@ export const POST = route(async (req, { id }, user) => {
         },
       });
     }
+
+    // 3. Add synthesized curriculum-grounded items for any unfilled slots
+    for (const syn of synthesizedItems) {
+      const nextPos = (maxPosBySection.get(syn.sectionId) ?? -1) + 1;
+      maxPosBySection.set(syn.sectionId, nextPos);
+
+      const createdQ = await tx.question.create({
+        data: {
+          bookId: paper.blueprint.bookId,
+          chapterId: syn.chapterId,
+          type: syn.question.type || sectionMap.get(syn.sectionId)?.type || "SHORT",
+          text: syn.question.text,
+          optionsJson: JSON.stringify(syn.question.options || []),
+          subpartsJson: JSON.stringify(syn.question.subparts || []),
+          answer: syn.question.answer || "",
+          difficulty: syn.question.difficulty || "MEDIUM",
+          cognitiveLevel: syn.question.cognitiveLevel || "APPLYING",
+          explanation: syn.question.explanation || null,
+          createdById: user.id,
+        },
+      });
+
+      let orQuestionId: string | null = null;
+      if (syn.orQuestion) {
+        const createdOr = await tx.question.create({
+          data: {
+            bookId: paper.blueprint.bookId,
+            chapterId: syn.chapterId,
+            type: syn.orQuestion.type || sectionMap.get(syn.sectionId)?.type || "SHORT",
+            text: syn.orQuestion.text,
+            optionsJson: JSON.stringify(syn.orQuestion.options || []),
+            subpartsJson: JSON.stringify(syn.orQuestion.subparts || []),
+            answer: syn.orQuestion.answer || "",
+            difficulty: syn.orQuestion.difficulty || "MEDIUM",
+            cognitiveLevel: syn.orQuestion.cognitiveLevel || "APPLYING",
+            explanation: syn.orQuestion.explanation || null,
+            createdById: user.id,
+          },
+        });
+        orQuestionId = createdOr.id;
+      }
+
+      await tx.paperQuestion.create({
+        data: {
+          paperId: id,
+          sectionId: syn.sectionId,
+          questionId: createdQ.id,
+          orQuestionId,
+          position: nextPos,
+        },
+      });
+    }
+
     await tx.paper.update({
       where: { id },
       data: { updatedAt: new Date() },
     });
   });
 
+  const totalAdded = result.added.length + synthesizedItems.length;
+  const totalNeededUnfilled = result.unfilled.reduce((sum, u) => sum + u.count, 0);
+  const finalUnfilled = synthesizedItems.length >= totalNeededUnfilled ? [] : result.unfilled;
+
   await recordAudit(user, "PAPER_UPDATE", "PAPER", id, {
     action: "PAPER_AUTOFILL",
     title: paper.title,
-    addedCount: result.added.length,
+    addedCount: totalAdded,
     repairedChoicesCount,
-    complete: result.complete,
+    complete: finalUnfilled.length === 0,
   });
 
   const updatedPaper = await loadPaperView(id);
@@ -399,17 +581,20 @@ export const POST = route(async (req, { id }, user) => {
     : "";
   const repairNote =
     repairedChoicesCount > 0 ? ` Synchronized ${repairedChoicesCount} internal choice (OR / अथवा) slot(s).` : "";
+  const finalUnfilledSummary = finalUnfilled.length > 0
+    ? ` Unfilled: ${finalUnfilled.map((u) => `${u.title} (${u.count} needed)`).join(", ")}.`
+    : "";
 
   return {
     success: true,
-    addedCount: result.added.length,
+    addedCount: totalAdded,
     repairedChoicesCount,
-    unfilled: result.unfilled,
-    complete: updatedPaper?.progress.complete ?? result.complete,
+    unfilled: finalUnfilled,
+    complete: updatedPaper?.progress.complete ?? (finalUnfilled.length === 0),
     solverMode: result.solverMode,
-    message: updatedPaper?.progress.complete
-      ? `Successfully auto-filled ${result.added.length} questions.${repairNote} Paper is now complete!${modeNote}`
-      : `Auto-filled ${result.added.length} questions.${repairNote}${unfilledSummary}${modeNote}`,
+    message: (updatedPaper?.progress.complete ?? (finalUnfilled.length === 0))
+      ? `Successfully auto-filled ${totalAdded} questions.${repairNote} Paper is now complete!${modeNote}`
+      : `Auto-filled ${totalAdded} questions.${repairNote}${finalUnfilledSummary}${modeNote}`,
     paper: updatedPaper,
   };
 });

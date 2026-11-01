@@ -4,6 +4,7 @@ import { ArrowLeft, CheckCircle2, FileDown, FileText, Grid3X3, ListChecks, Print
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
 import { MathText } from "@/components/MathText";
+import { QuestionContent } from "@/components/QuestionContent";
 import { api, imageUrl } from "@/lib/client";
 import {
   cleanOptionText,
@@ -437,7 +438,7 @@ function QuestionSolutionItem({
         <div className="font-semibold text-slate-900 text-sm">
           {displayLabel} {isOrOption && "(OR) "}
           <span className="font-normal text-slate-800">
-            <MathText text={q.text} />
+            <QuestionContent text={q.text} />
           </span>
         </div>
         <span className="whitespace-nowrap rounded bg-slate-200 px-1.5 py-0.5 text-xs font-bold text-slate-700">
@@ -464,7 +465,7 @@ function QuestionSolutionItem({
               <div className="flex items-start justify-between gap-2">
                 <div className="text-xs font-semibold text-slate-800">
                   <span className="font-bold text-indigo-700 mr-1.5">{sp.label || `(${idx + 1})`}</span>
-                  <MathText text={sp.text} />
+                  <QuestionContent text={sp.text} />
                 </div>
                 {sp.marks !== undefined && (
                   <span className="whitespace-nowrap rounded bg-slate-200 px-1.5 py-0.5 text-[11px] font-bold text-slate-700">

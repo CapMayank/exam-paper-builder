@@ -1717,6 +1717,7 @@ JSON Array Output Schema:
   let activePrompt = baseUserPrompt;
   let lastValidationIssues: QuestionValidationIssue[] = [];
   let lastAccepted: GeneratedPaperQuestion[] = [];
+  let lastNormalizedQuestions: GeneratedPaperQuestion[] = [];
   let lastIsMock = false;
   let lastModelUsed = model || "gemini-2.5-pro";
 
@@ -1773,6 +1774,7 @@ JSON Array Output Schema:
             options: repRes.question.options || q.options,
             subparts: repRes.question.subparts || q.subparts,
             answer: repRes.question.answer || q.answer,
+            orQuestion: (repRes.question.orQuestion as any) ?? q.orQuestion,
           };
         }
       }
@@ -1843,6 +1845,7 @@ JSON Array Output Schema:
 
     lastValidationIssues = validation.issues;
     lastAccepted = validation.acceptedQuestions as GeneratedPaperQuestion[];
+    lastNormalizedQuestions = normalizedQuestions;
 
     if (validation.valid) {
       const trace = createGenerationJobTrace({
@@ -1874,6 +1877,49 @@ JSON Array Output Schema:
     retryCount = attempt + 1;
     const errorFeedback = validation.issues.map((iss) => `- ${iss.message}`).join("\n");
     activePrompt = `${baseUserPrompt}\n\nCRITICAL VALIDATION CORRECTION (Retry #${retryCount}):\nYour previous output was rejected by the Subject & Curriculum Quality Gate for the following reasons:\n${errorFeedback}\nRegenerate the complete JSON array ensuring every question strictly passes all ${contract.canonicalSubject} curriculum and format checks.`;
+  }
+
+  // If validation is still not passing after all retries, patch failing slots with guaranteed curriculum-grounded questions
+  if (lastValidationIssues.length > 0) {
+    const fallbackPool = fallbackQuestions();
+    if (fallbackPool && fallbackPool.length > 0) {
+      const invalidSlotIndices = new Set(
+        lastValidationIssues
+          .map((iss) => iss.slotIndex)
+          .filter((idx): idx is number => typeof idx === "number"),
+      );
+      const patchedQuestions = contract.slots.map((slot, idx) => {
+        if (invalidSlotIndices.has(slot.slotIndex) || !lastNormalizedQuestions[idx]) {
+          return (fallbackPool[idx] || lastNormalizedQuestions[idx]) as GeneratedPaperQuestion;
+        }
+        return lastNormalizedQuestions[idx];
+      });
+      const patchedValidation = validateGeneratedSection(
+        patchedQuestions,
+        contract,
+        existingQuestionTexts || [],
+      );
+      if (patchedValidation.valid) {
+        const trace = createGenerationJobTrace({
+          contract,
+          modelUsed: lastModelUsed,
+          isOfflineCurriculumMode: true,
+          retryCount,
+          acceptedCount: patchedQuestions.length,
+          rejectedCount: 0,
+          validationIssues: [],
+        });
+        return {
+          success: true,
+          isMock: true,
+          modelUsed: lastModelUsed,
+          data: patchedQuestions,
+          trace,
+          contract,
+          validationIssues: [],
+        };
+      }
+    }
   }
 
   const trace = createGenerationJobTrace({

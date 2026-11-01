@@ -22,6 +22,7 @@ import { getInternalChoiceSeparatorLabel } from "@/lib/internalChoiceRules";
 import { isTextPredominantlySanskrit, type PaperLanguage } from "@/lib/localization";
 import type { QuestionDto } from "@/lib/types";
 import { MathText } from "@/components/MathText";
+import { QuestionContent } from "@/components/QuestionContent";
 
 const LETTERS = "ABCDEFGHIJ";
 const LETTERS_LIST = ["(A)", "(B)", "(C)", "(D)", "(E)", "(F)", "(G)", "(H)", "(I)", "(J)"];
@@ -210,7 +211,7 @@ function SingleQuestionBody({
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight }}>
-            <MathText text={stemText} />
+            <QuestionContent text={stemText} isA5={isA5} />
             {marks !== undefined && marksStyle === "INLINE" && (
               <span style={{ fontWeight: 700, fontSize: marksFontSize, marginLeft: "2mm", whiteSpace: "nowrap", color: "#334155" }}>
                 {formatMarksLabel(marks, effectiveLang)}
@@ -311,7 +312,7 @@ function SingleQuestionBody({
                   </span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight }}>
-                      <MathText text={sp.text} />
+                      <QuestionContent text={sp.text} isA5={isA5} />
                     </div>
                     {sp.options && sp.options.length > 0 && (
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: isA5 ? "1mm 3mm" : "1.5mm 4mm", marginTop: "1.5mm" }}>
@@ -333,7 +334,7 @@ function SingleQuestionBody({
                             </span>
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight }}>
-                                <MathText text={nested.text} />
+                                <QuestionContent text={nested.text} isA5={isA5} />
                               </div>
                               {showAnswer && nested.answer && (
                                 <div style={{ marginTop: "1mm", fontSize: isA5 ? "7.5pt" : "0.85em", color: "#166534" }}>

@@ -13,6 +13,7 @@ import {
   Plus,
 } from "lucide-react";
 import { MathText } from "@/components/MathText";
+import { QuestionContent } from "@/components/QuestionContent";
 import { api } from "@/lib/client";
 import {
   cleanMatchItem,
@@ -594,7 +595,7 @@ export function SectionAiModal({
 
                     {/* Question Prompt */}
                     <div className="font-medium text-slate-900 leading-relaxed">
-                      <MathText
+                      <QuestionContent
                         text={
                           q.type === "MATCH_COLUMN" || section.type === "MATCH_COLUMN"
                             ? getMatchColumnInstruction(q.text)
@@ -662,7 +663,7 @@ export function SectionAiModal({
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex items-start gap-1.5 font-medium text-slate-800">
                                 <span className="font-bold text-indigo-600 font-mono">{sp.label || `(${sIdx + 1})`}</span>
-                                <MathText text={sp.text} />
+                                <QuestionContent text={sp.text} />
                               </div>
                               <span className="shrink-0 rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700">
                                 {sp.marks} mark{sp.marks > 1 ? "s" : ""}
@@ -706,7 +707,7 @@ export function SectionAiModal({
                           </span>
                         </div>
                         <div className="font-medium text-slate-900 leading-relaxed">
-                          <MathText text={q.orQuestion.text} />
+                          <QuestionContent text={q.orQuestion.text} />
                         </div>
                         {q.orQuestion.answer && (
                           <div className="rounded-lg bg-indigo-50/70 p-2 text-[11px] text-indigo-900 border border-indigo-100">

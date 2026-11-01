@@ -242,6 +242,20 @@ Find the determinant of the submatrix.`;
       expect(result.prefixText).toBe(text);
       expect(result.suffixText).toBe("");
     });
+
+    it("extracts single-line and inline-delimited tables with prefix prose and suffix marks", () => {
+      const text =
+        "For the following distribution, the modal class is: | Marks | Number of Students | | :--- | :--- | | 0-10 | 3 | | 10-20 | 12 | | 20-30 | 20 | | 30-40 | 10 | | 40-50 | 5 | [1 Mark]";
+      const result = extractTableFromText(text);
+      expect(result.table).not.toBeNull();
+      expect(result.table!.headers).toEqual(["Marks", "Number of Students"]);
+      expect(result.table!.rows).toHaveLength(5);
+      expect(result.table!.rows[0]).toEqual(["0-10", "3"]);
+      expect(result.table!.rows[1]).toEqual(["10-20", "12"]);
+      expect(result.table!.rows[2]).toEqual(["20-30", "20"]);
+      expect(result.prefixText).toBe("For the following distribution, the modal class is:");
+      expect(result.suffixText).toBe("[1 Mark]");
+    });
   });
 
   describe("Adversarial Prefix Stripping Defense (Words vs Labels)", () => {

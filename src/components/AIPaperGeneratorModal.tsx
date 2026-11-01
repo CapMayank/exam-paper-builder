@@ -23,6 +23,7 @@ import {
   X,
 } from "lucide-react";
 import { MathText } from "@/components/MathText";
+import { QuestionContent } from "@/components/QuestionContent";
 import { ErrorBanner, Modal, Spinner, useToast } from "@/components/ui";
 import { renderDocToBlob } from "@/components/figure-studio/render";
 import { embedSceneInPng } from "@/components/figure-studio/pngMeta";
@@ -944,7 +945,7 @@ export function AIPaperGeneratorModal({
 
                           {/* Question Text */}
                           <div className="text-xs text-slate-900 font-medium leading-relaxed">
-                            <MathText
+                            <QuestionContent
                               text={
                                 q.type === "MATCH_COLUMN"
                                   ? getMatchColumnInstruction(q.text)
@@ -1024,7 +1025,7 @@ export function AIPaperGeneratorModal({
                               {q.subparts.map((sp, spIdx) => (
                                 <div key={spIdx} className="text-[11px] text-slate-700 flex items-start gap-1">
                                   <span className="font-bold text-slate-500">{sp.label}</span>
-                                  <span className="flex-1"><MathText text={sp.text} /></span>
+                                  <span className="flex-1"><QuestionContent text={sp.text} /></span>
                                   <span className="text-[10px] text-slate-400 font-mono">[{sp.marks}m]</span>
                                 </div>
                               ))}
@@ -1040,7 +1041,7 @@ export function AIPaperGeneratorModal({
                                 </span>
                               </div>
                               <div className="text-xs text-slate-900 font-medium leading-relaxed">
-                                <MathText text={q.orQuestion.text} />
+                                <QuestionContent text={q.orQuestion.text} />
                               </div>
                               {q.orQuestion.subparts &&
                                 q.orQuestion.subparts.length > 0 && (
@@ -1048,7 +1049,7 @@ export function AIPaperGeneratorModal({
                                     {q.orQuestion.subparts.map((sp, spIdx) => (
                                       <div key={spIdx} className="text-[11px] text-slate-700 flex items-start gap-1">
                                         <span className="font-bold text-slate-500">{sp.label}</span>
-                                        <span className="flex-1"><MathText text={sp.text} /></span>
+                                        <span className="flex-1"><QuestionContent text={sp.text} /></span>
                                         <span className="text-[10px] text-slate-400 font-mono">[{sp.marks}m]</span>
                                       </div>
                                     ))}
