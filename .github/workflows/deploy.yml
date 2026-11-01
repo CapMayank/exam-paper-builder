@@ -23,4 +23,8 @@ jobs:
           script_stop: true
           command_timeout: 30m
           timeout: 60s
-          script: bash /home/ubuntu/exam-paper-builder/scripts/deploy.sh
+          script: |
+            cd /home/ubuntu/exam-paper-builder
+            git fetch --quiet origin main
+            git reset --hard origin/main
+            bash scripts/deploy.sh
