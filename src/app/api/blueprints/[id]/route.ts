@@ -141,6 +141,9 @@ export const PUT = route(async (req, { id }, user) => {
         durationMin: input.durationMin,
         subjectCode: input.subjectCode ?? "",
         language: input.language || "en",
+        curriculumMode: input.curriculumMode || "BLANK_CUSTOM",
+        curriculumTemplateId: input.curriculumTemplateId || null,
+        curriculumVariantId: input.curriculumVariantId || null,
       },
     });
   });

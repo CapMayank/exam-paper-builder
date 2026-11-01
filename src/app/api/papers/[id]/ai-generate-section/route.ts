@@ -64,8 +64,10 @@ export const POST = route(async (req, { id }, user) => {
       });
       reqChoice = choiceRule.required;
     }
+    const slotId = slot.slotId || (matchedSection ? `slot_${matchedSection.id}_${slotIdx}` : `slot_${slotIdx}`);
     return {
       ...slot,
+      slotId,
       slotIndex: slotIdx,
       requiresInternalChoice: reqChoice,
     };

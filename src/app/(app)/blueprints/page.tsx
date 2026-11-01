@@ -581,9 +581,21 @@ export default function BlueprintsPage() {
                         >
                         <div className="flex items-center justify-between gap-2">
                           <span className="block font-semibold text-sm text-slate-900 truncate">{bp.name}</span>
-                          <span className="inline-flex shrink-0 items-center rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 ring-1 ring-inset ring-indigo-700/10 whitespace-nowrap">
-                            {EXAM_TYPE_LABEL[bp.examType as ExamType] || bp.examType}
-                          </span>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {(bp as any).curriculumMode === "STANDARD_MPBSE" && (
+                              <span className="inline-flex items-center rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800 ring-1 ring-inset ring-emerald-600/20 whitespace-nowrap">
+                                MPBSE Official
+                              </span>
+                            )}
+                            {(bp as any).curriculumMode === "CUSTOM_SCHOOL" && (
+                              <span className="inline-flex items-center rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold text-indigo-800 ring-1 ring-inset ring-indigo-600/20 whitespace-nowrap">
+                                School Exam
+                              </span>
+                            )}
+                            <span className="inline-flex shrink-0 items-center rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-700 ring-1 ring-inset ring-slate-600/10 whitespace-nowrap">
+                              {EXAM_TYPE_LABEL[bp.examType as ExamType] || bp.examType}
+                            </span>
+                          </div>
                         </div>
                         <span className="mt-0.5 block text-xs text-slate-600 truncate">
                           {bp.book.className} · {bp.book.subject}
@@ -667,10 +679,31 @@ export default function BlueprintsPage() {
                       <span className="badge !bg-indigo-50 !text-indigo-700 border border-indigo-200/50">
                         {EXAM_TYPE_LABEL[selected.examType as ExamType] || selected.examType} Exam
                       </span>
+                      {(selected as any).curriculumMode === "STANDARD_MPBSE" && (
+                        <span className="badge !bg-emerald-50 !text-emerald-800 border border-emerald-300 font-bold">
+                          🏛️ MPBSE Official Pattern
+                        </span>
+                      )}
+                      {(selected as any).curriculumMode === "CUSTOM_SCHOOL" && (
+                        <span className="badge !bg-indigo-50 !text-indigo-800 border border-indigo-300 font-bold">
+                          🏫 School Term Pattern
+                        </span>
+                      )}
                     </div>
                     <p className="mt-1 text-sm text-slate-600">
                       {selected.book.className} · {selected.book.subject} · {selected.book.title}
                     </p>
+                    {(selected as any).curriculumMode === "STANDARD_MPBSE" && (
+                      <div className="mt-2.5 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-xs text-emerald-950 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold">📜 Statutory Compliance:</span>
+                          <span>MPBSE Circular 465/2026 Aligned • 100% Alternative OR Choice Enforced for 3m/4m</span>
+                        </div>
+                        <span className="text-[10px] bg-emerald-200/80 text-emerald-900 font-bold px-2 py-0.5 rounded shrink-0">
+                          Board Certified
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2">

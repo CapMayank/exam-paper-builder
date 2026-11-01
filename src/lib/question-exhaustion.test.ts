@@ -188,6 +188,9 @@ describe("Milestone 3 Requirement R3: Question Usage History & Exhaustion Taggin
       spaceMm: 40,
       showGrid: false,
       subpartsJson: "[]",
+      curriculumTopicId: null,
+      competencyLevel: null,
+      sourceProvenance: null,
       createdById: "user_test",
       createdAt: new Date("2025-01-01"),
       paperQuestions: [
@@ -232,6 +235,9 @@ describe("Milestone 3 Requirement R3: Question Usage History & Exhaustion Taggin
       spaceMm: 30,
       showGrid: false,
       subpartsJson: "[]",
+      curriculumTopicId: null,
+      competencyLevel: null,
+      sourceProvenance: null,
       createdById: "user_test",
       createdAt: new Date("2025-01-01"),
       paperQuestions: [

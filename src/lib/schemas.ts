@@ -197,6 +197,9 @@ export const blueprintSchema = z.object({
   durationMin: z.number().int().min(5).max(600),
   subjectCode: z.string().trim().max(40).optional().default(""),
   language: z.enum(["en", "hi", "sa", "bilingual"]).optional().default("en"),
+  curriculumMode: z.enum(["STANDARD_MPBSE", "CUSTOM_SCHOOL", "BLANK_CUSTOM"]).optional().default("BLANK_CUSTOM"),
+  curriculumTemplateId: z.string().nullable().optional(),
+  curriculumVariantId: z.string().nullable().optional(),
   chapters: z.array(z.object({ chapterId: z.string().min(1), marks: z.number().int().min(0).max(1000) })),
   sections: z
     .array(

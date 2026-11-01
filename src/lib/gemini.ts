@@ -26,6 +26,7 @@ import {
   cleanChapterTitleForLookup,
   generateCurriculumGroundedSectionQuestions,
   getChapterCurriculumSpec,
+  type CurriculumGenerationPayload,
   type GenerationContract,
 } from "./curriculumContract";
 import {
@@ -895,6 +896,7 @@ Return a JSON array strictly matching this TypeScript structure:
 /* ------------------------------------------------------------------ */
 
 export interface GeneratePaperSectionSlot {
+  slotId?: string;
   slotIndex: number;
   chapterId: string;
   chapterNumber: number;
@@ -902,6 +904,7 @@ export interface GeneratePaperSectionSlot {
   marks: number;
   topicFocus?: string;
   requiresInternalChoice?: boolean;
+  curriculumPayload?: CurriculumGenerationPayload;
 }
 
 export interface GeneratePaperSectionInput {
@@ -930,6 +933,7 @@ export interface GeneratePaperSectionInput {
 }
 
 export interface GeneratedPaperQuestion {
+  slotId?: string;
   slotIndex: number;
   chapterId: string;
   chapterNumber: number;
@@ -1083,22 +1087,41 @@ ${contract.forbiddenCrossSubjectDomains.length > 0 ? `2. FORBIDDEN CROSS-SUBJECT
    - Internal Choice Isolation: NEVER embed the word 'अथवा' or alternative questions inside the primary question's 'text' field. All alternative questions must strictly be placed in the separate 'orQuestion' object.
    - When language is "hi" (Hindi), generate 100% standard Hindi in Devanagari script. Never leak English words.
    - When language is "en" (English), generate 100% English.
-14. Return ONLY a valid JSON array of question objects. No markdown wrapping or conversational commentary.`;
+14. SUBJECT VARIANT & COGNITIVE LEVEL DIRECTIVE:
+   - Subject Variant: ${contract.subjectVariant || "STANDARD"}
+   ${
+     contract.subjectVariant === "BASIC"
+       ? "- TARGET COGNITIVE LEVEL (BASIC / CODE 101): 50% Easy (Direct Recall / Single-Step Formula Substitution), 40% Average (Standard Textbook Applications), 10% Higher Order. Keep numbers clean, avoid multi-step algebraic manipulations, and focus on fundamental definitions. NEVER generate irrationality proofs (e.g. proof that √5 is irrational) or multi-concept synthesis."
+       : "- TARGET COGNITIVE LEVEL (STANDARD / CODE 100): 30% Easy, 50% Average, 20% Higher Order (Multi-step Problem Solving, Geometric/Algebraic Proofs, In-depth Conceptual Analysis). 3-mark and 4-mark slots must NOT be trivial 1-step substitutions."
+   }
+15. STATUTORY RATIONALIZED SYLLABUS COMPLIANCE (NEGATIVE CONSTRAINT):
+   - The Board has officially deleted and rationalized specific chapters and topics for the 2026–27 session.
+   - VIOLATION PENALTY: Generating any question, option, distractor, scenario, or alternative (OR) question testing deleted topics is an examination security violation and will cause immediate rejection by deterministic quality gates.
+16. STATUTORY INTERNAL CHOICE & WORD COUNT RUBRIC (Circular 465/2026):
+   - 1-mark & 2-mark questions: Strictly NO internal choice. Target answer length: ~30 words for 2m.
+   - 3-mark questions: 100% mandatory internal choice (Full OR alternative from same chapter). Target answer length: ~75 words.
+   - 4-mark questions: 100% mandatory internal choice (Full OR alternative from same chapter). Target answer length: ~120 words.
+   - 5-mark questions: 100% mandatory internal choice. Target answer length: ~150 words.
+   - Rubric: For all subjective questions, model answers MUST provide a step-wise mark distribution totaling the exact slot marks.
+17. Echo the stable "slotId" provided in each slot specification inside the returned JSON question object.
+18. Return ONLY a valid JSON array of question objects. No markdown wrapping or conversational commentary.`;
 
   const slotsDescription = contract.slots
     .map((s, idx) => {
       const origSlot = slots[idx];
+      const slotId = s.slotId || origSlot?.slotId || `slot_${idx}`;
       const allowed = s.curriculumSpec.includedTopics.join("; ");
       const deleted =
         s.curriculumSpec.deletedTopics.length > 0
-          ? ` | Excluded/Deleted Topics: ${s.curriculumSpec.deletedTopics.join("; ")}`
+          ? ` | STATUTORY EXCLUDED/DELETED TOPICS (FORBIDDEN): ${s.curriculumSpec.deletedTopics.join("; ")}`
           : "";
       const choiceRule = s.requiresInternalChoice
         ? ` | Internal Choice: REQUIRED (Must include distinct "orQuestion" from same chapter "${s.chapterTitle}")`
         : choiceForbidden
         ? ` | Internal Choice: FORBIDDEN (No "orQuestion")`
         : "";
-      return `Question ${idx + 1} (Slot ${s.slotIndex}): Chapter ${s.chapterNumber} - "${s.chapterTitle}" (${s.marks} marks) | Allowed Topics: ${allowed}${deleted}${choiceRule}${
+      const targetWords = s.marks === 2 ? 30 : s.marks === 3 ? 75 : s.marks === 4 ? 120 : 150;
+      return `Question ${idx + 1} (Slot ${s.slotIndex}, slotId: "${slotId}"): Chapter ${s.chapterNumber} - "${s.chapterTitle}" (${s.marks} marks, target length: ~${targetWords} words) | Allowed Topics: ${allowed}${deleted}${choiceRule}${
         origSlot?.topicFocus ? ` | Topic Focus: ${origSlot.topicFocus}` : ""
       }`;
     })
@@ -1263,6 +1286,7 @@ JSON Array Output Schema:
       existingQuestionTexts: existingQuestionTexts || [],
     });
     return grounded.map((g) => ({
+      slotId: contract.slots[g.slotIndex]?.slotId || `slot_${g.slotIndex}`,
       slotIndex: g.slotIndex,
       chapterId: g.chapterId,
       chapterNumber: g.chapterNumber,
@@ -1545,6 +1569,7 @@ JSON Array Output Schema:
       }
 
       const questionItem: GeneratedPaperQuestion = {
+        slotId: rawQ.slotId || slot.slotId,
         slotIndex: slot.slotIndex,
         chapterId: slot.chapterId,
         chapterNumber: slot.chapterNumber,

@@ -1,5 +1,19 @@
 import type { QuestionType } from "./constants";
 
+export type ChoicePolicyType =
+  | "NO_CHOICE"
+  | "FULL_OR_ALTERNATIVE"
+  | "ATTEMPT_K_OF_N"
+  | "SELECT_ONE_OF_N";
+
+export interface ChoicePolicy {
+  policyType: ChoicePolicyType;
+  totalProvided: number;
+  totalRequired: number;
+  poolScope: "ANY_INCLUDED_CHAPTER" | "SAME_UNIT" | "SAME_CHAPTER";
+  rationale: string;
+}
+
 export interface BlueprintTemplateSectionGroup {
   title: string;
   instructions: string;
@@ -10,25 +24,1374 @@ export interface BlueprintTemplateSectionGroup {
     orChoiceMode?: "BOARD_DEFAULT" | "REQUIRED" | "NOT_REQUIRED";
     orAlternativeCount?: number;
     orSlots?: boolean[];
+    choicePolicy?: ChoicePolicy;
   }>;
 }
 
 export interface BlueprintTemplate {
   id: string;
+  templateCode: string;
   title: string;
   description: string;
   examType: "QUARTERLY" | "HALF_YEARLY" | "ANNUAL";
   durationMin: number;
   totalMarks: number;
-  targetClasses: string; // e.g. "Class 9, Class 10, Class 11, Class 12"
-  language?: string;
+  targetClasses: string;
+  classLevel?: number;
+  stream?: string;
   subjectCode?: string;
+  subjectName?: string;
+  variant?: string;
+  language?: string;
+  archetype: string;
   sections: BlueprintTemplateSectionGroup[];
+  provenance?: {
+    documentTitle: string;
+    circularReference: string;
+    theoryMarks: number;
+    practicalMarks?: number;
+    projectMarks?: number;
+  };
 }
 
-export const STANDARD_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
+export interface Circular465Violation {
+  slotIndex: number;
+  questionNumber?: number;
+  sectionTitle: string;
+  marksEach: number;
+  ruleType: "NO_CHOICE_2M" | "MANDATORY_OR_3M_4M" | "ATTEMPT_K_OF_N_POOL" | "UNIT_POOL_MISMATCH";
+  severity: "error";
+  message: string;
+}
+
+export interface Circular465AuditResult {
+  isCompliant: boolean;
+  circularReference: "465/विद्योचित/2026";
+  violations: Circular465Violation[];
+  coveragePercent: number;
+}
+
+export type ExaminationTerm = "QUARTERLY" | "HALF_YEARLY" | "PRE_BOARD" | "UNIT_TEST";
+
+export interface TermAdaptationConfig {
+  term: ExaminationTerm;
+  targetMarks: number;
+  durationMin: number;
+  proportionalScaling: boolean;
+}
+
+export const TERM_CONFIGS: Record<ExaminationTerm, TermAdaptationConfig> = {
+  PRE_BOARD: { term: "PRE_BOARD", targetMarks: 75, durationMin: 180, proportionalScaling: false },
+  HALF_YEARLY: { term: "HALF_YEARLY", targetMarks: 75, durationMin: 180, proportionalScaling: false },
+  QUARTERLY: { term: "QUARTERLY", targetMarks: 50, durationMin: 120, proportionalScaling: true },
+  UNIT_TEST: { term: "UNIT_TEST", targetMarks: 25, durationMin: 60, proportionalScaling: true },
+};
+
+export function createChoicePolicy(
+  policyType: ChoicePolicyType,
+  totalProvided: number,
+  totalRequired: number,
+  poolScope: "ANY_INCLUDED_CHAPTER" | "SAME_UNIT" | "SAME_CHAPTER",
+  rationale: string
+): ChoicePolicy {
+  return { policyType, totalProvided, totalRequired, poolScope, rationale };
+}
+
+/**
+ * Normalizes raw string question types from DB/seed to canonical QuestionType enum.
+ */
+export function normalizeQuestionType(raw: string): QuestionType {
+  const upper = raw.trim().toUpperCase();
+  const mapping: Record<string, QuestionType> = {
+    FILL_IN_BLANKS: "FILL_BLANK",
+    FILL_BLANK: "FILL_BLANK",
+    MATCH_FOLLOWING: "MATCH_COLUMN",
+    MATCH_COLUMN: "MATCH_COLUMN",
+    ONE_WORD: "VERY_SHORT",
+    VERY_SHORT: "VERY_SHORT",
+    VERY_SHORT_ANSWER: "VERY_SHORT",
+    SHORT_ANSWER: "SHORT",
+    SHORT: "SHORT",
+    LONG_ANSWER: "LONG",
+    LONG: "LONG",
+    MCQ: "MCQ",
+    TRUE_FALSE: "TRUE_FALSE",
+    ASSERTION_REASON: "ASSERTION_REASON",
+    CASE_STUDY: "CASE_STUDY",
+  };
+  return mapping[upper] || "SHORT";
+}
+
+/**
+ * Validates blueprint sections against statutory Circular 465 rules:
+ * - 2-mark questions: choice is strictly abolished (NO_CHOICE / NOT_REQUIRED).
+ * - 3-mark and 4-mark questions: internal choice is 100% mandatory (FULL_OR_ALTERNATIVE / REQUIRED).
+ */
+export function validateCircular465Blueprint(
+  sections: Array<{
+    title: string;
+    type: string;
+    count: number;
+    marksEach: number;
+    orChoiceMode?: string;
+    orAlternativeCount?: number | null;
+  }>
+): Circular465AuditResult {
+  const violations: Circular465Violation[] = [];
+  let eligibleSlots = 0;
+  let compliantSlots = 0;
+
+  for (const [idx, sec] of sections.entries()) {
+    if (sec.marksEach === 2) {
+      const hasOrCount = (sec.orAlternativeCount ?? 0) > 0;
+      if (sec.orChoiceMode === "REQUIRED" || hasOrCount) {
+        violations.push({
+          slotIndex: idx,
+          sectionTitle: sec.title,
+          marksEach: 2,
+          ruleType: "NO_CHOICE_2M",
+          severity: "error",
+          message: `Section "${sec.title}" carries 2 marks per question. Internal choice is prohibited under MPBSE Circular 465/2026.`,
+        });
+      }
+    }
+
+    if (sec.marksEach === 3 || sec.marksEach === 4) {
+      eligibleSlots += sec.count;
+      if (sec.orChoiceMode === "NOT_REQUIRED") {
+        violations.push({
+          slotIndex: idx,
+          sectionTitle: sec.title,
+          marksEach: sec.marksEach,
+          ruleType: "MANDATORY_OR_3M_4M",
+          severity: "error",
+          message: `Section "${sec.title}" carries ${sec.marksEach} marks per question. 100% internal choice (OR / अथवा) is mandatory under MPBSE Circular 465/2026.`,
+        });
+      } else {
+        compliantSlots += sec.count;
+      }
+    }
+  }
+
+  const coveragePercent = eligibleSlots > 0 ? Math.round((compliantSlots / eligibleSlots) * 100) : 100;
+  return {
+    isCompliant: violations.length === 0 && coveragePercent === 100,
+    circularReference: "465/विद्योचित/2026",
+    violations,
+    coveragePercent,
+  };
+}
+
+// =============================================================================
+// ARCHETYPE GENERATORS
+// =============================================================================
+
+export function generateStandard23Q75MSectionGroups(): BlueprintTemplateSectionGroup[] {
+  return [
+    {
+      title: "प्रश्न 1: सही विकल्प चुनिए (Multiple Choice Questions)",
+      instructions: "प्रत्येक प्रश्न के लिए दिए गए विकल्पों में से सही विकल्प चुनकर लिखिए।",
+      questionTypes: [
+        {
+          type: "MCQ",
+          count: 6,
+          marksEach: 1,
+          orChoiceMode: "NOT_REQUIRED",
+          choicePolicy: createChoicePolicy("NO_CHOICE", 6, 6, "ANY_INCLUDED_CHAPTER", "Circular 465: Objective questions are compulsory"),
+        },
+      ],
+    },
+    {
+      title: "प्रश्न 2: रिक्त स्थानों की पूर्ति कीजिए (Fill in the Blanks)",
+      instructions: "दिए गए रिक्त स्थानों की सही शब्दों द्वारा पूर्ति कीजिए।",
+      questionTypes: [
+        {
+          type: "FILL_BLANK",
+          count: 6,
+          marksEach: 1,
+          orChoiceMode: "NOT_REQUIRED",
+          choicePolicy: createChoicePolicy("NO_CHOICE", 6, 6, "ANY_INCLUDED_CHAPTER", "Circular 465: Objective questions are compulsory"),
+        },
+      ],
+    },
+    {
+      title: "प्रश्न 3: सत्य / असत्य लिखिए (True / False)",
+      instructions: "निम्नलिखित कथनों में सत्य अथवा असत्य चुनकर लिखिए।",
+      questionTypes: [
+        {
+          type: "TRUE_FALSE",
+          count: 6,
+          marksEach: 1,
+          orChoiceMode: "NOT_REQUIRED",
+          choicePolicy: createChoicePolicy("NO_CHOICE", 6, 6, "ANY_INCLUDED_CHAPTER", "Circular 465: Objective questions are compulsory"),
+        },
+      ],
+    },
+    {
+      title: "प्रश्न 4: सही जोड़ी बनाइए (Match the Columns)",
+      instructions: "स्तम्भ 'अ' के सम्मुख स्तम्भ 'ब' से सही मिलान कीजिए।",
+      questionTypes: [
+        {
+          type: "MATCH_COLUMN",
+          count: 6,
+          marksEach: 1,
+          orChoiceMode: "NOT_REQUIRED",
+          choicePolicy: createChoicePolicy("NO_CHOICE", 6, 6, "ANY_INCLUDED_CHAPTER", "Circular 465: Objective questions are compulsory"),
+        },
+      ],
+    },
+    {
+      title: "प्रश्न 5: एक शब्द / एक वाक्य में उत्तर दीजिए (One Word / Sentence Answer)",
+      instructions: "निम्नलिखित प्रश्नों के उत्तर एक शब्द अथवा एक वाक्य में लिखिए।",
+      questionTypes: [
+        {
+          type: "VERY_SHORT",
+          count: 6,
+          marksEach: 1,
+          orChoiceMode: "NOT_REQUIRED",
+          choicePolicy: createChoicePolicy("NO_CHOICE", 6, 6, "ANY_INCLUDED_CHAPTER", "Circular 465: Objective questions are compulsory"),
+        },
+      ],
+    },
+    {
+      title: "प्रश्न 6 से 17: अतिलघुउत्तरीय प्रश्न (Very Short Answer Questions)",
+      instructions: "प्रत्येक प्रश्न का उत्तर लगभग 30 शब्दों में दीजिए। सभी प्रश्न अनिवार्य हैं।",
+      questionTypes: [
+        {
+          type: "VERY_SHORT",
+          count: 12,
+          marksEach: 2,
+          orChoiceMode: "NOT_REQUIRED",
+          orAlternativeCount: 0,
+          choicePolicy: createChoicePolicy("NO_CHOICE", 12, 12, "ANY_INCLUDED_CHAPTER", "Circular 465/2026: Abolition of internal choice in 2-mark questions"),
+        },
+      ],
+    },
+    {
+      title: "प्रश्न 18 से 20: लघुउत्तरीय प्रश्न (Short Answer Questions)",
+      instructions: "प्रत्येक प्रश्न का उत्तर लगभग 75 शब्दों में दीजिए। आंतरिक विकल्प उपलब्ध हैं।",
+      questionTypes: [
+        {
+          type: "SHORT",
+          count: 3,
+          marksEach: 3,
+          orChoiceMode: "REQUIRED",
+          orAlternativeCount: 1,
+          choicePolicy: createChoicePolicy("FULL_OR_ALTERNATIVE", 2, 1, "SAME_UNIT", "Circular 465/2026: Mandatory 100% internal choice in 3-mark questions from same unit"),
+        },
+      ],
+    },
+    {
+      title: "प्रश्न 21 से 23: दीर्घउत्तरीय / विश्लेषणात्मक प्रश्न (Long Answer Questions)",
+      instructions: "प्रत्येक प्रश्न का उत्तर लगभग 120 शब्दों में दीजिए। आंतरिक विकल्प उपलब्ध हैं।",
+      questionTypes: [
+        {
+          type: "LONG",
+          count: 3,
+          marksEach: 4,
+          orChoiceMode: "REQUIRED",
+          orAlternativeCount: 1,
+          choicePolicy: createChoicePolicy("FULL_OR_ALTERNATIVE", 2, 1, "SAME_UNIT", "Circular 465/2026: Mandatory 100% internal choice in 4-mark questions from same unit"),
+        },
+      ],
+    },
+  ];
+}
+
+export function generateScience20Q70MSectionGroups(): BlueprintTemplateSectionGroup[] {
+  return [
+    {
+      title: "प्रश्न 1: सही विकल्प चुनिए (Multiple Choice Questions)",
+      instructions: "प्रत्येक प्रश्न के लिए दिए गए विकल्पों में से सही विकल्प चुनकर लिखिए।",
+      questionTypes: [
+        {
+          type: "MCQ",
+          count: 6,
+          marksEach: 1,
+          orChoiceMode: "NOT_REQUIRED",
+          choicePolicy: createChoicePolicy("NO_CHOICE", 6, 6, "ANY_INCLUDED_CHAPTER", "Compulsory objective items"),
+        },
+      ],
+    },
+    {
+      title: "प्रश्न 2: रिक्त स्थानों की पूर्ति कीजिए (Fill in the Blanks)",
+      instructions: "दिए गए रिक्त स्थानों की सही शब्दों द्वारा पूर्ति कीजिए।",
+      questionTypes: [
+        {
+          type: "FILL_BLANK",
+          count: 6,
+          marksEach: 1,
+          orChoiceMode: "NOT_REQUIRED",
+          choicePolicy: createChoicePolicy("NO_CHOICE", 6, 6, "ANY_INCLUDED_CHAPTER", "Compulsory objective items"),
+        },
+      ],
+    },
+    {
+      title: "प्रश्न 3: सत्य / असत्य लिखिए (True / False)",
+      instructions: "निम्नलिखित कथनों में सत्य अथवा असत्य चुनकर लिखिए।",
+      questionTypes: [
+        {
+          type: "TRUE_FALSE",
+          count: 5,
+          marksEach: 1,
+          orChoiceMode: "NOT_REQUIRED",
+          choicePolicy: createChoicePolicy("NO_CHOICE", 5, 5, "ANY_INCLUDED_CHAPTER", "Compulsory objective items"),
+        },
+      ],
+    },
+    {
+      title: "प्रश्न 4: सही जोड़ी बनाइए (Match the Columns)",
+      instructions: "स्तम्भ 'अ' के सम्मुख स्तम्भ 'ब' से सही मिलान कीजिए।",
+      questionTypes: [
+        {
+          type: "MATCH_COLUMN",
+          count: 5,
+          marksEach: 1,
+          orChoiceMode: "NOT_REQUIRED",
+          choicePolicy: createChoicePolicy("NO_CHOICE", 5, 5, "ANY_INCLUDED_CHAPTER", "Compulsory objective items"),
+        },
+      ],
+    },
+    {
+      title: "प्रश्न 5: एक शब्द / एक वाक्य में उत्तर दीजिए (One Word / Sentence Answer)",
+      instructions: "निम्नलिखित प्रश्नों के उत्तर एक शब्द अथवा एक वाक्य में लिखिए।",
+      questionTypes: [
+        {
+          type: "VERY_SHORT",
+          count: 6,
+          marksEach: 1,
+          orChoiceMode: "NOT_REQUIRED",
+          choicePolicy: createChoicePolicy("NO_CHOICE", 6, 6, "ANY_INCLUDED_CHAPTER", "Compulsory objective items"),
+        },
+      ],
+    },
+    {
+      title: "प्रश्न 6 से 12: अतिलघुउत्तरीय प्रश्न (Very Short Answer Questions)",
+      instructions: "प्रत्येक प्रश्न का उत्तर लगभग 30 शब्दों में दीजिए। सभी प्रश्न अनिवार्य हैं।",
+      questionTypes: [
+        {
+          type: "VERY_SHORT",
+          count: 7,
+          marksEach: 2,
+          orChoiceMode: "NOT_REQUIRED",
+          orAlternativeCount: 0,
+          choicePolicy: createChoicePolicy("NO_CHOICE", 7, 7, "ANY_INCLUDED_CHAPTER", "Circular 465/2026: Abolition of internal choice in 2-mark questions"),
+        },
+      ],
+    },
+    {
+      title: "प्रश्न 13 से 16: लघुउत्तरीय प्रश्न (Short Answer Questions)",
+      instructions: "प्रत्येक प्रश्न का उत्तर लगभग 75 शब्दों में दीजिए। प्रत्येक प्रश्न में आंतरिक विकल्प दिया गया है।",
+      questionTypes: [
+        {
+          type: "SHORT",
+          count: 4,
+          marksEach: 3,
+          orChoiceMode: "REQUIRED",
+          orAlternativeCount: 1,
+          choicePolicy: createChoicePolicy("FULL_OR_ALTERNATIVE", 2, 1, "SAME_UNIT", "Circular 465/2026: Mandatory 100% internal choice in 3-mark questions from same unit"),
+        },
+      ],
+    },
+    {
+      title: "प्रश्न 17 से 20: विश्लेषणात्मक / दीर्घउत्तरीय प्रश्न (Long Answer Questions)",
+      instructions: "प्रत्येक प्रश्न का उत्तर लगभग 120 शब्दों में दीजिए। प्रत्येक प्रश्न में आंतरिक विकल्प दिया गया है।",
+      questionTypes: [
+        {
+          type: "LONG",
+          count: 4,
+          marksEach: 4,
+          orChoiceMode: "REQUIRED",
+          orAlternativeCount: 1,
+          choicePolicy: createChoicePolicy("FULL_OR_ALTERNATIVE", 2, 1, "SAME_UNIT", "Circular 465/2026: Mandatory 100% internal choice in 4-mark questions from same unit"),
+        },
+      ],
+    },
+  ];
+}
+
+export function generateStandard23Q80MSectionGroups(): BlueprintTemplateSectionGroup[] {
+  return [
+    {
+      title: "प्रश्न 1: सही विकल्प चुनिए (Multiple Choice Questions)",
+      instructions: "प्रत्येक प्रश्न के लिए दिए गए विकल्पों में से सही विकल्प चुनकर लिखिए।",
+      questionTypes: [
+        {
+          type: "MCQ",
+          count: 6,
+          marksEach: 1,
+          orChoiceMode: "NOT_REQUIRED",
+          choicePolicy: createChoicePolicy("NO_CHOICE", 6, 6, "ANY_INCLUDED_CHAPTER", "Compulsory objective items"),
+        },
+      ],
+    },
+    {
+      title: "प्रश्न 2: रिक्त स्थानों की पूर्ति कीजिए (Fill in the Blanks)",
+      instructions: "दिए गए रिक्त स्थानों की सही शब्दों द्वारा पूर्ति कीजिए।",
+      questionTypes: [
+        {
+          type: "FILL_BLANK",
+          count: 6,
+          marksEach: 1,
+          orChoiceMode: "NOT_REQUIRED",
+          choicePolicy: createChoicePolicy("NO_CHOICE", 6, 6, "ANY_INCLUDED_CHAPTER", "Compulsory objective items"),
+        },
+      ],
+    },
+    {
+      title: "प्रश्न 3: सत्य / असत्य लिखिए (True / False)",
+      instructions: "निम्नलिखित कथनों में सत्य अथवा असत्य चुनकर लिखिए।",
+      questionTypes: [
+        {
+          type: "TRUE_FALSE",
+          count: 6,
+          marksEach: 1,
+          orChoiceMode: "NOT_REQUIRED",
+          choicePolicy: createChoicePolicy("NO_CHOICE", 6, 6, "ANY_INCLUDED_CHAPTER", "Compulsory objective items"),
+        },
+      ],
+    },
+    {
+      title: "प्रश्न 4: सही जोड़ी बनाइए (Match the Columns)",
+      instructions: "स्तम्भ 'अ' के सम्मुख स्तम्भ 'ब' से सही मिलान कीजिए।",
+      questionTypes: [
+        {
+          type: "MATCH_COLUMN",
+          count: 7,
+          marksEach: 1,
+          orChoiceMode: "NOT_REQUIRED",
+          choicePolicy: createChoicePolicy("NO_CHOICE", 7, 7, "ANY_INCLUDED_CHAPTER", "Compulsory objective items"),
+        },
+      ],
+    },
+    {
+      title: "प्रश्न 5: एक शब्द / एक वाक्य में उत्तर दीजिए (One Word / Sentence Answer)",
+      instructions: "निम्नलिखित प्रश्नों के उत्तर एक शब्द अथवा एक वाक्य में लिखिए।",
+      questionTypes: [
+        {
+          type: "VERY_SHORT",
+          count: 7,
+          marksEach: 1,
+          orChoiceMode: "NOT_REQUIRED",
+          choicePolicy: createChoicePolicy("NO_CHOICE", 7, 7, "ANY_INCLUDED_CHAPTER", "Compulsory objective items"),
+        },
+      ],
+    },
+    {
+      title: "प्रश्न 6 से 15: अतिलघुउत्तरीय प्रश्न (Very Short Answer Questions)",
+      instructions: "प्रत्येक प्रश्न का उत्तर लगभग 30 शब्दों में दीजिए। सभी प्रश्न अनिवार्य हैं।",
+      questionTypes: [
+        {
+          type: "VERY_SHORT",
+          count: 10,
+          marksEach: 2,
+          orChoiceMode: "NOT_REQUIRED",
+          orAlternativeCount: 0,
+          choicePolicy: createChoicePolicy("NO_CHOICE", 10, 10, "ANY_INCLUDED_CHAPTER", "Circular 465/2026: Abolition of internal choice in 2-mark questions"),
+        },
+      ],
+    },
+    {
+      title: "प्रश्न 16 से 19: लघुउत्तरीय प्रश्न (Short Answer Questions)",
+      instructions: "प्रत्येक प्रश्न का उत्तर लगभग 75 शब्दों में दीजिए। प्रत्येक प्रश्न में आंतरिक विकल्प दिया गया है।",
+      questionTypes: [
+        {
+          type: "SHORT",
+          count: 4,
+          marksEach: 3,
+          orChoiceMode: "REQUIRED",
+          orAlternativeCount: 1,
+          choicePolicy: createChoicePolicy("FULL_OR_ALTERNATIVE", 2, 1, "SAME_UNIT", "Circular 465/2026: Mandatory 100% internal choice in 3-mark questions from same unit"),
+        },
+      ],
+    },
+    {
+      title: "प्रश्न 20 से 23: विश्लेषणात्मक / दीर्घउत्तरीय प्रश्न (Long Answer Questions)",
+      instructions: "प्रत्येक प्रश्न का उत्तर लगभग 120 शब्दों में दीजिए। प्रत्येक प्रश्न में आंतरिक विकल्प दिया गया है।",
+      questionTypes: [
+        {
+          type: "LONG",
+          count: 4,
+          marksEach: 4,
+          orChoiceMode: "REQUIRED",
+          orAlternativeCount: 1,
+          choicePolicy: createChoicePolicy("FULL_OR_ALTERNATIVE", 2, 1, "SAME_UNIT", "Circular 465/2026: Mandatory 100% internal choice in 4-mark questions from same unit"),
+        },
+      ],
+    },
+  ];
+}
+
+export function generateEnglish16Q75MSectionGroups(): BlueprintTemplateSectionGroup[] {
+  return [
+    {
+      title: "Section A: Reading Comprehension (Unseen Passages)",
+      instructions: "Read the passages carefully and answer the questions that follow.",
+      questionTypes: [
+        {
+          type: "MCQ",
+          count: 10,
+          marksEach: 1,
+          orChoiceMode: "NOT_REQUIRED",
+          choicePolicy: createChoicePolicy("NO_CHOICE", 10, 10, "ANY_INCLUDED_CHAPTER", "Reading comprehension objective items"),
+        },
+      ],
+    },
+    {
+      title: "Section B: Writing Skills",
+      instructions: "Answer the writing section tasks as per instructions.",
+      questionTypes: [
+        {
+          type: "LONG",
+          count: 1,
+          marksEach: 4,
+          orChoiceMode: "NOT_REQUIRED",
+          choicePolicy: createChoicePolicy("NO_CHOICE", 1, 1, "ANY_INCLUDED_CHAPTER", "Note Making and Summary"),
+        },
+        {
+          type: "LONG",
+          count: 1,
+          marksEach: 4,
+          orChoiceMode: "REQUIRED",
+          orAlternativeCount: 1,
+          choicePolicy: createChoicePolicy("FULL_OR_ALTERNATIVE", 2, 1, "SAME_UNIT", "Formal / Informal Letter Writing with choice"),
+        },
+        {
+          type: "LONG",
+          count: 1,
+          marksEach: 5,
+          orChoiceMode: "REQUIRED",
+          orAlternativeCount: 1,
+          choicePolicy: createChoicePolicy("FULL_OR_ALTERNATIVE", 2, 1, "SAME_UNIT", "Long Composition / Essay with choice"),
+        },
+        {
+          type: "SHORT",
+          count: 1,
+          marksEach: 3,
+          orChoiceMode: "NOT_REQUIRED",
+          choicePolicy: createChoicePolicy("NO_CHOICE", 1, 1, "ANY_INCLUDED_CHAPTER", "Picture Guided Composition"),
+        },
+      ],
+    },
+    {
+      title: "Section C: Grammar",
+      instructions: "Answer the grammar exercises as directed.",
+      questionTypes: [
+        {
+          type: "FILL_BLANK",
+          count: 5,
+          marksEach: 1,
+          orChoiceMode: "NOT_REQUIRED",
+          choicePolicy: createChoicePolicy("ATTEMPT_K_OF_N", 6, 5, "ANY_INCLUDED_CHAPTER", "Grammar: Fill in the blanks (Attempt any 5 of 6)"),
+        },
+        {
+          type: "VERY_SHORT",
+          count: 5,
+          marksEach: 1,
+          orChoiceMode: "NOT_REQUIRED",
+          choicePolicy: createChoicePolicy("ATTEMPT_K_OF_N", 6, 5, "ANY_INCLUDED_CHAPTER", "Grammar: Do as directed (Attempt any 5 of 6)"),
+        },
+      ],
+    },
+    {
+      title: "Section D: Literature (Textbooks)",
+      instructions: "Answer textual extracts, short answers, and long answers from prescribed textbooks.",
+      questionTypes: [
+        {
+          type: "MCQ",
+          count: 10,
+          marksEach: 1,
+          orChoiceMode: "NOT_REQUIRED",
+          choicePolicy: createChoicePolicy("NO_CHOICE", 10, 10, "ANY_INCLUDED_CHAPTER", "Textual extracts (Beehive / Moments / First Flight)"),
+        },
+        {
+          type: "SHORT",
+          count: 10,
+          marksEach: 2,
+          orChoiceMode: "NOT_REQUIRED",
+          orAlternativeCount: 0,
+          choicePolicy: createChoicePolicy("NO_CHOICE", 10, 10, "ANY_INCLUDED_CHAPTER", "Circular 465/2026: Abolition of choice in 2-mark questions"),
+        },
+        {
+          type: "LONG",
+          count: 3,
+          marksEach: 3,
+          orChoiceMode: "REQUIRED",
+          orAlternativeCount: 1,
+          choicePolicy: createChoicePolicy("FULL_OR_ALTERNATIVE", 2, 1, "SAME_UNIT", "Circular 465/2026: Mandatory 100% internal choice in 3-mark questions"),
+        },
+      ],
+    },
+  ];
+}
+
+export function generateEnglish15Q80MSectionGroups(): BlueprintTemplateSectionGroup[] {
+  return [
+    {
+      title: "Section A: Reading Skills",
+      instructions: "Read the unseen passages and complete the comprehension and note-making tasks.",
+      questionTypes: [
+        {
+          type: "MCQ",
+          count: 10,
+          marksEach: 1,
+          orChoiceMode: "NOT_REQUIRED",
+          choicePolicy: createChoicePolicy("NO_CHOICE", 10, 10, "ANY_INCLUDED_CHAPTER", "Unseen passage comprehension questions"),
+        },
+        {
+          type: "SHORT",
+          count: 1,
+          marksEach: 4,
+          orChoiceMode: "NOT_REQUIRED",
+          choicePolicy: createChoicePolicy("NO_CHOICE", 1, 1, "ANY_INCLUDED_CHAPTER", "Note Making and Summary"),
+        },
+      ],
+    },
+    {
+      title: "Section B: Writing Skills",
+      instructions: "Complete the writing tasks following official format and word limits.",
+      questionTypes: [
+        {
+          type: "SHORT",
+          count: 1,
+          marksEach: 4,
+          orChoiceMode: "REQUIRED",
+          orAlternativeCount: 1,
+          choicePolicy: createChoicePolicy("FULL_OR_ALTERNATIVE", 2, 1, "SAME_UNIT", "Notice / Advertisement / Poster with choice"),
+        },
+        {
+          type: "LONG",
+          count: 1,
+          marksEach: 4,
+          orChoiceMode: "REQUIRED",
+          orAlternativeCount: 1,
+          choicePolicy: createChoicePolicy("FULL_OR_ALTERNATIVE", 2, 1, "SAME_UNIT", "Formal / Informal Letter with choice"),
+        },
+        {
+          type: "LONG",
+          count: 1,
+          marksEach: 4,
+          orChoiceMode: "REQUIRED",
+          orAlternativeCount: 1,
+          choicePolicy: createChoicePolicy("FULL_OR_ALTERNATIVE", 2, 1, "SAME_UNIT", "Article / Report / Speech with choice"),
+        },
+      ],
+    },
+    {
+      title: "Section C: Grammar",
+      instructions: "Answer the grammar exercises as directed.",
+      questionTypes: [
+        {
+          type: "FILL_BLANK",
+          count: 5,
+          marksEach: 1,
+          orChoiceMode: "NOT_REQUIRED",
+          choicePolicy: createChoicePolicy("ATTEMPT_K_OF_N", 6, 5, "ANY_INCLUDED_CHAPTER", "Sentence fillers (Attempt 5 of 6)"),
+        },
+        {
+          type: "VERY_SHORT",
+          count: 5,
+          marksEach: 1,
+          orChoiceMode: "NOT_REQUIRED",
+          choicePolicy: createChoicePolicy("ATTEMPT_K_OF_N", 6, 5, "ANY_INCLUDED_CHAPTER", "Do as directed (Attempt 5 of 6)"),
+        },
+      ],
+    },
+    {
+      title: "Section D: Textbooks (Flamingo & Vistas)",
+      instructions: "Answer extracts, short answers, and long answers from Flamingo and Vistas.",
+      questionTypes: [
+        {
+          type: "MCQ",
+          count: 9,
+          marksEach: 1,
+          orChoiceMode: "NOT_REQUIRED",
+          choicePolicy: createChoicePolicy("NO_CHOICE", 9, 9, "ANY_INCLUDED_CHAPTER", "Flamingo extracts"),
+        },
+        {
+          type: "SHORT",
+          count: 11,
+          marksEach: 2,
+          orChoiceMode: "NOT_REQUIRED",
+          orAlternativeCount: 0,
+          choicePolicy: createChoicePolicy("NO_CHOICE", 11, 11, "ANY_INCLUDED_CHAPTER", "Circular 465/2026: Abolition of choice in 2-mark questions"),
+        },
+        {
+          type: "LONG",
+          count: 3,
+          marksEach: 3,
+          orChoiceMode: "REQUIRED",
+          orAlternativeCount: 1,
+          choicePolicy: createChoicePolicy("FULL_OR_ALTERNATIVE", 2, 1, "SAME_UNIT", "Flamingo long answers with choice"),
+        },
+        {
+          type: "LONG",
+          count: 1,
+          marksEach: 4,
+          orChoiceMode: "REQUIRED",
+          orAlternativeCount: 1,
+          choicePolicy: createChoicePolicy("FULL_OR_ALTERNATIVE", 2, 1, "SAME_UNIT", "Vistas analytical long answer with choice"),
+        },
+      ],
+    },
+  ];
+}
+
+// =============================================================================
+// ALL 27 VERIFIED MPBSE BOARD BLUEPRINT TEMPLATES
+// =============================================================================
+
+export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
+  // ---------------------------------------------------------------------------
+  // CLASS 9 (7 Subjects)
+  // ---------------------------------------------------------------------------
+  {
+    id: "mpbse-9th-hindi-401-75m",
+    templateCode: "mpbse-9th-hindi-401-75m",
+    title: "MPBSE Class 9 Hindi Official Blueprint (75 Marks)",
+    description: "म.प्र. बोर्ड कक्षा 9 हिन्दी आधिकारिक 23-प्रश्नीय अंकयोजना (75 अंक सैद्धांतिक + 25 अंक प्रायोजना कार्य)।",
+    examType: "ANNUAL",
+    durationMin: 180,
+    totalMarks: 75,
+    targetClasses: "Class 9",
+    classLevel: 9,
+    stream: "SECONDARY_GENERAL",
+    subjectCode: "401",
+    subjectName: "Hindi",
+    language: "hi",
+    archetype: "STANDARD_23Q_75M",
+    sections: generateStandard23Q75MSectionGroups(),
+    provenance: {
+      documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
+      circularReference: "465/विद्योचित/2026",
+      theoryMarks: 75,
+      projectMarks: 25,
+    },
+  },
+  {
+    id: "mpbse-9th-english-411-75m",
+    templateCode: "mpbse-9th-english-411-75m",
+    title: "MPBSE Class 9 English Official Blueprint (75 Marks)",
+    description: "Official MPBSE Class 9 English 16-question examination pattern (Reading 10m, Writing 16m, Grammar 10m, Literature 39m).",
+    examType: "ANNUAL",
+    durationMin: 180,
+    totalMarks: 75,
+    targetClasses: "Class 9",
+    classLevel: 9,
+    stream: "SECONDARY_GENERAL",
+    subjectCode: "411",
+    subjectName: "English",
+    language: "en",
+    archetype: "ENGLISH_16Q_75M",
+    sections: generateEnglish16Q75MSectionGroups(),
+    provenance: {
+      documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
+      circularReference: "465/विद्योचित/2026",
+      theoryMarks: 75,
+      projectMarks: 25,
+    },
+  },
+  {
+    id: "mpbse-9th-mathematics-standard-100-75m",
+    templateCode: "mpbse-9th-mathematics-standard-100-75m",
+    title: "MPBSE Class 9 Mathematics Standard Official Blueprint (75 Marks)",
+    description: "म.प्र. बोर्ड कक्षा 9 गणित (Standard) 23-प्रश्नीय अंकयोजना (30 वस्तुनिष्ठ, 12×2 अंक, 3×3 अंक, 3×4 अंक)।",
+    examType: "ANNUAL",
+    durationMin: 180,
+    totalMarks: 75,
+    targetClasses: "Class 9",
+    classLevel: 9,
+    stream: "SECONDARY_GENERAL",
+    subjectCode: "100",
+    subjectName: "Mathematics",
+    variant: "Standard",
+    language: "hi",
+    archetype: "STANDARD_23Q_75M",
+    sections: generateStandard23Q75MSectionGroups(),
+    provenance: {
+      documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
+      circularReference: "465/विद्योचित/2026",
+      theoryMarks: 75,
+      projectMarks: 25,
+    },
+  },
+  {
+    id: "mpbse-9th-mathematics-basic-101-75m",
+    templateCode: "mpbse-9th-mathematics-basic-101-75m",
+    title: "MPBSE Class 9 Mathematics Basic Official Blueprint (75 Marks)",
+    description: "म.प्र. बोर्ड कक्षा 9 गणित (Basic) 23-प्रश्नीय अंकयोजना (आधारभूत अवधारणाओं पर केन्द्रित)।",
+    examType: "ANNUAL",
+    durationMin: 180,
+    totalMarks: 75,
+    targetClasses: "Class 9",
+    classLevel: 9,
+    stream: "SECONDARY_GENERAL",
+    subjectCode: "101",
+    subjectName: "Mathematics",
+    variant: "Basic",
+    language: "hi",
+    archetype: "STANDARD_23Q_75M",
+    sections: generateStandard23Q75MSectionGroups(),
+    provenance: {
+      documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
+      circularReference: "465/विद्योचित/2026",
+      theoryMarks: 75,
+      projectMarks: 25,
+    },
+  },
+  {
+    id: "mpbse-9th-science-200-75m",
+    templateCode: "mpbse-9th-science-200-75m",
+    title: "MPBSE Class 9 Science Official Blueprint (75 Marks)",
+    description: "म.प्र. बोर्ड कक्षा 9 विज्ञान आधिकारिक 23-प्रश्नीय अंकयोजना (75 अंक सैद्धांतिक + 25 अंक प्रायोगिक/प्रायोजना)।",
+    examType: "ANNUAL",
+    durationMin: 180,
+    totalMarks: 75,
+    targetClasses: "Class 9",
+    classLevel: 9,
+    stream: "SECONDARY_GENERAL",
+    subjectCode: "200",
+    subjectName: "Science",
+    language: "hi",
+    archetype: "STANDARD_23Q_75M",
+    sections: generateStandard23Q75MSectionGroups(),
+    provenance: {
+      documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
+      circularReference: "465/विद्योचित/2026",
+      theoryMarks: 75,
+      projectMarks: 25,
+    },
+  },
+  {
+    id: "mpbse-9th-social-science-300-75m",
+    templateCode: "mpbse-9th-social-science-300-75m",
+    title: "MPBSE Class 9 Social Science Official Blueprint (75 Marks)",
+    description: "म.प्र. बोर्ड कक्षा 9 सामाजिक विज्ञान 23-प्रश्नीय अंकयोजना (71 अंक अध्याय भार + 4 अंक भारत मानचित्र कार्य)।",
+    examType: "ANNUAL",
+    durationMin: 180,
+    totalMarks: 75,
+    targetClasses: "Class 9",
+    classLevel: 9,
+    stream: "SECONDARY_GENERAL",
+    subjectCode: "300",
+    subjectName: "Social Science",
+    language: "hi",
+    archetype: "STANDARD_23Q_75M",
+    sections: generateStandard23Q75MSectionGroups(),
+    provenance: {
+      documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
+      circularReference: "465/विद्योचित/2026",
+      theoryMarks: 75,
+      projectMarks: 25,
+    },
+  },
+  {
+    id: "mpbse-9th-sanskrit-512-75m",
+    templateCode: "mpbse-9th-sanskrit-512-75m",
+    title: "MPBSE Class 9 Sanskrit Official Blueprint (75 Marks)",
+    description: "म.प्र. बोर्ड कक्षा 9 संस्कृत आधिकारिक 23-प्रश्नीय अंकयोजना (शेमुषी भाग-1 एवं व्याकरणवीथि)।",
+    examType: "ANNUAL",
+    durationMin: 180,
+    totalMarks: 75,
+    targetClasses: "Class 9",
+    classLevel: 9,
+    stream: "SECONDARY_GENERAL",
+    subjectCode: "512",
+    subjectName: "Sanskrit",
+    language: "sa",
+    archetype: "STANDARD_23Q_75M",
+    sections: generateStandard23Q75MSectionGroups(),
+    provenance: {
+      documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
+      circularReference: "465/विद्योचित/2026",
+      theoryMarks: 75,
+      projectMarks: 25,
+    },
+  },
+
+  // ---------------------------------------------------------------------------
+  // CLASS 10 (8 Subjects)
+  // ---------------------------------------------------------------------------
+  {
+    id: "mpbse-10th-hindi-401-75m",
+    templateCode: "mpbse-10th-hindi-401-75m",
+    title: "MPBSE Class 10 Hindi Official Blueprint (75 Marks)",
+    description: "म.प्र. बोर्ड कक्षा 10 हिन्दी आधिकारिक 23-प्रश्नीय बोर्ड अंकयोजना (क्षितिज भाग-2 एवं कृतिका भाग-2)।",
+    examType: "ANNUAL",
+    durationMin: 180,
+    totalMarks: 75,
+    targetClasses: "Class 10",
+    classLevel: 10,
+    stream: "SECONDARY_GENERAL",
+    subjectCode: "401",
+    subjectName: "Hindi",
+    language: "hi",
+    archetype: "STANDARD_23Q_75M",
+    sections: generateStandard23Q75MSectionGroups(),
+    provenance: {
+      documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
+      circularReference: "465/विद्योचित/2026",
+      theoryMarks: 75,
+      projectMarks: 25,
+    },
+  },
+  {
+    id: "mpbse-10th-english-411-75m",
+    templateCode: "mpbse-10th-english-411-75m",
+    title: "MPBSE Class 10 English Official Blueprint (75 Marks)",
+    description: "Official MPBSE Class 10 English 16-question examination pattern (First Flight & Footprints without Feet).",
+    examType: "ANNUAL",
+    durationMin: 180,
+    totalMarks: 75,
+    targetClasses: "Class 10",
+    classLevel: 10,
+    stream: "SECONDARY_GENERAL",
+    subjectCode: "411",
+    subjectName: "English",
+    language: "en",
+    archetype: "ENGLISH_16Q_75M",
+    sections: generateEnglish16Q75MSectionGroups(),
+    provenance: {
+      documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
+      circularReference: "465/विद्योचित/2026",
+      theoryMarks: 75,
+      projectMarks: 25,
+    },
+  },
+  {
+    id: "mpbse-10th-mathematics-standard-100-75m",
+    templateCode: "mpbse-10th-mathematics-standard-100-75m",
+    title: "MPBSE Class 10 Mathematics Standard Official Blueprint (75 Marks)",
+    description: "म.प्र. बोर्ड कक्षा 10 गणित (Standard) 23-प्रश्नीय अंकयोजना (30 वस्तुनिष्ठ, 12×2 अंक, 3×3 अंक, 3×4 अंक)।",
+    examType: "ANNUAL",
+    durationMin: 180,
+    totalMarks: 75,
+    targetClasses: "Class 10",
+    classLevel: 10,
+    stream: "SECONDARY_GENERAL",
+    subjectCode: "100",
+    subjectName: "Mathematics",
+    variant: "Standard",
+    language: "hi",
+    archetype: "STANDARD_23Q_75M",
+    sections: generateStandard23Q75MSectionGroups(),
+    provenance: {
+      documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
+      circularReference: "465/विद्योचित/2026",
+      theoryMarks: 75,
+      projectMarks: 25,
+    },
+  },
+  {
+    id: "mpbse-10th-mathematics-basic-101-75m",
+    templateCode: "mpbse-10th-mathematics-basic-101-75m",
+    title: "MPBSE Class 10 Mathematics Basic Official Blueprint (75 Marks)",
+    description: "म.प्र. बोर्ड कक्षा 10 गणित (Basic) 23-प्रश्नीय अंकयोजना (Circular 53/54 अनुसार)।",
+    examType: "ANNUAL",
+    durationMin: 180,
+    totalMarks: 75,
+    targetClasses: "Class 10",
+    classLevel: 10,
+    stream: "SECONDARY_GENERAL",
+    subjectCode: "101",
+    subjectName: "Mathematics",
+    variant: "Basic",
+    language: "hi",
+    archetype: "STANDARD_23Q_75M",
+    sections: generateStandard23Q75MSectionGroups(),
+    provenance: {
+      documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
+      circularReference: "465/विद्योचित/2026",
+      theoryMarks: 75,
+      projectMarks: 25,
+    },
+  },
+  {
+    id: "mpbse-10th-science-200-75m",
+    templateCode: "mpbse-10th-science-200-75m",
+    title: "MPBSE Class 10 Science Official Blueprint (75 Marks)",
+    description: "म.प्र. बोर्ड कक्षा 10 विज्ञान 23-प्रश्नीय आधिकारिक अंकयोजना (75 अंक सैद्धांतिक + 25 अंक प्रायोगिक)।",
+    examType: "ANNUAL",
+    durationMin: 180,
+    totalMarks: 75,
+    targetClasses: "Class 10",
+    classLevel: 10,
+    stream: "SECONDARY_GENERAL",
+    subjectCode: "200",
+    subjectName: "Science",
+    language: "hi",
+    archetype: "STANDARD_23Q_75M",
+    sections: generateStandard23Q75MSectionGroups(),
+    provenance: {
+      documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
+      circularReference: "465/विद्योचित/2026",
+      theoryMarks: 75,
+      projectMarks: 25,
+    },
+  },
+  {
+    id: "mpbse-10th-social-science-300-75m",
+    templateCode: "mpbse-10th-social-science-300-75m",
+    title: "MPBSE Class 10 Social Science Official Blueprint (75 Marks)",
+    description: "म.प्र. बोर्ड कक्षा 10 सामाजिक विज्ञान 23-प्रश्नीय बोर्ड अंकयोजना (इतिहास, भूगोल, राजनीति, अर्थशास्त्र)।",
+    examType: "ANNUAL",
+    durationMin: 180,
+    totalMarks: 75,
+    targetClasses: "Class 10",
+    classLevel: 10,
+    stream: "SECONDARY_GENERAL",
+    subjectCode: "300",
+    subjectName: "Social Science",
+    language: "hi",
+    archetype: "STANDARD_23Q_75M",
+    sections: generateStandard23Q75MSectionGroups(),
+    provenance: {
+      documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
+      circularReference: "465/विद्योचित/2026",
+      theoryMarks: 75,
+      projectMarks: 25,
+    },
+  },
+  {
+    id: "mpbse-10th-sanskrit-512-75m",
+    templateCode: "mpbse-10th-sanskrit-512-75m",
+    title: "MPBSE Class 10 Sanskrit Official Blueprint (75 Marks)",
+    description: "म.प्र. बोर्ड कक्षा 10 संस्कृत आधिकारिक 23-प्रश्नीय बोर्ड अंकयोजना (शेमुषी भाग-2 एवं व्याकरणवीथि)।",
+    examType: "ANNUAL",
+    durationMin: 180,
+    totalMarks: 75,
+    targetClasses: "Class 10",
+    classLevel: 10,
+    stream: "SECONDARY_GENERAL",
+    subjectCode: "512",
+    subjectName: "Sanskrit",
+    language: "sa",
+    archetype: "STANDARD_23Q_75M",
+    sections: generateStandard23Q75MSectionGroups(),
+    provenance: {
+      documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
+      circularReference: "465/विद्योचित/2026",
+      theoryMarks: 75,
+      projectMarks: 25,
+    },
+  },
+  {
+    id: "mpbse-10th-urdu-508-75m",
+    templateCode: "mpbse-10th-urdu-508-75m",
+    title: "MPBSE Class 10 Urdu Official Blueprint (75 Marks)",
+    description: "म.प्र. बोर्ड कक्षा 10 उर्दू आधिकारिक 23-प्रश्नीय बोर्ड अंकयोजना (75 अंक सैद्धांतिक)।",
+    examType: "ANNUAL",
+    durationMin: 180,
+    totalMarks: 75,
+    targetClasses: "Class 10",
+    classLevel: 10,
+    stream: "SECONDARY_GENERAL",
+    subjectCode: "508",
+    subjectName: "Urdu",
+    language: "ur",
+    archetype: "STANDARD_23Q_75M",
+    sections: generateStandard23Q75MSectionGroups(),
+    provenance: {
+      documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
+      circularReference: "465/विद्योचित/2026",
+      theoryMarks: 75,
+      projectMarks: 25,
+    },
+  },
+
+  // ---------------------------------------------------------------------------
+  // CLASS 11 (6 Subjects: Science Stream + Compulsory Languages)
+  // ---------------------------------------------------------------------------
+  {
+    id: "mpbse-11th-hindi-051-80m",
+    templateCode: "mpbse-11th-hindi-051-80m",
+    title: "MPBSE Class 11 Hindi Official Blueprint (80 Marks)",
+    description: "म.प्र. बोर्ड कक्षा 11 हिन्दी आधिकारिक 23-प्रश्नीय बोर्ड अंकयोजना (80 अंक सैद्धांतिक + 20 अंक प्रायोजना)।",
+    examType: "ANNUAL",
+    durationMin: 180,
+    totalMarks: 80,
+    targetClasses: "Class 11",
+    classLevel: 11,
+    stream: "SECONDARY_GENERAL",
+    subjectCode: "051",
+    subjectName: "Hindi",
+    language: "hi",
+    archetype: "STANDARD_23Q_80M",
+    sections: generateStandard23Q80MSectionGroups(),
+    provenance: {
+      documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
+      circularReference: "465/विद्योचित/2026",
+      theoryMarks: 80,
+      projectMarks: 20,
+    },
+  },
+  {
+    id: "mpbse-11th-english-052-80m",
+    templateCode: "mpbse-11th-english-052-80m",
+    title: "MPBSE Class 11 English Official Blueprint (80 Marks)",
+    description: "Official MPBSE Class 11 English 15-question examination pattern (Hornbill & Snapshots, 80 Marks).",
+    examType: "ANNUAL",
+    durationMin: 180,
+    totalMarks: 80,
+    targetClasses: "Class 11",
+    classLevel: 11,
+    stream: "SECONDARY_GENERAL",
+    subjectCode: "052",
+    subjectName: "English",
+    language: "en",
+    archetype: "ENGLISH_15Q_80M",
+    sections: generateEnglish15Q80MSectionGroups(),
+    provenance: {
+      documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
+      circularReference: "465/विद्योचित/2026",
+      theoryMarks: 80,
+      projectMarks: 20,
+    },
+  },
+  {
+    id: "mpbse-11th-physics-210-70m",
+    templateCode: "mpbse-11th-physics-210-70m",
+    title: "MPBSE Class 11 Physics Official Blueprint (70 Marks)",
+    description: "म.प्र. बोर्ड कक्षा 11 भौतिक विज्ञान 20-प्रश्नीय अंकयोजना (70 अंक सैद्धांतिक + 30 अंक प्रायोगिक)।",
+    examType: "ANNUAL",
+    durationMin: 180,
+    totalMarks: 70,
+    targetClasses: "Class 11",
+    classLevel: 11,
+    stream: "SCIENCE",
+    subjectCode: "210",
+    subjectName: "Physics",
+    language: "hi",
+    archetype: "SCIENCE_20Q_70M",
+    sections: generateScience20Q70MSectionGroups(),
+    provenance: {
+      documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
+      circularReference: "465/विद्योचित/2026",
+      theoryMarks: 70,
+      practicalMarks: 30,
+    },
+  },
+  {
+    id: "mpbse-11th-chemistry-220-70m",
+    templateCode: "mpbse-11th-chemistry-220-70m",
+    title: "MPBSE Class 11 Chemistry Official Blueprint (70 Marks)",
+    description: "म.प्र. बोर्ड कक्षा 11 रसायन विज्ञान 20-प्रश्नीय अंकयोजना (70 अंक सैद्धांतिक + 30 अंक प्रायोगिक)।",
+    examType: "ANNUAL",
+    durationMin: 180,
+    totalMarks: 70,
+    targetClasses: "Class 11",
+    classLevel: 11,
+    stream: "SCIENCE",
+    subjectCode: "220",
+    subjectName: "Chemistry",
+    language: "hi",
+    archetype: "SCIENCE_20Q_70M",
+    sections: generateScience20Q70MSectionGroups(),
+    provenance: {
+      documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
+      circularReference: "465/विद्योचित/2026",
+      theoryMarks: 70,
+      practicalMarks: 30,
+    },
+  },
+  {
+    id: "mpbse-11th-biology-231-70m",
+    templateCode: "mpbse-11th-biology-231-70m",
+    title: "MPBSE Class 11 Biology Official Blueprint (70 Marks)",
+    description: "म.प्र. बोर्ड कक्षा 11 जीव विज्ञान 20-प्रश्नीय अंकयोजना (70 अंक सैद्धांतिक + 30 अंक प्रायोगिक)।",
+    examType: "ANNUAL",
+    durationMin: 180,
+    totalMarks: 70,
+    targetClasses: "Class 11",
+    classLevel: 11,
+    stream: "SCIENCE_BIO",
+    subjectCode: "231",
+    subjectName: "Biology",
+    language: "hi",
+    archetype: "SCIENCE_20Q_70M",
+    sections: generateScience20Q70MSectionGroups(),
+    provenance: {
+      documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
+      circularReference: "465/विद्योचित/2026",
+      theoryMarks: 70,
+      practicalMarks: 30,
+    },
+  },
+  {
+    id: "mpbse-11th-mathematics-150-80m",
+    templateCode: "mpbse-11th-mathematics-150-80m",
+    title: "MPBSE Class 11 Mathematics Official Blueprint (80 Marks)",
+    description: "म.प्र. बोर्ड कक्षा 11 उच्च गणित 23-प्रश्नीय अंकयोजना (80 अंक सैद्धांतिक + 20 अंक प्रायोजना)।",
+    examType: "ANNUAL",
+    durationMin: 180,
+    totalMarks: 80,
+    targetClasses: "Class 11",
+    classLevel: 11,
+    stream: "SCIENCE_PCM",
+    subjectCode: "150",
+    subjectName: "Mathematics",
+    language: "hi",
+    archetype: "STANDARD_23Q_80M",
+    sections: generateStandard23Q80MSectionGroups(),
+    provenance: {
+      documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
+      circularReference: "465/विद्योचित/2026",
+      theoryMarks: 80,
+      projectMarks: 20,
+    },
+  },
+
+  // ---------------------------------------------------------------------------
+  // CLASS 12 (6 Subjects: Science Stream + Compulsory Languages)
+  // ---------------------------------------------------------------------------
+  {
+    id: "mpbse-12th-hindi-051-80m",
+    templateCode: "mpbse-12th-hindi-051-80m",
+    title: "MPBSE Class 12 Hindi Official Blueprint (80 Marks)",
+    description: "म.प्र. बोर्ड कक्षा 12 हिन्दी आधिकारिक 23-प्रश्नीय बोर्ड अंकयोजना (आरोह भाग-2 एवं वितान भाग-2)।",
+    examType: "ANNUAL",
+    durationMin: 180,
+    totalMarks: 80,
+    targetClasses: "Class 12",
+    classLevel: 12,
+    stream: "SECONDARY_GENERAL",
+    subjectCode: "051",
+    subjectName: "Hindi",
+    language: "hi",
+    archetype: "STANDARD_23Q_80M",
+    sections: generateStandard23Q80MSectionGroups(),
+    provenance: {
+      documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
+      circularReference: "465/विद्योचित/2026",
+      theoryMarks: 80,
+      projectMarks: 20,
+    },
+  },
+  {
+    id: "mpbse-12th-english-052-80m",
+    templateCode: "mpbse-12th-english-052-80m",
+    title: "MPBSE Class 12 English Official Blueprint (80 Marks)",
+    description: "Official MPBSE Class 12 English 15-question examination pattern (Flamingo & Vistas, 80 Marks).",
+    examType: "ANNUAL",
+    durationMin: 180,
+    totalMarks: 80,
+    targetClasses: "Class 12",
+    classLevel: 12,
+    stream: "SECONDARY_GENERAL",
+    subjectCode: "052",
+    subjectName: "English",
+    language: "en",
+    archetype: "ENGLISH_15Q_80M",
+    sections: generateEnglish15Q80MSectionGroups(),
+    provenance: {
+      documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
+      circularReference: "465/विद्योचित/2026",
+      theoryMarks: 80,
+      projectMarks: 20,
+    },
+  },
+  {
+    id: "mpbse-12th-physics-210-70m",
+    templateCode: "mpbse-12th-physics-210-70m",
+    title: "MPBSE Class 12 Physics Official Blueprint (70 Marks)",
+    description: "म.प्र. बोर्ड कक्षा 12 भौतिक विज्ञान 20-प्रश्नीय बोर्ड अंकयोजना (70 अंक सैद्धांतिक + 30 अंक प्रायोगिक)।",
+    examType: "ANNUAL",
+    durationMin: 180,
+    totalMarks: 70,
+    targetClasses: "Class 12",
+    classLevel: 12,
+    stream: "SCIENCE",
+    subjectCode: "210",
+    subjectName: "Physics",
+    language: "hi",
+    archetype: "SCIENCE_20Q_70M",
+    sections: generateScience20Q70MSectionGroups(),
+    provenance: {
+      documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
+      circularReference: "465/विद्योचित/2026",
+      theoryMarks: 70,
+      practicalMarks: 30,
+    },
+  },
+  {
+    id: "mpbse-12th-chemistry-220-70m",
+    templateCode: "mpbse-12th-chemistry-220-70m",
+    title: "MPBSE Class 12 Chemistry Official Blueprint (70 Marks)",
+    description: "म.प्र. बोर्ड कक्षा 12 रसायन विज्ञान 20-प्रश्नीय बोर्ड अंकयोजना (70 अंक सैद्धांतिक + 30 अंक प्रायोगिक)।",
+    examType: "ANNUAL",
+    durationMin: 180,
+    totalMarks: 70,
+    targetClasses: "Class 12",
+    classLevel: 12,
+    stream: "SCIENCE",
+    subjectCode: "220",
+    subjectName: "Chemistry",
+    language: "hi",
+    archetype: "SCIENCE_20Q_70M",
+    sections: generateScience20Q70MSectionGroups(),
+    provenance: {
+      documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
+      circularReference: "465/विद्योचित/2026",
+      theoryMarks: 70,
+      practicalMarks: 30,
+    },
+  },
+  {
+    id: "mpbse-12th-biology-231-70m",
+    templateCode: "mpbse-12th-biology-231-70m",
+    title: "MPBSE Class 12 Biology Official Blueprint (70 Marks)",
+    description: "म.प्र. बोर्ड कक्षा 12 जीव विज्ञान 20-प्रश्नीय बोर्ड अंकयोजना (70 अंक सैद्धांतिक + 30 अंक प्रायोगिक)।",
+    examType: "ANNUAL",
+    durationMin: 180,
+    totalMarks: 70,
+    targetClasses: "Class 12",
+    classLevel: 12,
+    stream: "SCIENCE_BIO",
+    subjectCode: "231",
+    subjectName: "Biology",
+    language: "hi",
+    archetype: "SCIENCE_20Q_70M",
+    sections: generateScience20Q70MSectionGroups(),
+    provenance: {
+      documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
+      circularReference: "465/विद्योचित/2026",
+      theoryMarks: 70,
+      practicalMarks: 30,
+    },
+  },
+  {
+    id: "mpbse-12th-mathematics-150-80m",
+    templateCode: "mpbse-12th-mathematics-150-80m",
+    title: "MPBSE Class 12 Mathematics Official Blueprint (80 Marks)",
+    description: "म.प्र. बोर्ड कक्षा 12 उच्च गणित 23-प्रश्नीय बोर्ड अंकयोजना (80 अंक सैद्धांतिक + 20 अंक प्रायोजना)।",
+    examType: "ANNUAL",
+    durationMin: 180,
+    totalMarks: 80,
+    targetClasses: "Class 12",
+    classLevel: 12,
+    stream: "SCIENCE_PCM",
+    subjectCode: "150",
+    subjectName: "Mathematics",
+    language: "hi",
+    archetype: "STANDARD_23Q_80M",
+    sections: generateStandard23Q80MSectionGroups(),
+    provenance: {
+      documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
+      circularReference: "465/विद्योचित/2026",
+      theoryMarks: 80,
+      projectMarks: 20,
+    },
+  },
+];
+
+// =============================================================================
+// LEGACY & STARTER TEMPLATES PRESERVED FOR FULL BACKWARD COMPATIBILITY
+// =============================================================================
+
+export const LEGACY_STARTER_TEMPLATES: BlueprintTemplate[] = [
   {
     id: "mpbse-sanskrit-10th-75m",
+    templateCode: "mpbse-10th-sanskrit-shemushi-75m",
     title: "MPBSE संस्कृतम् कक्षा 10 (75 अङ्काः - आधिकारिक 23-प्रश्नीय प्रतिरूप)",
     description: "म.प्र. माध्यमिक शिक्षा मण्डल (MPBSE) द्वारा शैक्षणिक सत्र 2026–27 के लिए जारी आधिकारिक अभ्यास मॉडल प्रश्नपत्र अनुसार 23-प्रश्नीय, 75-अङ्कीय पूर्ण संरचना (कोड 512, शेमुषी भाग-2 एवं व्याकरणवीथि)।",
     examType: "ANNUAL",
@@ -37,6 +1400,7 @@ export const STANDARD_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     targetClasses: "Class 10",
     language: "sa",
     subjectCode: "512",
+    archetype: "SANSKRIT_23Q_75M",
     sections: [
       {
         title: "प्रश्न 1: उचितविकल्पं चित्वा लिखत (बहुविकल्प)",
@@ -175,6 +1539,7 @@ export const STANDARD_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
   },
   {
     id: "mpbse-sanskrit-10th-legacy-75m",
+    templateCode: "mpbse-sanskrit-10th-legacy-75m",
     title: "MPBSE संस्कृतम् कक्षा 10 (75 अङ्काः - पारम्परिक 8-खण्डीय प्रतिरूप)",
     description: "पारम्परिक 8-खण्डीय संरचना (खण्ड क तः ज पर्यन्तम्) - बहुविकल्प, रिक्तस्थान, शुद्ध-अशुद्ध, मेलन, लघूत्तरीय एवं दीर्घप्रश्नाः।",
     examType: "ANNUAL",
@@ -183,6 +1548,7 @@ export const STANDARD_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     targetClasses: "Class 10",
     language: "sa",
     subjectCode: "512",
+    archetype: "SANSKRIT_8SEC_75M",
     sections: [
       {
         title: "खण्डः 'क' : बहुविकल्पीयप्रश्नाः",
@@ -244,12 +1610,14 @@ export const STANDARD_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
   },
   {
     id: "cbse-80m-5sec",
+    templateCode: "cbse-standard-80m-5sec",
     title: "CBSE Standard Board Pattern (80 Marks)",
     description: "Official 5-Section pattern (A to E) used for Class 9–10 Board exams in Math, Science, and Social Science.",
     examType: "ANNUAL",
     durationMin: 180,
     totalMarks: 80,
     targetClasses: "Classes 9, 10, 11, 12",
+    archetype: "CBSE_80M",
     sections: [
       {
         title: "Section A",
@@ -291,12 +1659,14 @@ export const STANDARD_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
   },
   {
     id: "cbse-science-70m",
+    templateCode: "cbse-senior-science-70m",
     title: "CBSE Senior Secondary Science (70 Marks Theory)",
     description: "Standard 70-mark theory paper for Class 11–12 Physics, Chemistry, and Biology.",
     examType: "ANNUAL",
     durationMin: 180,
     totalMarks: 70,
     targetClasses: "Classes 11, 12",
+    archetype: "CBSE_70M",
     sections: [
       {
         title: "Section A",
@@ -338,12 +1708,14 @@ export const STANDARD_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
   },
   {
     id: "middle-school-50m",
+    templateCode: "middle-school-50m",
     title: "Middle School Term Exam (50 Marks)",
     description: "Balanced 4-section pattern for Class 6–8 Half-Yearly / Annual examinations.",
     examType: "HALF_YEARLY",
     durationMin: 120,
     totalMarks: 50,
     targetClasses: "Classes 6, 7, 8",
+    archetype: "MIDDLE_SCHOOL_50M",
     sections: [
       {
         title: "Section A",
@@ -377,12 +1749,14 @@ export const STANDARD_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
   },
   {
     id: "unit-test-25m",
+    templateCode: "unit-test-25m",
     title: "Periodic Unit Test / Assessment (25 Marks)",
     description: "Compact 1-hour assessment pattern ideal for unit tests and monthly revision tests.",
     examType: "QUARTERLY",
     durationMin: 60,
     totalMarks: 25,
     targetClasses: "Classes 3 to 10",
+    archetype: "UNIT_TEST_25M",
     sections: [
       {
         title: "Section A",
@@ -409,12 +1783,14 @@ export const STANDARD_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
   },
   {
     id: "kindergarten-foundational-25m",
+    templateCode: "kindergarten-foundational-25m",
     title: "Foundational & Pre-Primary Activity (25 Marks)",
     description: "Interactive tracing, matching, and counting pattern for Nursery, LKG, and UKG classes.",
     examType: "QUARTERLY",
     durationMin: 60,
     totalMarks: 25,
     targetClasses: "Nursery, LKG, UKG, Class 1",
+    archetype: "KINDERGARTEN_25M",
     sections: [
       {
         title: "Section A",
@@ -440,3 +1816,83 @@ export const STANDARD_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     ],
   },
 ];
+
+export const STANDARD_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
+  ...MPBSE_BLUEPRINT_TEMPLATES,
+  ...LEGACY_STARTER_TEMPLATES,
+];
+
+// =============================================================================
+// HAMILTON-HARE PROPORTIONAL ADAPTATION HELPER
+// =============================================================================
+
+/**
+ * Distributes targetMarks across active chapters proportionally using the
+ * Hamilton-Hare Largest Remainder Method, ensuring exact sum without rounding drift.
+ */
+export function adaptChaptersHamiltonHare<T extends { chapterId: string; officialMarks?: number; marks?: number }>(
+  activeChapters: T[],
+  targetMarks: number,
+  minDenomination = 1
+): Array<T & { marks: number }> {
+  if (activeChapters.length === 0) return [];
+  if (activeChapters.length === 1) {
+    return [{ ...activeChapters[0], marks: targetMarks }];
+  }
+
+  const officialSum = activeChapters.reduce(
+    (sum, ch) => sum + (ch.officialMarks != null && ch.officialMarks > 0 ? ch.officialMarks : ch.marks != null && ch.marks > 0 ? ch.marks : 1),
+    0
+  );
+
+  const rawAllocations = activeChapters.map((ch) => {
+    const baseWeight =
+      ch.officialMarks != null && ch.officialMarks > 0 ? ch.officialMarks : ch.marks != null && ch.marks > 0 ? ch.marks : 1;
+    const exact = (baseWeight / officialSum) * targetMarks;
+    const integerPart = Math.floor(exact);
+    const remainder = exact - integerPart;
+    return { ch, exact, integerPart, remainder };
+  });
+
+  const integerSum = rawAllocations.reduce((s, r) => s + r.integerPart, 0);
+  const remainderCount = targetMarks - integerSum;
+
+  // Sort by remainder descending, break ties by original chapter order
+  rawAllocations.sort((a, b) => b.remainder - a.remainder);
+  for (let i = 0; i < remainderCount; i++) {
+    rawAllocations[i].integerPart += 1;
+  }
+
+  // Ensure minimum denomination constraint per chapter
+  const adjusted = rawAllocations.map((r) => {
+    let finalMarks = Math.max(minDenomination, r.integerPart);
+    return { ...r.ch, marks: finalMarks };
+  });
+
+  // Re-level total to exactly targetMarks if minDenomination bumped it over
+  let currentTotal = adjusted.reduce((s, a) => s + a.marks, 0);
+  while (currentTotal > targetMarks) {
+    // Find chapter with largest marks above minDenomination and decrement
+    let maxIdx = -1;
+    let maxVal = -1;
+    for (let i = 0; i < adjusted.length; i++) {
+      if (adjusted[i].marks > minDenomination && adjusted[i].marks > maxVal) {
+        maxVal = adjusted[i].marks;
+        maxIdx = i;
+      }
+    }
+    if (maxIdx >= 0) {
+      adjusted[maxIdx].marks -= 1;
+      currentTotal -= 1;
+    } else {
+      break;
+    }
+  }
+
+  while (currentTotal < targetMarks) {
+    adjusted[0].marks += 1;
+    currentTotal += 1;
+  }
+
+  return adjusted;
+}

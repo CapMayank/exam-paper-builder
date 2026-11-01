@@ -28,6 +28,9 @@ describe("Subparts Hierarchy, Nested Structures & Attempt Count Regression", () 
       imagePath: null,
       spaceMm: 0,
       showGrid: false,
+      curriculumTopicId: null,
+      competencyLevel: null,
+      sourceProvenance: null,
       createdById: "u1",
       createdAt: new Date(),
     };

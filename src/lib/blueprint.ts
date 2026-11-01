@@ -189,18 +189,105 @@ export function validateBlueprint(bp: {
   return errors;
 }
 
+/**
+ * Verifies whether section question denomination capacities can be partitioned
+ * to satisfy all chapter quotas simultaneously (Level 3 Global Bounded Capacity Check).
+ */
+function checkBoundedPartitionFeasible(
+  denominations: number[],
+  capacities: number[],
+  chapterQuotas: number[]
+): boolean {
+  function getSolutions(target: number): number[][] {
+    const sols: number[][] = [];
+    function solve(dIdx: number, curSum: number, curSol: number[]) {
+      if (dIdx === denominations.length) {
+        if (curSum === target) sols.push([...curSol]);
+        return;
+      }
+      const d = denominations[dIdx];
+      const maxQ = Math.min(capacities[dIdx], Math.floor((target - curSum) / d));
+      for (let q = 0; q <= maxQ; q++) {
+        curSol.push(q);
+        solve(dIdx + 1, curSum + q * d, curSol);
+        curSol.pop();
+      }
+    }
+    solve(0, 0, []);
+    return sols;
+  }
+
+  const allSolutions: number[][][] = [];
+  for (const q of chapterQuotas) {
+    const sols = getSolutions(q);
+    if (sols.length === 0) return false;
+    allSolutions.push(sols);
+  }
+
+  const order = allSolutions.map((s, idx) => ({ idx, count: s.length })).sort((a, b) => a.count - b.count);
+  const remaining = [...capacities];
+  const memo = new Set<string>();
+
+  function search(step: number): boolean {
+    if (step === order.length) {
+      return remaining.every((r) => r === 0);
+    }
+    const stateKey = `${step}:${remaining.join(",")}`;
+    if (memo.has(stateKey)) return false;
+
+    const chIdx = order[step].idx;
+    for (const sol of allSolutions[chIdx]) {
+      let fits = true;
+      for (let k = 0; k < denominations.length; k++) {
+        if (sol[k] > remaining[k]) {
+          fits = false;
+          break;
+        }
+      }
+      if (!fits) continue;
+
+      for (let k = 0; k < denominations.length; k++) remaining[k] -= sol[k];
+      if (search(step + 1)) return true;
+      for (let k = 0; k < denominations.length; k++) remaining[k] += sol[k];
+    }
+
+    memo.add(stateKey);
+    return false;
+  }
+
+  return search(0);
+}
+
 /** Arithmetic feasibility checks for chapter mark allocations against section denominations. */
 export function checkBlueprintFeasibility(bp: {
   sections: Pick<SectionDef, "count" | "marksEach">[];
   chapters: ChapterQuota[];
+  enforceMarksConservation?: boolean;
 }): string[] {
   const warnings: string[] = [];
   if (bp.sections.length === 0 || bp.chapters.length === 0) return warnings;
 
-  const denominations = Array.from(new Set(bp.sections.map((s) => s.marksEach))).sort((a, b) => a - b);
+  // Level 1: Optional strict total marks conservation check
+  const totalSectionMarks = blueprintTotalMarks(bp.sections);
+  const totalChapterMarks = bp.chapters.reduce((s, c) => s + c.marks, 0);
+  if (bp.enforceMarksConservation && totalSectionMarks !== totalChapterMarks) {
+    warnings.push(
+      `Sections total ${totalSectionMarks} marks but chapter weightage totals ${totalChapterMarks}. They must match.`
+    );
+    return warnings;
+  }
+
+  // Denominations and bounded capacities
+  const denomCapacities = new Map<number, number>();
+  for (const s of bp.sections) {
+    denomCapacities.set(s.marksEach, (denomCapacities.get(s.marksEach) || 0) + s.count);
+  }
+  const denominations = Array.from(denomCapacities.keys()).sort((a, b) => a - b);
   if (denominations.length === 0) return warnings;
 
   const minDenom = denominations[0];
+
+  // Level 2: Single-chapter minimum denomination and coin-change reachability
   for (const c of bp.chapters) {
     const chapterLabel = c.title
       ? `Chapter "${c.title}"`
@@ -215,7 +302,6 @@ export function checkBlueprintFeasibility(bp: {
     }
   }
 
-  // Coin-change reachability check: can c.marks be formed using denominations?
   for (const c of bp.chapters) {
     if (c.marks <= 0) continue;
     const chapterLabel = c.title
@@ -235,6 +321,24 @@ export function checkBlueprintFeasibility(bp: {
     if (!reachable[c.marks]) {
       warnings.push(
         `${chapterLabel} quota (${c.marks}m) cannot be formed by any combination of section question denominations (${denominations.join("m, ")}m).`
+      );
+    }
+  }
+
+  // Level 3: Global bounded capacity partitioning check (when totals match and no reachability errors)
+  const activeChapters = bp.chapters.filter((c) => c.marks > 0);
+  if (
+    warnings.length === 0 &&
+    totalSectionMarks === totalChapterMarks &&
+    activeChapters.length > 0 &&
+    activeChapters.length <= 30
+  ) {
+    const capacities = denominations.map((d) => denomCapacities.get(d) || 0);
+    const quotas = activeChapters.map((c) => c.marks);
+    const isGloballyFeasible = checkBoundedPartitionFeasible(denominations, capacities, quotas);
+    if (!isGloballyFeasible) {
+      warnings.push(
+        `Denomination capacity conflict: Section question counts cannot be partitioned to satisfy all chapter quotas simultaneously.`
       );
     }
   }

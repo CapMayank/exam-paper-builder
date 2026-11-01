@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "seed": "node scripts/seed.mjs"
+    "seed": "node scripts/seed.mjs",
+    "seed:mpbse": "npx tsx prisma/seed-mpbse.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

@@ -83,11 +83,23 @@ export type BlueprintDto = {
 };
 
 export function toQuestionDto(
-  q: Omit<Question, "createdAt" | "cognitiveLevel" | "explanation" | "figureScene"> & {
+  q: Omit<
+    Question,
+    | "createdAt"
+    | "cognitiveLevel"
+    | "explanation"
+    | "figureScene"
+    | "curriculumTopicId"
+    | "competencyLevel"
+    | "sourceProvenance"
+  > & {
     createdAt: Date | string;
     cognitiveLevel?: string | null;
     explanation?: string | null;
     figureScene?: string | null;
+    curriculumTopicId?: string | null;
+    competencyLevel?: string | null;
+    sourceProvenance?: string | null;
     chapter?: Pick<Chapter, "id" | "number" | "title">;
     _count?: { paperQuestions?: number; orPaperQuestions?: number };
     subpartsJson?: string | null;

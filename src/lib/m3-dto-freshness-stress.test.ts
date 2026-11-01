@@ -35,6 +35,9 @@ describe("Milestone 3 Challenger M3.2: DTO Compatibility & Freshness Stress", ()
         spaceMm: 25,
         showGrid: false,
         subpartsJson: "[]",
+        curriculumTopicId: null,
+        competencyLevel: null,
+        sourceProvenance: null,
         createdById: "teacher_1",
         createdAt: new Date("2025-05-01T00:00:00Z"),
         paperQuestions: [
@@ -95,6 +98,9 @@ describe("Milestone 3 Challenger M3.2: DTO Compatibility & Freshness Stress", ()
         spaceMm: 0,
         showGrid: false,
         subpartsJson: "[]",
+        curriculumTopicId: null,
+        competencyLevel: null,
+        sourceProvenance: null,
         createdById: "teacher_1",
         createdAt: "2025-05-01",
         paperQuestions: [
@@ -217,6 +223,9 @@ describe("Milestone 3 Challenger M3.2: DTO Compatibility & Freshness Stress", ()
         spaceMm: 60,
         showGrid: false,
         subpartsJson: "[]",
+        curriculumTopicId: null,
+        competencyLevel: null,
+        sourceProvenance: null,
         createdById: "teacher_1",
         createdAt: new Date(),
         paperQuestions: [
@@ -305,6 +314,9 @@ describe("Milestone 3 Challenger M3.2: DTO Compatibility & Freshness Stress", ()
         spaceMm: 20,
         showGrid: false,
         subpartsJson: "[]",
+        curriculumTopicId: null,
+        competencyLevel: null,
+        sourceProvenance: null,
         createdById: "teacher_1",
         createdAt: new Date(),
         paperQuestions: [
@@ -351,6 +363,9 @@ describe("Milestone 3 Challenger M3.2: DTO Compatibility & Freshness Stress", ()
         spaceMm: 50,
         showGrid: false,
         subpartsJson: "[]",
+        curriculumTopicId: null,
+        competencyLevel: null,
+        sourceProvenance: null,
         createdById: "teacher_1",
         createdAt: new Date(),
         orPaperQuestions: [
@@ -855,6 +870,9 @@ describe("Milestone 3 Challenger M3.2: DTO Compatibility & Freshness Stress", ()
         spaceMm: 50,
         showGrid: false,
         subpartsJson: "[]",
+        curriculumTopicId: null,
+        competencyLevel: null,
+        sourceProvenance: null,
         createdById: "teacher_1",
         createdAt: new Date(),
         paperQuestions: [

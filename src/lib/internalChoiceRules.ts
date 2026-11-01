@@ -446,7 +446,23 @@ export function resolveEffectiveChoiceOverride(
   // 2. Blueprint Section-level choice mode
   const mode = (ctx.orChoiceMode || "").trim().toUpperCase();
   if (mode === "REQUIRED") return "ENABLE";
-  if (mode === "NOT_REQUIRED") return "DISABLE";
+  if (mode === "NOT_REQUIRED") {
+    // Under MPBSE 2026-27 statutory rules, 2-mark questions cannot have internal choices.
+    // Specifying NOT_REQUIRED matches the statutory absence of required choice and must NOT
+    // downgrade the statutory rule from forbidden: true to forbidden: false (OPTIONAL).
+    const marks = Number(ctx.marksEach ?? (ctx as any).marks) || 0;
+    const isMpbse2026TwoMark =
+      Boolean(options?.isMpbse2026MainTwoMark) ||
+      (marks === 2 &&
+        detectExaminationBoard(ctx) === "MPBSE" &&
+        isSession2026OrLater(ctx.academicSession) &&
+        !isLegacy2025Session(ctx.academicSession));
+
+    if (isMpbse2026TwoMark) {
+      return null;
+    }
+    return "DISABLE";
+  }
 
   // 3. Instruction text override (legacy blueprints)
   return parseBlueprintInstructionOverride(ctx.sectionInstructions, options);
@@ -528,6 +544,21 @@ function resolveInternalChoiceRequirementBase(
     });
 
     if (override === "DISABLE") {
+      if (marks === 2) {
+        return {
+          required: false,
+          forbidden: true,
+          policy: "FORBIDDEN",
+          patternVersion: ruleSet.versionId,
+          circularReference: ruleSet.circularReference,
+          board,
+          academicSession,
+          isNsqf: nsqf,
+          overrideApplied: "BLUEPRINT_DISABLE",
+          reason:
+            "MPBSE Circular 465/विद्योचित/2026 (15 Oct 2026): 2-mark Very Short Answer questions are NOT allowed to have internal choices in 2026–27.",
+        };
+      }
       return {
         required: false,
         forbidden: false,

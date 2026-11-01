@@ -74,20 +74,25 @@ model Chapter {
 }
 
 model Blueprint {
-  id              String             @id @default(cuid())
-  name            String
-  bookId          String
-  academicSession String             @default("2025–26")
-  examType        String // QUARTERLY | HALF_YEARLY | ANNUAL
-  durationMin     Int
-  subjectCode     String             @default("")
-  language        String             @default("en")
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
-  book            Book               @relation(fields: [bookId], references: [id], onDelete: Restrict)
-  chapters        BlueprintChapter[]
-  sections        BlueprintSection[]
-  papers          Paper[]
+  id                   String                        @id @default(cuid())
+  name                 String
+  bookId               String
+  academicSession      String                        @default("2025–26")
+  examType             String // QUARTERLY | HALF_YEARLY | ANNUAL
+  durationMin          Int
+  subjectCode          String                        @default("")
+  language             String                        @default("en")
+  curriculumTemplateId String?
+  curriculumVariantId  String?
+  curriculumMode       String                        @default("BLANK_CUSTOM")
+  createdAt            DateTime                      @default(now())
+  updatedAt            DateTime                      @updatedAt
+  book                 Book                          @relation(fields: [bookId], references: [id], onDelete: Restrict)
+  curriculumTemplate   CurriculumBlueprintTemplate?  @relation(fields: [curriculumTemplateId], references: [id], onDelete: SetNull)
+  curriculumVariant    CurriculumSubjectVariant?     @relation(fields: [curriculumVariantId], references: [id], onDelete: SetNull)
+  chapters             BlueprintChapter[]
+  sections             BlueprintSection[]
+  papers               Paper[]
 }
 
 // Marks that a chapter must contribute to the paper.
@@ -120,28 +125,32 @@ model BlueprintSection {
 }
 
 model Question {
-  id             String          @id @default(cuid())
-  bookId         String
-  chapterId      String
-  type           String
-  text           String
-  optionsJson    String          @default("[]") // MCQ options: string[]
-  subpartsJson   String          @default("[]") // Subparts for multi-part / case study questions
-  answer         String          @default("")
-  difficulty     String          @default("MEDIUM")
-  cognitiveLevel String?
-  explanation    String?
-  figureScene    String?
-  imagePath      String? // file name inside data/uploads
-  spaceMm        Int             @default(0) // blank answer space printed under the question
-  showGrid       Boolean         @default(false) // DRAW type: print graph-paper grid in the space
-  createdById    String
-  createdAt      DateTime        @default(now())
-  book           Book            @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  chapter        Chapter         @relation(fields: [chapterId], references: [id], onDelete: Cascade)
-  createdBy      User            @relation(fields: [createdById], references: [id])
-  paperQuestions   PaperQuestion[] @relation("PrimaryQuestion")
-  orPaperQuestions PaperQuestion[] @relation("OrQuestion")
+  id                String           @id @default(cuid())
+  bookId            String
+  chapterId         String
+  type              String
+  text              String
+  optionsJson       String           @default("[]") // MCQ options: string[]
+  subpartsJson      String           @default("[]") // Subparts for multi-part / case study questions
+  answer            String           @default("")
+  difficulty        String           @default("MEDIUM")
+  cognitiveLevel    String?
+  explanation       String?
+  figureScene       String?
+  imagePath         String? // file name inside data/uploads
+  spaceMm           Int              @default(0) // blank answer space printed under the question
+  showGrid          Boolean          @default(false) // DRAW type: print graph-paper grid in the space
+  curriculumTopicId String?
+  competencyLevel   String?
+  sourceProvenance  String?
+  createdById       String
+  createdAt         DateTime         @default(now())
+  book              Book             @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  chapter           Chapter          @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  createdBy         User             @relation(fields: [createdById], references: [id])
+  curriculumTopic   CurriculumTopic? @relation(fields: [curriculumTopicId], references: [id], onDelete: SetNull)
+  paperQuestions    PaperQuestion[]  @relation("PrimaryQuestion")
+  orPaperQuestions  PaperQuestion[]  @relation("OrQuestion")
 
   @@index([bookId, chapterId, type])
 }
@@ -272,5 +281,190 @@ model PrintRunCalculation {
   createdAt           DateTime @default(now())
 
   @@index([createdAt])
+}
+
+// ==========================================
+// MPBSE CURRICULUM ARCHITECTURE (100% ADDITIVE)
+// ==========================================
+
+model CurriculumBoard {
+  id            String               @id @default(cuid())
+  code          String               @unique // e.g., "MPBSE"
+  name          String               // "Madhya Pradesh Board of Secondary Education"
+  state         String               @default("Madhya Pradesh")
+  websiteUrl    String               @default("https://mpbse.nic.in")
+  activeSession String               @default("2026-27")
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  documents     CurriculumDocument[]
+  classes       CurriculumClass[]
+
+  @@map("curriculum_boards")
+}
+
+model CurriculumDocument {
+  id                 String                        @id @default(cuid())
+  boardId            String
+  board              CurriculumBoard               @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  title              String                        // e.g., "अंकयोजना 2026-27"
+  docType            String                        // "SYLLABUS", "MARKS_SCHEME", "PRACTICAL", "CIRCULAR", "MODEL_PAPER"
+  academicSession    String                        // "2026-27"
+  officialUrl        String                        // "https://mpbse.nic.in/MarksScheme_2026_27.pdf"
+  circularNumber     String?                       // "465/विद्योचित/2026"
+  publishedDate      DateTime?
+  verificationStatus String                        @default("VERIFIED") // "VERIFIED", "PENDING", "DEPRECATED"
+  notes              String?
+  createdAt          DateTime                      @default(now())
+  updatedAt          DateTime                      @updatedAt
+  chapters           CurriculumChapter[]
+  marksSchemes       CurriculumMarksScheme[]
+  blueprints         CurriculumBlueprintTemplate[]
+
+  @@map("curriculum_documents")
+}
+
+model CurriculumClass {
+  id          String              @id @default(cuid())
+  boardId     String
+  board       CurriculumBoard     @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  classLevel  Int                 // 9, 10, 11, 12
+  displayName String              // "Class 9th", "Class 10th", "Class 11th", "Class 12th"
+  isBoardExam Boolean             // true for 10 and 12, false for 9 and 11
+  streams     CurriculumStream[]
+  subjects    CurriculumSubject[]
+
+  @@unique([boardId, classLevel])
+  @@map("curriculum_classes")
+}
+
+model CurriculumStream {
+  id              String              @id @default(cuid())
+  classId         String
+  curriculumClass CurriculumClass     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  code            String              // "SCIENCE_BIO", "SCIENCE_MATH", "COMMERCE", "ARTS", "GENERAL"
+  name            String              // "Science (Biology Group)", "Science (Mathematics Group)"
+  subjects        CurriculumSubject[]
+
+  @@unique([classId, code])
+  @@map("curriculum_streams")
+}
+
+model CurriculumSubject {
+  id              String                        @id @default(cuid())
+  classId         String
+  curriculumClass CurriculumClass               @relation(fields: [classId], references: [id], onDelete: Cascade)
+  streamId        String?
+  stream          CurriculumStream?             @relation(fields: [streamId], references: [id], onDelete: SetNull)
+  code            String                        // Official Subject Code: "100", "200", "210", "401", etc.
+  name            String                        // "Mathematics", "Physics", "Hindi"
+  isCompulsory    Boolean                       @default(true)
+  hasPracticals   Boolean                       @default(false)
+  theoryMarks     Int                           @default(75) // 75, 70, or 80
+  practicalMarks  Int                           @default(0)  // 0, 30, or 25
+  projectMarks    Int                           @default(25) // 25 or 20
+  variants        CurriculumSubjectVariant[]
+  textbooks       CurriculumTextbook[]
+  marksSchemes    CurriculumMarksScheme[]
+  blueprints      CurriculumBlueprintTemplate[]
+
+  @@unique([classId, code])
+  @@map("curriculum_subjects")
+}
+
+model CurriculumSubjectVariant {
+  id              String             @id @default(cuid())
+  subjectId       String
+  subject         CurriculumSubject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  code            String             // "STANDARD", "BASIC", "GENERAL", "SPECIAL"
+  name            String             // "Mathematics Standard", "Mathematics Basic"
+  cognitiveWeight Json?              // { "EASY": 40, "AVERAGE": 40, "DIFFICULT": 20 }
+  notes           String?
+  blueprints      Blueprint[]
+
+  @@unique([subjectId, code])
+  @@map("curriculum_subject_variants")
+}
+
+model CurriculumTextbook {
+  id              String              @id @default(cuid())
+  subjectId       String
+  subject         CurriculumSubject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  title           String              // "Kshitij Bhag 1", "Physics Part 1"
+  publisher       String              @default("NCERT / MP Text Book Corporation")
+  academicSession String              @default("2026-27")
+  legacyBookId    String?             // Optional linkage to existing Book(id)
+  chapters        CurriculumChapter[]
+
+  @@map("curriculum_textbooks")
+}
+
+model CurriculumChapter {
+  id              String              @id @default(cuid())
+  textbookId      String
+  textbook        CurriculumTextbook  @relation(fields: [textbookId], references: [id], onDelete: Cascade)
+  documentId      String?
+  sourceDocument  CurriculumDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  unitNumber      Int?
+  unitTitle       String?
+  chapterNumber   Int
+  title           String              // "Real Numbers", "Force and Laws of Motion"
+  isDeleted       Boolean             @default(false)
+  officialMarks   Int?                // Official marks if published by board (DO NOT FABRICATE)
+  provenancePage  Int?                // Official Marks Scheme page number
+  legacyChapterId String?             // Optional linkage to existing Chapter(id)
+  topics          CurriculumTopic[]
+
+  @@map("curriculum_chapters")
+}
+
+model CurriculumTopic {
+  id           String            @id @default(cuid())
+  chapterId    String
+  chapter      CurriculumChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  title        String
+  isExcluded   Boolean           @default(false)
+  competencies Json?             // Learning outcomes & competencies array
+  sortOrder    Int               @default(1)
+  questions    Question[]
+
+  @@map("curriculum_topics")
+}
+
+model CurriculumMarksScheme {
+  id               String             @id @default(cuid())
+  subjectId        String
+  subject          CurriculumSubject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  documentId       String
+  sourceDocument   CurriculumDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  academicSession  String             // "2026-27"
+  totalTheory      Int
+  totalPractical   Int
+  totalProject     Int
+  unitBreakdown    Json               // Array of { unitNumber, title, officialMarks, chapterIds }
+  practicalRubric  Json?              // Breakdown of experiments, viva, record, project
+  verificationPage Int
+  createdAt        DateTime           @default(now())
+
+  @@map("curriculum_marks_schemes")
+}
+
+model CurriculumBlueprintTemplate {
+  id              String             @id @default(cuid())
+  subjectId       String
+  subject         CurriculumSubject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  documentId      String
+  sourceDocument  CurriculumDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  templateCode    String             @unique // e.g., "mpbse-10th-math-standard-75m"
+  title           String             // "MPBSE Class 10 Mathematics Standard Official Blueprint"
+  academicSession String             @default("2026-27")
+  durationMin     Int                @default(180)
+  totalMarks      Int                @default(75)
+  archetype       String             // "STANDARD_23Q_75M", "SCIENCE_20Q_70M", "STANDARD_23Q_80M", "ENGLISH_15Q_80M"
+  sectionsJson    Json               // Reconciled blueprint sections with choice policies
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  blueprints      Blueprint[]
+
+  @@map("curriculum_blueprint_templates")
 }
 

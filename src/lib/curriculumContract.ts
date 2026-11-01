@@ -13,6 +13,46 @@ import { getCanonicalSubjectName, getStandardPresetForClass } from "./schoolCurr
 import { normalizeSubpartMarks, type SubPart } from "./types";
 
 export type SupportedBoard = "MPBSE" | "CBSE" | "FOUNDATIONAL" | "STATE_BOARD";
+export type SubjectVariantCode = "STANDARD" | "BASIC" | "GENERAL" | "SPECIAL";
+export type ChoicePolicyType = "NO_CHOICE" | "FULL_OR_ALTERNATIVE" | "ATTEMPT_K_OF_N" | "SELECT_ONE_OF_N";
+
+export interface ChoicePolicy {
+  policyType: ChoicePolicyType;
+  totalProvided: number; // N (e.g. 1 for NO_CHOICE, 2 for FULL_OR_ALTERNATIVE, 6 for ATTEMPT_K_OF_N)
+  totalRequired: number; // K (e.g. 1 for NO_CHOICE, 1 for FULL_OR_ALTERNATIVE, 5 for ATTEMPT_K_OF_N)
+  poolScope: "SAME_CHAPTER" | "SAME_UNIT" | "ANY_INCLUDED_CHAPTER";
+  rationale: string;
+}
+
+export interface CurriculumGenerationPayload {
+  // 1. Board & Session Governance
+  board: SupportedBoard;
+  academicSession: string;
+  classLevel: number;
+  streamCode?: string;
+  subjectCode: string;
+  subjectVariant: SubjectVariantCode;
+
+  // 2. Chapter & Syllabus Scope
+  chapterNumber: number;
+  chapterTitle: string;
+  officialMarksQuota: number;
+  includedTopics: string[];
+  excludedTopics: string[];
+  competencies?: string[];
+
+  // 3. Slot & Examination Mechanics
+  slotId: string;
+  questionType: string;
+  marks: number;
+  targetWordCount?: number;
+  choicePolicy: ChoicePolicy;
+  language: "en" | "hi" | "sa" | "bilingual";
+
+  // 4. Provenance & Observability
+  curriculumChapterId?: string;
+  curriculumTemplateId?: string;
+}
 
 export interface ChapterCurriculumSpec {
   chapterTitle: string;
@@ -65,6 +105,7 @@ export interface ChapterCurriculumSpec {
 }
 
 export interface GenerationSlotContract {
+  slotId?: string;
   slotIndex: number;
   chapterId: string;
   chapterNumber: number;
@@ -72,6 +113,8 @@ export interface GenerationSlotContract {
   marks: number;
   requiresInternalChoice?: boolean;
   internalChoiceRequirement?: InternalChoiceRequirement;
+  choicePolicy?: ChoicePolicy;
+  curriculumPayload?: CurriculumGenerationPayload;
   curriculumSpec: ChapterCurriculumSpec;
 }
 
@@ -89,6 +132,7 @@ export interface GenerationContract {
   rawSubject: string;
   canonicalSubject: string;
   subjectCode: string;
+  subjectVariant?: SubjectVariantCode;
   questionType: QuestionType;
   marksEach: number;
   difficulty: "EASY" | "MEDIUM" | "HARD" | "BALANCED";
@@ -303,6 +347,191 @@ export function resolveBoardAndSubjectCode(params: {
     canonicalSubject,
     subjectCode: resolvedCode,
   };
+}
+
+export function resolveChoicePolicyForSlot(params: {
+  marks: number;
+  questionType?: string;
+  subject?: string;
+  className?: string;
+  requiresChoice?: boolean;
+  forbiddenChoice?: boolean;
+}): ChoicePolicy {
+  const { marks, questionType, requiresChoice, forbiddenChoice } = params;
+
+  // Circular 465 statutory rule:
+  // 1-mark and 2-mark questions: STRICTLY NO CHOICE
+  if (forbiddenChoice || marks <= 2) {
+    return {
+      policyType: "NO_CHOICE",
+      totalProvided: 1,
+      totalRequired: 1,
+      poolScope: "SAME_CHAPTER",
+      rationale: "Circular 465/2026: No internal choice on objective and 2-mark questions",
+    };
+  }
+
+  // Language literature short questions: attempt K of N if specified
+  if (
+    questionType === "ATTEMPT_K_OF_N" ||
+    (params.subject && /sanskrit|hindi|english/i.test(params.subject) && marks >= 4 && !requiresChoice)
+  ) {
+    return {
+      policyType: "ATTEMPT_K_OF_N",
+      totalProvided: 3,
+      totalRequired: 2,
+      poolScope: "SAME_CHAPTER",
+      rationale: "Language literature elective subparts (Attempt K of N)",
+    };
+  }
+
+  // 3-mark and 4-mark questions: 100% mandatory internal choice (Full OR alternative)
+  if (requiresChoice || marks >= 3) {
+    return {
+      policyType: "FULL_OR_ALTERNATIVE",
+      totalProvided: 2,
+      totalRequired: 1,
+      poolScope: "SAME_CHAPTER",
+      rationale: "Circular 465/2026: Mandatory 100% internal choice on 3-mark and 4-mark questions",
+    };
+  }
+
+  return {
+    policyType: "NO_CHOICE",
+    totalProvided: 1,
+    totalRequired: 1,
+    poolScope: "SAME_CHAPTER",
+    rationale: "Standard compulsory question",
+  };
+}
+
+export function resolveChapterCurriculumContextSync(params: {
+  chapterNumber: number;
+  chapterTitle: string;
+  subject?: string;
+  className?: string;
+}): {
+  curriculumChapterId?: string;
+  isDeleted: boolean;
+  officialMarks: number;
+  includedTopics: string[];
+  excludedTopics: string[];
+  competencies: string[];
+} {
+  const spec = getChapterCurriculumSpec(params.subject || "", params.chapterTitle, params.className);
+  return {
+    isDeleted: false,
+    officialMarks: 0,
+    includedTopics: [...spec.includedTopics],
+    excludedTopics: [...spec.deletedTopics],
+    competencies: [...spec.keyFormulasOrConcepts],
+  };
+}
+
+let _prismaClientPromise: Promise<any> | null = null;
+async function getLazyPrisma() {
+  if (typeof window !== "undefined") return null;
+  if (!_prismaClientPromise) {
+    _prismaClientPromise = import("./prisma")
+      .then((m) => m.prisma)
+      .catch(() => null);
+  }
+  return _prismaClientPromise;
+}
+
+export async function resolveChapterCurriculumContext(params: {
+  bookId?: string;
+  chapterId?: string;
+  chapterNumber: number;
+  chapterTitle: string;
+  subjectCode?: string;
+  className?: string;
+  subject?: string;
+}): Promise<{
+  curriculumChapterId?: string;
+  isDeleted: boolean;
+  officialMarks: number;
+  includedTopics: string[];
+  excludedTopics: string[];
+  competencies: string[];
+}> {
+  const staticFallback = resolveChapterCurriculumContextSync(params);
+
+  try {
+    const p = await getLazyPrisma();
+    if (!p) return staticFallback;
+
+    let chapter = null;
+    if (params.chapterId) {
+      chapter = await p.curriculumChapter.findFirst({
+        where: {
+          OR: [{ id: params.chapterId }, { legacyChapterId: params.chapterId }],
+        },
+        include: { topics: true },
+      });
+    }
+
+    if (!chapter && params.chapterNumber) {
+      chapter = await p.curriculumChapter.findFirst({
+        where: {
+          chapterNumber: params.chapterNumber,
+          textbook: {
+            OR: [
+              params.bookId ? { legacyBookId: params.bookId } : undefined,
+              params.subjectCode ? { subject: { code: params.subjectCode } } : undefined,
+            ].filter(Boolean) as any,
+          },
+        },
+        include: { topics: true },
+      });
+    }
+
+    if (!chapter) {
+      return staticFallback;
+    }
+
+    const dbIncluded: string[] = [];
+    const dbExcluded: string[] = [];
+    const dbCompetencies: string[] = [];
+
+    if (Array.isArray(chapter.topics)) {
+      for (const t of chapter.topics) {
+        if (t.isExcluded) {
+          dbExcluded.push(t.title);
+        } else {
+          dbIncluded.push(t.title);
+        }
+        if (t.competencies) {
+          try {
+            const parsed = typeof t.competencies === "string" ? JSON.parse(t.competencies) : t.competencies;
+            if (Array.isArray(parsed)) {
+              dbCompetencies.push(...parsed.map(String));
+            }
+          } catch {
+            // Ignore parse errors defensively
+          }
+        }
+      }
+    }
+
+    const mergedIncluded = Array.from(new Set([...dbIncluded, ...staticFallback.includedTopics]));
+    const mergedExcluded = Array.from(new Set([...dbExcluded, ...staticFallback.excludedTopics]));
+    if (chapter.isDeleted) {
+      mergedExcluded.push(params.chapterTitle);
+    }
+    const mergedCompetencies = Array.from(new Set([...dbCompetencies, ...staticFallback.competencies]));
+
+    return {
+      curriculumChapterId: chapter.id,
+      isDeleted: Boolean(chapter.isDeleted),
+      officialMarks: chapter.officialMarks || staticFallback.officialMarks,
+      includedTopics: mergedIncluded,
+      excludedTopics: mergedExcluded,
+      competencies: mergedCompetencies,
+    };
+  } catch {
+    return staticFallback;
+  }
 }
 
 /**
@@ -3438,6 +3667,11 @@ export function buildAndValidateGenerationContract(params: {
     marksEach,
   });
 
+  const subjectVariant: SubjectVariantCode =
+    (subjectCode === "101" || /basic/i.test(rawSubject || "") || /basic/i.test(params.blueprintName || ""))
+      ? "BASIC"
+      : "STANDARD";
+
   const slots: GenerationSlotContract[] = rawSlots.map((s, idx) => {
     const slotMarks = Number.isFinite(s.marks) && s.marks > 0 ? s.marks : marksEach;
     const slotChoiceReq = resolveInternalChoiceRequirement({
@@ -3460,14 +3694,60 @@ export function buildAndValidateGenerationContract(params: {
       ? s.requiresInternalChoice
       : slotChoiceReq.required;
 
+    const slotIndex = typeof s.slotIndex === "number" ? s.slotIndex : idx;
+    const slotId =
+      (s as any).slotId ||
+      `slot_${(params.sectionTitle || "sec").replace(/[^a-zA-Z0-9_-]/g, "_")}_${slotIndex}`;
+    const choicePolicy =
+      (s as any).choicePolicy ||
+      resolveChoicePolicyForSlot({
+        marks: slotMarks,
+        questionType: qTypeRaw,
+        subject: rawSubject,
+        className,
+        requiresChoice: requiresInternalChoice,
+        forbiddenChoice: slotChoiceReq.forbidden,
+      });
+    const currCtx = resolveChapterCurriculumContextSync({
+      chapterNumber: s.chapterNumber || idx + 1,
+      chapterTitle: s.chapterTitle || `Chapter ${idx + 1}`,
+      subject: rawSubject,
+      className,
+    });
+    const targetWordCount =
+      slotMarks === 2 ? 30 : slotMarks === 3 ? 75 : slotMarks === 4 ? 120 : 150;
+    const curriculumPayload: CurriculumGenerationPayload =
+      (s as any).curriculumPayload || {
+        board,
+        academicSession,
+        classLevel: parseInt(className.replace(/\D/g, "") || "10", 10),
+        subjectCode,
+        subjectVariant,
+        chapterNumber: s.chapterNumber || idx + 1,
+        chapterTitle: s.chapterTitle || `Chapter ${idx + 1}`,
+        officialMarksQuota: slotMarks,
+        includedTopics: currCtx.includedTopics,
+        excludedTopics: currCtx.excludedTopics,
+        competencies: currCtx.competencies,
+        slotId,
+        questionType: qTypeRaw,
+        marks: slotMarks,
+        targetWordCount,
+        choicePolicy,
+        language,
+      };
+
     return {
-      slotIndex: typeof s.slotIndex === "number" ? s.slotIndex : idx,
+      slotId,
+      slotIndex,
       chapterId: s.chapterId || `ch_${idx + 1}`,
       chapterNumber: s.chapterNumber || idx + 1,
       chapterTitle: s.chapterTitle || `Chapter ${idx + 1}`,
       marks: slotMarks,
       requiresInternalChoice,
       internalChoiceRequirement: slotChoiceReq,
+      choicePolicy,
+      curriculumPayload,
       curriculumSpec: getChapterCurriculumSpec(rawSubject, s.chapterTitle || `Chapter ${idx + 1}`, className),
     };
   });
@@ -3493,6 +3773,7 @@ export function buildAndValidateGenerationContract(params: {
     rawSubject,
     canonicalSubject,
     subjectCode,
+    subjectVariant,
     questionType: qTypeRaw,
     marksEach,
     difficulty,

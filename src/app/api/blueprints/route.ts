@@ -28,6 +28,9 @@ export const POST = route(async (req) => {
       durationMin: input.durationMin,
       subjectCode: input.subjectCode ?? "",
       language: input.language || "en",
+      curriculumMode: input.curriculumMode || "BLANK_CUSTOM",
+      curriculumTemplateId: input.curriculumTemplateId || null,
+      curriculumVariantId: input.curriculumVariantId || null,
       chapters: { create: input.chapters },
       sections: {
         create: input.sections.map((s, position) => ({

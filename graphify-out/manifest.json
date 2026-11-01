@@ -12,9 +12,9 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1793346414.6668868,
-    "seen": 1793350664.6064894,
-    "ast_hash": "42ae1c045461f63aa4345b2ef998f456",
+    "mtime": 1793467319.5922291,
+    "seen": 1793484021.2790325,
+    "ast_hash": "d1ee60b99ec0512702d69f34ee57d9a8",
     "semantic_hash": ""
   },
   "scripts/deploy.sh": {
@@ -54,15 +54,15 @@
     "semantic_hash": ""
   },
   "src/app/(app)/blueprints/[id]/page.tsx": {
-    "mtime": 1793454198.7763762,
-    "seen": 1793455136.0322418,
-    "ast_hash": "653c9d39f93bf1ba861457e0cb3f6ec5",
+    "mtime": 1793482526.0055814,
+    "seen": 1793484021.2790325,
+    "ast_hash": "a586e201ca7bb7598bd412f161542955",
     "semantic_hash": ""
   },
   "src/app/(app)/blueprints/page.tsx": {
-    "mtime": 1793424253.9846475,
-    "seen": 1793424724.083891,
-    "ast_hash": "2b5bc8524cdff28e598123cb15d5ec0f",
+    "mtime": 1793482557.6724195,
+    "seen": 1793484021.2790325,
+    "ast_hash": "b127cfb1f34976bf2c16b622d413ef46",
     "semantic_hash": ""
   },
   "src/app/(app)/books/page.tsx": {
@@ -198,9 +198,9 @@
     "semantic_hash": ""
   },
   "src/app/api/blueprints/[id]/route.ts": {
-    "mtime": 1793428806.9361708,
-    "seen": 1793430179.0615995,
-    "ast_hash": "bac2fb288e10e1c8ebbf556a8899ce62",
+    "mtime": 1793481570.5344958,
+    "seen": 1793484021.2800324,
+    "ast_hash": "e4d3a3f5d44b43fbc6b73f0ee9868dbc",
     "semantic_hash": ""
   },
   "src/app/api/blueprints/rollover/route.ts": {
@@ -210,9 +210,9 @@
     "semantic_hash": ""
   },
   "src/app/api/blueprints/route.ts": {
-    "mtime": 1793428788.662178,
-    "seen": 1793430179.0615995,
-    "ast_hash": "a2ada9d6015be7f4767145ad9cf4f27d",
+    "mtime": 1793481562.0187454,
+    "seen": 1793484021.2800324,
+    "ast_hash": "fd2125a7491d46a5af73d30bb887c4b7",
     "semantic_hash": ""
   },
   "src/app/api/books/[id]/chapters/route.ts": {
@@ -318,9 +318,9 @@
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/ai-generate-section/route.ts": {
-    "mtime": 1793434279.439377,
-    "seen": 1793434666.943221,
-    "ast_hash": "55c858118a9e76a28b6f14fa8f96e31b",
+    "mtime": 1793490078.0280013,
+    "seen": 1793491120.3699422,
+    "ast_hash": "00ae6a2ed08e7ceeda14d43a8ab3e4a0",
     "semantic_hash": ""
   },
   "src/app/api/papers/[id]/ai-plan/route.ts": {
@@ -750,9 +750,9 @@
     "semantic_hash": ""
   },
   "src/lib/blueprint.ts": {
-    "mtime": 1793443737.2552185,
-    "seen": 1793444277.9467785,
-    "ast_hash": "1d88e6abb83e89bf9d2bb4db97de32b1",
+    "mtime": 1793481692.7071123,
+    "seen": 1793484021.2800324,
+    "ast_hash": "f3d46838d724c9107b9c9132b6cb8c67",
     "semantic_hash": ""
   },
   "src/lib/blueprintExport.ts": {
@@ -774,9 +774,9 @@
     "semantic_hash": ""
   },
   "src/lib/blueprints.ts": {
-    "mtime": 1792062880.4417133,
-    "seen": 1792685467.5911267,
-    "ast_hash": "65177f5e8972848b3f3282aa05cd7d81",
+    "mtime": 1793482038.929006,
+    "seen": 1793484021.2800324,
+    "ast_hash": "7c62a1680b8421efd59a63260c8a6a94",
     "semantic_hash": ""
   },
   "src/lib/bulkImport.ts": {
@@ -852,9 +852,9 @@
     "semantic_hash": ""
   },
   "src/lib/dto.ts": {
-    "mtime": 1793449903.74903,
-    "seen": 1793450157.1647072,
-    "ast_hash": "333079ee2d4a854673457aeee49c5166",
+    "mtime": 1793469820.9328337,
+    "seen": 1793484021.2800324,
+    "ast_hash": "d5f3cfe066c13d56c1ffe9ad9355b36c",
     "semantic_hash": ""
   },
   "src/lib/format.ts": {
@@ -864,15 +864,15 @@
     "semantic_hash": ""
   },
   "src/lib/gemini.test.ts": {
-    "mtime": 1792664229.9881477,
-    "seen": 1792685467.5911267,
+    "mtime": 1793490840.8351998,
+    "seen": 1793491120.3699422,
     "ast_hash": "5c192c02e8b26ba2f8fb475a3312e6b2",
     "semantic_hash": ""
   },
   "src/lib/gemini.ts": {
-    "mtime": 1793449225.4960527,
-    "seen": 1793450157.1647072,
-    "ast_hash": "5d7e43b8348d43e9757e1c49098b6d56",
+    "mtime": 1793490062.8899212,
+    "seen": 1793491120.3699422,
+    "ast_hash": "4a5fef335b590822bb3bedae5b412157",
     "semantic_hash": ""
   },
   "src/lib/kindergarten.test.ts": {
@@ -978,9 +978,9 @@
     "semantic_hash": ""
   },
   "src/lib/m1-adversarial.test.ts": {
-    "mtime": 1793350408.6339693,
-    "seen": 1793350664.6064894,
-    "ast_hash": "c19032170078691035420354e59eef4f",
+    "mtime": 1793469831.3665926,
+    "seen": 1793484021.2800324,
+    "ast_hash": "17bb7e52885c5f0d94f7def3b0ecbf91",
     "semantic_hash": ""
   },
   "src/lib/m1-challenger-state-lock.test.ts": {
@@ -990,9 +990,9 @@
     "semantic_hash": ""
   },
   "src/lib/m1-data-models.test.ts": {
-    "mtime": 1793350398.5681758,
-    "seen": 1793350664.6064894,
-    "ast_hash": "3b69ece5a0f3050fc7b413f39cc8a0fc",
+    "mtime": 1793469849.6576538,
+    "seen": 1793484021.2800324,
+    "ast_hash": "880886f00375d6e42641dc77a5b32d8e",
     "semantic_hash": ""
   },
   "src/lib/m1-database-stress.test.ts": {
@@ -1008,9 +1008,9 @@
     "semantic_hash": ""
   },
   "src/lib/m2-adversarial-freshness.test.ts": {
-    "mtime": 1792081178.644508,
-    "seen": 1792685467.5911267,
-    "ast_hash": "80770ecd49f2211ce58c84859c3a996f",
+    "mtime": 1793469863.976296,
+    "seen": 1793484021.2800324,
+    "ast_hash": "e85f19834b52ae11759ce0eef839cd68",
     "semantic_hash": ""
   },
   "src/lib/m2-challenger-boundary.test.ts": {
@@ -1026,9 +1026,9 @@
     "semantic_hash": ""
   },
   "src/lib/m2-guardrails.test.ts": {
-    "mtime": 1792080677.5064542,
-    "seen": 1792685467.5911267,
-    "ast_hash": "28bda61cb8a2c2f7e7e8cd9a3f123324",
+    "mtime": 1793469872.392303,
+    "seen": 1793484021.2800324,
+    "ast_hash": "e2104832e92170029b263b0ed0708cc7",
     "semantic_hash": ""
   },
   "src/lib/m2-print-calculator-stress.test.ts": {
@@ -1050,9 +1050,9 @@
     "semantic_hash": ""
   },
   "src/lib/m3-dto-freshness-stress.test.ts": {
-    "mtime": 1792395098.247269,
-    "seen": 1792685467.5911267,
-    "ast_hash": "88f3819b72c37ddb905e397c82443ab8",
+    "mtime": 1793469942.6909206,
+    "seen": 1793484021.2800324,
+    "ast_hash": "e8008deeb1775cc37e17b97797798b98",
     "semantic_hash": ""
   },
   "src/lib/m3-exhaustion-stress.test.ts": {
@@ -1086,9 +1086,9 @@
     "semantic_hash": ""
   },
   "src/lib/paperAutogen.ts": {
-    "mtime": 1793434541.1516652,
-    "seen": 1793434666.9442203,
-    "ast_hash": "70b8cd78670ee660a6ccad842649d7c8",
+    "mtime": 1793491015.074721,
+    "seen": 1793491120.3699422,
+    "ast_hash": "b9fc77ce16197052b00ab8138598bbce",
     "semantic_hash": ""
   },
   "src/lib/paperImport.test.ts": {
@@ -1128,9 +1128,9 @@
     "semantic_hash": ""
   },
   "src/lib/question-exhaustion.test.ts": {
-    "mtime": 1792394634.8297398,
-    "seen": 1792685467.5911267,
-    "ast_hash": "6d8cca15f51cbc9fdda3a249fba240e3",
+    "mtime": 1793469963.8492482,
+    "seen": 1793484021.2800324,
+    "ast_hash": "58d6387f8a0aa58437c847e55e416119",
     "semantic_hash": ""
   },
   "src/lib/question-usage-tags.test.ts": {
@@ -1158,9 +1158,9 @@
     "semantic_hash": ""
   },
   "src/lib/schemas.ts": {
-    "mtime": 1793437065.0345812,
-    "seen": 1793438260.4130752,
-    "ast_hash": "2e56d2d687600c21ade9f81c2908f119",
+    "mtime": 1793481554.1424584,
+    "seen": 1793484021.2800324,
+    "ast_hash": "fb719e99b6f9435e647e6df4c269ecb6",
     "semantic_hash": ""
   },
   "src/lib/schoolCurriculum.ts": {
@@ -1458,9 +1458,9 @@
     "semantic_hash": ""
   },
   "src/lib/curriculumTemplates.ts": {
-    "mtime": 1793454875.7658541,
-    "seen": 1793455136.0322418,
-    "ast_hash": "f6d898b0223b1e9b643aa872880fa4e1",
+    "mtime": 1793483802.5499542,
+    "seen": 1793484021.2800324,
+    "ast_hash": "4cbcb0801a22f0176afd5f47a71d834a",
     "semantic_hash": ""
   },
   "src/lib/newFeatures.test.ts": {
@@ -1536,9 +1536,9 @@
     "semantic_hash": ""
   },
   "src/lib/curriculumContract.ts": {
-    "mtime": 1793454702.662127,
-    "seen": 1793455136.0322418,
-    "ast_hash": "c1d4803c39dfd273e25ae978bea7d51b",
+    "mtime": 1793489857.8220077,
+    "seen": 1793491120.3699422,
+    "ast_hash": "4d1f6cf468658ef049f314223ad5fc87",
     "semantic_hash": ""
   },
   "src/lib/generationObservability.ts": {
@@ -1548,21 +1548,21 @@
     "semantic_hash": ""
   },
   "src/lib/mpbse-class12-math-regression.test.ts": {
-    "mtime": 1793416521.3915849,
-    "seen": 1793417171.191507,
-    "ast_hash": "bda02ec0469af13f9a77d7924c2f7950",
+    "mtime": 1793469950.7829428,
+    "seen": 1793484021.2800324,
+    "ast_hash": "58a7e5d1c0d97a12cc3a1fc3158d3fd8",
     "semantic_hash": ""
   },
   "src/lib/questionValidator.ts": {
-    "mtime": 1793454053.58845,
-    "seen": 1793455136.0322418,
-    "ast_hash": "f2d93a52c6dfac06b7bdadd002b72aed",
+    "mtime": 1793505809.771906,
+    "seen": 1793506010.305069,
+    "ast_hash": "b69717a9317af1020869de2ab0ee5fad",
     "semantic_hash": ""
   },
   "src/lib/internalChoiceRules.ts": {
-    "mtime": 1793427541.5248692,
-    "seen": 1793430179.0615995,
-    "ast_hash": "46df3437ca5b84a7f2dc2185ac7f2550",
+    "mtime": 1793483887.9455884,
+    "seen": 1793484021.2800324,
+    "ast_hash": "7aea0f36e93cf322efe9ba2e987656e6",
     "semantic_hash": ""
   },
   "src/lib/academicSessionUtils.ts": {
@@ -1614,9 +1614,9 @@
     "semantic_hash": ""
   },
   "src/lib/subparts-hierarchy-regression.test.ts": {
-    "mtime": 1793438049.784746,
-    "seen": 1793438260.4130752,
-    "ast_hash": "fc7c4475a283f494dd408747220fef19",
+    "mtime": 1793469972.0445304,
+    "seen": 1793484021.2800324,
+    "ast_hash": "dd0d7e4d81d76b1691150c0e64ec5786",
     "semantic_hash": ""
   },
   "src/lib/quota-or-choice-regression.test.ts": {
@@ -1635,6 +1635,198 @@
     "mtime": 1793454602.01802,
     "seen": 1793455136.0322418,
     "ast_hash": "fc192c93fae2f69a71aa5f59784a69a0",
+    "semantic_hash": ""
+  },
+  "prisma/seed-mpbse.ts": {
+    "mtime": 1793469803.5265522,
+    "seen": 1793484021.2790325,
+    "ast_hash": "7e8fe0a440f2aa20c8c08cebf274ee2f",
+    "semantic_hash": ""
+  },
+  "scripts/audit-comprehensive-checks.ts": {
+    "mtime": 1793470614.08428,
+    "seen": 1793484021.2790325,
+    "ast_hash": "9f0b7471a3dc9671e344fce61c0cee21",
+    "semantic_hash": ""
+  },
+  "scripts/audit-db-verify.ts": {
+    "mtime": 1793470567.921303,
+    "seen": 1793484021.2790325,
+    "ast_hash": "61fa1040e5fa47351decc663c0228e08",
+    "semantic_hash": ""
+  },
+  "scripts/challenge-m1.ts": {
+    "mtime": 1793468277.9370303,
+    "seen": 1793484021.2790325,
+    "ast_hash": "7890814e955bdb2a9d68791477166950",
+    "semantic_hash": ""
+  },
+  "scripts/challenger-m1-c2-verify.ts": {
+    "mtime": 1793470581.713639,
+    "seen": 1793484021.2790325,
+    "ast_hash": "aa9fa3307444a34617d56978c5932d62",
+    "semantic_hash": ""
+  },
+  "scripts/challenger-m1-gate-verify.ts": {
+    "mtime": 1793470504.542208,
+    "seen": 1793484021.2790325,
+    "ast_hash": "53483c957dc5446ddd06fc3d35d33f32",
+    "semantic_hash": ""
+  },
+  "scripts/inspect-all-chapter-marks.ts": {
+    "mtime": 1793468357.4943683,
+    "seen": 1793484021.2790325,
+    "ast_hash": "892e634ab43833bf24e85ab9dcd34166",
+    "semantic_hash": ""
+  },
+  "scripts/test-idempotency.ts": {
+    "mtime": 1793468415.5629206,
+    "seen": 1793484021.2790325,
+    "ast_hash": "8ed9047a15114be1b57d275fec6260de",
+    "semantic_hash": ""
+  },
+  "src/app/api/blueprints/feasibility/route.ts": {
+    "mtime": 1793481949.173615,
+    "seen": 1793484021.2800324,
+    "ast_hash": "7c326a91541c3dbe1232edb88d54c617",
+    "semantic_hash": ""
+  },
+  "src/app/api/curriculum/blueprints/adapt/route.ts": {
+    "mtime": 1793481943.0926142,
+    "seen": 1793484021.2800324,
+    "ast_hash": "0be4a0236cf2a928a7de30afd6d7c2e5",
+    "semantic_hash": ""
+  },
+  "src/app/api/curriculum/templates/[code]/route.ts": {
+    "mtime": 1793482000.9969847,
+    "seen": 1793484021.2800324,
+    "ast_hash": "90d13d04601a1cb163338362ce9d78f4",
+    "semantic_hash": ""
+  },
+  "src/app/api/curriculum/templates/route.ts": {
+    "mtime": 1793481989.0699234,
+    "seen": 1793484021.2800324,
+    "ast_hash": "72603f789ef1431b50a5303365d7a88c",
+    "semantic_hash": ""
+  },
+  "src/components/blueprints/CustomSchoolTermConfigurator.tsx": {
+    "mtime": 1793482261.5451455,
+    "seen": 1793484021.2800324,
+    "ast_hash": "573b41d6bc5ebd1a42b66ebad41ede76",
+    "semantic_hash": ""
+  },
+  "src/components/blueprints/FeasibilityStatusAlert.tsx": {
+    "mtime": 1793482215.9484282,
+    "seen": 1793484021.2800324,
+    "ast_hash": "1079a96aca7822689964a001db46aa70",
+    "semantic_hash": ""
+  },
+  "src/components/blueprints/StandardMpbseConfigurator.tsx": {
+    "mtime": 1793482235.557881,
+    "seen": 1793484021.2800324,
+    "ast_hash": "d1cef4888f138243c0d1d3f3b5a3a2ff",
+    "semantic_hash": ""
+  },
+  "src/lib/challenger-m1-backward-compat.test.ts": {
+    "mtime": 1793469989.7200027,
+    "seen": 1793484021.2800324,
+    "ast_hash": "ba42d7e610dd84702376e347e521f991",
+    "semantic_hash": ""
+  },
+  "src/lib/m2-challenger-2-adversarial.test.ts": {
+    "mtime": 1793483345.0528247,
+    "seen": 1793484021.2800324,
+    "ast_hash": "64ebe4c74e925a0ef98c955dba9e2fdd",
+    "semantic_hash": ""
+  },
+  "src/lib/m2-challenger-blueprint.test.ts": {
+    "mtime": 1793483930.3116488,
+    "seen": 1793484021.2800324,
+    "ast_hash": "748e4158411a6a531d2822130c7f4edb",
+    "semantic_hash": ""
+  },
+  "src/lib/m2-forensic-adversarial.test.ts": {
+    "mtime": 1793483097.4704218,
+    "seen": 1793484021.2800324,
+    "ast_hash": "7d36037ca3ba3d7619a8878b223e9e23",
+    "semantic_hash": ""
+  },
+  "src/lib/mpbse-blueprints.test.ts": {
+    "mtime": 1793482094.7781115,
+    "seen": 1793484021.2800324,
+    "ast_hash": "5eae9b2f364a20527858841ed2440bdb",
+    "semantic_hash": ""
+  },
+  "src/lib/mpbse-curriculum-adversarial.test.ts": {
+    "mtime": 1793470069.1855543,
+    "seen": 1793484021.2800324,
+    "ast_hash": "c598fe77ea9bd52057c1fa869a0239b0",
+    "semantic_hash": ""
+  },
+  "src/lib/mpbse-curriculum.test.ts": {
+    "mtime": 1793470052.0303066,
+    "seen": 1793484021.2800324,
+    "ast_hash": "f903dde12dc5b505b8522ff28569d1ea",
+    "semantic_hash": ""
+  },
+  "src/lib/mathQuestionValidator.ts": {
+    "mtime": 1793492347.4091933,
+    "seen": 1793492636.4037437,
+    "ast_hash": "3c5d667c5718992f9759037825353e3f",
+    "semantic_hash": ""
+  },
+  "src/lib/mpbse-quality-gates.test.ts": {
+    "mtime": 1793492506.9183824,
+    "seen": 1793492636.4037437,
+    "ast_hash": "bfd8274346abf685fc1e827f5c1ff8d2",
+    "semantic_hash": ""
+  },
+  "src/lib/m3-challenger-chem-phys.test.ts": {
+    "mtime": 1793492429.8353734,
+    "seen": 1793492636.4037437,
+    "ast_hash": "96fe3669dddeadf9855869ac81b5a090",
+    "semantic_hash": ""
+  },
+  "src/lib/m3-challenger-gates.test.ts": {
+    "mtime": 1793492461.6601217,
+    "seen": 1793492636.4037437,
+    "ast_hash": "b0f47ebe7e1a11c2e6b279aedc5f31ef",
+    "semantic_hash": ""
+  },
+  "src/lib/m3-forensic-adversarial.test.ts": {
+    "mtime": 1793491684.7351174,
+    "seen": 1793492636.4037437,
+    "ast_hash": "7e68703c720c3f71a79f02899a2916e1",
+    "semantic_hash": ""
+  },
+  "src/lib/m3-challenger-chem-phys-it2.test.ts": {
+    "mtime": 1793505874.710774,
+    "seen": 1793506010.305069,
+    "ast_hash": "3792ee5075703e84544d1fe868ac24e5",
+    "semantic_hash": ""
+  },
+  "src/lib/m3-challenger-gates-it2.test.ts": {
+    "mtime": 1793504409.545662,
+    "seen": 1793504516.4586158,
+    "ast_hash": "353601f3b611081881c4f62c2627fc32",
+    "semantic_hash": ""
+  },
+  "src/lib/m3-challenger-chem-phys-it3.test.ts": {
+    "mtime": 1793506808.8147109,
+    "seen": 1793506919.066066,
+    "ast_hash": "a3c551ebe477cbf6858be313a3c884a9",
+    "semantic_hash": ""
+  },
+  "src/lib/m3-challenger-gates-it3.test.ts": {
+    "mtime": 1793506849.0698087,
+    "seen": 1793506919.066066,
+    "ast_hash": "4e3c1b5e3a2ca16cf2e0ad3033ef104e",
+    "semantic_hash": ""
+  },
+  "tests/e2e/blueprint-ui-modes.spec.ts": {
+    "mtime": 1793507541.5582418,
+    "seen": 1793507684.8325937,
+    "ast_hash": "691dade67eaf03c4f2943632add94b06",
     "semantic_hash": ""
   }
 }

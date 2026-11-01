@@ -1,4 +1,10 @@
 import {
+  type ChoicePolicy,
+  type CurriculumGenerationPayload,
+  resolveChapterCurriculumContextSync,
+  resolveChoicePolicyForSlot,
+} from "./curriculumContract";
+import {
   resolveInternalChoiceRequirement,
   type InternalChoiceRequirement,
 } from "./internalChoiceRules";
@@ -6,12 +12,15 @@ import { detectPaperLanguage, type PaperLanguage } from "./localization";
 import type { PaperData, Section } from "./types";
 
 export interface PaperAutogenSlot {
+  slotId?: string;
   slotIndex: number;
   chapterId: string;
   chapterNumber: number;
   chapterTitle: string;
   marks: number;
   requiresInternalChoice?: boolean;
+  choicePolicy?: ChoicePolicy;
+  curriculumPayload?: CurriculumGenerationPayload;
 }
 
 export interface PaperAutogenSectionPlan {
@@ -102,6 +111,8 @@ export interface PaperAutogenInput {
  */
 export function planPaperSlotAssignments(paper: PaperAutogenInput): PaperAutogenPlan {
   const { blueprint, items } = paper;
+  const paperLang = detectPaperLanguage(paper, paper.items);
+  const classLevel = parseInt((blueprint.book?.className || "").replace(/\D/g, "") || "10", 10);
 
   // 1. Compute already placed marks and count per chapter
   const placedMarksByChapter = new Map<string, number>();
@@ -270,14 +281,53 @@ export function planPaperSlotAssignments(paper: PaperAutogenInput): PaperAutogen
       );
       if (matchUnit && unitAssignments.has(matchUnit)) {
         const assignedChap = unitAssignments.get(matchUnit)!;
-        sectionSlots = Array.from({ length: matchUnit.slotCount }, (_, idx) => ({
-          slotIndex: placed + idx,
-          chapterId: assignedChap.chapterId,
-          chapterNumber: assignedChap.chapterNumber,
-          chapterTitle: assignedChap.chapterTitle,
-          marks: sec.marksEach,
-          requiresInternalChoice: false,
-        }));
+        sectionSlots = Array.from({ length: matchUnit.slotCount }, (_, idx) => {
+          const sIdx = placed + idx;
+          const slotId = `slot_${sec.id}_${sIdx}`;
+          const choicePolicy = resolveChoicePolicyForSlot({
+            marks: sec.marksEach,
+            questionType: sec.type,
+            requiresChoice: false,
+            forbiddenChoice: true,
+          });
+          const currCtx = resolveChapterCurriculumContextSync({
+            chapterNumber: assignedChap.chapterNumber,
+            chapterTitle: assignedChap.chapterTitle,
+            subject: blueprint.book?.subject,
+            className: blueprint.book?.className,
+          });
+          const targetWordCount = sec.marksEach === 2 ? 30 : sec.marksEach === 3 ? 75 : sec.marksEach === 4 ? 120 : 150;
+          const curriculumPayload: CurriculumGenerationPayload = {
+            board: "MPBSE",
+            academicSession: paper.academicSession || blueprint.academicSession || "2026-27",
+            classLevel,
+            subjectCode: paper.subjectCode || blueprint.subjectCode || "100",
+            subjectVariant: (paper.subjectCode === "101" || /basic/i.test(blueprint.book?.subject || "")) ? "BASIC" : "STANDARD",
+            chapterNumber: assignedChap.chapterNumber,
+            chapterTitle: assignedChap.chapterTitle,
+            officialMarksQuota: assignedChap.targetMarks,
+            includedTopics: currCtx.includedTopics,
+            excludedTopics: currCtx.excludedTopics,
+            competencies: currCtx.competencies,
+            slotId,
+            questionType: sec.type,
+            marks: sec.marksEach,
+            targetWordCount,
+            choicePolicy,
+            language: paperLang,
+          };
+          return {
+            slotId,
+            slotIndex: sIdx,
+            chapterId: assignedChap.chapterId,
+            chapterNumber: assignedChap.chapterNumber,
+            chapterTitle: assignedChap.chapterTitle,
+            marks: sec.marksEach,
+            requiresInternalChoice: false,
+            choicePolicy,
+            curriculumPayload,
+          };
+        });
       }
     } else {
       const singleUnits = planningUnits.filter(
@@ -288,13 +338,49 @@ export function planPaperSlotAssignments(paper: PaperAutogenInput): PaperAutogen
         .sort((a, b) => a.slotIndex - b.slotIndex)
         .map((s) => {
           const assignedChap = unitAssignments.get(s)!;
+          const slotId = `slot_${sec.id}_${s.slotIndex}`;
+          const choicePolicy = resolveChoicePolicyForSlot({
+            marks: s.marksEach,
+            questionType: sec.type,
+            requiresChoice: choiceReq.required,
+            forbiddenChoice: choiceReq.forbidden,
+          });
+          const currCtx = resolveChapterCurriculumContextSync({
+            chapterNumber: assignedChap.chapterNumber,
+            chapterTitle: assignedChap.chapterTitle,
+            subject: blueprint.book?.subject,
+            className: blueprint.book?.className,
+          });
+          const targetWordCount = s.marksEach === 2 ? 30 : s.marksEach === 3 ? 75 : s.marksEach === 4 ? 120 : 150;
+          const curriculumPayload: CurriculumGenerationPayload = {
+            board: "MPBSE",
+            academicSession: paper.academicSession || blueprint.academicSession || "2026-27",
+            classLevel,
+            subjectCode: paper.subjectCode || blueprint.subjectCode || "100",
+            subjectVariant: (paper.subjectCode === "101" || /basic/i.test(blueprint.book?.subject || "")) ? "BASIC" : "STANDARD",
+            chapterNumber: assignedChap.chapterNumber,
+            chapterTitle: assignedChap.chapterTitle,
+            officialMarksQuota: assignedChap.targetMarks,
+            includedTopics: currCtx.includedTopics,
+            excludedTopics: currCtx.excludedTopics,
+            competencies: currCtx.competencies,
+            slotId,
+            questionType: sec.type,
+            marks: s.marksEach,
+            targetWordCount,
+            choicePolicy,
+            language: paperLang,
+          };
           return {
+            slotId,
             slotIndex: s.slotIndex,
             chapterId: assignedChap.chapterId,
             chapterNumber: assignedChap.chapterNumber,
             chapterTitle: assignedChap.chapterTitle,
             marks: s.marksEach,
             requiresInternalChoice: choiceReq.required,
+            choicePolicy,
+            curriculumPayload,
           };
         });
     }

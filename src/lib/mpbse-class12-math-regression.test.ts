@@ -698,6 +698,9 @@ describe("MPBSE Class 12 Mathematics Regression & Subject Integrity Suite", () =
         imagePath: null,
         spaceMm: 0,
         showGrid: false,
+        curriculumTopicId: null,
+        competencyLevel: null,
+        sourceProvenance: null,
         createdById: "u1",
         createdAt: new Date(),
       });

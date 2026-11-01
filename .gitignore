@@ -58,3 +58,11 @@ prisma/*.db.bak
 /scratch/
 .vscode/
 graphify-out/cache/
+
+# downloads and reference media
+/downloads/
+*.pdf
+*.jpg
+*.jpeg
+!/public/**
+

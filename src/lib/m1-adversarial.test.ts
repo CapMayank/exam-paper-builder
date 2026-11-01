@@ -429,6 +429,9 @@ describe("Adversarial Challenge: toQuestionDto Safe Parsing & Resiliency", () =>
     imagePath: null,
     spaceMm: 0,
     showGrid: false,
+    curriculumTopicId: null,
+    competencyLevel: null,
+    sourceProvenance: null,
     createdById: "user-1",
     createdAt: new Date("2026-03-01T00:00:00.000Z"),
   };

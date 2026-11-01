@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUp, BookOpen, Code2, Download, FileText, Layers, Plus, Sparkles, Trash2, Upload } from "lucide-react";
+import { ArrowDown, ArrowUp, BookOpen, Code2, Download, FileText, Layers, Plus, Scale, ShieldCheck, Sparkles, Trash2, Upload } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useEffect, useMemo, useState } from "react";
@@ -8,7 +8,10 @@ import { ErrorBanner, Field, useConfirm, useToast } from "@/components/ui";
 import { BlueprintImportModal } from "@/components/BlueprintImportModal";
 import { BlueprintJsonModal } from "@/components/BlueprintJsonModal";
 import { BlueprintTemplateModal } from "@/components/BlueprintTemplateModal";
-import { STANDARD_BLUEPRINT_TEMPLATES, type BlueprintTemplate } from "@/lib/curriculumTemplates";
+import { STANDARD_BLUEPRINT_TEMPLATES, type BlueprintTemplate, type ExaminationTerm, adaptChaptersHamiltonHare } from "@/lib/curriculumTemplates";
+import { StandardMpbseConfigurator } from "@/components/blueprints/StandardMpbseConfigurator";
+import { CustomSchoolTermConfigurator } from "@/components/blueprints/CustomSchoolTermConfigurator";
+import { FeasibilityStatusAlert } from "@/components/blueprints/FeasibilityStatusAlert";
 import { SANSKRIT_COMPETENCY_TAXONOMY } from "@/lib/curriculumContract";
 import { downloadBlueprintJson, type BlueprintWithExportRelations } from "@/lib/blueprintExport";
 import { useAcademicSession } from "@/lib/academicSession";
@@ -85,6 +88,12 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
   const [selectedClassFilter, setSelectedClassFilter] = useState("");
   const [selectedSubjectFilter, setSelectedSubjectFilter] = useState("");
 
+  const [curriculumMode, setCurriculumMode] = useState<"STANDARD_MPBSE" | "CUSTOM_SCHOOL" | "BLANK_CUSTOM">("BLANK_CUSTOM");
+  const [curriculumTemplateId, setCurriculumTemplateId] = useState<string | null>(null);
+  const [curriculumVariantId, setCurriculumVariantId] = useState<string | null>(null);
+  const [selectedTerm, setSelectedTerm] = useState<ExaminationTerm>("QUARTERLY");
+  const [customTargetMarks, setCustomTargetMarks] = useState<number>(75);
+
   useEffect(() => {
     if (sp.import === "true" || sp.import === "1") {
       if (sp.tab === "ai") {
@@ -121,6 +130,9 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
           setMarks(Object.fromEntries(source.chapters.map((c) => [c.chapterId, c.marks])));
           setSectionGroups(groupSectionsFromFlat(source.sections));
           setPaperCount(id === "new" ? 0 : source._count.papers);
+          setCurriculumMode(((source as any).curriculumMode as any) || "BLANK_CUSTOM");
+          setCurriculumTemplateId((source as any).curriculumTemplateId || null);
+          setCurriculumVariantId((source as any).curriculumVariantId || null);
         } else {
           const urlBookId = typeof sp.bookId === "string" ? sp.bookId : undefined;
           const urlCode = typeof sp.subjectCode === "string" ? sp.subjectCode : "";
@@ -565,6 +577,87 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
     toast.success(`Applied template "${template.title}" (${template.totalMarks} marks)`);
   }
 
+  async function handleLoadOfficialTemplate(template: BlueprintTemplate) {
+    setCurriculumMode("STANDARD_MPBSE");
+    setCurriculumTemplateId(template.id);
+    setCurriculumVariantId(null);
+    setName(`${template.subjectName || template.title} Class ${template.classLevel} (MPBSE ${academicSession})`);
+    setExamType(template.examType);
+    setDurationMin(template.durationMin);
+    if (template.subjectCode) {
+      setSubjectCode(template.subjectCode);
+    }
+
+    const matchedBook = books.find(
+      (b) =>
+        (b.className.includes(String(template.classLevel)) || b.className.toLowerCase() === `class ${template.classLevel}`.toLowerCase()) &&
+        isSubjectMatching(b.subject, template.subjectName || template.title)
+    );
+    if (matchedBook) {
+      setBookId(matchedBook.id);
+      setSelectedClassFilter(matchedBook.className);
+      setSelectedSubjectFilter(matchedBook.subject);
+    }
+
+    const newGroups: SectionGroup[] = template.sections.map((sec, idx) => ({
+      key: `sec_mpbse_${Date.now()}_${idx}`,
+      title: sec.title,
+      instructions: sec.instructions,
+      questionTypes: sec.questionTypes.map((qt, qIdx) => ({
+        key: `qt_mpbse_${Date.now()}_${idx}_${qIdx}`,
+        type: qt.type,
+        count: qt.count,
+        marksEach: qt.marksEach,
+        orChoiceMode: (qt as any).orChoiceMode ?? "BOARD_DEFAULT",
+        orAlternativeCount: (qt as any).orAlternativeCount ?? null,
+        orSlotsJson: (qt as any).orSlotsJson ?? null,
+      })),
+    }));
+    setSectionGroups(newGroups);
+
+    try {
+      const tData = await api<any>(`/api/curriculum/templates/${template.templateCode || template.id}`);
+      const targetBook = matchedBook || book;
+      if (tData?.marksSchemes?.[0]?.chapters && targetBook?.chapters?.length) {
+        const officialChapters = tData.marksSchemes[0].chapters;
+        const newMarks: Record<string, number> = {};
+        targetBook.chapters.forEach((bc: any) => {
+          const match = officialChapters.find((oc: any) =>
+            oc.chapterNumber === bc.number ||
+            oc.chapterTitle.trim().toLowerCase() === bc.title.trim().toLowerCase()
+          );
+          if (match) {
+            newMarks[bc.id] = match.marks;
+          }
+        });
+        if (Object.keys(newMarks).length > 0) {
+          setMarks(newMarks);
+        } else {
+          const adapted = adaptChaptersHamiltonHare(
+            targetBook.chapters.map((c: any) => ({ chapterId: c.id, marks: 5 })),
+            template.totalMarks
+          );
+          const dist: Record<string, number> = {};
+          adapted.forEach((a) => { dist[a.chapterId] = a.marks; });
+          setMarks(dist);
+        }
+      }
+    } catch {
+      const targetBook = matchedBook || book;
+      if (targetBook?.chapters?.length) {
+        const adapted = adaptChaptersHamiltonHare(
+          targetBook.chapters.map((c: any) => ({ chapterId: c.id, marks: 5 })),
+          template.totalMarks
+        );
+        const dist: Record<string, number> = {};
+        adapted.forEach((a) => { dist[a.chapterId] = a.marks; });
+        setMarks(dist);
+      }
+    }
+
+    toast.success(`Loaded MPBSE Official Pattern: ${template.title} (${template.totalMarks} marks)`);
+  }
+
   async function save(e?: React.FormEvent, andBuildPaper = false) {
     if (e) e.preventDefault();
     setError(null);
@@ -593,6 +686,9 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
         examType,
         durationMin,
         subjectCode,
+        curriculumMode,
+        curriculumTemplateId,
+        curriculumVariantId,
         chapters: chapterQuotas.filter((c) => c.marks > 0),
         sections: sections.map((s) => ({
           id: s.id,
@@ -829,6 +925,76 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
       )}
 
       <ErrorBanner message={error} />
+
+      {/* 3 UI Modes Selector */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-2 shadow-xs">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setCurriculumMode("STANDARD_MPBSE")}
+            className={`flex-1 py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition ${
+              curriculumMode === "STANDARD_MPBSE"
+                ? "bg-emerald-600 text-white shadow-xs"
+                : "text-slate-700 hover:bg-slate-100"
+            }`}
+          >
+            <ShieldCheck size={16} /> Mode 1: Standard MPBSE Pattern
+          </button>
+          <button
+            type="button"
+            onClick={() => setCurriculumMode("CUSTOM_SCHOOL")}
+            className={`flex-1 py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition ${
+              curriculumMode === "CUSTOM_SCHOOL"
+                ? "bg-indigo-600 text-white shadow-xs"
+                : "text-slate-700 hover:bg-slate-100"
+            }`}
+          >
+            <Scale size={16} /> Mode 2: Custom School Exam
+          </button>
+          <button
+            type="button"
+            onClick={() => setCurriculumMode("BLANK_CUSTOM")}
+            className={`flex-1 py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition ${
+              curriculumMode === "BLANK_CUSTOM"
+                ? "bg-slate-800 text-white shadow-xs"
+                : "text-slate-700 hover:bg-slate-100"
+            }`}
+          >
+            <Code2 size={16} /> Mode 3: Blank Custom Blueprint
+          </button>
+        </div>
+      </div>
+
+      {curriculumMode === "STANDARD_MPBSE" && (
+        <StandardMpbseConfigurator
+          onLoadTemplate={handleLoadOfficialTemplate}
+          isReadOnly={isReadOnly}
+          currentTemplateId={curriculumTemplateId}
+        />
+      )}
+
+      {curriculumMode === "CUSTOM_SCHOOL" && (
+        <CustomSchoolTermConfigurator
+          chapters={book?.chapters || []}
+          marks={marks}
+          onMarksChange={setMarks}
+          term={selectedTerm}
+          onTermChange={(t, dur) => {
+            setSelectedTerm(t);
+            setExamType(t === "PRE_BOARD" ? "ANNUAL" : t === "UNIT_TEST" ? "QUARTERLY" : t);
+            setDurationMin(dur);
+          }}
+          targetMarks={customTargetMarks}
+          onTargetMarksChange={setCustomTargetMarks}
+          isReadOnly={isReadOnly}
+        />
+      )}
+
+      <FeasibilityStatusAlert
+        warnings={feasibilityWarnings}
+        totalSectionMarks={total}
+        totalChapterMarks={chapterTotal}
+      />
 
       <fieldset disabled={isReadOnly} className="space-y-4">
         <section className="card grid gap-3 sm:grid-cols-4">
@@ -1193,6 +1359,11 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
 
                             {/* Internal Choice (OR / अथवा) Configuration */}
                             <div className="pt-2 border-t border-slate-200/80 space-y-2">
+                              {curriculumMode === "STANDARD_MPBSE" && (
+                                <div className="flex items-center gap-1.5 text-[10px] bg-emerald-50 text-emerald-900 border border-emerald-300 font-semibold px-2 py-0.5 rounded">
+                                  <span>🔒 Locked: MPBSE Circular 465 requires {qt.marksEach === 2 ? "strictly NO internal choice for 2-mark questions" : qt.marksEach >= 3 ? "100% internal OR choice for 3m/4m analytical questions" : "objective questions without choice"}</span>
+                                </div>
+                              )}
                               <div className="flex flex-wrap items-center justify-between gap-2">
                                 <div className="flex flex-wrap items-center gap-1.5">
                                   <span className="text-[11px] font-semibold text-slate-700">
