@@ -25,6 +25,7 @@ import {
   type QuestionTypeItem,
   type SectionGroup,
 } from "@/lib/blueprint";
+import { matchOfficialChapterMarks } from "@/lib/officialChapterMarks";
 import {
   detectBoardRuleConflict,
   getBoardDefaultChoiceRequirement,
@@ -632,17 +633,12 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
       const officialChapters: any[] = tData?.subject?.textbooks?.flatMap((tb: any) => tb.chapters || []) || [];
 
       if (officialChapters.length > 0 && targetBook?.chapters?.length) {
-        const newMarks: Record<string, number> = {};
-        targetBook.chapters.forEach((bc: any) => {
-          const match = officialChapters.find((oc: any) =>
-            (oc.legacyChapterId && oc.legacyChapterId === bc.id) ||
-            oc.chapterNumber === bc.number ||
-            oc.title.trim().toLowerCase() === bc.title.trim().toLowerCase()
-          );
-          if (match) {
-            newMarks[bc.id] = match.isDeleted ? 0 : (typeof match.officialMarks === "number" ? match.officialMarks : 0);
-          }
-        });
+        // match official marks onto the book's chapters, also when several textbooks were combined into one book
+        const newMarks: Record<string, number> = matchOfficialChapterMarks(
+          targetBook.chapters.map((c: any) => ({ id: c.id, number: c.number, title: c.title })),
+          tData?.subject?.textbooks || [],
+          template.totalMarks,
+        ).marks;
 
         const currentSum = Object.values(newMarks).reduce((a, b) => a + b, 0);
         if (currentSum === template.totalMarks) {
