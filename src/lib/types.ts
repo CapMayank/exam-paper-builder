@@ -51,6 +51,8 @@ export type Section = {
   orChoiceMode?: "BOARD_DEFAULT" | "REQUIRED" | "NOT_REQUIRED";
   orAlternativeCount?: number;
   orSlotsJson?: string;
+  role?: "STANDARD" | "PASSAGE" | "GRAMMAR" | "WRITING" | "LITERATURE";
+  groupKey?: string;
 };
 
 export type Blueprint = {

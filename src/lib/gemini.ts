@@ -2108,9 +2108,11 @@ export interface PaperAuditReport {
       applying: string;
       analyzingHots: string;
     };
-    rating: "EXCELLENT" | "BALANCED" | "NEEDS_ADJUSTMENT";
+    rating: "EXCELLENT" | "BALANCED" | "NEEDS_ADJUSTMENT" | "NOT_ASSESSED";
     summary: string;
   };
+  status?: "PASS" | "PASS WITH WARNINGS" | "FAIL" | "INCONCLUSIVE";
+  aiStage?: "COMPLETED" | "SKIPPED" | "FAILED";
   issues: Array<{
     questionId?: string;
     questionNumber: number;

@@ -219,12 +219,12 @@ describe("Gemini AI Integration Suite", () => {
       const audit = res.data;
       expect(audit.totalMarks).toBe(12);
       expect(audit.totalQuestions).toBe(4);
-      expect(audit.cognitiveBalance.rememberingPct).toBeGreaterThan(0);
-      expect(audit.cognitiveBalance.understandingPct).toBeGreaterThan(0);
-      expect(audit.cognitiveBalance.applyingPct).toBeGreaterThan(0);
-      expect(audit.cognitiveBalance.analyzingHotsPct).toBeGreaterThan(0);
+      // No model review ran here: no cognitive split is invented and the verdict is not PASS.
+      expect(audit.cognitiveBalance.rating).toBe("NOT_ASSESSED");
+      expect(audit.cognitiveBalance.rememberingPct).toBe(0);
       expect(audit.cognitiveBalance.summary).toBeTruthy();
-      expect(audit.overallVerdict).toBeTruthy();
+      expect(audit.status).toBe("INCONCLUSIVE");
+      expect(audit.overallVerdict).toContain("INCONCLUSIVE");
     });
 
     it("flags flawed questions appropriately", async () => {

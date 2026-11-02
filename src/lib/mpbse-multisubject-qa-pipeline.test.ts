@@ -544,9 +544,10 @@ describe("Major Refactoring Acceptance Suite: Multi-Subject MP Board QA Pipeline
       };
 
       const audit = await auditPaperEvidenceBased(cleanPaper);
-      expect(audit.status).toBe("PASS");
+      // Without the independent model review the paper is INCONCLUSIVE, never PASS.
+      expect(audit.status).toBe("INCONCLUSIVE");
       expect(audit.findings).toHaveLength(0);
-      expect(audit.overallVerdict).toContain("PASS");
+      expect(audit.overallVerdict).toContain("INCONCLUSIVE");
     });
   });
 });

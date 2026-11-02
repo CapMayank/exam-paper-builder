@@ -48,9 +48,11 @@ export interface EvidenceAuditReport {
       applying: string;
       analyzingHots: string;
     };
-    rating: "EXCELLENT" | "BALANCED" | "NEEDS_ADJUSTMENT";
+    rating: "EXCELLENT" | "BALANCED" | "NEEDS_ADJUSTMENT" | "NOT_ASSESSED";
     summary: string;
   };
+  /** COMPLETED = the independent model review ran; SKIPPED = no API key; FAILED = call or parse error. */
+  aiStage: "COMPLETED" | "SKIPPED" | "FAILED";
   overallVerdict: string;
   summary: string;
 }
@@ -74,8 +76,30 @@ export interface AuditPaperInput {
     difficulty: string;
     imagePath?: string;
     figureDoc?: unknown;
+    subparts?: Array<{ label?: string; text: string; marks?: number; options?: string[]; answer?: string }>;
+    orQuestion?: { text: string; options?: string[]; answer?: string; subparts?: unknown } | null;
   }>;
   apiKey?: string | null;
+}
+
+const PASSAGE_SECTION = /unseen|comprehension|reading|passage|अपठित|गद्यांश|काव्यांश|अवबोधन/i;
+const PASSAGE_TYPES = new Set(["UNSEEN_PASSAGE", "REFERENCE_CONTEXT"]);
+
+/**
+ * True when a question points at a visual that is not attached. Deliberately narrow:
+ * "given below" / "shown below" alone (passages, "answer the questions given below") and
+ * "figure of speech" are not references to a diagram.
+ */
+export function referencesMissingVisual(text: string, type: string, sectionTitle = ""): boolean {
+  if (PASSAGE_TYPES.has(type.toUpperCase()) || PASSAGE_SECTION.test(sectionTitle)) return false;
+  const t = text.toLowerCase().replace(/figures? of speech/g, "");
+  const visual = "(?:diagram|figure|fig\\.?|graph|map|picture)";
+  return (
+    new RegExp(`\\b(?:in|from|using|see|refer to|observe|study)\\s+(?:the\\s+)?(?:given\\s+|following\\s+|above\\s+|adjoining\\s+)?${visual}\\b`).test(t) ||
+    new RegExp(`\\b${visual}\\s+(?:given|shown|drawn|below|above)\\b`).test(t) ||
+    new RegExp(`\\bshown in (?:the )?${visual}\\b`).test(t) ||
+    /दिए गए (चित्र|आरेख|रेखाचित्र)|चित्र में दर्शाए|आकृति में/.test(text)
+  );
 }
 
 /**
@@ -118,12 +142,7 @@ export async function auditPaperEvidenceBased(
     }
 
     // 2. Dangling visual reference
-    const lowerText = qText.toLowerCase();
-    const referencesDiagram =
-      lowerText.includes("diagram") ||
-      lowerText.includes("figure") ||
-      lowerText.includes("shown below") ||
-      lowerText.includes("given below");
+    const referencesDiagram = referencesMissingVisual(qText, qType, q.sectionTitle);
     const hasVisual = Boolean(q.imagePath || q.figureDoc);
 
     if (referencesDiagram && !hasVisual) {
@@ -266,6 +285,8 @@ export async function auditPaperEvidenceBased(
   // STAGE 2: AI DEEP AUDIT (ONLY IF API KEY IS AVAILABLE)
   // -------------------------------------------------------------
   const geminiApiKey = getGeminiApiKey(apiKey);
+  let aiStage: "COMPLETED" | "SKIPPED" | "FAILED" = geminiApiKey && questions.length > 0 ? "FAILED" : "SKIPPED";
+  let modelCognitive: { r: number; u: number; a: number; h: number } | null = null;
   if (geminiApiKey && questions.length > 0) {
     try {
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`;
@@ -291,6 +312,8 @@ ${JSON.stringify(
     options: q.options,
     answer: q.answer,
     explanation: q.explanation,
+    subparts: q.subparts,
+    alternativeQuestion: q.orQuestion ?? undefined,
   })),
   null,
   2,
@@ -337,6 +360,11 @@ Return a JSON object matching this schema:
         if (candText) {
           const parsed = parseGeminiJsonWithLatexSafety<any>(candText);
           if (Array.isArray(parsed?.defects)) {
+            aiStage = "COMPLETED";
+            const cd = parsed.cognitiveDistribution;
+            if (cd && [cd.rememberingPct, cd.understandingPct, cd.applyingPct, cd.analyzingHotsPct].every((n: unknown) => typeof n === "number")) {
+              modelCognitive = { r: cd.rememberingPct, u: cd.understandingPct, a: cd.applyingPct, h: cd.analyzingHotsPct };
+            }
             for (const d of parsed.defects) {
               // Ensure finding has real evidence and is not duplicate of deterministic scan
               if (
@@ -376,16 +404,21 @@ Return a JSON object matching this schema:
   const highSeverityCount = findings.filter((f) => f.severity === "HIGH").length;
   const mediumSeverityCount = findings.filter((f) => f.severity === "MEDIUM").length;
 
+  // A paper only PASSes when the independent review actually ran; otherwise it is INCONCLUSIVE.
   const status: "PASS" | "PASS WITH WARNINGS" | "FAIL" | "INCONCLUSIVE" =
     highSeverityCount > 0
       ? "FAIL"
+      : aiStage !== "COMPLETED"
+      ? "INCONCLUSIVE"
       : mediumSeverityCount > 0
       ? "PASS WITH WARNINGS"
       : "PASS";
 
   const overallVerdict =
     status === "PASS"
-      ? "PASS: Examination paper is academically sound, complete, and fully aligned with MP Board standards. Zero significant defects detected."
+      ? "PASS: deterministic checks and the independent model review found no significant defect. This is not a certification of MP Board compliance."
+      : status === "INCONCLUSIVE"
+      ? `INCONCLUSIVE: deterministic checks found no high-severity defect, but the independent model review did not run (${aiStage === "SKIPPED" ? "no API key" : "call or parse failed"}). The paper has not been academically reviewed.`
       : status === "PASS WITH WARNINGS"
       ? `PASS WITH WARNINGS: Found ${mediumSeverityCount} minor item(s) recommended for teacher review, but paper remains structurally valid.`
       : `FAIL: Found ${highSeverityCount} significant defect(s) requiring correction prior to printing.`;
@@ -397,26 +430,29 @@ Return a JSON object matching this schema:
   }));
 
   const boardBenchmarkObj = {
-    remembering: "20-25%",
-    understanding: "40-45%",
-    applying: "20-25%",
-    analyzingHots: "10-15%",
+    remembering: "not published",
+    understanding: "not published",
+    applying: "not published",
+    analyzingHots: "not published",
   };
 
+  // Percentages come from the model's own estimate when it returned one; never invented.
   const cognitiveBalance = {
-    rememberingPct: 25,
-    understandingPct: 45,
-    applyingPct: 20,
-    analyzingHotsPct: 10,
+    rememberingPct: modelCognitive?.r ?? 0,
+    understandingPct: modelCognitive?.u ?? 0,
+    applyingPct: modelCognitive?.a ?? 0,
+    analyzingHotsPct: modelCognitive?.h ?? 0,
     boardBenchmark: boardBenchmarkObj,
     cbseBenchmark: boardBenchmarkObj, // UI backward-compatibility alias
-    rating: status === "PASS" ? ("EXCELLENT" as const) : ("BALANCED" as const),
-    summary:
-      "Cognitive distribution mirrors MPBSE blueprint norms with balanced representation of fundamental recall, conceptual understanding, and problem-solving application.",
+    rating: "NOT_ASSESSED" as const,
+    summary: modelCognitive
+      ? "Distribution is the reviewing model's estimate; it is not compared against an official MPBSE benchmark."
+      : "Cognitive balance was not assessed.",
   };
 
   return {
     status,
+    aiStage,
     paperTitle,
     totalQuestions: questions.length,
     totalMarks,

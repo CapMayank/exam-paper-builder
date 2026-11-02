@@ -75,7 +75,7 @@ describe("Forensic Adversarial Audit: Milestone 2 Deliverables", () => {
       const nonEnglish = MPBSE_BLUEPRINT_TEMPLATES.filter(
         (t) => t.archetype !== "ENGLISH_16Q_75M" && t.archetype !== "ENGLISH_15Q_80M"
       );
-      expect(nonEnglish.length).toBe(23); // 27 - 4 English templates = 23
+      expect(nonEnglish.length).toBe(25); // 29 - 4 English templates = 25
       for (const template of nonEnglish) {
         for (const grp of template.sections) {
           for (const qt of grp.questionTypes) {

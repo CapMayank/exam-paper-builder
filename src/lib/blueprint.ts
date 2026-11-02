@@ -13,7 +13,38 @@ export type SectionDef = {
   orChoiceMode?: "BOARD_DEFAULT" | "REQUIRED" | "NOT_REQUIRED" | string | null;
   orAlternativeCount?: number | null;
   orSlotsJson?: string | null;
+  /** Examination purpose of the slot; placement honours it, not just type + marks. */
+  role?: SectionRole | string | null;
+  groupKey?: string | null;
 };
+
+export const SECTION_ROLES = ["STANDARD", "PASSAGE", "GRAMMAR", "WRITING", "LITERATURE"] as const;
+export type SectionRole = (typeof SECTION_ROLES)[number];
+
+/** Question types that are themselves a passage parent carrying its own sub-questions. */
+const PASSAGE_PARENT_TYPES = new Set(["UNSEEN_PASSAGE", "CASE_STUDY", "REFERENCE_CONTEXT"]);
+
+/**
+ * Role-based placement rule. Returns a reason when `candidate` must not go in `section`.
+ * - PASSAGE sections accept a passage parent, or a sub-question that carries a passageGroupId.
+ * - Every other section rejects a passage sub-question, so a 1-mark passage MCQ can never
+ *   land in a general objective section.
+ */
+export function roleMismatchReason(
+  section: Pick<SectionDef, "title" | "role" | "type">,
+  candidate: { type: string; passageGroupId?: string | null },
+): string | null {
+  const role = section.role || "STANDARD";
+  const isPassageChild = !!candidate.passageGroupId && !PASSAGE_PARENT_TYPES.has(candidate.type);
+  if (role === "PASSAGE") {
+    if (PASSAGE_PARENT_TYPES.has(candidate.type) || isPassageChild) return null;
+    return `${section.title} is a passage section: it only accepts an unseen passage or questions that belong to a passage group.`;
+  }
+  if (isPassageChild) {
+    return `This question belongs to a passage group and can only be placed in a passage section, not ${section.title}.`;
+  }
+  return null;
+}
 export type ChapterQuota = { chapterId: string; marks: number; title?: string; number?: number | null };
 export type BlueprintDef = { sections: SectionDef[]; chapters: ChapterQuota[] };
 export type PlacedItem = {
@@ -33,6 +64,8 @@ export type QuestionTypeItem = {
   orChoiceMode?: "BOARD_DEFAULT" | "REQUIRED" | "NOT_REQUIRED";
   orAlternativeCount?: number;
   orSlotsJson?: string;
+  role?: string;
+  groupKey?: string;
 };
 
 export type SectionGroup = {
@@ -81,6 +114,8 @@ export function groupSectionsFromFlat(
     orChoiceMode?: string | null;
     orAlternativeCount?: number | null;
     orSlotsJson?: string | null;
+    role?: string | null;
+    groupKey?: string | null;
   }[]
 ): SectionGroup[] {
   const groups: SectionGroup[] = [];
@@ -90,6 +125,8 @@ export function groupSectionsFromFlat(
     const orChoiceMode = (s.orChoiceMode as any) || "BOARD_DEFAULT";
     const orAlternativeCount = s.orAlternativeCount ?? 1;
     const orSlotsJson = s.orSlotsJson || "[]";
+    const role = s.role || "STANDARD";
+    const groupKey = s.groupKey || "";
     if (last && last.title.trim().toLowerCase() === s.title.trim().toLowerCase()) {
       last.questionTypes.push({
         key: `qt-${s.id || seq++}`,
@@ -100,6 +137,8 @@ export function groupSectionsFromFlat(
         orChoiceMode,
         orAlternativeCount,
         orSlotsJson,
+        role,
+        groupKey,
       });
       if (!last.instructions && s.instructions) {
         last.instructions = s.instructions;
@@ -119,6 +158,8 @@ export function groupSectionsFromFlat(
             orChoiceMode,
             orAlternativeCount,
             orSlotsJson,
+            role,
+            groupKey,
           },
         ],
       });
@@ -149,6 +190,8 @@ export function flattenSectionGroups(groups: SectionGroup[]): {
   orChoiceMode: "BOARD_DEFAULT" | "REQUIRED" | "NOT_REQUIRED";
   orAlternativeCount: number;
   orSlotsJson: string;
+  role: string;
+  groupKey: string;
 }[] {
   return groups.flatMap((g) =>
     g.questionTypes.map((qt) => ({
@@ -161,6 +204,8 @@ export function flattenSectionGroups(groups: SectionGroup[]): {
       orChoiceMode: (qt.orChoiceMode as any) || "BOARD_DEFAULT",
       orAlternativeCount: qt.orAlternativeCount ?? 1,
       orSlotsJson: qt.orSlotsJson || "[]",
+      role: qt.role || "STANDARD",
+      groupKey: qt.groupKey || "",
     }))
   );
 }
@@ -407,11 +452,13 @@ export function paperStatus(bp: BlueprintDef, items: PlacedItem[]): PaperStatus 
 export function whyCannotAdd(
   bp: BlueprintDef,
   items: PlacedItem[],
-  candidate: { sectionId: string; chapterId: string; type: string; marks?: number; subpartsCount?: number },
+  candidate: { sectionId: string; chapterId: string; type: string; marks?: number; subpartsCount?: number; passageGroupId?: string | null },
 ): string | null {
   const section = bp.sections.find((s) => s.id === candidate.sectionId);
   if (!section) return "That section is not part of this paper's blueprint.";
   if (candidate.type !== section.type) return `${section.title} only accepts ${section.type} questions.`;
+  const roleReason = roleMismatchReason(section, candidate);
+  if (roleReason) return roleReason;
   const status = paperStatus(bp, items);
   const sec = status.sections.find((s) => s.id === section.id)!;
   if (sec.filled >= sec.needed) return `${section.title} is already full (${sec.needed} questions).`;

@@ -33,7 +33,7 @@ const auditSchema = z.object({
     .optional(),
 });
 
-export const POST = route(async (req) => {
+export const POST = route(async (req, _ctx, user) => {
   const customKey = req.headers.get("x-gemini-api-key");
   const data = await body(req, auditSchema);
 
@@ -41,6 +41,10 @@ export const POST = route(async (req) => {
     const paper = await loadPaperView(data.paperId);
     if (!paper) {
       throw new HttpError(404, "Paper not found");
+    }
+    // Read-only audit: a teacher may audit only their own papers (finalised papers stay auditable).
+    if (user.role === "TEACHER" && paper.createdById !== user.id) {
+      throw new HttpError(403, "You can only audit your own papers.");
     }
 
     const totalMarks = paper.progress.totalMarks;
@@ -72,6 +76,8 @@ export const POST = route(async (req) => {
         difficulty: it.question.difficulty,
         imagePath: (it.question as any).imagePath,
         figureDoc: (it.question as any).figureDoc,
+        subparts: it.question.subparts,
+        orQuestion: (it as any).orQuestion ?? null,
       };
     });
 
@@ -210,9 +216,11 @@ export const POST = route(async (req) => {
     const highCount = allFindings.filter((f) => f.severity === "HIGH").length;
     const medCount = allFindings.filter((f) => f.severity === "MEDIUM").length;
 
-    const finalStatus: "PASS" | "PASS WITH WARNINGS" | "FAIL" =
+    const finalStatus: "PASS" | "PASS WITH WARNINGS" | "FAIL" | "INCONCLUSIVE" =
       highCount > 0
         ? "FAIL"
+        : auditReport.aiStage !== "COMPLETED"
+        ? "INCONCLUSIVE"
         : medCount > 0
         ? "PASS WITH WARNINGS"
         : "PASS";
@@ -221,20 +229,23 @@ export const POST = route(async (req) => {
     auditReport.issues = allFindings;
     auditReport.status = finalStatus;
 
-    if (finalStatus === "PASS") {
-      auditReport.overallVerdict = "PASS: Certified Ready for Print. Fully verified, mathematically accurate, and 100% compliant with MP Board standards.";
-      auditReport.cognitiveBalance.rating = "EXCELLENT";
+    if (finalStatus === "FAIL") {
+      auditReport.overallVerdict = `FAIL: ${highCount} significant defect(s) must be corrected before printing.`;
+    } else if (finalStatus === "INCONCLUSIVE") {
+      // keep the engine's explanation of why the model review did not run
+      auditReport.overallVerdict = auditReport.overallVerdict.startsWith("INCONCLUSIVE")
+        ? auditReport.overallVerdict
+        : "INCONCLUSIVE: the independent model review did not run, so the paper has not been academically reviewed.";
     } else if (finalStatus === "PASS WITH WARNINGS") {
-      auditReport.overallVerdict = `PASS WITH WARNINGS: Found ${medCount} minor item(s) recommended for teacher refinement prior to print run.`;
-      auditReport.cognitiveBalance.rating = "BALANCED";
+      auditReport.overallVerdict = `PASS WITH WARNINGS: ${medCount} item(s) recommended for teacher review.`;
     } else {
-      auditReport.overallVerdict = `FAIL: Found ${highCount} significant defect(s) requiring teacher correction prior to printing.`;
-      auditReport.cognitiveBalance.rating = "NEEDS_ADJUSTMENT";
+      auditReport.overallVerdict = "PASS: no defects found by the deterministic checks, blueprint checks or the independent model review. This is not a certification of MP Board compliance.";
     }
+    auditReport.summary = auditReport.overallVerdict;
 
     return {
       success: true,
-      isMock: false,
+      isMock: auditReport.aiStage !== "COMPLETED",
       data: auditReport,
       completeness,
       mpbseCompliance,

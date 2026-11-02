@@ -12,6 +12,7 @@ import {
 import { parseSubparts, parseSubpartsPayload, type QuestionUsageTag, type SubPart } from "./types";
 
 export type QuestionDto = {
+  passageGroupId?: string | null;
   id: string;
   bookId: string;
   chapterId: string;
@@ -92,7 +93,9 @@ export function toQuestionDto(
     | "curriculumTopicId"
     | "competencyLevel"
     | "sourceProvenance"
+    | "passageGroupId"
   > & {
+    passageGroupId?: string | null;
     createdAt: Date | string;
     cognitiveLevel?: string | null;
     explanation?: string | null;
@@ -230,6 +233,7 @@ export function toQuestionDto(
     subpartsJson: q.subpartsJson ?? undefined,
     usages,
     attemptCount,
+    ...(q.passageGroupId ? { passageGroupId: q.passageGroupId } : {}),
   };
 }
 

@@ -101,6 +101,8 @@ export async function mapCurriculumTemplateToBlueprintInput(
     orAlternativeCount?: number | null;
     orSlotsJson?: string | null;
     choicePolicy?: { policyType: string };
+    role?: string | null;
+    groupKey?: string | null;
   };
 
   let rawSections: RawSection[] = [];
@@ -117,6 +119,8 @@ export async function mapCurriculumTemplateToBlueprintInput(
         orChoiceMode: qt.orChoiceMode,
         orAlternativeCount: qt.orAlternativeCount,
         choicePolicy: qt.choicePolicy,
+        role: qt.role,
+        groupKey: qt.groupKey,
       }))
     );
   }
@@ -143,6 +147,8 @@ export async function mapCurriculumTemplateToBlueprintInput(
       orChoiceMode: choiceMode,
       orAlternativeCount: s.orAlternativeCount ?? (choiceMode === "REQUIRED" ? 1 : 0),
       orSlotsJson: s.orSlotsJson || "[]",
+      role: (["PASSAGE", "GRAMMAR", "WRITING", "LITERATURE"].includes(s.role ?? "") ? s.role : "STANDARD") as "STANDARD" | "PASSAGE" | "GRAMMAR" | "WRITING" | "LITERATURE",
+      groupKey: s.groupKey || "",
     };
   });
 
@@ -218,6 +224,9 @@ export async function mapCurriculumTemplateToBlueprintInput(
     curriculumMode: "STANDARD_MPBSE",
     curriculumTemplateId: templateId,
     curriculumVariantId: null,
+    verificationStatus: staticTemplate?.source?.url ? ("SOURCE_CITED" as const) : ("UNVERIFIED" as const),
+    sourceRef: staticTemplate?.source ? `${staticTemplate.source.url} (p.${staticTemplate.source.pdfPage})` : "",
+    blueprintVersion: staticTemplate?.source?.session ?? "",
     sections,
     chapters: finalChapters,
   };

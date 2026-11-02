@@ -94,6 +94,7 @@ export const POST = route(async (req, params, user) => {
       type: q.type,
       marks: candidateSubmarks > 0 ? candidateSubmarks : undefined,
       subpartsCount: candidateSubparts.length > 1 ? candidateSubparts.length : undefined,
+      passageGroupId: q.passageGroupId,
     };
 
     const reason = whyCannotAdd(blueprintDef, placedItems, candidate);

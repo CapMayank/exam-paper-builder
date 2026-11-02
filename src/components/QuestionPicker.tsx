@@ -175,6 +175,7 @@ export function QuestionPicker({
                 type: q.type,
                 marks: qCandidateMarks,
                 subpartsCount: qCandidateUnits,
+                passageGroupId: q.passageGroupId,
               });
             }
           }

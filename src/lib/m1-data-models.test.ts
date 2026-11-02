@@ -157,6 +157,7 @@ describe("Milestone 1: DTO Mapping & Safe Fallbacks", () => {
       curriculumTopicId: null,
       competencyLevel: null,
       sourceProvenance: null,
+      passageGroupId: null,
       createdById: "u1",
       createdAt: new Date("2026-01-01"),
     };
@@ -188,6 +189,7 @@ describe("Milestone 1: DTO Mapping & Safe Fallbacks", () => {
       curriculumTopicId: null,
       competencyLevel: null,
       sourceProvenance: null,
+      passageGroupId: null,
       createdById: "u1",
       createdAt: new Date("2025-01-01"),
     };
@@ -228,6 +230,7 @@ describe("Milestone 1: DTO Mapping & Safe Fallbacks", () => {
       curriculumTopicId: null,
       competencyLevel: null,
       sourceProvenance: null,
+      passageGroupId: null,
       createdById: "u1",
       createdAt: new Date(),
       paperQuestions: [

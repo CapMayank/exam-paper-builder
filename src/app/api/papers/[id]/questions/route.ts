@@ -74,6 +74,7 @@ export const POST = route(async (req, { id }, user) => {
       type: question.type,
       marks: candidateMarks,
       subpartsCount: candidateUnits,
+      passageGroupId: question.passageGroupId,
     },
   );
   if (reason) throw new HttpError(409, reason);

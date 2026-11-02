@@ -128,6 +128,7 @@ export const PATCH = route(async (req, { id, itemId }, user) => {
         type: candidate.type,
         marks: candidateMarks,
         subpartsCount: candidateUnits,
+        passageGroupId: candidate.passageGroupId,
       },
     );
     if (reason) throw new HttpError(409, reason);

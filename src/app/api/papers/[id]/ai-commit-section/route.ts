@@ -6,6 +6,7 @@ import {
   generateCurriculumGroundedSectionQuestions,
 } from "@/lib/curriculumContract";
 import type { GeneratedPaperQuestion } from "@/lib/gemini";
+import { toPlacedItems, whyCannotAdd } from "@/lib/blueprint";
 import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { isQuestionContaminated, validateGeneratedQuestion } from "@/lib/questionValidator";
@@ -55,6 +56,20 @@ export const POST = route(async (req, { id }, user) => {
   if (!fallbackChapterId) {
     throw new HttpError(400, "Blueprint has no associated chapters. Add chapters to the blueprint first.");
   }
+  // A chapter must be named explicitly unless the blueprint has only one; never silently re-assign.
+  const resolveChapterId = (q: { chapterId?: string }, idx: number): string => {
+    const given = q.chapterId?.trim();
+    if (given) {
+      if (!validChapterIds.has(given)) {
+        throw new HttpError(422, `Question ${idx + 1} names a chapter that is not part of this blueprint.`);
+      }
+      return given;
+    }
+    if (validChapterIds.size === 1) return fallbackChapterId;
+    throw new HttpError(422, `Question ${idx + 1} has no chapter; refusing to guess one for a multi-chapter blueprint.`);
+  };
+  const bodyIsMock = (body as { isMock?: boolean }).isMock === true;
+  const templateFallbackIdx = new Set<number>();
 
   // Enforce Subject & Curriculum Validation Gate before committing to paper or Question Bank
   const contractRes = buildAndValidateGenerationContract({
@@ -93,6 +108,9 @@ export const POST = route(async (req, { id }, user) => {
 
   for (let i = 0; i < questions.length; i++) {
     const q = questions[i];
+    if (q.type && q.type !== section.type) {
+      throw new HttpError(422, `Question ${i + 1} is ${q.type} but section "${section.title}" only accepts ${section.type}.`);
+    }
     if (choiceForbidden && q.orQuestion) {
       q.orQuestion = undefined;
       q.requiresInternalChoice = false;
@@ -168,6 +186,7 @@ export const POST = route(async (req, { id }, user) => {
         existingQuestionTexts: questions.map((item) => item.text).filter((t): t is string => Boolean(t)),
       })[i];
       if (grounded) {
+        templateFallbackIdx.add(i);
         questions[i] = {
           ...q,
           text: grounded.text,
@@ -197,11 +216,30 @@ export const POST = route(async (req, { id }, user) => {
     }
   }
 
+  // Same blueprint rules as the manual add path: section role, slot capacity, chapter quota.
+  const placedSoFar = toPlacedItems(paper.blueprint.sections, paper.items);
+  const bpDef = {
+    sections: paper.blueprint.sections,
+    chapters: paper.blueprint.chapters.map((c) => ({ chapterId: c.chapterId, marks: c.marks })),
+  };
+  for (let i = 0; i < questions.length; i++) {
+    const q = questions[i];
+    const cand = {
+      sectionId,
+      chapterId: resolveChapterId(q, i),
+      type: q.type || section.type,
+      passageGroupId: (q as { passageGroupId?: string | null }).passageGroupId ?? null,
+    };
+    const why = whyCannotAdd(bpDef, placedSoFar, cand);
+    if (why) throw new HttpError(409, `Question ${i + 1} cannot be placed: ${why}`);
+    placedSoFar.push({ sectionId, chapterId: cand.chapterId, marks: section.marksEach });
+  }
+
   let nextPos = existingSectionItems.reduce((max, i) => Math.max(max, i.position), -1) + 1;
 
   // Persist questions and link to paper
   await prisma.$transaction(async (tx) => {
-    for (const q of questions) {
+    for (const [qIdx, q] of questions.entries()) {
       const qType = q.type || section.type;
       const isMatch = qType === "MATCH_COLUMN" || section.type === "MATCH_COLUMN";
 
@@ -222,10 +260,11 @@ export const POST = route(async (req, { id }, user) => {
       }
       const subpartsData = attemptCount ? { attemptCount, subparts: normalizedSubparts } : normalizedSubparts;
 
-      let chapterId = q.chapterId && q.chapterId.trim() ? q.chapterId.trim() : fallbackChapterId;
-      if (!validChapterIds.has(chapterId)) {
-        chapterId = fallbackChapterId;
-      }
+      const chapterId = resolveChapterId(q, qIdx);
+      const provenance =
+        bodyIsMock || templateFallbackIdx.has(qIdx)
+          ? "TEMPLATE_FALLBACK: offline curriculum template, not AI-generated; teacher review required"
+          : "AI_GENERATED";
 
       // 1. Create primary question in the question bank
       const figureSceneVal = q.figureScene
@@ -246,6 +285,8 @@ export const POST = route(async (req, { id }, user) => {
           explanation: q.explanation || null,
           figureScene: figureSceneVal,
           imagePath: q.imagePath || null,
+          sourceProvenance: provenance,
+          passageGroupId: (q as { passageGroupId?: string | null }).passageGroupId ?? null,
           createdById: user.id,
         },
       });
@@ -280,6 +321,7 @@ export const POST = route(async (req, { id }, user) => {
             difficulty: q.orQuestion.difficulty || q.difficulty || "MEDIUM",
             cognitiveLevel: q.orQuestion.cognitiveLevel || q.cognitiveLevel || null,
             explanation: q.orQuestion.explanation || null,
+            sourceProvenance: provenance,
             createdById: user.id,
           },
         });
@@ -309,6 +351,7 @@ export const POST = route(async (req, { id }, user) => {
     sectionId,
     sectionTitle: section.title,
     questionsAdded: questions.length,
+    templateFallbackCount: templateFallbackIdx.size + (bodyIsMock ? questions.length : 0),
   });
 
   const updatedPaper = await loadPaperView(id);
@@ -316,6 +359,7 @@ export const POST = route(async (req, { id }, user) => {
   return {
     success: true,
     addedCount: questions.length,
+    templateFallbackCount: bodyIsMock ? questions.length : templateFallbackIdx.size,
     paper: updatedPaper,
   };
 });

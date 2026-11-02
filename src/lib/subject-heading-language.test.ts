@@ -114,8 +114,8 @@ describe("MP Board Subject-Based Heading Language & Application Seeding", () => 
   });
 
   describe("3. Authoritative Blueprint Templates Language Audit", () => {
-    it("ensures all 27 MPBSE blueprint templates have strictly compliant languages", () => {
-      expect(MPBSE_BLUEPRINT_TEMPLATES.length).toBe(27);
+    it("ensures all 29 MPBSE blueprint templates have strictly compliant languages", () => {
+      expect(MPBSE_BLUEPRINT_TEMPLATES.length).toBe(29);
 
       for (const t of MPBSE_BLUEPRINT_TEMPLATES) {
         const lang = t.language;

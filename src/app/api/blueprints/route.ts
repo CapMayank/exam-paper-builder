@@ -64,6 +64,10 @@ export const POST = route(async (req) => {
       curriculumMode: input.curriculumMode || "BLANK_CUSTOM",
       curriculumTemplateId: validTemplateId,
       curriculumVariantId: validVariantId,
+      verificationStatus: input.verificationStatus ?? "UNVERIFIED",
+      sourceRef: input.sourceRef ?? "",
+      textbookVariant: input.textbookVariant ?? "",
+      blueprintVersion: input.blueprintVersion ?? "",
       chapters: { create: input.chapters },
       sections: {
         create: input.sections.map((s, position) => ({
@@ -75,6 +79,8 @@ export const POST = route(async (req) => {
           orChoiceMode: s.orChoiceMode || "BOARD_DEFAULT",
           orAlternativeCount: s.orAlternativeCount ?? 1,
           orSlotsJson: s.orSlotsJson || "[]",
+          role: s.role || "STANDARD",
+          groupKey: s.groupKey || "",
           position,
         })),
       },

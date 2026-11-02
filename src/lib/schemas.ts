@@ -200,6 +200,10 @@ export const blueprintSchema = z.object({
   curriculumMode: z.enum(["STANDARD_MPBSE", "CUSTOM_SCHOOL", "BLANK_CUSTOM"]).optional().default("BLANK_CUSTOM"),
   curriculumTemplateId: z.string().nullable().optional(),
   curriculumVariantId: z.string().nullable().optional(),
+  verificationStatus: z.enum(["UNVERIFIED", "SOURCE_CITED"]).optional(),
+  sourceRef: z.string().trim().max(500).optional(),
+  textbookVariant: z.string().trim().max(200).optional(),
+  blueprintVersion: z.string().trim().max(50).optional(),
   chapters: z.array(z.object({ chapterId: z.string().min(1), marks: z.number().int().min(0).max(1000) })),
   sections: z
     .array(
@@ -213,6 +217,8 @@ export const blueprintSchema = z.object({
         orChoiceMode: z.enum(["BOARD_DEFAULT", "REQUIRED", "NOT_REQUIRED"]).default("BOARD_DEFAULT"),
         orAlternativeCount: z.number().int().min(0).max(5).default(1),
         orSlotsJson: z.string().default("[]"),
+        role: z.enum(["STANDARD", "PASSAGE", "GRAMMAR", "WRITING", "LITERATURE"]).default("STANDARD"),
+        groupKey: z.string().trim().max(100).default(""),
       }),
     )
     .max(50),

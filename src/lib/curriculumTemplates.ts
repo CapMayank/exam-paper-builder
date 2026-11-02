@@ -1,4 +1,9 @@
 import type { QuestionType } from "./constants";
+import {
+  findOfficialScheme,
+  type MarkingComponent,
+  type OfficialSource,
+} from "./officialMarkingSchemes";
 
 export type ChoicePolicyType =
   | "NO_CHOICE"
@@ -25,6 +30,9 @@ export interface BlueprintTemplateSectionGroup {
     orAlternativeCount?: number;
     orSlots?: boolean[];
     choicePolicy?: ChoicePolicy;
+    /** Examination purpose; defaults to STANDARD. */
+    role?: "STANDARD" | "PASSAGE" | "GRAMMAR" | "WRITING" | "LITERATURE";
+    groupKey?: string;
   }>;
 }
 
@@ -45,6 +53,10 @@ export interface BlueprintTemplate {
   language?: string;
   archetype: string;
   sections: BlueprintTemplateSectionGroup[];
+  /** Official content allocation (language subjects: by component, not chapter). */
+  components?: MarkingComponent[];
+  /** Present only when the pattern was read from an official document. */
+  source?: OfficialSource;
   provenance?: {
     documentTitle: string;
     circularReference: string;
@@ -693,14 +705,17 @@ export function generateEnglish16Q75MSectionGroups(): BlueprintTemplateSectionGr
   return [
     {
       title: "Section A: Reading Comprehension (Unseen Passages)",
-      instructions: "Read the passages carefully and answer the questions that follow.",
+      instructions: "Read the following passages carefully and answer the questions given below.",
       questionTypes: [
         {
-          type: "MCQ",
-          count: 10,
-          marksEach: 1,
+          // Official sample paper: Q1 and Q2 are each a passage with five 1-mark MCQs (1x5=5).
+          type: "UNSEEN_PASSAGE",
+          count: 2,
+          marksEach: 5,
           orChoiceMode: "NOT_REQUIRED",
-          choicePolicy: createChoicePolicy("NO_CHOICE", 10, 10, "ANY_INCLUDED_CHAPTER", "Reading comprehension objective items"),
+          role: "PASSAGE",
+          groupKey: "reading.unseen-passage",
+          choicePolicy: createChoicePolicy("NO_CHOICE", 2, 2, "ANY_INCLUDED_CHAPTER", "Two unseen passages, 5 one-mark MCQs each"),
         },
       ],
     },
@@ -908,7 +923,7 @@ export function generateEnglish15Q80MSectionGroups(): BlueprintTemplateSectionGr
 // ALL 27 VERIFIED MPBSE BOARD BLUEPRINT TEMPLATES
 // =============================================================================
 
-export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
+const RAW_MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
   // ---------------------------------------------------------------------------
   // CLASS 9 (7 Subjects)
   // ---------------------------------------------------------------------------
@@ -1549,7 +1564,48 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
       projectMarks: 20,
     },
   },
+  {
+    id: "mpbse-11th-sanskrit-80m",
+    templateCode: "mpbse-11th-sanskrit-80m",
+    title: "MPBSE Class 11 Sanskrit Blueprint (80 Marks)",
+    description: "Class 11 Sanskrit, 80-mark paper. Question format and content allocation from the 2026-27 अंक योजना; subject code not confirmed.",
+    examType: "ANNUAL",
+    durationMin: 180,
+    totalMarks: 80,
+    targetClasses: "Class 11",
+    classLevel: 11,
+    stream: "HIGHER_SECONDARY_GENERAL",
+    subjectName: "Sanskrit",
+    language: "sa",
+    archetype: "STANDARD_23Q_80M",
+    sections: generateStandard23Q80MSectionGroups("sa"),
+  },
+  {
+    id: "mpbse-12th-sanskrit-80m",
+    templateCode: "mpbse-12th-sanskrit-80m",
+    title: "MPBSE Class 12 Sanskrit Blueprint (80 Marks)",
+    description: "Class 12 Sanskrit, 80-mark paper. Question format and content allocation from the 2026-27 अंक योजना; subject code not confirmed.",
+    examType: "ANNUAL",
+    durationMin: 180,
+    totalMarks: 80,
+    targetClasses: "Class 12",
+    classLevel: 12,
+    stream: "HIGHER_SECONDARY_GENERAL",
+    subjectName: "Sanskrit",
+    language: "sa",
+    archetype: "STANDARD_23Q_80M",
+    sections: generateStandard23Q80MSectionGroups("sa"),
+  },
 ];
+
+/** Attaches official source + content components when a verified 2026-27 scheme exists. */
+function attachOfficialSource(t: BlueprintTemplate): BlueprintTemplate {
+  const scheme = findOfficialScheme(t.classLevel, t.subjectName);
+  if (!scheme || scheme.totalMarks !== t.totalMarks) return t;
+  return { ...t, components: scheme.components, source: scheme.source };
+}
+
+export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = RAW_MPBSE_BLUEPRINT_TEMPLATES.map(attachOfficialSource);
 
 // =============================================================================
 // LEGACY & STARTER TEMPLATES PRESERVED FOR FULL BACKWARD COMPATIBILITY

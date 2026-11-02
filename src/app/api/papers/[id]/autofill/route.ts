@@ -116,6 +116,7 @@ export const POST = route(async (req, { id }, user) => {
       chapterId: true,
       type: true,
       difficulty: true,
+      passageGroupId: true,
       text: true,
       optionsJson: true,
       subpartsJson: true,
@@ -149,6 +150,7 @@ export const POST = route(async (req, { id }, user) => {
       type: q.type,
       difficulty: q.difficulty,
       subpartsMarks: subMarks > 0 ? subMarks : undefined,
+      passageGroupId: q.passageGroupId,
     };
   });
 

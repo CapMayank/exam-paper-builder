@@ -126,6 +126,8 @@ export const PUT = route(async (req, { id }, user) => {
             orChoiceMode: s.orChoiceMode || "BOARD_DEFAULT",
             orAlternativeCount: s.orAlternativeCount ?? 1,
             orSlotsJson: s.orSlotsJson || "[]",
+            role: s.role || "STANDARD",
+            groupKey: s.groupKey || "",
             position,
           },
         });
@@ -141,6 +143,8 @@ export const PUT = route(async (req, { id }, user) => {
             orChoiceMode: s.orChoiceMode || "BOARD_DEFAULT",
             orAlternativeCount: s.orAlternativeCount ?? 1,
             orSlotsJson: s.orSlotsJson || "[]",
+            role: s.role || "STANDARD",
+            groupKey: s.groupKey || "",
             position,
           },
         });
@@ -173,6 +177,10 @@ export const PUT = route(async (req, { id }, user) => {
         curriculumMode: input.curriculumMode || "BLANK_CUSTOM",
         curriculumTemplateId: validTemplateId,
         curriculumVariantId: validVariantId,
+        ...(input.verificationStatus ? { verificationStatus: input.verificationStatus } : {}),
+        ...(input.sourceRef !== undefined ? { sourceRef: input.sourceRef } : {}),
+        ...(input.textbookVariant !== undefined ? { textbookVariant: input.textbookVariant } : {}),
+        ...(input.blueprintVersion !== undefined ? { blueprintVersion: input.blueprintVersion } : {}),
       },
     });
   });

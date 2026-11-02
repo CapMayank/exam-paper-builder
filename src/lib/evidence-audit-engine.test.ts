@@ -43,9 +43,11 @@ describe("Evidence-Based AI Audit Engine (TDD)", () => {
 
     const report: EvidenceAuditReport = await auditPaperEvidenceBased(validPaper);
 
-    expect(report.status).toBe("PASS");
+    // Deterministic checks find nothing, but without the independent model review the paper is not PASSed.
     expect(report.findings.length).toBe(0);
-    expect(report.summary).toContain("PASS");
+    expect(report.aiStage).toBe("SKIPPED");
+    expect(report.status).toBe("INCONCLUSIVE");
+    expect(report.summary).toContain("INCONCLUSIVE");
   });
 
   it("returns FAIL with concrete evidence-based findings when defects exist", async () => {

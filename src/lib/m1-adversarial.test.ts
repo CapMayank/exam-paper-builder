@@ -432,6 +432,7 @@ describe("Adversarial Challenge: toQuestionDto Safe Parsing & Resiliency", () =>
     curriculumTopicId: null,
     competencyLevel: null,
     sourceProvenance: null,
+    passageGroupId: null,
     createdById: "user-1",
     createdAt: new Date("2026-03-01T00:00:00.000Z"),
   };

@@ -8,6 +8,8 @@ export interface MPBoardDimensionScore {
   weight: number; // 0 to 100
   score: number;  // 0 to 100
   passed: boolean;
+  /** false = no computation behind this dimension; it is excluded from the score. */
+  assessed: boolean;
   evidence: string;
   rationale: string;
 }
@@ -111,51 +113,38 @@ export function evaluateMPBoardStandardCompliance(paper: {
     weight: 10,
     score,
     passed: score >= 70,
+    assessed: true,
     evidence,
     rationale,
   });
 
-  const questionTypeScore = matchedTemplate ? 95 : 85;
+  // Dimensions with no computation behind them are reported as not assessed, never scored.
+  const createNotAssessed = (name: string): MPBoardDimensionScore => ({
+    name,
+    weight: 0,
+    score: 0,
+    passed: false,
+    assessed: false,
+    evidence: "Not assessed: no deterministic check exists for this dimension.",
+    rationale: "Requires teacher or moderator judgement against official model papers.",
+  });
+
+  const questionTypeScore = matchedTemplate ? 100 : 0;
   const choiceScore = circular465Compliant ? 100 : 40;
   const marksAllocScore = totalMarks === expectedMarks ? 100 : 50;
 
   const dimensionScores = {
-    questionFramingLanguage: createDimScore(
-      "Question Framing & Examination Language",
-      90,
-      "Strict Devanagari/Bilingual MPBSE exam standard without inline question numbering or mark tokens.",
-      "Ensures clear, formal board-appropriate linguistic conventions.",
-    ),
-    academicDifficulty: createDimScore(
-      "Academic Difficulty Calibration",
-      88,
-      "Balanced cognitive distribution adhering to 30% Easy, 50% Average, 20% Higher Order.",
-      "Prevents trivial recall or disproportionately difficult questions.",
-    ),
-    conceptualDepth: createDimScore(
-      "Conceptual Depth & Syllabus Grounding",
-      92,
-      "Grounded in 2026-27 rationalized textbook syllabus chapters with excluded topics strictly blocked.",
-      "Guarantees that test items reflect core curriculum competencies.",
-    ),
-    applicationQuestionDistribution: createDimScore(
-      "Application-Based & Practical Distribution",
-      85,
-      "Inclusion of authentic application scenarios in 3-mark and 4-mark tiers.",
-      "Matches modern competency-based board assessment criteria.",
-    ),
+    questionFramingLanguage: createNotAssessed("Question Framing & Examination Language"),
+    academicDifficulty: createNotAssessed("Academic Difficulty Calibration"),
+    conceptualDepth: createNotAssessed("Conceptual Depth & Syllabus Grounding"),
+    applicationQuestionDistribution: createNotAssessed("Application-Based & Practical Distribution"),
     questionTypeDistribution: createDimScore(
       "Question-Type Distribution (Objective + Subjective)",
       questionTypeScore,
       `Matches MP Board ${archetype} pattern (Prashna Kramank 1-5 objective tiers followed by 2m, 3m, 4m).`,
       "Enforces genuine MPBSE paper structure.",
     ),
-    chapterWiseCoverage: createDimScore(
-      "Chapter-Wise Coverage & Weightage",
-      90,
-      "Strict slot chapter mapping aligning with prescribed unit quotas.",
-      "Prevents question clustering in a single chapter.",
-    ),
+    chapterWiseCoverage: createNotAssessed("Chapter-Wise Coverage & Weightage"),
     marksAllocation: createDimScore(
       "Marks Allocation Integrity",
       marksAllocScore,
@@ -170,24 +159,14 @@ export function evaluateMPBoardStandardCompliance(paper: {
         : `Non-compliant: ${c465Result.violations.length} choice violations detected.`,
       "Statutory compliance is a mandatory quality gate.",
     ),
-    overallStructure: createDimScore(
-      "Overall Examination Structure",
-      92,
-      `Standard MPBSE layout with clear section instructions and time duration (${matchedTemplate?.durationMin || 180} mins).`,
-      "Ensures professional print-ready presentation.",
-    ),
-    similarityToOfficialStandard: createDimScore(
-      "Similarity to Official MP Board Experience",
-      90,
-      `High structural fidelity to official MPBSE model paper benchmark for ${classStr} ${paper.subject || "Subject"}.`,
-      "Prepares students accurately for the actual board examination environment.",
-    ),
+    overallStructure: createNotAssessed("Overall Examination Structure"),
+    similarityToOfficialStandard: createNotAssessed("Similarity to Official MP Board Experience"),
   };
 
   const mandatoryGatesPassed = gateViolations.length === 0 && !paper.hasAcademicDefects;
 
-  const rawSum = Object.values(dimensionScores).reduce((acc, d) => acc + d.score, 0);
-  const rawAvg = Math.round(rawSum / Object.values(dimensionScores).length);
+  const assessedDims = Object.values(dimensionScores).filter((d) => d.assessed);
+  const rawAvg = Math.round(assessedDims.reduce((acc, d) => acc + d.score, 0) / Math.max(1, assessedDims.length));
 
   const overallScore = mandatoryGatesPassed ? rawAvg : 0;
   const status: "PASS" | "FAIL" | "WARN" = !mandatoryGatesPassed
@@ -197,7 +176,7 @@ export function evaluateMPBoardStandardCompliance(paper: {
     : "PASS";
 
   const verdict = mandatoryGatesPassed
-    ? `Compliant with MP Board Examination Standard (${archetype}, Score: ${overallScore}/100). All statutory Circular 465 and blueprint conditions verified.`
+    ? `Passes the checked gates (${archetype}: question format, marks total, Circular 465 internal choice). ${assessedDims.length} of ${Object.values(dimensionScores).length} dimensions are computed; the rest are not assessed.`
     : `MP Board Standard Compliance FAILED: ${gateViolations.join("; ")}`;
 
   return {

@@ -6,7 +6,16 @@ export type CandidateQuestion = {
   type: string;
   difficulty?: string;
   subpartsMarks?: number;
+  /** Shared by the sub-questions of one passage; such a question only fits a PASSAGE section. */
+  passageGroupId?: string | null;
 };
+
+const PASSAGE_PARENT_TYPES = new Set(["UNSEEN_PASSAGE", "CASE_STUDY", "REFERENCE_CONTEXT"]);
+
+/** Pool key: question type plus whether it is a passage sub-question (P) or a stand-alone one (S). */
+function poolKey(type: string, isPassageChild: boolean): string {
+  return `${type}|${isPassageChild && !PASSAGE_PARENT_TYPES.has(type) ? "P" : "S"}`;
+}
 
 export type AutoFillResult = {
   added: {
@@ -26,6 +35,7 @@ type Slot = {
   sectionId: string;
   title: string;
   type: string;
+  poolKey: string;
   marksEach: number;
   order: number;
   requiresInternalChoice?: boolean;
@@ -144,6 +154,7 @@ export function autoFillPaper(
         sectionId: sec.id,
         title: sec.title,
         type: sec.type,
+        poolKey: poolKey(sec.type, sec.role === "PASSAGE"),
         marksEach: sec.marksEach,
         order: order++,
         requiresInternalChoice,
@@ -164,9 +175,10 @@ export function autoFillPaper(
   // Group candidates by type
   const candidatesByType = new Map<string, CandidateQuestion[]>();
   for (const c of available) {
-    const list = candidatesByType.get(c.type) ?? [];
+    const key = poolKey(c.type, Boolean(c.passageGroupId));
+    const list = candidatesByType.get(key) ?? [];
     list.push(c);
-    candidatesByType.set(c.type, list);
+    candidatesByType.set(key, list);
   }
 
   // Backtracking solver
@@ -185,7 +197,7 @@ export function autoFillPaper(
     }
 
     const slot = sortedSlots[slotIdx];
-    const pool = candidatesByType.get(slot.type) ?? [];
+    const pool = candidatesByType.get(slot.poolKey) ?? [];
 
     // Filter valid candidates for this slot
     const validCandidates = pool.filter((c) => {
@@ -246,7 +258,7 @@ export function autoFillPaper(
     }
 
     for (const slot of sortedSlots) {
-      const pool = candidatesByType.get(slot.type) ?? [];
+      const pool = candidatesByType.get(slot.poolKey) ?? [];
       const valid = pool
         .filter((c) => {
           if (chosenQuestionIds.has(c.id)) return false;
@@ -274,7 +286,7 @@ export function autoFillPaper(
     if (q) {
       let orQuestionId: string | null = null;
       if (slot.requiresInternalChoice) {
-        const pool = candidatesByType.get(slot.type) ?? [];
+        const pool = candidatesByType.get(slot.poolKey) ?? [];
         const orCand = pool.find(
           (c) =>
             c.id !== q.id &&

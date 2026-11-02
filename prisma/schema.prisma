@@ -85,7 +85,11 @@ model Blueprint {
   curriculumTemplateId String?
   curriculumVariantId  String?
   curriculumMode       String                        @default("BLANK_CUSTOM")
-  createdAt            DateTime                      @default(now())
+  verificationStatus   String                        @default("UNVERIFIED") // UNVERIFIED | SOURCE_CITED
+  sourceRef            String                        @default("") // URL/page of the official blueprint
+  textbookVariant      String                        @default("") // e.g. "Sanskrit with separate grammar book"
+  blueprintVersion     String                        @default("")
+  createdAt           DateTime                      @default(now())
   updatedAt            DateTime                      @updatedAt
   book                 Book                          @relation(fields: [bookId], references: [id], onDelete: Restrict)
   curriculumTemplate   CurriculumBlueprintTemplate?  @relation(fields: [curriculumTemplateId], references: [id], onDelete: SetNull)
@@ -120,6 +124,8 @@ model BlueprintSection {
   orChoiceMode       String          @default("BOARD_DEFAULT") // BOARD_DEFAULT | REQUIRED | NOT_REQUIRED
   orAlternativeCount Int             @default(1)
   orSlotsJson        String          @default("[]") // JSON array of booleans per slot e.g. [true, false]
+  role               String          @default("STANDARD") // STANDARD | PASSAGE | GRAMMAR | WRITING | LITERATURE
+  groupKey           String          @default("") // stable blueprint group id, e.g. "reading.unseen-prose"
   blueprint          Blueprint       @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
   paperQuestions PaperQuestion[]
 }
@@ -143,6 +149,7 @@ model Question {
   curriculumTopicId String?
   competencyLevel   String?
   sourceProvenance  String?
+  passageGroupId    String? // shared by a passage's sub-questions so they stay together
   createdById       String
   createdAt         DateTime         @default(now())
   book              Book             @relation(fields: [bookId], references: [id], onDelete: Cascade)
@@ -153,6 +160,7 @@ model Question {
   orPaperQuestions  PaperQuestion[]  @relation("OrQuestion")
 
   @@index([bookId, chapterId, type])
+  @@index([passageGroupId])
 }
 
 model Paper {

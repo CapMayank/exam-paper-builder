@@ -19,8 +19,8 @@ describe("MPBSE Blueprint Engine & Circular 465 Logic", () => {
   // SUITE 1: 27 VERIFIED TEMPLATES & ARCHETYPES COVERAGE
   // ===========================================================================
   describe("Suite 1: All 27 Verified Board Blueprint Templates", () => {
-    it("exports exactly 27 verified board blueprint templates", () => {
-      expect(MPBSE_BLUEPRINT_TEMPLATES.length).toBe(27);
+    it("exports the built-in board blueprint templates (29, of which only those with a source are verified)", () => {
+      expect(MPBSE_BLUEPRINT_TEMPLATES.length).toBe(29);
     });
 
     it("verifies template distribution across classes and streams", () => {
@@ -31,8 +31,8 @@ describe("MPBSE Blueprint Engine & Circular 465 Logic", () => {
 
       expect(class9.length).toBe(7);
       expect(class10.length).toBe(8);
-      expect(class11.length).toBe(6);
-      expect(class12.length).toBe(6);
+      expect(class11.length).toBe(7);
+      expect(class12.length).toBe(7);
     });
 
     it("enforces total marks integrity across all archetypes", () => {

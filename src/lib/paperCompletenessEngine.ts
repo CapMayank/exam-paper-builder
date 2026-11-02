@@ -1,3 +1,4 @@
+import { referencesMissingVisual } from "./evidenceAuditEngine";
 import { parseMatchColumnPairs } from "./constants";
 import { subpartsTotalMarks } from "./types";
 import type { ValidatableQuestion } from "./questionValidator";
@@ -199,11 +200,7 @@ export function validatePaperCompleteness(
     const textLower = String(q.text || "").toLowerCase();
     const qNum = it.itemNumber ?? idx + 1;
 
-    const mentionsDiagram =
-      textLower.includes("diagram") ||
-      textLower.includes("figure") ||
-      textLower.includes("shown below") ||
-      textLower.includes("given below");
+    const mentionsDiagram = referencesMissingVisual(String(q.text || ""), String(q.type || ""), "");
 
     const hasImage = Boolean((q as any).imagePath || (q as any).figureDoc || (q as any).diagramSource);
 

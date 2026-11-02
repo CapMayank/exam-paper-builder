@@ -235,16 +235,18 @@ export function AIPaperAuditModal({
               }`}
             >
               <div className="flex items-start gap-3">
-                {report.issues.length === 0 ? (
+                {report.status === "PASS" ? (
                   <ShieldCheck size={24} className="text-emerald-600 mt-0.5 shrink-0" />
                 ) : (
                   <ShieldAlert size={24} className="text-amber-600 mt-0.5 shrink-0" />
                 )}
                 <div>
                   <h3 className="text-sm font-bold text-slate-900">
-                    {report.cognitiveBalance.rating === "EXCELLENT"
-                      ? "Board-Standard Paper Alignment"
-                      : "Audit Review Completed"}
+                    {report.status === "PASS"
+                      ? "No defects found"
+                      : report.status === "INCONCLUSIVE"
+                      ? "Audit inconclusive"
+                      : "Defects found"}
                   </h3>
                   <p className="mt-0.5 text-xs text-slate-600 leading-relaxed max-w-2xl">
                     {report.overallVerdict}
@@ -253,12 +255,14 @@ export function AIPaperAuditModal({
               </div>
               <span
                 className={`rounded-full px-3 py-1 text-xs font-bold tracking-wide ${
-                  report.cognitiveBalance.rating === "EXCELLENT"
+                  report.status === "PASS"
                     ? "bg-emerald-200 text-emerald-950"
+                    : report.status === "FAIL"
+                    ? "bg-red-200 text-red-950"
                     : "bg-amber-200 text-amber-950"
                 }`}
               >
-                {report.cognitiveBalance.rating}
+                {report.status}
               </span>
             </div>
 
@@ -294,7 +298,7 @@ export function AIPaperAuditModal({
                 <div className="rounded-lg bg-slate-50 p-2.5 border border-slate-200/80">
                   <span className="text-[11px] text-slate-500 block">MP Board Standard</span>
                   <span className="font-bold text-indigo-700 mt-0.5 block">
-                    {mpbseCompliance?.dimensions?.overallScore ? `${mpbseCompliance.dimensions.overallScore}/100` : "Verified"}
+                    {mpbseCompliance?.dimensions?.overallScore ? `${mpbseCompliance.dimensions.overallScore}/100 (gates only)` : "Not scored"}
                   </span>
                 </div>
               </div>

@@ -564,6 +564,8 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
         orChoiceMode: (qt as any).orChoiceMode ?? "BOARD_DEFAULT",
         orAlternativeCount: (qt as any).orAlternativeCount ?? null,
         orSlotsJson: (qt as any).orSlotsJson ?? null,
+        role: (qt as any).role ?? "STANDARD",
+        groupKey: (qt as any).groupKey ?? "",
       })),
     }));
     setSectionGroups(newGroups);
@@ -599,6 +601,8 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
         orChoiceMode: (qt as any).orChoiceMode ?? "BOARD_DEFAULT",
         orAlternativeCount: (qt as any).orAlternativeCount ?? null,
         orSlotsJson: (qt as any).orSlotsJson ?? null,
+        role: (qt as any).role ?? "STANDARD",
+        groupKey: (qt as any).groupKey ?? "",
       })),
     }));
     setSectionGroups(newGroups);
@@ -734,6 +738,8 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
           orChoiceMode: (s as any).orChoiceMode ?? "BOARD_DEFAULT",
           orAlternativeCount: (s as any).orAlternativeCount ?? null,
           orSlotsJson: (s as any).orSlotsJson ?? null,
+          role: (s as any).role ?? "STANDARD",
+          groupKey: (s as any).groupKey ?? "",
         })),
       };
       let savedBlueprintId = id;
@@ -1449,6 +1455,22 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
                                     </option>
                                     <option value="REQUIRED">Required (OR / अथवा)</option>
                                     <option value="NOT_REQUIRED">Not Required</option>
+                                  </select>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <span className="text-[11px] font-semibold text-slate-700">Section role:</span>
+                                  <select
+                                    className="input text-xs py-1 px-2 font-medium"
+                                    value={qt.role || "STANDARD"}
+                                    onChange={(e) => patchQuestionType(grp.key, qt.key, { role: e.target.value })}
+                                    disabled={isReadOnly}
+                                    aria-label="Section role"
+                                  >
+                                    <option value="STANDARD">General</option>
+                                    <option value="PASSAGE">Passage group (unseen prose / poetry)</option>
+                                    <option value="GRAMMAR">Grammar</option>
+                                    <option value="WRITING">Writing task</option>
+                                    <option value="LITERATURE">Literature</option>
                                   </select>
                                 </div>
 
