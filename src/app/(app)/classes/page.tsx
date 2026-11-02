@@ -608,36 +608,10 @@ export default function ClassesHierarchyPage() {
 
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 
-      {/* 2. INSTITUTIONAL CONTEXT & WORKSPACE NAV PILLS */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/90 bg-white px-4 py-3 text-xs text-slate-600 shadow-xs min-w-0 max-w-full">
-        <div className="flex flex-wrap items-center gap-2.5 min-w-0">
-          <span className="flex items-center gap-1.5 font-semibold text-slate-800">
-            <Calendar size={14} className="text-indigo-600" /> Active Academic Session:
-          </span>
-          <span className="badge !bg-slate-900 !text-white font-mono px-2.5 py-0.5 text-xs">
-            {activeSession}
-          </span>
-          <span className="hidden sm:inline text-slate-300">|</span>
-          <span className="font-medium text-slate-700">
-            <strong>{classes.length}</strong> classes configured across{" "}
-            <strong>
-              {classes.reduce((sum, c) => sum + (c.sections?.length || 1), 0)}
-            </strong>{" "}
-            sections
-          </span>
-        </div>
-
-        <div className="flex items-center font-medium text-slate-600">
-          <Link
-            href="/books"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-700 hover:underline transition"
-            title="Browse all textbooks & syllabus"
-          >
-            <BookOpen size={14} className="text-indigo-600" />
-            <span>Manage Textbooks &amp; Syllabus Studio &rarr;</span>
-          </Link>
-        </div>
-      </div>
+      <p className="text-xs text-slate-500">
+        <strong className="text-slate-700">{classes.length}</strong> classes across{" "}
+        <strong className="text-slate-700">{classes.reduce((sum, c) => sum + (c.sections?.length || 1), 0)}</strong> sections
+      </p>
 
       {/* 3. MOBILE MASTER-DETAIL TABS (< lg screens) */}
       <div className="flex items-center gap-1.5 p-1 bg-slate-200/80 rounded-xl lg:hidden min-w-0 max-w-full">

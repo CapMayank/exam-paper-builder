@@ -239,16 +239,6 @@ export function AppShell({ children }: { children: ReactNode }) {
             )}
           </Link>
 
-          {/* Academic Session Selector in Sidebar */}
-          <div className={`mb-4 px-1 ${collapsed ? "flex justify-center" : ""}`}>
-            <AcademicSessionSelector compact={collapsed} className={collapsed ? "" : "w-full"} />
-          </div>
-          {!collapsed && (
-            <div className="mb-4 px-1">
-              <ViewScopeBar role={user?.role} />
-            </div>
-          )}
-
           <NavList pathname={pathname} rail={collapsed} role={user?.role} />
 
           <div className="mt-auto space-y-2">
@@ -294,10 +284,20 @@ export function AppShell({ children }: { children: ReactNode }) {
               </span>
             </div>
           </Link>
-          <div className="ml-auto shrink-0">
-            <AcademicSessionSelector compact={true} />
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            <ViewScopeBar role={user?.role} />
+            <AcademicSessionSelector compact tone="light" />
           </div>
         </header>
+
+        {/* Desktop context bar: what the whole app is scoped to */}
+        <div
+          className="no-print sticky top-0 z-20 hidden items-center justify-end gap-2 border-b border-slate-200 bg-white/90 px-8 py-2 backdrop-blur-md transition-[padding] duration-200 lg:flex lg:pl-(--pad)"
+          style={{ "--pad": `calc(${collapsed ? "var(--sidebar-w-rail)" : "var(--sidebar-w)"} + 2rem)` } as React.CSSProperties}
+        >
+          <ViewScopeBar role={user?.role} />
+          <AcademicSessionSelector tone="light" />
+        </div>
 
         {/* Mobile drawer */}
         {drawerOpen && (
@@ -329,12 +329,6 @@ export function AppShell({ children }: { children: ReactNode }) {
                 >
                   <X size={18} />
                 </button>
-              </div>
-              <div className="mb-4 px-1.5">
-                <AcademicSessionSelector className="w-full" />
-              </div>
-              <div className="mb-4 px-1.5">
-                <ViewScopeBar role={user?.role} />
               </div>
               <NavList pathname={pathname} rail={false} role={user?.role} onNavigate={() => setDrawerPath(null)} />
               <div className="mt-auto">

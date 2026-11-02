@@ -456,27 +456,6 @@ export default function BooksPage() {
 
       {/* Academic Session & Class -> Subject Hierarchy Filter Bar */}
       <div className="card p-4 space-y-3 bg-white">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-slate-500 flex items-center gap-1.5">
-              <Calendar size={14} className="text-slate-600" /> Active Session:
-            </span>
-            <span className="badge !bg-slate-900 !text-white font-mono px-2.5 py-0.5">
-              {normalizeSession(currentSession)}
-            </span>
-            <span className="text-xs text-slate-500">
-              ({sessionBooks.length} textbooks)
-            </span>
-          </div>
-
-          <Link
-            href="/classes"
-            className="text-xs font-semibold text-slate-700 hover:text-slate-950 inline-flex items-center gap-1"
-          >
-            <GraduationCap size={14} /> Manage Classes &amp; Subjects
-          </Link>
-        </div>
-
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-1.5">

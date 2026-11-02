@@ -7,9 +7,11 @@ import { useAcademicSession } from "@/lib/academicSession";
 interface AcademicSessionSelectorProps {
   compact?: boolean;
   className?: string;
+  /** "light" for the top bar, "dark" for use on the indigo sidebar */
+  tone?: "light" | "dark";
 }
 
-export function AcademicSessionSelector({ compact = false, className = "" }: AcademicSessionSelectorProps) {
+export function AcademicSessionSelector({ compact = false, className = "", tone = "dark" }: AcademicSessionSelectorProps) {
   const { currentSession, setSession, availableSessions, addCustomSession } = useAcademicSession();
   const [open, setOpen] = useState(false);
   const [addingCustom, setAddingCustom] = useState(false);
@@ -55,19 +57,21 @@ export function AcademicSessionSelector({ compact = false, className = "" }: Aca
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className={`group flex items-center gap-2 rounded-xl border border-indigo-700/60 bg-indigo-950/40 px-3 py-1.5 text-xs font-medium text-indigo-100 transition hover:border-amber-300/60 hover:bg-white/10 hover:text-white ${
-          compact ? "px-2 py-1" : ""
-        }`}
+        className={`group flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+          tone === "light"
+            ? "border-slate-200 bg-white text-slate-700 hover:border-indigo-300 hover:bg-slate-50"
+            : "border-indigo-700/60 bg-indigo-950/40 text-indigo-100 hover:border-amber-300/60 hover:bg-white/10 hover:text-white"
+        } ${compact ? "px-2 py-1" : ""}`}
         title={`Active Academic Session: ${currentSession} (Click to switch or roll over)`}
         aria-expanded={open}
         aria-haspopup="true"
       >
-        <Calendar size={14} className="text-amber-300" />
+        <Calendar size={14} className={tone === "light" ? "text-indigo-600" : "text-amber-300"} />
         <span className="flex items-center gap-1.5">
-          {!compact && <span className="text-indigo-300/80 font-normal">Session:</span>}
-          <strong className="font-semibold text-white tracking-wide">{currentSession}</strong>
+          {!compact && <span className={tone === "light" ? "font-normal text-slate-500" : "font-normal text-indigo-300/80"}>Session</span>}
+          <strong className={`font-semibold tracking-wide ${tone === "light" ? "text-slate-900" : "text-white"}`}>{currentSession}</strong>
         </span>
-        <ChevronDown size={13} className={`text-indigo-300 transition-transform ${open ? "rotate-180" : ""}`} />
+        <ChevronDown size={13} className={`${tone === "light" ? "text-slate-400" : "text-indigo-300"} transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
 
       {open && (

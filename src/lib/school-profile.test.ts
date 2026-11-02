@@ -65,7 +65,8 @@ describe("school profile", () => {
 
   it("round-trips the view cookie", () => {
     const c = `a=b; epb_view=${serializeViewScope({ stream: "PCB", showOther: true })}; c=d`;
-    expect(parseViewScope(c)).toEqual({ stream: "PCB", showOther: true });
+    // the UI no longer narrows by stream, so a stored stream is ignored
+    expect(parseViewScope(c)).toEqual({ stream: "ALL", showOther: true });
     expect(parseViewScope(undefined)).toEqual({ stream: "ALL", showOther: false });
     expect(parseViewScope("epb_view=%E0%A4%A")).toEqual({ stream: "ALL", showOther: false });
   });

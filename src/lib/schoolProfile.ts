@@ -128,9 +128,9 @@ export function parseViewScope(cookieHeader?: string | null): ViewScope {
   if (!m) return DEFAULT_VIEW_SCOPE;
   try {
     const p = new URLSearchParams(decodeURIComponent(m[1]));
-    const stream = p.get("stream");
     return {
-      stream: stream === "PCM" || stream === "PCB" ? stream : "ALL",
+      // the UI no longer narrows by stream (every required subject shows); a stale cookie must not hide subjects
+      stream: "ALL",
       showOther: p.get("other") === "1",
     };
   } catch {

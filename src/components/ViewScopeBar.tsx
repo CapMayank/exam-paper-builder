@@ -1,13 +1,11 @@
 "use client";
 
-import { Archive, FlaskConical } from "lucide-react";
+import { Archive } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import {
   DEFAULT_VIEW_SCOPE,
   parseViewScope,
   serializeViewScope,
-  STREAMS,
-  type Stream,
   type ViewScope,
 } from "@/lib/schoolProfile";
 
@@ -18,7 +16,7 @@ function readScope(): ViewScope {
   return parseViewScope(document.cookie);
 }
 
-/** The teacher's current view (stream and archive switch). The server reads the same cookie to filter lists. */
+/** The "show other subjects" switch. The server reads the same cookie to filter lists. */
 export function useViewScope(): [ViewScope, (next: Partial<ViewScope>) => void] {
   const [scope, setScopeState] = useState<ViewScope>(DEFAULT_VIEW_SCOPE);
   useEffect(() => {
@@ -34,41 +32,25 @@ export function useViewScope(): [ViewScope, (next: Partial<ViewScope>) => void] 
   return [scope, setScope];
 }
 
-export function ViewScopeBar({ role, compact = false }: { role?: string; compact?: boolean }) {
+/** Admin/HOD only: reveal subjects outside the school's required set. Renders nothing for teachers. */
+export function ViewScopeBar({ role }: { role?: string }) {
   const [scope, setScope] = useViewScope();
-  const canSeeOthers = role === "ADMIN" || role === "HOD";
-  if (compact) return null;
+  if (role !== "ADMIN" && role !== "HOD") return null;
   return (
-    <div className="rounded-xl border border-indigo-700/60 bg-indigo-950/40 p-2 text-[11px] text-indigo-100" aria-label="Subject view">
-      <div className="mb-1 flex items-center gap-1.5 font-semibold text-indigo-200">
-        <FlaskConical size={12} /> Class 11–12 stream
-      </div>
-      <div className="grid grid-cols-3 gap-1" role="group" aria-label="Stream">
-        {([{ code: "ALL", label: "All" }, ...STREAMS] as Array<{ code: Stream | "ALL"; label: string }>).map((s) => (
-          <button
-            key={s.code}
-            type="button"
-            onClick={() => setScope({ stream: s.code })}
-            aria-pressed={scope.stream === s.code}
-            title={s.code === "ALL" ? "Show every required subject" : s.label}
-            className={`rounded-lg px-1.5 py-1 font-semibold transition ${
-              scope.stream === s.code ? "bg-amber-300 text-indigo-950" : "bg-white/5 text-indigo-100 hover:bg-white/10"
-            }`}
-          >
-            {s.code === "ALL" ? "All" : s.code}
-          </button>
-        ))}
-      </div>
-      {canSeeOthers && (
-        <label className="mt-2 flex cursor-pointer items-center gap-1.5 text-indigo-200/90">
-          <input
-            type="checkbox"
-            checked={scope.showOther}
-            onChange={(e) => setScope({ showOther: e.target.checked })}
-          />
-          <Archive size={12} /> Show other subjects
-        </label>
-      )}
-    </div>
+    <button
+      type="button"
+      role="switch"
+      aria-checked={scope.showOther}
+      onClick={() => setScope({ showOther: !scope.showOther })}
+      title="Also list subjects outside the school's required set (kept for reference, not part of the teacher workflow)"
+      className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
+        scope.showOther
+          ? "border-amber-300 bg-amber-50 text-amber-900"
+          : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+      }`}
+    >
+      <Archive size={13} />
+      {scope.showOther ? "Showing other subjects" : "Other subjects hidden"}
+    </button>
   );
 }

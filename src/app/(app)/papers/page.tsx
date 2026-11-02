@@ -1,6 +1,6 @@
 "use client";
 
-import { Calendar, Check, Copy, FileDown, FileText, GitCompare, GraduationCap, Lock, Plus, Search, Sparkles, Trash2, Upload, X } from "lucide-react";
+import { Check, Copy, FileDown, FileText, GitCompare, GraduationCap, Lock, Plus, Search, Sparkles, Trash2, Upload, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -371,28 +371,6 @@ export default function PapersPage() {
       )}
 
       <ErrorBanner message={error} onDismiss={() => setError(null)} />
-
-      {/* Active Session & Count Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-slate-500 flex items-center gap-1.5">
-            <Calendar size={14} className="text-slate-600" /> Active Session:
-          </span>
-          <span className="badge !bg-slate-900 !text-white font-mono px-2.5 py-0.5">
-            {normalizeSession(currentSession)}
-          </span>
-          <span className="text-xs text-slate-500">
-            ({filteredPapers.length} of {papers.length} exam papers)
-          </span>
-        </div>
-
-        <Link
-          href="/classes"
-          className="text-xs font-semibold text-slate-700 hover:text-slate-950 inline-flex items-center gap-1"
-        >
-          <GraduationCap size={14} /> Manage Classes &amp; Subjects
-        </Link>
-      </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">

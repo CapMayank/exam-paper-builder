@@ -355,35 +355,6 @@ export default function BlueprintsPage() {
 
       {/* Top Filter Card (Matching Books & Syllabus) */}
       <div className="card p-4 space-y-3 bg-white">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-slate-500 flex items-center gap-1.5">
-              <Calendar size={14} className="text-slate-600" /> Active Session:
-            </span>
-            <span className="badge !bg-slate-900 !text-white font-mono px-2.5 py-0.5">
-              {activeSession}
-            </span>
-            <span className="text-xs text-slate-500">
-              ({sessionItems.length} {sessionItems.length === 1 ? "blueprint" : "blueprints"})
-            </span>
-          </div>
-
-          <div className="flex items-center gap-4 text-xs font-semibold text-slate-700">
-            <Link
-              href="/classes"
-              className="hover:text-slate-950 inline-flex items-center gap-1"
-            >
-              <GraduationCap size={14} /> Manage Classes &amp; Subjects
-            </Link>
-            <Link
-              href="/books"
-              className="hover:text-slate-950 inline-flex items-center gap-1"
-            >
-              <BookOpen size={14} /> Textbooks &amp; Syllabus
-            </Link>
-          </div>
-        </div>
-
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-1.5">
