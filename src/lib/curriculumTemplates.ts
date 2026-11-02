@@ -45,7 +45,7 @@ export interface BlueprintTemplate {
   templateCode: string;
   title: string;
   description: string;
-  examType: "QUARTERLY" | "HALF_YEARLY" | "ANNUAL";
+  examType: "UNIT_TEST" | "QUARTERLY" | "HALF_YEARLY" | "PRE_BOARD" | "ANNUAL";
   durationMin: number;
   totalMarks: number;
   targetClasses: string;
@@ -1733,6 +1733,171 @@ export const LEGACY_STARTER_TEMPLATES: BlueprintTemplate[] = [
         instructions: "Picture Recognition and Odd One Out",
         questionTypes: [
           { type: "KDG_CIRCLE_TARGET", count: 5, marksEach: 2 },
+        ],
+      },
+    ],
+  },
+  {
+    id: "kindergarten-nursery-activity-20m",
+    templateCode: "kindergarten-nursery-activity-20m",
+    title: "Nursery Activity Worksheet (20 Marks)",
+    description: "Pencil-control strokes, join the dots, colouring, counting and comparing. Prints as A4 portrait.",
+    examType: "QUARTERLY",
+    durationMin: 45,
+    totalMarks: 20,
+    targetClasses: "Nursery",
+    archetype: "KINDERGARTEN_20M",
+    sections: [
+      {
+        title: "Activity A",
+        instructions: "Pre-writing strokes",
+        questionTypes: [
+          { type: "KDG_PREWRITING", count: 2, marksEach: 2 },
+        ],
+      },
+      {
+        title: "Activity B",
+        instructions: "Join the dots",
+        questionTypes: [
+          { type: "KDG_JOIN_DOTS", count: 2, marksEach: 2 },
+        ],
+      },
+      {
+        title: "Activity C",
+        instructions: "Colour the pictures",
+        questionTypes: [
+          { type: "KDG_COLOUR", count: 1, marksEach: 4 },
+        ],
+      },
+      {
+        title: "Activity D",
+        instructions: "Count the objects",
+        questionTypes: [
+          { type: "KDG_COUNT_ITEMS", count: 2, marksEach: 2 },
+        ],
+      },
+      {
+        title: "Activity E",
+        instructions: "Big and small",
+        questionTypes: [
+          { type: "KDG_COMPARE", count: 2, marksEach: 2 },
+        ],
+      },
+    ],
+  },
+  {
+    id: "kindergarten-lkg-activity-25m",
+    templateCode: "kindergarten-lkg-activity-25m",
+    title: "LKG Activity Worksheet (25 Marks)",
+    description: "Letter tracing, missing letters, counting, patterns, tick the picture and colouring. Prints as A4 portrait.",
+    examType: "QUARTERLY",
+    durationMin: 60,
+    totalMarks: 25,
+    targetClasses: "LKG",
+    archetype: "KINDERGARTEN_25M",
+    sections: [
+      {
+        title: "Activity A",
+        instructions: "Letter tracing",
+        questionTypes: [
+          { type: "KDG_TRACE_WRITE", count: 2, marksEach: 3 },
+        ],
+      },
+      {
+        title: "Activity B",
+        instructions: "Fill the missing letter",
+        questionTypes: [
+          { type: "KDG_MISSING_LETTERS", count: 1, marksEach: 4 },
+        ],
+      },
+      {
+        title: "Activity C",
+        instructions: "Count the objects",
+        questionTypes: [
+          { type: "KDG_COUNT_ITEMS", count: 2, marksEach: 2 },
+        ],
+      },
+      {
+        title: "Activity D",
+        instructions: "Patterns",
+        questionTypes: [
+          { type: "KDG_PATTERN", count: 1, marksEach: 4 },
+        ],
+      },
+      {
+        title: "Activity E",
+        instructions: "Tick the correct picture",
+        questionTypes: [
+          { type: "KDG_TICK_PICTURE", count: 1, marksEach: 3 },
+        ],
+      },
+      {
+        title: "Activity F",
+        instructions: "Colour the pictures",
+        questionTypes: [
+          { type: "KDG_COLOUR", count: 1, marksEach: 4 },
+        ],
+      },
+    ],
+  },
+  {
+    id: "kindergarten-ukg-activity-30m",
+    templateCode: "kindergarten-ukg-activity-30m",
+    title: "UKG Activity Worksheet (30 Marks)",
+    description: "Tracing, missing letters, number grid, picture sums, patterns, tick the picture and join the dots. Prints as A4 portrait.",
+    examType: "QUARTERLY",
+    durationMin: 75,
+    totalMarks: 30,
+    targetClasses: "UKG",
+    archetype: "KINDERGARTEN_30M",
+    sections: [
+      {
+        title: "Activity A",
+        instructions: "Writing practice",
+        questionTypes: [
+          { type: "KDG_TRACE_WRITE", count: 1, marksEach: 4 },
+        ],
+      },
+      {
+        title: "Activity B",
+        instructions: "Fill the missing letter",
+        questionTypes: [
+          { type: "KDG_MISSING_LETTERS", count: 2, marksEach: 3 },
+        ],
+      },
+      {
+        title: "Activity C",
+        instructions: "Numbers",
+        questionTypes: [
+          { type: "KDG_NUMBER_GRID", count: 1, marksEach: 4 },
+        ],
+      },
+      {
+        title: "Activity D",
+        instructions: "Add with pictures",
+        questionTypes: [
+          { type: "KDG_PICTURE_SUM", count: 2, marksEach: 3 },
+        ],
+      },
+      {
+        title: "Activity E",
+        instructions: "Patterns",
+        questionTypes: [
+          { type: "KDG_PATTERN", count: 1, marksEach: 3 },
+        ],
+      },
+      {
+        title: "Activity F",
+        instructions: "Tick the correct picture",
+        questionTypes: [
+          { type: "KDG_TICK_PICTURE", count: 1, marksEach: 4 },
+        ],
+      },
+      {
+        title: "Activity G",
+        instructions: "Join the dots",
+        questionTypes: [
+          { type: "KDG_JOIN_DOTS", count: 1, marksEach: 3 },
         ],
       },
     ],

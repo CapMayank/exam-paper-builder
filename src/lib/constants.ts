@@ -5,6 +5,14 @@ export const KINDERGARTEN_QUESTION_TYPES = [
   "KDG_COUNT_ITEMS",
   "KDG_CIRCLE_TARGET",
   "KDG_SEQUENCE_CHAIN",
+  "KDG_MISSING_LETTERS",
+  "KDG_PATTERN",
+  "KDG_PICTURE_SUM",
+  "KDG_COMPARE",
+  "KDG_COLOUR",
+  "KDG_JOIN_DOTS",
+  "KDG_TICK_PICTURE",
+  "KDG_PREWRITING",
 ] as const;
 
 export const STANDARD_QUESTION_TYPES = [
@@ -53,6 +61,14 @@ export const QUESTION_TYPE_LABEL: Record<QuestionType, string> = {
   KDG_COUNT_ITEMS: "Count Objects & Write/Match",
   KDG_CIRCLE_TARGET: "Circle Target / Odd One Out",
   KDG_SEQUENCE_CHAIN: "Missing Sequence Chain (Caterpillar/Train)",
+  KDG_MISSING_LETTERS: "Fill the Missing Letter (with picture)",
+  KDG_PATTERN: "Complete the Pattern",
+  KDG_PICTURE_SUM: "Add / Subtract with Pictures",
+  KDG_COMPARE: "Compare: Big / Small, Tall / Short, More / Less",
+  KDG_COLOUR: "Colour the Picture",
+  KDG_JOIN_DOTS: "Join the Dots (1, 2, 3 or A, B, C)",
+  KDG_TICK_PICTURE: "Tick the Correct Picture",
+  KDG_PREWRITING: "Pre-Writing Strokes (lines, curves, zig-zag)",
 };
 
 import {
@@ -609,22 +625,29 @@ export function derangeMatchColumnPairs(pairs: MatchColumnPair[]): DerangedMatch
 export const DIFFICULTIES = ["EASY", "MEDIUM", "HARD"] as const;
 export type Difficulty = (typeof DIFFICULTIES)[number];
 
-export const EXAM_TYPES = ["QUARTERLY", "HALF_YEARLY", "ANNUAL"] as const;
+export const EXAM_TYPES = ["UNIT_TEST", "QUARTERLY", "HALF_YEARLY", "PRE_BOARD", "ANNUAL"] as const;
 export type ExamType = (typeof EXAM_TYPES)[number];
 export const EXAM_TYPE_LABEL: Record<ExamType, string> = {
+  UNIT_TEST: "Unit Test",
   QUARTERLY: "Quarterly",
   HALF_YEARLY: "Half Yearly",
+  PRE_BOARD: "Pre-Board",
   ANNUAL: "Annual",
 };
 
 export function inferExamTypeFromText(text?: string | null): ExamType | null {
   if (!text) return null;
   const lower = text.toLowerCase();
+  if (/pre[-_\s]?board/.test(lower)) return "PRE_BOARD";
   if (lower.includes("half-yearly") || lower.includes("half yearly") || lower.includes("half_yearly") || lower.includes("mid-term") || lower.includes("mid term") || lower.includes("term 1") || lower.includes("term-1")) {
     return "HALF_YEARLY";
   }
-  if (lower.includes("quarterly") || lower.includes("unit test") || lower.includes("periodic")) {
+  if (lower.includes("quarterly") || lower.includes("periodic")) {
     return "QUARTERLY";
+  }
+  // After "quarterly" so that "Quarterly Unit Test 1" stays a Quarterly paper.
+  if (lower.includes("unit test") || lower.includes("unit-test") || lower.includes("unit_test") || /cycle test/.test(lower)) {
+    return "UNIT_TEST";
   }
   if (lower.includes("annual") || lower.includes("final exam") || lower.includes("board exam") || lower.includes("term 2") || lower.includes("term-2")) {
     return "ANNUAL";
@@ -722,6 +745,16 @@ export function normalizeMcqAnswer(
     optionText: undefined,
     display: trimmed.startsWith("(") ? trimmed : `(${trimmed.toUpperCase()})`,
   };
+}
+
+/** Blueprint.curriculumMode of the hidden blueprint behind a Nursery / LKG / UKG worksheet (no blueprint or book needed by the teacher). */
+export const WORKSHEET_MODE = "KG_WORKSHEET";
+export const KG_CLASSES = ["Nursery", "LKG", "UKG"] as const;
+export const KG_SUBJECTS = ["English", "Mathematics", "Hindi", "General Awareness (EVS)", "Rhymes & Activities"] as const;
+
+/** Nursery, LKG and UKG worksheets are printed as full A4 portrait pages; everything else defaults to the folded booklet. */
+export function defaultLayoutForClass(className?: string | null): "PAGE" | "BOOKLET_A4" {
+  return isPrePrimaryClass(className) ? "PAGE" : "BOOKLET_A4";
 }
 
 export const LAYOUTS = ["BOOKLET_A4", "BOOKLET", "PAGE"] as const;

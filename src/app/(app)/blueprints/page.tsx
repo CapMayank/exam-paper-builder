@@ -48,6 +48,7 @@ import {
   EXAM_TYPE_LABEL,
   LAYOUTS,
   LAYOUT_LABEL,
+  defaultLayoutForClass,
   sortClassNames,
   type ExamType,
   type Layout,
@@ -263,7 +264,7 @@ export default function BlueprintsPage() {
     setPaperForm({
       title: `${bp.book.className} ${bp.book.subject} — ${EXAM_TYPE_LABEL[bp.examType as ExamType] || "Annual"} Exam`,
       examType: (bp.examType as ExamType) || "ANNUAL",
-      layout: "BOOKLET_A4",
+      layout: defaultLayoutForClass(bp.book.className),
       paperSet: "SET A",
       examDate: "",
       schoolName: DEFAULT_SCHOOL_NAME,

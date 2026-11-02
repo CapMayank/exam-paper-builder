@@ -26,7 +26,7 @@ import {
   serializeKindergartenConfig,
 } from "@/lib/kindergarten/registry";
 import { type Book, type QuestionDto, type SubPart, subpartsTotalMarks } from "@/lib/types";
-import { MathText } from "./MathText";
+import { MathRichEditor, type MathRichEditorHandle } from "./MathRichEditor";
 import { MathToolbar } from "./MathToolbar";
 import { DiagramSearchModal } from "./DiagramSearchModal";
 import { FigureStudio } from "./figure-studio";
@@ -204,7 +204,8 @@ export function QuestionForm({
   const [aiImproverOpen, setAiImproverOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const activeElementRef = useRef<HTMLTextAreaElement | HTMLInputElement | null>(null);
+  const activeEditorRef = useRef<MathRichEditorHandle | null>(null);
+  const editorsMounted = useRef<Set<MathRichEditorHandle>>(new Set());
   const [activeField, setActiveField] = useState<
     | { type: "text" }
     | { type: "option"; index: number }
@@ -214,82 +215,39 @@ export function QuestionForm({
   >({ type: "text" });
 
   function handleInsertSnippet(snippet: string) {
-    const el = activeElementRef.current;
-    if (el && document.body.contains(el)) {
-      const start = el.selectionStart ?? el.value.length;
-      const end = el.selectionEnd ?? el.value.length;
-      const currentVal = el.value;
-      const before = currentVal.substring(0, start);
-      const after = currentVal.substring(end);
-
-      let toInsert = snippet;
-      if (before.length > 0 && !before.endsWith(" ") && !before.endsWith("\n")) {
-        toInsert = " " + toInsert;
-      }
-      if (after.length > 0 && !after.startsWith(" ") && !after.startsWith("\n")) {
-        toInsert = toInsert + " ";
-      }
-
-      const newVal = before + toInsert + after;
-      const newCursor = before.length + toInsert.length;
-
-      if (activeField.type === "text") {
-        setText(newVal);
-      } else if (activeField.type === "option") {
-        const idx = activeField.index;
-        setOptions((opts) => opts.map((opt, j) => (j === idx ? newVal : opt)));
-      } else if (activeField.type === "answer") {
-        setAnswer(newVal);
-      } else if (activeField.type === "subpart-text") {
-        const idx = activeField.index;
-        setSubparts((subs) => subs.map((sp, j) => (j === idx ? { ...sp, text: newVal } : sp)));
-      } else if (activeField.type === "subpart-answer") {
-        const idx = activeField.index;
-        setSubparts((subs) => subs.map((sp, j) => (j === idx ? { ...sp, answer: newVal } : sp)));
-      }
-
-      setTimeout(() => {
-        try {
-          el.focus();
-          el.setSelectionRange(newCursor, newCursor);
-        } catch {}
-      }, 0);
+    const editor = activeEditorRef.current;
+    if (editor && editorsMounted.current.has(editor)) {
+      editor.insert(snippet);
       return;
     }
-
+    const join = (prev: string) => prev + (prev.endsWith(" ") || prev === "" ? "" : " ") + snippet + " ";
     if (activeField.type === "text") {
-      setText((prev) => prev + (prev.endsWith(" ") || prev === "" ? "" : " ") + snippet + " ");
+      setText(join);
     } else if (activeField.type === "option") {
       const idx = activeField.index;
-      setOptions((opts) =>
-        opts.map((opt, j) => (j === idx ? opt + (opt.endsWith(" ") || opt === "" ? "" : " ") + snippet + " " : opt))
-      );
+      setOptions((opts) => opts.map((opt, j) => (j === idx ? join(opt) : opt)));
     } else if (activeField.type === "answer") {
-      setAnswer((prev) => prev + (prev.endsWith(" ") || prev === "" ? "" : " ") + snippet + " ");
+      setAnswer(join);
     } else if (activeField.type === "subpart-text") {
       const idx = activeField.index;
-      setSubparts((subs) =>
-        subs.map((sp, j) =>
-          j === idx ? { ...sp, text: sp.text + (sp.text.endsWith(" ") || sp.text === "" ? "" : " ") + snippet + " " } : sp
-        )
-      );
+      setSubparts((subs) => subs.map((sp, j) => (j === idx ? { ...sp, text: join(sp.text) } : sp)));
     } else if (activeField.type === "subpart-answer") {
       const idx = activeField.index;
-      setSubparts((subs) =>
-        subs.map((sp, j) =>
-          j === idx
-            ? {
-                ...sp,
-                answer:
-                  (sp.answer ?? "") +
-                  ((sp.answer ?? "").endsWith(" ") || sp.answer === "" ? "" : " ") +
-                  snippet +
-                  " ",
-              }
-            : sp
-        )
-      );
+      setSubparts((subs) => subs.map((sp, j) => (j === idx ? { ...sp, answer: join(sp.answer ?? "") } : sp)));
     }
+  }
+
+  function handleNewFormula() {
+    const editor = activeEditorRef.current;
+    if (editor && editorsMounted.current.has(editor)) editor.insertFormula();
+  }
+
+  function activate(field: typeof activeField) {
+    return (handle: MathRichEditorHandle) => {
+      editorsMounted.current.add(handle);
+      activeEditorRef.current = handle;
+      setActiveField(field);
+    };
   }
 
   async function attach(blob: Blob) {
@@ -339,6 +297,7 @@ export function QuestionForm({
       }
     }
 
+    if (!text.trim()) return setError("Enter the question text.");
     const isKdg = isKindergartenType(type);
     if (isKdg && !text.trim()) {
       return setError("Please provide an activity instruction for the question.");
@@ -599,7 +558,7 @@ export function QuestionForm({
         <>
           {/* Visual Math & Science Equation Editor Toolbar */}
           <div>
-            <MathToolbar onInsert={handleInsertSnippet} />
+            <MathToolbar onInsert={handleInsertSnippet} onNewFormula={handleNewFormula} />
           </div>
 
       <div>
@@ -785,39 +744,13 @@ export function QuestionForm({
             )}
           </div>
         </div>
-        <textarea
-          className="input min-h-24"
+        <MathRichEditor
+          multiline
           value={text}
-          required
-          onFocus={(e) => {
-            setActiveField({ type: "text" });
-            activeElementRef.current = e.currentTarget;
-          }}
-          onSelect={(e) => {
-            activeElementRef.current = e.currentTarget;
-          }}
-          placeholder="Type question text here. Click symbols in Math Assistant above to insert formulas, or type $...$ for math, e.g. $x^2 + 5x + 6 = 0$."
-          onChange={(e) => setText(e.target.value)}
+          onChange={setText}
+          onActivate={activate({ type: "text" })}
+          placeholder="Type the question here. Use the Math Assistant above (or the Formula button) to add maths — formulas appear exactly as they will print, and you edit them right there."
         />
-        {(text.match(/\$/g) || []).length % 2 !== 0 && (
-          <div className="mt-1 rounded bg-amber-50 px-2.5 py-1 text-xs text-amber-800 border border-amber-200">
-            ⚠️ Tip: Mismatched &apos;$&apos; detected ({(text.match(/\$/g) || []).length} total). Formulas must start and end with &apos;$&apos;, like <code className="font-mono bg-amber-100 px-1 py-0.5 rounded">$x^2$</code>.
-          </div>
-        )}
-        {text.trim() && (
-          <div className="mt-2 rounded-xl border border-indigo-100 bg-indigo-50/60 p-2.5 text-xs text-slate-800 shadow-2xs">
-            <div className="flex items-center justify-between mb-1 pb-1 border-b border-indigo-100/70">
-              <span className="font-semibold text-indigo-800 flex items-center gap-1.5">
-                <Sparkles size={12} className="text-indigo-600" />
-                Live KaTeX &amp; Formula Preview
-              </span>
-              <span className="text-[10px] text-slate-400">WYSIWYG live rendering</span>
-            </div>
-            <div className="text-slate-900 leading-relaxed font-normal whitespace-pre-wrap">
-              <MathText text={text} />
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Match the Column Pair Editor */}
@@ -1051,52 +984,24 @@ export function QuestionForm({
                 </div>
 
                 <div>
-                  <textarea
-                    className="input min-h-[60px] text-xs"
+                  <MathRichEditor
+                    multiline
+                    className="min-h-[60px] text-xs"
                     value={sp.text}
-                    required
                     placeholder={`Enter prompt for subpart ${sp.label || i + 1}...`}
-                    onFocus={(e) => {
-                      setActiveField({ type: "subpart-text", index: i });
-                      activeElementRef.current = e.currentTarget;
-                    }}
-                    onSelect={(e) => {
-                      activeElementRef.current = e.currentTarget;
-                    }}
-                    onChange={(e) =>
-                      setSubparts(subparts.map((s, j) => (j === i ? { ...s, text: e.target.value } : s)))
-                    }
+                    onActivate={activate({ type: "subpart-text", index: i })}
+                    onChange={(v) => setSubparts((subs) => subs.map((s, j) => (j === i ? { ...s, text: v } : s)))}
                   />
-                  {sp.text.includes("$") && (
-                    <div className="mt-1 rounded bg-indigo-50/60 px-2 py-0.5 text-xs text-indigo-900 border border-indigo-100">
-                      <span className="font-semibold text-indigo-700">Preview: </span>
-                      <MathText text={sp.text} />
-                    </div>
-                  )}
                 </div>
 
                 <div>
-                  <input
-                    className="input text-xs"
+                  <MathRichEditor
+                    className="text-xs"
                     value={sp.answer ?? ""}
                     placeholder={`Model answer / marking rubric for ${sp.label || i + 1} (optional)`}
-                    onFocus={(e) => {
-                      setActiveField({ type: "subpart-answer", index: i });
-                      activeElementRef.current = e.currentTarget;
-                    }}
-                    onSelect={(e) => {
-                      activeElementRef.current = e.currentTarget;
-                    }}
-                    onChange={(e) =>
-                      setSubparts(subparts.map((s, j) => (j === i ? { ...s, answer: e.target.value } : s)))
-                    }
+                    onActivate={activate({ type: "subpart-answer", index: i })}
+                    onChange={(v) => setSubparts((subs) => subs.map((s, j) => (j === i ? { ...s, answer: v } : s)))}
                   />
-                  {(sp.answer ?? "").includes("$") && (
-                    <div className="mt-1 rounded bg-emerald-50/60 px-2 py-0.5 text-xs text-emerald-900 border border-emerald-100">
-                      <span className="font-semibold text-emerald-800">Preview: </span>
-                      <MathText text={sp.answer ?? ""} />
-                    </div>
-                  )}
                 </div>
 
                 {sp.options && sp.options.length > 0 && (
@@ -1106,14 +1011,17 @@ export function QuestionForm({
                       {sp.options.map((opt, optIdx) => (
                         <div key={optIdx} className="flex items-center gap-1.5">
                           <span className="text-xs font-bold text-slate-500 w-5">({String.fromCharCode(97 + optIdx)})</span>
-                          <input
-                            className="input text-xs flex-1 py-1 px-2"
+                          <MathRichEditor
+                            className="flex-1 text-xs"
                             value={opt}
-                            onChange={(e) => {
-                              const newOpts = [...(sp.options || [])];
-                              newOpts[optIdx] = e.target.value;
-                              setSubparts(subparts.map((s, j) => (j === i ? { ...s, options: newOpts } : s)));
-                            }}
+                            onActivate={activate({ type: "text" })}
+                            onChange={(v) =>
+                              setSubparts((subs) =>
+                                subs.map((s, j) =>
+                                  j === i ? { ...s, options: (s.options || []).map((o2, k) => (k === optIdx ? v : o2)) } : s
+                                )
+                              )
+                            }
                           />
                         </div>
                       ))}
@@ -1140,18 +1048,12 @@ export function QuestionForm({
                   onChange={() => setAnswer(LETTERS[i])}
                 />
                 <span className="w-5 text-sm font-medium">{LETTERS[i]}</span>
-                <input
-                  className="input"
+                <MathRichEditor
+                  className="flex-1"
                   value={o}
-                  onFocus={(e) => {
-                    setActiveField({ type: "option", index: i });
-                    activeElementRef.current = e.currentTarget;
-                  }}
-                  onSelect={(e) => {
-                    activeElementRef.current = e.currentTarget;
-                  }}
-                  placeholder={`Option ${LETTERS[i]} (e.g. $x = 2$)`}
-                  onChange={(e) => setOptions(options.map((x, j) => (j === i ? e.target.value : x)))}
+                  placeholder={`Option ${LETTERS[i]}`}
+                  onActivate={activate({ type: "option", index: i })}
+                  onChange={(v) => setOptions((opts) => opts.map((x, j) => (j === i ? v : x)))}
                 />
                 <button
                   type="button"
@@ -1166,12 +1068,6 @@ export function QuestionForm({
                   <X size={16} />
                 </button>
               </div>
-              {o.includes("$") && (
-                <div className="ml-7 flex items-center gap-1.5 rounded bg-indigo-50/60 px-2 py-0.5 text-xs text-indigo-900 border border-indigo-100/80">
-                  <span className="font-semibold text-indigo-700">Preview:</span>
-                  <MathText text={o} />
-                </div>
-              )}
             </div>
           ))}
           {options.length < MAX_OPTIONS && (
@@ -1192,30 +1088,17 @@ export function QuestionForm({
               : "Model answer / Marking rubric (optional, never printed on the question paper)"
           }
         >
-          <textarea
-            className="input"
-            rows={2}
+          <MathRichEditor
+            multiline
             value={answer}
-            onFocus={(e) => {
-              setActiveField({ type: "answer" });
-              activeElementRef.current = e.currentTarget;
-            }}
-            onSelect={(e) => {
-              activeElementRef.current = e.currentTarget;
-            }}
+            onChange={setAnswer}
+            onActivate={activate({ type: "answer" })}
             placeholder={
               type === "MATCH_COLUMN"
                 ? "(i) → (b), (ii) → (d), (iii) → (a), (iv) → (c)"
-                : "Enter model answer or solution step. Use Math Assistant above to insert formulas."
+                : "Enter model answer or solution step. Use the Math Assistant above to add formulas."
             }
-            onChange={(e) => setAnswer(e.target.value)}
           />
-          {answer.includes("$") && (
-            <div className="mt-1 rounded border border-emerald-100 bg-emerald-50/50 p-2 text-xs text-slate-800">
-              <span className="font-semibold text-emerald-800">Solution Preview: </span>
-              <MathText text={answer} />
-            </div>
-          )}
         </Field>
       )}
 

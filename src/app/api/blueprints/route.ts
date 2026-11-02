@@ -2,7 +2,7 @@ import { body, route } from "@/lib/api";
 import { assertBlueprintValid, blueprintInclude, loadBlueprint } from "@/lib/blueprints";
 import { prisma } from "@/lib/prisma";
 import { blueprintSchema } from "@/lib/schemas";
-import { DEFAULT_ACADEMIC_SESSION } from "@/lib/constants";
+import { DEFAULT_ACADEMIC_SESSION, WORKSHEET_MODE } from "@/lib/constants";
 import { ensureCurriculumSeeded } from "@/lib/curriculumInit";
 
 import { keepActive, scopeFromRequest } from "@/lib/viewScope";
@@ -13,10 +13,11 @@ export const GET = route(async (req) => {
   });
   const url = new URL(req.url);
   const session = url.searchParams.get("session");
+  const notWorksheet = { NOT: { curriculumMode: WORKSHEET_MODE } };
   const where =
     session && session !== "ALL"
-      ? { academicSession: { in: [session.replace(/[–—]/g, "-"), session.replace(/-/g, "–")] } }
-      : undefined;
+      ? { ...notWorksheet, academicSession: { in: [session.replace(/[–—]/g, "-"), session.replace(/-/g, "–")] } }
+      : notWorksheet;
   const list = await prisma.blueprint.findMany({ where, orderBy: { createdAt: "desc" }, include: blueprintInclude });
   return keepActive(list, (b) => b.book, scopeFromRequest(req));
 });

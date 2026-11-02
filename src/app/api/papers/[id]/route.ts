@@ -25,6 +25,10 @@ export const PATCH = route(async (req, { id }, user) => {
     }
   }
   await prisma.paper.update({ where: { id }, data: input });
+  // A worksheet's exam type lives on its hidden blueprint too (that is where it is read from).
+  if (input.examType && (current.blueprint as { curriculumMode?: string }).curriculumMode === "KG_WORKSHEET") {
+    await prisma.blueprint.update({ where: { id: current.blueprintId }, data: { examType: input.examType } });
+  }
 
   if (input.status && input.status !== current.status) {
     await recordAudit(user, "PAPER_STATUS_CHANGE", "PAPER", id, {

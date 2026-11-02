@@ -706,3 +706,69 @@ input[type="range"] {
     print-color-adjust: exact;
   }
 }
+
+/* WYSIWYG maths text box (MathRichEditor): formulas are live, editable boxes inside the text */
+.mre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.9;
+}
+.mre[data-empty="true"]:not(:focus)::before,
+.mre[data-empty="true"]::before {
+  content: attr(data-placeholder);
+  color: var(--color-slate-400);
+  pointer-events: none;
+}
+.mre .mre-math {
+  display: inline-block;
+  vertical-align: middle;
+  margin: 0 2px;
+}
+.mre .mre-math[data-display] {
+  display: block;
+  text-align: center;
+  margin: 4px 0;
+}
+.mre math-field {
+  display: inline-block;
+  font-size: 1.2em;
+  min-width: 1.8em;
+  padding: 2px 6px;
+  border-radius: 8px;
+  border: 1px dashed #a5b4fc;
+  background: #eef2ff;
+  color: #0f172a;
+  outline: none;
+  --caret-color: #4f46e5;
+  --selection-background-color: #c7d2fe;
+  --selection-color: #1e1b4b;
+  --contains-highlight-background-color: #c7d2fe;
+  --keyboard-toggle-size: 22px;
+}
+.mre math-field:focus,
+.mre math-field:focus-within {
+  outline: none;
+  border: 1px solid #6366f1;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgb(99 102 241 / 0.18);
+}
+.mre math-field::part(container) {
+  outline: none;
+}
+.mre math-field::part(content) {
+  padding: 2px 0;
+}
+.mre math-field::part(menu-toggle) {
+  display: none;
+}
+.mre math-field:not(:focus-within)::part(virtual-keyboard-toggle) {
+  display: none;
+}
+.mre math-field::part(virtual-keyboard-toggle) {
+  color: #6366f1;
+  margin-left: 4px;
+}
+.mre ::selection {
+  background: #c7d2fe;
+  color: #1e1b4b;
+}

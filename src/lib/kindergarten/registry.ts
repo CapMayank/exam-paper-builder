@@ -4,11 +4,19 @@ import { pictureMatchPlugin } from "./activities/pictureMatch";
 import { countItemsPlugin } from "./activities/countItems";
 import { circleTargetPlugin } from "./activities/circleTarget";
 import { sequenceChainPlugin } from "./activities/sequenceChain";
+import { missingLettersPlugin } from "./activities/missingLetters";
+import { patternPlugin } from "./activities/pattern";
+import { pictureSumPlugin } from "./activities/pictureSum";
+import { comparePlugin } from "./activities/compare";
+import { colourPlugin } from "./activities/colourPicture";
+import { joinDotsPlugin } from "./activities/joinDots";
+import { tickPicturePlugin } from "./activities/tickPicture";
+import { preWritingPlugin } from "./activities/preWriting";
 import type { KindergartenActivityPlugin } from "./types";
 
 const REGISTRY = new Map<string, KindergartenActivityPlugin>();
 
-// Register initial 6 activities
+// Register all kindergarten activities (original 6 + 8 added later)
 [
   traceWritePlugin,
   numberGridPlugin,
@@ -16,6 +24,14 @@ const REGISTRY = new Map<string, KindergartenActivityPlugin>();
   countItemsPlugin,
   circleTargetPlugin,
   sequenceChainPlugin,
+  preWritingPlugin,
+  joinDotsPlugin,
+  missingLettersPlugin,
+  colourPlugin,
+  patternPlugin,
+  comparePlugin,
+  pictureSumPlugin,
+  tickPicturePlugin,
 ].forEach((plugin) => {
   REGISTRY.set(plugin.type, plugin);
 });

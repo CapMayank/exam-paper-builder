@@ -97,7 +97,9 @@ import type {
   GridSettings,
   Hatch,
   LineObj,
+  FractionObj,
   NumLineObj,
+  TableObj,
   Obj,
   PointObj,
   Pt,
@@ -110,6 +112,15 @@ import type {
   TextObj,
 } from "./types";
 import { CANVAS_PRESETS, DEFAULT_STYLE } from "./types";
+import {
+  AlignTools,
+  AxesInspector,
+  CanvasSizeControls,
+  FractionInspector,
+  NumberLineInspector,
+  TableInspector,
+  type AlignMode,
+} from "./FigureInspectors";
 
 export type Tool =
   | "select"
@@ -139,6 +150,10 @@ export type Tool =
   | "ring"
   | "axes"
   | "numberline"
+  | "fraction_circle"
+  | "fraction_bar"
+  | "fraction_grid"
+  | "table"
   | "point"
   | "text"
   | "stamp";
@@ -175,6 +190,34 @@ type ActiveHandle =
   | { kind: "obj"; id: string; objId: string }
   | { kind: "box"; handle: BoxHandle; objId: string }
   | { kind: "rot"; objId: string };
+
+/** Cursors with a white halo around a dark ink stroke so they stay visible on white paper, grid and grey workspace. */
+const cursorSvg = (body: string, x: number, y: number, fallback: string) =>
+  `url("data:image/svg+xml,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">${body}</svg>`,
+  )}") ${x} ${y}, ${fallback}`;
+const CURSOR_CROSS = cursorSvg(
+  `<g stroke-linecap="round"><path d="M16 3v10M16 19v10M3 16h10M19 16h10" stroke="#fff" stroke-width="5"/>` +
+    `<path d="M16 3v10M16 19v10M3 16h10M19 16h10" stroke="#0f172a" stroke-width="2"/>` +
+    `<circle cx="16" cy="16" r="2.2" fill="#0f172a" stroke="#fff" stroke-width="1.6"/></g>`,
+  16,
+  16,
+  "crosshair",
+);
+const CURSOR_TEXT = cursorSvg(
+  `<g stroke-linecap="round"><path d="M11 5h10M16 5v22M11 27h10" stroke="#fff" stroke-width="5"/>` +
+    `<path d="M11 5h10M16 5v22M11 27h10" stroke="#0f172a" stroke-width="2"/></g>`,
+  16,
+  16,
+  "text",
+);
+const CURSOR_ERASER = cursorSvg(
+  `<circle cx="16" cy="16" r="9" fill="rgba(239,68,68,0.12)" stroke="#fff" stroke-width="5"/>` +
+    `<circle cx="16" cy="16" r="9" fill="none" stroke="#b91c1c" stroke-width="2"/>`,
+  16,
+  16,
+  "crosshair",
+);
 
 function hasBoxFields(o: Obj): o is Obj & BoxFields {
   return "w" in o && "h" in o && "x" in o && "y" in o && "rot" in o;
@@ -241,6 +284,8 @@ export function FigureStudio({
 
   // Viewport pan/zoom
   const [zoom, setZoom] = useState(1);
+  const [snap, setSnap] = useState(true);
+  const [cropToFigure, setCropToFigure] = useState(true);
   const [pan, setPan] = useState<Pt>({ x: 0, y: 0 });
 
   // Tool & Active Selection
@@ -282,6 +327,11 @@ export function FigureStudio({
   const pointerPosRef = useRef<Pt>({ x: 0, y: 0 });
   const activeHandleRef = useRef<ActiveHandle | null>(null);
   const liveObj = useRef<Obj | null>(null);
+  const coordRef = useRef<HTMLSpanElement>(null);
+  const clipboardRef = useRef<Obj[]>([]);
+  const pasteCount = useRef(0);
+  const zoomRef = useRef(1);
+  const panRef = useRef<Pt>({ x: 0, y: 0 });
 
   // 1. Load initial image or embedded metadata
   useEffect(() => {
@@ -337,22 +387,28 @@ export function FigureStudio({
       });
   }, [initialImageUrl]);
 
-  // Auto-center the document page on load
-  useEffect(() => {
-    const timer = setTimeout(() => {
+  // Scale the page to fill the workspace (and re-centre it) on load and whenever the canvas size changes
+  const fitView = useCallback(
+    (maxZoom = 3) => {
       const canvas = canvasRef.current;
-      if (!canvas) return;
-      const w = canvas.clientWidth;
-      const h = canvas.clientHeight;
-      if (w > 0 && h > 0) {
-        setPan({
-          x: Math.max(16, Math.round((w - doc.w) / 2)),
-          y: Math.max(16, Math.round((h - doc.h) / 2)),
-        });
-      }
-    }, 60);
+      if (!canvas || canvas.clientWidth <= 0 || canvas.clientHeight <= 0) return;
+      const z = Math.max(
+        0.2,
+        Math.min((canvas.clientWidth - 64) / doc.w, (canvas.clientHeight - 64) / doc.h, maxZoom),
+      );
+      setZoom(z);
+      setPan({
+        x: Math.round((canvas.clientWidth - doc.w * z) / 2),
+        y: Math.round((canvas.clientHeight - doc.h * z) / 2),
+      });
+    },
+    [doc.w, doc.h],
+  );
+
+  useEffect(() => {
+    const timer = setTimeout(() => fitView(2), 60);
     return () => clearTimeout(timer);
-  }, [doc.w, doc.h]);
+  }, [fitView]);
 
   // Global Clipboard Paste for Images
   useEffect(() => {
@@ -399,6 +455,34 @@ export function FigureStudio({
     window.addEventListener("paste", handlePaste);
     return () => window.removeEventListener("paste", handlePaste);
   }, [doc, pushHistory]);
+
+  useEffect(() => {
+    zoomRef.current = zoom;
+    panRef.current = pan;
+  }, [zoom, pan]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      if (e.ctrlKey || e.metaKey) {
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        const z = zoomRef.current;
+        const nz = Math.min(4, Math.max(0.2, z * Math.exp(-e.deltaY * 0.0015)));
+        const pn = panRef.current;
+        setZoom(nz);
+        setPan({ x: mx - ((mx - pn.x) * nz) / z, y: my - ((my - pn.y) * nz) / z });
+      } else {
+        const pn = panRef.current;
+        setPan({ x: pn.x - e.deltaX, y: pn.y - e.deltaY });
+      }
+    };
+    canvas.addEventListener("wheel", onWheel, { passive: false });
+    return () => canvas.removeEventListener("wheel", onWheel);
+  }, [mounted]);
 
   // Screen to Scene coordinate transform
   const screenToScene = useCallback(
@@ -671,9 +755,16 @@ export function FigureStudio({
   }, [render]);
 
   // Pointer Event Handlers
+  /** Snap drawing clicks to the grid (hold Alt to place freely). Editing and freehand tools are never snapped. */
+  const snapPoint = (pt: Pt, bypass: boolean): Pt => {
+    if (!snap || bypass || grid.style === "none" || grid.size <= 0) return pt;
+    if (["select", "hand", "pen", "highlighter", "eraser", "text"].includes(activeTool)) return pt;
+    return { x: Math.round(pt.x / grid.size) * grid.size, y: Math.round(pt.y / grid.size) * grid.size };
+  };
+
   const handlePointerDown = (e: React.PointerEvent) => {
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    const p = screenToScene(e.clientX, e.clientY);
+    const p = snapPoint(screenToScene(e.clientX, e.clientY), e.altKey);
     isDragging.current = true;
     dragStart.current = p;
     pointerPosRef.current = p;
@@ -892,10 +983,10 @@ export function FigureStudio({
       const newNumLine: NumLineObj = {
         id: uid(),
         type: "numberline",
-        x: p.x - 140,
-        y: p.y - 25,
-        w: 280,
-        h: 50,
+        x: p.x - 170,
+        y: p.y - 58,
+        w: 340,
+        h: 156,
         rot: 0,
         min: -5,
         max: 5,
@@ -907,6 +998,56 @@ export function FigureStudio({
       };
       pushHistory({ ...doc, objects: [...doc.objects, newNumLine] });
       setSelectedIds([newNumLine.id]);
+      setActiveTool("select");
+      return;
+    }
+
+    if (activeTool === "fraction_circle" || activeTool === "fraction_bar" || activeTool === "fraction_grid") {
+      const model = activeTool === "fraction_circle" ? "circle" : activeTool === "fraction_bar" ? "bar" : "grid";
+      const w = model === "circle" ? 140 : 220;
+      const h = model === "circle" ? 140 : model === "bar" ? 50 : 120;
+      const newFraction: FractionObj = {
+        id: uid(),
+        type: "fraction",
+        x: p.x - w / 2,
+        y: p.y - h / 2,
+        w,
+        h,
+        rot: 0,
+        model,
+        parts: model === "grid" ? 12 : 4,
+        shaded: model === "grid" ? 6 : 3,
+        rows: model === "grid" ? 3 : 1,
+        showLabel: true,
+        style: { ...style, width: 2, fill: "#93c5fd" },
+      };
+      pushHistory({ ...doc, objects: [...doc.objects, newFraction] });
+      setSelectedIds([newFraction.id]);
+      setActiveTool("select");
+      return;
+    }
+
+    if (activeTool === "table") {
+      const rows = 3;
+      const cols = 3;
+      const newTable: TableObj = {
+        id: uid(),
+        type: "table",
+        x: p.x - 120,
+        y: p.y - 48,
+        w: 240,
+        h: 96,
+        rot: 0,
+        rows,
+        cols,
+        cells: Array.from({ length: rows }, () => Array.from({ length: cols }, () => "")),
+        headerRow: true,
+        headerCol: false,
+        size: 14,
+        style: { ...style, width: 1.5, fill: null },
+      };
+      pushHistory({ ...doc, objects: [...doc.objects, newTable] });
+      setSelectedIds([newTable.id]);
       setActiveTool("select");
       return;
     }
@@ -953,7 +1094,8 @@ export function FigureStudio({
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    const p = screenToScene(e.clientX, e.clientY);
+    const p = snapPoint(screenToScene(e.clientX, e.clientY), e.altKey);
+    if (coordRef.current) coordRef.current.textContent = `x ${Math.round(p.x)}  y ${Math.round(p.y)}`;
     pointerPosRef.current = p;
 
     // 1. Direct Handle Dragging (Smooth 60fps)
@@ -1116,6 +1258,36 @@ export function FigureStudio({
         // Duplicate
         e.preventDefault();
         duplicateSelected();
+      } else if ((e.ctrlKey || e.metaKey) && e.key === "c") {
+        const picked = doc.objects.filter((o) => selectedIds.includes(o.id) && !o.locked);
+        if (picked.length > 0) {
+          e.preventDefault();
+          clipboardRef.current = picked;
+          pasteCount.current = 0;
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key === "v" && clipboardRef.current.length > 0) {
+        e.preventDefault();
+        pasteCount.current += 1;
+        const shift = 20 * pasteCount.current;
+        const clones = clipboardRef.current.map((o) => ({ ...translateObj(o, shift, shift), id: uid() }));
+        pushHistory({ ...doc, objects: [...doc.objects, ...clones] });
+        setSelectedIds(clones.map((c) => c.id));
+        setActiveTool("select");
+      } else if ((e.ctrlKey || e.metaKey) && e.key === "a") {
+        e.preventDefault();
+        setSelectedIds(doc.objects.filter((o) => !o.locked).map((o) => o.id));
+        setActiveTool("select");
+      } else if (e.key.startsWith("Arrow") && selectedIds.length > 0) {
+        e.preventDefault();
+        const step = e.shiftKey ? 10 : 1;
+        const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
+        const dy = e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0;
+        pushHistory({
+          ...doc,
+          objects: doc.objects.map((o) => (selectedIds.includes(o.id) && !o.locked ? translateObj(o, dx, dy) : o)),
+        });
+      } else if (e.key === "0" && !e.ctrlKey && !e.metaKey) {
+        fitView();
       } else if (e.key === "Delete" || e.key === "Backspace") {
         if (selectedIds.length > 0) {
           e.preventDefault();
@@ -1144,7 +1316,7 @@ export function FigureStudio({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [doc, selectedIds, undo, redo]);
+  }, [doc, selectedIds, undo, redo, fitView]);
 
   // Selected Object Inspector helpers
   const selectedObj = doc.objects.find((o) => selectedIds.includes(o.id));
@@ -1221,6 +1393,42 @@ export function FigureStudio({
     });
   };
 
+  const alignSelected = (mode: AlignMode) => {
+    const picked = doc.objects.filter((o) => selectedIds.includes(o.id) && !o.locked);
+    if (picked.length < 2) return;
+    const boxes = picked.map((o) => ({ o, b: objectBounds(o) }));
+    const minX = Math.min(...boxes.map((x) => x.b.x));
+    const maxX = Math.max(...boxes.map((x) => x.b.x + x.b.w));
+    const minY = Math.min(...boxes.map((x) => x.b.y));
+    const maxY = Math.max(...boxes.map((x) => x.b.y + x.b.h));
+    const moves = new Map<string, { dx: number; dy: number }>();
+    if (mode === "distH" || mode === "distV") {
+      const horiz = mode === "distH";
+      const sorted = [...boxes].sort((a, b) => (horiz ? a.b.x - b.b.x : a.b.y - b.b.y));
+      const total = sorted.reduce((sum, x) => sum + (horiz ? x.b.w : x.b.h), 0);
+      const gap = ((horiz ? maxX - minX : maxY - minY) - total) / (sorted.length - 1);
+      let cursor = horiz ? minX : minY;
+      for (const x of sorted) {
+        const delta = cursor - (horiz ? x.b.x : x.b.y);
+        moves.set(x.o.id, horiz ? { dx: delta, dy: 0 } : { dx: 0, dy: delta });
+        cursor += (horiz ? x.b.w : x.b.h) + gap;
+      }
+    } else {
+      for (const { o, b } of boxes) {
+        const dx = mode === "left" ? minX - b.x : mode === "right" ? maxX - (b.x + b.w) : mode === "hcenter" ? (minX + maxX) / 2 - (b.x + b.w / 2) : 0;
+        const dy = mode === "top" ? minY - b.y : mode === "bottom" ? maxY - (b.y + b.h) : mode === "vcenter" ? (minY + maxY) / 2 - (b.y + b.h / 2) : 0;
+        moves.set(o.id, { dx, dy });
+      }
+    }
+    pushHistory({
+      ...doc,
+      objects: doc.objects.map((o) => {
+        const m = moves.get(o.id);
+        return m && (m.dx || m.dy) ? translateObj(o, m.dx, m.dy) : o;
+      }),
+    });
+  };
+
   const duplicateSelected = () => {
     if (selectedIds.length === 0) return;
     const clones = doc.objects
@@ -1235,7 +1443,7 @@ export function FigureStudio({
 
   const handleExport = async () => {
     try {
-      const rawPng = await renderDocToBlob(doc, grid, 2);
+      const rawPng = await renderDocToBlob(doc, grid, 2, cropToFigure);
       const sceneData: SceneFile = { v: 1, doc, grid };
       const finalBlob = await embedSceneInPng(rawPng, JSON.stringify(sceneData));
       onDone(finalBlob);
@@ -1635,25 +1843,8 @@ export function FigureStudio({
             <button
               type="button"
               className="rounded px-1.5 py-0.5 text-[11px] font-medium text-slate-600 hover:bg-white"
-              onClick={() => {
-                const canvas = canvasRef.current;
-                if (canvas && canvas.clientWidth > 0) {
-                  const fitZoom = Math.min(
-                    (canvas.clientWidth - 48) / doc.w,
-                    (canvas.clientHeight - 48) / doc.h,
-                    1,
-                  );
-                  setZoom(fitZoom);
-                  setPan({
-                    x: Math.round((canvas.clientWidth - doc.w * fitZoom) / 2),
-                    y: Math.round((canvas.clientHeight - doc.h * fitZoom) / 2),
-                  });
-                } else {
-                  setZoom(1);
-                  setPan({ x: 0, y: 0 });
-                }
-              }}
-              title="Fit to screen & center"
+              onClick={() => fitView()}
+              title="Fit to screen & center (0)"
             >
               Fit
             </button>
@@ -1690,11 +1881,11 @@ export function FigureStudio({
       {/* ---------------- Main Body ---------------- */}
       <div className="flex flex-1 overflow-hidden relative">
         {/* Left Toolbar */}
-        <aside className="w-14 shrink-0 border-r border-slate-200 bg-white flex flex-col items-center py-2.5 gap-1.5 shadow-2xs z-20">
+        <aside className="w-[76px] shrink-0 border-r border-slate-200 bg-white flex flex-col items-center py-2 gap-1 shadow-2xs z-20">
           {/* Select & Move */}
           <button
             type="button"
-            className={`btn btn-icon rounded-lg p-2.5 transition ${
+            className={`btn rounded-lg !p-1 w-[62px] min-h-[52px] flex-col gap-0.5 !border-transparent !shadow-none transition ${
               activeTool === "select"
                 ? "bg-indigo-600 text-white shadow-xs"
                 : "text-slate-600 hover:bg-slate-100"
@@ -1707,12 +1898,13 @@ export function FigureStudio({
             title="Select & Move (V)"
           >
             <MousePointer size={18} />
+            <span className="text-[10px] font-medium leading-none">Select</span>
           </button>
 
           {/* Hand / Pan */}
           <button
             type="button"
-            className={`btn btn-icon rounded-lg p-2.5 transition ${
+            className={`btn rounded-lg !p-1 w-[62px] min-h-[52px] flex-col gap-0.5 !border-transparent !shadow-none transition ${
               activeTool === "hand"
                 ? "bg-indigo-600 text-white shadow-xs"
                 : "text-slate-600 hover:bg-slate-100"
@@ -1724,6 +1916,7 @@ export function FigureStudio({
             title="Hand / Pan (H)"
           >
             <Hand size={18} />
+            <span className="text-[10px] font-medium leading-none">Pan</span>
           </button>
 
           <div className="w-8 h-px bg-slate-200 my-0.5" />
@@ -1731,7 +1924,7 @@ export function FigureStudio({
           {/* Angle tool - Primary headline feature */}
           <button
             type="button"
-            className={`btn btn-icon rounded-lg p-2.5 transition relative ${
+            className={`btn rounded-lg !p-1 w-[62px] min-h-[52px] flex-col gap-0.5 !border-transparent !shadow-none transition relative ${
               activeTool === "angle"
                 ? "bg-indigo-600 text-white shadow-xs"
                 : "text-slate-600 hover:bg-slate-100"
@@ -1744,14 +1937,15 @@ export function FigureStudio({
             title="Angle Tool (A) - Click vertex, arm 1, arm 2 with live degree preview"
           >
             <CornerDownRight size={18} />
-            <span className="absolute bottom-1 right-1 text-[8px] font-bold">∠</span>
+            
+            <span className="text-[10px] font-medium leading-none">Angle</span>
           </button>
 
           {/* Lines & Dimension Flyout */}
           <div className="relative">
             <button
               type="button"
-              className={`btn btn-icon rounded-lg p-2.5 transition relative ${
+              className={`btn rounded-lg !p-1 w-[62px] min-h-[52px] flex-col gap-0.5 !border-transparent !shadow-none transition relative ${
                 ["line", "ray", "double_arrow", "dimension", "arc_line"].includes(activeTool)
                   ? "bg-indigo-600 text-white shadow-xs"
                   : "text-slate-600 hover:bg-slate-100"
@@ -1762,10 +1956,11 @@ export function FigureStudio({
               title="Lines, Rays, Dimension & Arcs"
             >
               <Minus size={18} />
-              <span className="absolute bottom-0.5 right-0.5 text-[7px]">▾</span>
-            </button>
+              <span className="absolute top-1 right-1.5 text-[8px] opacity-70">▾</span>
+              <span className="text-[10px] font-medium leading-none">Lines</span>
+          </button>
             {activeFlyout === "lines" && (
-              <div className="absolute left-14 top-0 ml-1.5 w-48 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl z-50 space-y-1">
+              <div className="absolute left-full top-0 ml-2 w-48 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl z-50 space-y-1">
                 <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2 py-0.5">
                   Line Tools
                 </div>
@@ -1801,7 +1996,7 @@ export function FigureStudio({
           <div className="relative">
             <button
               type="button"
-              className={`btn btn-icon rounded-lg p-2.5 transition relative ${
+              className={`btn rounded-lg !p-1 w-[62px] min-h-[52px] flex-col gap-0.5 !border-transparent !shadow-none transition relative ${
                 [
                   "rect",
                   "roundrect",
@@ -1827,10 +2022,11 @@ export function FigureStudio({
               title="Geometry Shapes (Triangles, Polygons, Sectors)"
             >
               <Square size={17} />
-              <span className="absolute bottom-0.5 right-0.5 text-[7px]">▾</span>
-            </button>
+              <span className="absolute top-1 right-1.5 text-[8px] opacity-70">▾</span>
+              <span className="text-[10px] font-medium leading-none">Shapes</span>
+          </button>
             {activeFlyout === "shapes" && (
-              <div className="absolute left-14 top-0 ml-1.5 w-60 rounded-xl border border-slate-200 bg-white p-2 shadow-xl z-50 max-h-96 overflow-y-auto space-y-2">
+              <div className="absolute left-full top-0 ml-2 w-60 rounded-xl border border-slate-200 bg-white p-2 shadow-xl z-50 max-h-96 overflow-y-auto space-y-2">
                 <div>
                   <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 mb-1">
                     Triangles &amp; Boxes
@@ -1930,27 +2126,32 @@ export function FigureStudio({
           <div className="relative">
             <button
               type="button"
-              className={`btn btn-icon rounded-lg p-2.5 transition relative ${
-                ["axes", "numberline"].includes(activeTool)
+              className={`btn rounded-lg !p-1 w-[62px] min-h-[52px] flex-col gap-0.5 !border-transparent !shadow-none transition relative ${
+                ["axes", "numberline", "fraction_circle", "fraction_bar", "fraction_grid", "table"].includes(activeTool)
                   ? "bg-indigo-600 text-white shadow-xs"
                   : "text-slate-600 hover:bg-slate-100"
               }`}
               onClick={() =>
                 setActiveFlyout(activeFlyout === "graphs" ? null : "graphs")
               }
-              title="Graphing Axes &amp; Number Line"
+              title="Graphs, Number Line &amp; Fraction models"
             >
               <TrendingUp size={18} />
-              <span className="absolute bottom-0.5 right-0.5 text-[7px]">▾</span>
-            </button>
+              <span className="absolute top-1 right-1.5 text-[8px] opacity-70">▾</span>
+              <span className="text-[10px] font-medium leading-none">Maths</span>
+          </button>
             {activeFlyout === "graphs" && (
-              <div className="absolute left-14 top-0 ml-1.5 w-48 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl z-50 space-y-1">
+              <div className="absolute left-full top-0 ml-2 w-60 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl z-50 space-y-1">
                 <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2 py-0.5">
-                  Graphs &amp; Scales
+                  Graphs, Scales &amp; Fractions
                 </div>
                 {[
                   { id: "axes", label: "X-Y Coordinate Plane", desc: "4 Quadrants" },
-                  { id: "numberline", label: "Number Line", desc: "Negative to positive" },
+                  { id: "numberline", label: "Number Line", desc: "Scales, jumps, marks" },
+                  { id: "fraction_circle", label: "Fraction Circle", desc: "Shade parts" },
+                  { id: "fraction_bar", label: "Fraction Bar", desc: "Shade parts" },
+                  { id: "fraction_grid", label: "Fraction Grid", desc: "Rows × columns" },
+                  { id: "table", label: "Table", desc: "Frequency / data" },
                 ].map((item) => (
                   <button
                     key={item.id}
@@ -1976,7 +2177,7 @@ export function FigureStudio({
           {/* Point & Auto-Lettering Tool */}
           <button
             type="button"
-            className={`btn btn-icon rounded-lg p-2.5 transition ${
+            className={`btn rounded-lg !p-1 w-[62px] min-h-[52px] flex-col gap-0.5 !border-transparent !shadow-none transition ${
               activeTool === "point"
                 ? "bg-indigo-600 text-white shadow-xs"
                 : "text-slate-600 hover:bg-slate-100"
@@ -1988,12 +2189,13 @@ export function FigureStudio({
             title="Point Tool (P) - Auto-labelled A, B, C..."
           >
             <div className="flex items-center justify-center font-bold text-xs">P•</div>
+            <span className="text-[10px] font-medium leading-none">Point</span>
           </button>
 
           {/* Text & Formula Tool */}
           <button
             type="button"
-            className={`btn btn-icon rounded-lg p-2.5 transition ${
+            className={`btn rounded-lg !p-1 w-[62px] min-h-[52px] flex-col gap-0.5 !border-transparent !shadow-none transition ${
               activeTool === "text"
                 ? "bg-indigo-600 text-white shadow-xs"
                 : "text-slate-600 hover:bg-slate-100"
@@ -2005,12 +2207,13 @@ export function FigureStudio({
             title="Text & Formula Tool (T) - Click canvas to type"
           >
             <Type size={18} />
+            <span className="text-[10px] font-medium leading-none">Text</span>
           </button>
 
           {/* Pen Freehand */}
           <button
             type="button"
-            className={`btn btn-icon rounded-lg p-2.5 transition ${
+            className={`btn rounded-lg !p-1 w-[62px] min-h-[52px] flex-col gap-0.5 !border-transparent !shadow-none transition ${
               activeTool === "pen"
                 ? "bg-indigo-600 text-white shadow-xs"
                 : "text-slate-600 hover:bg-slate-100"
@@ -2022,12 +2225,13 @@ export function FigureStudio({
             title="Freehand Pen (P)"
           >
             <Pencil size={17} />
+            <span className="text-[10px] font-medium leading-none">Pen</span>
           </button>
 
           {/* Highlighter */}
           <button
             type="button"
-            className={`btn btn-icon rounded-lg p-2.5 transition ${
+            className={`btn rounded-lg !p-1 w-[62px] min-h-[52px] flex-col gap-0.5 !border-transparent !shadow-none transition ${
               activeTool === "highlighter"
                 ? "bg-amber-500 text-white shadow-xs"
                 : "text-slate-600 hover:bg-amber-50"
@@ -2039,12 +2243,13 @@ export function FigureStudio({
             title="Highlighter"
           >
             <Sparkles size={17} />
+            <span className="text-[10px] font-medium leading-none">Marker</span>
           </button>
 
           {/* Eraser */}
           <button
             type="button"
-            className={`btn btn-icon rounded-lg p-2.5 transition ${
+            className={`btn rounded-lg !p-1 w-[62px] min-h-[52px] flex-col gap-0.5 !border-transparent !shadow-none transition ${
               activeTool === "eraser"
                 ? "bg-red-600 text-white shadow-xs"
                 : "text-slate-600 hover:bg-red-50 hover:text-red-700"
@@ -2056,6 +2261,7 @@ export function FigureStudio({
             title="Object Eraser (E)"
           >
             <Eraser size={17} />
+            <span className="text-[10px] font-medium leading-none">Eraser</span>
           </button>
         </aside>
 
@@ -2068,18 +2274,32 @@ export function FigureStudio({
                 ? "grab"
                 : activeTool === "select"
                   ? "default"
-                  : "crosshair",
+                  : activeTool === "text"
+                    ? CURSOR_TEXT
+                    : activeTool === "eraser"
+                      ? CURSOR_ERASER
+                      : CURSOR_CROSS,
           }}
           onClick={() => setActiveFlyout(null)}
         >
           <canvas
             ref={canvasRef}
             className="w-full h-full touch-none block"
+            style={{ cursor: "inherit" }}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             onDoubleClick={handleDoubleClick}
           />
+
+          {doc.objects.length === 0 && !inlineText && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-5 flex justify-center px-4">
+              <div className="rounded-full border border-slate-200 bg-white/95 px-4 py-2 text-xs text-slate-600 shadow-sm">
+                Pick a tool on the left, or start from <b>Templates</b> / <b>AI Draw</b> above. Scroll to pan,
+                Ctrl + scroll to zoom.
+              </div>
+            </div>
+          )}
 
           {/* On-Canvas Inline Text Editor Overlay */}
           {inlineText && (
@@ -2232,7 +2452,7 @@ export function FigureStudio({
 
         {/* Right Inspector & Style Panel */}
         <aside
-          className={`fixed lg:static top-14 bottom-0 right-0 z-30 w-80 shrink-0 border-l border-slate-200 bg-white flex flex-col overflow-y-auto p-4 space-y-4 shadow-xl lg:shadow-2xs text-xs transition-transform duration-200 ${
+          className={`fixed lg:static top-14 bottom-0 right-0 z-30 w-[22rem] shrink-0 border-l border-slate-200 bg-white flex flex-col overflow-y-auto p-4 space-y-4 shadow-xl lg:shadow-2xs text-xs transition-transform duration-200 ${
             showMobileInspector
               ? "translate-x-0"
               : "translate-x-full lg:translate-x-0"
@@ -3034,6 +3254,19 @@ export function FigureStudio({
             </div>
           )}
 
+          {selectedObj?.type === "numberline" && (
+            <NumberLineInspector key={selectedObj.id} obj={selectedObj as NumLineObj} update={updateSelected} />
+          )}
+          {selectedObj?.type === "axes" && <AxesInspector obj={selectedObj as AxesObj} update={updateSelected} />}
+          {selectedObj?.type === "table" && (
+            <TableInspector key={selectedObj.id} obj={selectedObj as TableObj} update={updateSelected} />
+          )}
+          {selectedObj?.type === "fraction" && (
+            <FractionInspector obj={selectedObj as FractionObj} update={updateSelected} />
+          )}
+
+          {selectedIds.length >= 2 && <AlignTools count={selectedIds.length} onAlign={alignSelected} />}
+
           {/* ---------------- Arrange & Layering Section ---------------- */}
           {selectedObj && (
             <div className="space-y-2 pt-2 border-t border-slate-200">
@@ -3199,6 +3432,35 @@ export function FigureStudio({
                 Print Grid
               </button>
             </div>
+            <label
+              className="flex cursor-pointer items-center gap-2 text-xs text-slate-700"
+              title="Saves only the drawing (plus a small margin) instead of the whole page"
+            >
+              <input type="checkbox" checked={cropToFigure} onChange={(e) => setCropToFigure(e.target.checked)} />
+              Crop to the figure when saving
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-700">
+              <input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} />
+              Snap to grid <span className="text-slate-400">(hold Alt to bypass)</span>
+            </label>
+            <div className="flex items-center gap-1 text-xs text-slate-600">
+              <span className="mr-1">Grid size</span>
+              {[10, 20, 40].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  className={`btn btn-sm !min-h-7 !px-2.5 ${grid.size === n ? "btn-primary" : ""}`}
+                  onClick={() => setGrid((g) => ({ ...g, size: n, style: g.style === "none" ? "squares" : g.style }))}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+            <CanvasSizeControls
+              w={doc.w}
+              h={doc.h}
+              onResize={(w, h) => pushHistory({ ...doc, w, h })}
+            />
           </div>
         </aside>
       </div>
@@ -3226,6 +3488,10 @@ export function FigureStudio({
           <span>
             Canvas: {doc.w} × {doc.h} px
           </span>
+          <span ref={coordRef} className="w-24 tabular-nums text-slate-400">
+            x –  y –
+          </span>
+          {snap && grid.style !== "none" && <span className="text-indigo-600">Snap on</span>}
           <span>Zoom: {Math.round(zoom * 100)}%</span>
         </div>
       </footer>
@@ -3257,6 +3523,12 @@ export function FigureStudio({
               <div><kbd className="kbd">Ctrl+D</kbd> Duplicate</div>
               <div><kbd className="kbd">Del</kbd> Delete object</div>
               <div><kbd className="kbd">Ctrl+Z</kbd> Undo / Redo</div>
+              <div><kbd className="kbd">Ctrl+C / V</kbd> Copy / Paste</div>
+              <div><kbd className="kbd">Ctrl+A</kbd> Select all</div>
+              <div><kbd className="kbd">Arrows</kbd> Nudge (Shift = 10px)</div>
+              <div><kbd className="kbd">Alt</kbd> Draw without snapping</div>
+              <div><kbd className="kbd">Ctrl+Scroll</kbd> Zoom at pointer</div>
+              <div><kbd className="kbd">0</kbd> Fit to screen</div>
             </div>
             <button
               type="button"

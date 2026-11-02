@@ -719,6 +719,26 @@ function parseInlineMathFragments(rawText: string): MathSegment[] {
   return segments;
 }
 
+export interface MathRange {
+  start: number;
+  end: number;
+  tex: string;
+  display: boolean;
+}
+
+/** Locates every explicit `$...$` / `$$...$$` formula in the raw text so it can be edited in place. */
+export function findMathRanges(input: string): MathRange[] {
+  const ranges: MathRange[] = [];
+  const re = new RegExp(MATH_REGEX.source, "g");
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(input)) !== null) {
+    const display = m[1] !== undefined;
+    const tex = (display ? m[1] : m[2])?.trim() ?? "";
+    if (tex) ranges.push({ start: m.index, end: m.index + m[0].length, tex, display });
+  }
+  return ranges;
+}
+
 /**
  * Parses a string into plain text segments and KaTeX rendered math segments.
  * Supports both explicit LaTeX ($...$, $$...$$) and natural mathematical plain text

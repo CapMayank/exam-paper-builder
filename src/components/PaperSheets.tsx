@@ -1,6 +1,6 @@
 "use client";
 import { questionSlotMarks } from "@/lib/blueprint";
-import { BOOKLET_MAX_PAGES, describeFit, fitMm, getFit, MIN_QUESTION_GAP_MM, nextFitLevel, type FitStatus, type PrintFit } from "@/lib/printFit";
+import { BOOKLET_MAX_PAGES, describeFit, FIT_LEVELS, fitMm, getFit, MIN_QUESTION_GAP_MM, nextFitLevel, WORKSHEET_FIT_LEVELS, WORKSHEET_MAX_PAGES, type FitStatus, type PrintFit } from "@/lib/printFit";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { QuestionView } from "@/components/QuestionView";
@@ -20,6 +20,7 @@ import {
   getSharedInstruction,
   isBookletLayout,
   isPrePrimaryClass,
+  WORKSHEET_MODE,
   canHaveSubparts,
   isSubpartQuestionType,
   localizeSectionTitle,
@@ -77,7 +78,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
   const isHindi = paperLang === "hi";
   const total = paper.progress.totalMarks;
   const examType = resolvePaperExamType(paper);
-  const examHeading = `${EXAM_TYPE_LABEL[examType]} Examination`;
+  const examHeading = blueprint.curriculumMode === WORKSHEET_MODE ? `${EXAM_TYPE_LABEL[examType]} · Activity Worksheet` : `${EXAM_TYPE_LABEL[examType]} Examination`;
   const sessionText = paper.academicSession || blueprint.academicSession || "2025–26";
   const numbering = computeDisplayedPaperNumbering(
     blueprint.sections,
@@ -396,8 +397,11 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
         s.type === "FILL_BLANK" ||
         ((s.type === "MCQ" || s.type === "VERY_SHORT") && isNumberedSingleGroupedExercise));
 
+    // Worksheets list activities straight away – no "Section A" headings.
+    const isWorksheet = blueprint.curriculumMode === WORKSHEET_MODE;
+
     // Only render the main SECTION header if it's the first in this title group!
-    if (!isSameAsPrev) {
+    if (!isWorksheet && !isSameAsPrev) {
       const allInGroup = blueprint.sections.filter(
         (x) => x.title.trim().toLowerCase() === s.title.trim().toLowerCase()
       );
@@ -457,7 +461,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
     }
 
     // If section has multiple question types, render a clean sub-heading for this question type!
-    if (hasMultipleTypes) {
+    if (!isWorksheet && hasMultipleTypes) {
       const typeLabel = getQuestionTypeLabel(s.type, paperLang);
       const typeFormula = locale.section.formatTypeFormula(s.count, s.marksEach, s.type);
 
@@ -798,7 +802,14 @@ function Page({
           </div>
         </div>
       )}
-      <div style={{ position: "relative", zIndex: 1, ...(zoom !== 1 ? { zoom } : null) }}>
+      <div
+        style={{
+          position: "relative",
+          zIndex: 1,
+          ...(zoom !== 1 ? { zoom } : null),
+          ...(fit?.layoutZoom && fit.layoutZoom !== zoom ? { width: `${CONTENT_W_MM / fit.layoutZoom}mm`, margin: "0 auto" } : null),
+        }}
+      >
         {blocks.map((b) => (
           <div key={b.key} style={{ display: "flow-root" }}>
             {renderBlock(b, continuationKeys?.has(b.key) ?? false)}
@@ -913,12 +924,16 @@ export function PaperSheets({
   const paperLang = detectPaperLanguage(paper, paper.items);
   const effectiveWatermark = watermark ?? paper.securityWatermark ?? false;
   const effectiveWatermarkText = watermarkText || paper.watermarkText || "CONFIDENTIAL — SARVODAYA EXAM CELL";
-  const fitActive = isA5 && autoFit;
+  // Nursery–KG worksheets always scale themselves to 2 pages (one A4 sheet, front and back).
+  const isWorksheet = paper.blueprint.curriculumMode === WORKSHEET_MODE;
+  const fitLevels = isWorksheet ? WORKSHEET_FIT_LEVELS : FIT_LEVELS;
+  const fitMaxPages = isWorksheet ? WORKSHEET_MAX_PAGES : maxPages;
+  const fitActive = isWorksheet || (isA5 && autoFit);
   // Any change to the paper or print options restarts the fit from the configured spacing.
-  const fitInputKey = useMemo(() => ({}), [paper, compact, isA5, showSignatures, fitActive, maxPages]);
+  const fitInputKey = useMemo(() => ({}), [paper, compact, isA5, showSignatures, fitActive, fitMaxPages]);
   const [fitState, setFitState] = useState({ key: fitInputKey, level: 0 });
   const fitLevel = fitActive && fitState.key === fitInputKey ? fitState.level : 0;
-  const fit = useMemo(() => getFit(fitLevel), [fitLevel]);
+  const fit = useMemo(() => getFit(fitLevel, fitLevels), [fitLevel, fitLevels]);
   const blocks = useMemo(
     () => buildBlocks(paper, compact, isA5, showSignatures, fit),
     [paper, compact, isA5, showSignatures, fit]
@@ -954,19 +969,19 @@ export function PaperSheets({
         blocks.map((b) => b.groupId),
         blocks.map((b) => Boolean(b.forceBreakBefore))
       );
-      const next = fitActive ? nextFitLevel(fitLevel, paged.length, maxPages) : null;
+      const next = fitActive ? nextFitLevel(fitLevel, paged.length, fitMaxPages, fitLevels.length - 1) : null;
       if (next !== null) {
         // Still too long: re-measure with tighter spacing before showing anything.
         setFitState({ key: fitInputKey, level: next });
         return;
       }
       setPages(paged);
-      setFitStatus(fitActive ? describeFit(fitLevel, paged.length, maxPages) : undefined);
+      setFitStatus(fitActive ? describeFit(fitLevel, paged.length, fitMaxPages, fitLevels) : undefined);
     })();
     return () => {
       cancelled = true;
     };
-  }, [blocks, fitActive, fitLevel, fitInputKey, maxPages]);
+  }, [blocks, fitActive, fitLevel, fitInputKey, fitMaxPages, fitLevels]);
 
   const pageCount = pages?.length ?? 0;
   const isEligibleTwoUp = isA5 && pageCount > 0 && pageCount <= 2;
@@ -1115,7 +1130,7 @@ export function PaperSheets({
         <div
           ref={measureRef}
           className={`${isA5 ? "a5-measure" : "a4-measure"} paper-font`}
-          style={{ width: `${contentW / fit.zoom}mm`, ...(fit.zoom !== 1 ? { zoom: fit.zoom } : null) }}
+          style={{ width: `${contentW / (fit.layoutZoom ?? fit.zoom)}mm`, ...(fit.zoom !== 1 ? { zoom: fit.zoom } : null) }}
         >
           {blocks.map((b) => (
             <div key={b.key} style={{ display: "flow-root" }}>

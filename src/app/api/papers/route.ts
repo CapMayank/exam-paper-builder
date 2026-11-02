@@ -18,6 +18,7 @@ export const GET = route(async (req) => {
         select: {
           name: true,
           examType: true,
+          curriculumMode: true,
           book: { select: { title: true, subject: true, className: true } },
           sections: { select: { id: true, title: true, type: true, count: true, marksEach: true } },
           chapters: { select: { chapterId: true, marks: true, unitKey: true, unitTitle: true } },
@@ -58,7 +59,7 @@ export const GET = route(async (req) => {
     return {
       ...p,
       examType: resolvedExamType,
-      blueprint: { name: blueprint.name, examType: resolvedExamType, book: blueprint.book },
+      blueprint: { name: blueprint.name, examType: resolvedExamType, curriculumMode: blueprint.curriculumMode, book: blueprint.book },
       filled: filledQuestions,
       needed: neededQuestions,
       totalMarks: status.totalMarks,

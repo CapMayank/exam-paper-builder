@@ -1,4 +1,5 @@
 import {
+  EXAM_TYPES,
   inferExamTypeFromText,
   QUESTION_TYPES,
   type ExamType,
@@ -398,8 +399,8 @@ export function parsePaperJson(jsonStr: string): PaperImportResult {
   const title = typeof obj.title === "string" && obj.title.trim() ? obj.title.trim() : "Imported Exam Paper";
   const rawExamType = typeof obj.examType === "string" ? obj.examType.trim().toUpperCase() : "";
   const examType: ExamType | undefined =
-    rawExamType === "QUARTERLY" || rawExamType === "HALF_YEARLY" || rawExamType === "ANNUAL"
-      ? rawExamType
+    (EXAM_TYPES as readonly string[]).includes(rawExamType)
+      ? (rawExamType as ExamType)
       : inferExamTypeFromText(title) ?? undefined;
   const academicSession = typeof obj.academicSession === "string" ? obj.academicSession.trim() : undefined;
   const schoolName = typeof obj.schoolName === "string" ? obj.schoolName.trim() : undefined;
@@ -722,8 +723,8 @@ export function parsePaperText(text: string): PaperImportResult {
       const match = line.match(/(?:term|exam\s*type):\s*([A-Za-z_-]+)/i);
       if (match) {
         const rawTerm = match[1].trim().toUpperCase();
-        if (rawTerm === "QUARTERLY" || rawTerm === "HALF_YEARLY" || rawTerm === "ANNUAL") {
-          examType = rawTerm;
+        if ((EXAM_TYPES as readonly string[]).includes(rawTerm)) {
+          examType = rawTerm as ExamType;
         } else {
           const inf = inferExamTypeFromText(rawTerm);
           if (inf) examType = inf;
@@ -1518,6 +1519,14 @@ export function getQuestionTypeTier(type: string): number {
       "KDG_COUNT_ITEMS",
       "KDG_CIRCLE_TARGET",
       "KDG_SEQUENCE_CHAIN",
+      "KDG_MISSING_LETTERS",
+      "KDG_PATTERN",
+      "KDG_PICTURE_SUM",
+      "KDG_COMPARE",
+      "KDG_COLOUR",
+      "KDG_JOIN_DOTS",
+      "KDG_TICK_PICTURE",
+      "KDG_PREWRITING",
     ].includes(norm)
   ) {
     return 1;

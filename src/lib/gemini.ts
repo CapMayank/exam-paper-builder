@@ -629,6 +629,74 @@ Return a JSON array strictly matching this TypeScript structure:
           },
         ];
       }
+
+      // Later activities: ready-made sample content (teachers edit it afterwards).
+      const extra: Record<string, { en: string; hi: string; config: object; answer: string }> = {
+        KDG_MISSING_LETTERS: {
+          en: "Look at the picture and fill in the missing letter:",
+          hi: "चित्र देखकर छूटा हुआ अक्षर भरिए:",
+          config: { items: [{ word: "cat", blanks: [1], clipartId: "cat" }, { word: "dog", blanks: [2], clipartId: "dog" }] },
+          answer: "cat (a), dog (g)",
+        },
+        KDG_PATTERN: {
+          en: "Look at the pattern and draw what comes next:",
+          hi: "पैटर्न देखकर अगली आकृति बनाइए:",
+          config: { rows: [{ unit: ["circle", "square"], repeats: 3, blanksAtEnd: 2 }] },
+          answer: "circle, square",
+        },
+        KDG_PICTURE_SUM: {
+          en: "Count the pictures and add. Write the answer in the box:",
+          hi: "चित्र गिनकर जोड़िए और उत्तर डिब्बे में लिखिए:",
+          config: { op: "ADD", showPictures: true, rows: [{ a: 2, b: 1, clipartId: "apple" }, { a: 3, b: 2, clipartId: "ball" }] },
+          answer: "3, 5",
+        },
+        KDG_COMPARE: {
+          en: "Circle the bigger one:",
+          hi: "बड़े चित्र पर गोला लगाइए:",
+          config: { mode: "BIGGER", rows: [{ clipartId: "apple", left: 2, right: 4 }, { clipartId: "elephant", left: 5, right: 2 }] },
+          answer: "Right, Left",
+        },
+        KDG_COLOUR: {
+          en: "Colour the pictures with the colour given:",
+          hi: "दिए गए रंग से चित्रों में रंग भरिए:",
+          config: { items: [{ clipartId: "apple", colour: "red" }, { clipartId: "sun", colour: "yellow" }] },
+          answer: "Apple - red, Sun - yellow",
+        },
+        KDG_JOIN_DOTS: {
+          en: "Join the dots in order from 1 and see the picture:",
+          hi: "बिंदुओं को 1 से क्रम में जोड़िए:",
+          config: { shape: "STAR", labels: "NUMBERS", count: 10 },
+          answer: "Star",
+        },
+        KDG_TICK_PICTURE: {
+          en: "Tick (✓) the correct picture:",
+          hi: "सही चित्र पर (✓) लगाइए:",
+          config: { rows: [{ question: "Which one starts with the letter b?", options: ["ball", "cat", "sun"], correctIndex: 0 }] },
+          answer: "ball",
+        },
+        KDG_PREWRITING: {
+          en: "Trace over the dotted lines with your pencil:",
+          hi: "बिंदुओं पर पेंसिल चलाकर रेखाएँ बनाइए:",
+          config: { rows: [{ stroke: "STANDING" }, { stroke: "SLEEPING" }, { stroke: "ZIGZAG" }] },
+          answer: "Pencil-control practice",
+        },
+      };
+      const sample = extra[String(type)];
+      if (sample) {
+        return [
+          {
+            type: type as string,
+            text: language === "hi" ? sample.hi : sample.en,
+            options: [JSON.stringify(sample.config)],
+            subparts: [],
+            answer: sample.answer,
+            marks: marks || 5,
+            difficulty: "EASY",
+            cognitiveLevel: "UNDERSTANDING",
+            explanation: sample.en,
+          },
+        ];
+      }
     }
 
     const grounded = generateCurriculumGroundedSectionQuestions(contract);

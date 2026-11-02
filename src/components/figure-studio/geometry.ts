@@ -902,6 +902,8 @@ export function objectHandles(o: Obj): Handle[] {
     case "image":
     case "axes":
     case "numberline":
+    case "fraction":
+    case "table":
     case "path":
       return [];
   }

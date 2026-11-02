@@ -157,8 +157,10 @@ const SNIPPETS: Record<Exclude<MathCategory, "tables">, MathSnippet[]> = {
 
 export function MathToolbar({
   onInsert,
+  onNewFormula,
 }: {
   onInsert: (snippet: string) => void;
+  onNewFormula: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<MathCategory>("arithmetic");
   const [expanded, setExpanded] = useState(false);
@@ -271,6 +273,16 @@ export function MathToolbar({
             }`}
           >
             Board Formulas
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={onNewFormula}
+            className="flex items-center gap-1 rounded bg-indigo-600 px-2 py-0.5 font-semibold text-white hover:bg-indigo-700 transition"
+            title="Add an empty formula box at the cursor and type the maths directly"
+          >
+            <Calculator size={12} />
+            + Formula
           </button>
           <button
             type="button"

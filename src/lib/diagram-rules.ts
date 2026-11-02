@@ -18,7 +18,15 @@ export function isSectionVisuallyEligible(sectionType: string, subject?: string)
     norm === "GRAMMAR" ||
     norm === "KDG_NUMBER_GRID" ||
     norm === "KDG_SEQUENCE_CHAIN" ||
-    norm === "KDG_TRACE_WRITE"
+    norm === "KDG_TRACE_WRITE" ||
+    norm === "KDG_MISSING_LETTERS" ||
+    norm === "KDG_PATTERN" ||
+    norm === "KDG_PICTURE_SUM" ||
+    norm === "KDG_COMPARE" ||
+    norm === "KDG_COLOUR" ||
+    norm === "KDG_JOIN_DOTS" ||
+    norm === "KDG_TICK_PICTURE" ||
+    norm === "KDG_PREWRITING"
   ) {
     return false;
   }

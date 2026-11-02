@@ -134,3 +134,101 @@ export interface SequenceChainConfig {
   items: SequenceChainItem[];
   instruction: string;
 }
+
+// ---------------- 7. KDG_MISSING_LETTERS Config ----------------
+export interface MissingLettersItem {
+  word: string; // e.g. "cat"
+  blanks: number[]; // indexes of letters the child must fill in
+  clipartId?: string; // picture clue
+}
+export interface MissingLettersConfig {
+  items: MissingLettersItem[];
+  instruction: string;
+}
+
+// ---------------- 8. KDG_PATTERN Config ----------------
+export interface PatternRow {
+  unit: string[]; // repeating unit: shape ids (circle, star...) or clipart ids
+  repeats: number; // how many times the unit repeats
+  blanksAtEnd: number; // how many trailing items the child must draw / complete
+}
+export interface PatternConfig {
+  rows: PatternRow[];
+  instruction: string;
+}
+
+// ---------------- 9. KDG_PICTURE_SUM Config ----------------
+export interface PictureSumRow {
+  a: number;
+  b: number;
+  clipartId: string;
+}
+export interface PictureSumConfig {
+  op: "ADD" | "SUBTRACT";
+  rows: PictureSumRow[];
+  showPictures: boolean; // picture support under the numbers
+  instruction: string;
+}
+
+// ---------------- 10. KDG_COMPARE Config ----------------
+export type CompareMode = "BIGGER" | "SMALLER" | "TALLER" | "SHORTER" | "MORE" | "FEWER";
+export interface CompareRow {
+  clipartId: string;
+  left: number; // size step (1-5) for size modes, or number of pictures (1-10) for MORE / FEWER
+  right: number;
+}
+export interface CompareConfig {
+  mode: CompareMode;
+  rows: CompareRow[];
+  instruction: string;
+}
+
+// ---------------- 11. KDG_COLOUR Config ----------------
+export interface ColourItem {
+  clipartId: string;
+  colour: string; // e.g. "red"
+}
+export interface ColourConfig {
+  items: ColourItem[];
+  instruction: string;
+}
+
+// ---------------- 12. KDG_JOIN_DOTS Config ----------------
+export type JoinDotsShape = "TRIANGLE" | "SQUARE" | "STAR" | "HOUSE" | "STAIRS" | "ZIGZAG" | "CIRCLE";
+export interface JoinDotsConfig {
+  shape: JoinDotsShape;
+  labels: "NUMBERS" | "LETTERS";
+  count: number; // number of dots (4-26)
+  instruction: string;
+}
+
+// ---------------- 13. KDG_TICK_PICTURE Config ----------------
+export interface TickPictureRow {
+  question: string; // e.g. "Which one starts with b?"
+  options: string[]; // clipart ids
+  correctIndex: number;
+}
+export interface TickPictureConfig {
+  rows: TickPictureRow[];
+  instruction: string;
+}
+
+// ---------------- 14. KDG_PREWRITING Config ----------------
+export type PreWritingStroke =
+  | "STANDING"
+  | "SLEEPING"
+  | "SLANTING_RIGHT"
+  | "SLANTING_LEFT"
+  | "ZIGZAG"
+  | "CURVES"
+  | "WAVES"
+  | "LOOPS"
+  | "CIRCLES"
+  | "STEPS";
+export interface PreWritingRow {
+  stroke: PreWritingStroke;
+}
+export interface PreWritingConfig {
+  rows: PreWritingRow[];
+  instruction: string;
+}

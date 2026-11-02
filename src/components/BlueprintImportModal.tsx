@@ -1059,6 +1059,7 @@ export function BlueprintImportModal({
                     { code: "ANNUAL", label: "Annual" },
                     { code: "HALF_YEARLY", label: "Half Yearly" },
                     { code: "QUARTERLY", label: "Quarterly" },
+                    { code: "PRE_BOARD", label: "Pre-Board" },
                     { code: "PERIODIC", label: "Periodic (PT)" },
                     { code: "UNIT_TEST", label: "Unit Test (UT)" },
                   ].map((et) => (

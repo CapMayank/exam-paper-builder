@@ -2,7 +2,7 @@
 
 import { Copy, KeyRound, Printer, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { EXAM_TYPE_LABEL, resolvePaperExamType, type ExamType } from "@/lib/constants";
+import { EXAM_TYPE_LABEL, WORKSHEET_MODE, resolvePaperExamType, type ExamType } from "@/lib/constants";
 import { plural, timeAgo } from "@/lib/format";
 import type { PaperListItem } from "@/lib/types";
 
@@ -88,6 +88,8 @@ export function PaperRow({
   );
 
   const examType = resolvePaperExamType(p);
+  const isWs = p.blueprint.curriculumMode === WORKSHEET_MODE;
+  const openHref = isWs ? `/worksheets/${p.id}` : `/papers/${p.id}`;
   const isOwner = currentUser?.id && p.createdById ? p.createdById === currentUser.id : false;
   const isAdmin = currentUser?.role === "ADMIN";
   const isHod = currentUser?.role === "HOD";
@@ -109,10 +111,11 @@ export function PaperRow({
       )}
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <Link href={`/papers/${p.id}`} className="truncate font-semibold text-slate-900 hover:text-indigo-700">
+          <Link href={openHref} className="truncate font-semibold text-slate-900 hover:text-indigo-700">
             {p.title}
           </Link>
           <span className={`badge ${p.status === "FINAL" ? "badge-success" : ""}`}>{p.status === "FINAL" ? "Finalized" : "Draft"}</span>
+          {isWs && <span className="badge badge-indigo whitespace-nowrap">Worksheet</span>}
           <span className="badge whitespace-nowrap">{EXAM_TYPE_LABEL[examType]}</span>
           {p.paperSet && <span className="badge badge-indigo">{p.paperSet}</span>}
           {p.academicSession && (
@@ -122,7 +125,7 @@ export function PaperRow({
           )}
         </div>
         <p className="mt-0.5 truncate text-xs text-slate-500">
-          {p.blueprint.book.className} {p.blueprint.book.subject} · {EXAM_TYPE_LABEL[examType]} Examination ·{" "}
+          {p.blueprint.book.className} {p.blueprint.book.subject} · {isWs ? `${EXAM_TYPE_LABEL[examType]} · Activity worksheet` : `${EXAM_TYPE_LABEL[examType]} Examination`} ·{" "}
           {p.layout === "BOOKLET_A4" ? "A4 booklet (A5)" : p.layout === "BOOKLET" ? "A3 booklet (A4)" : "Single pages"} · edited {timeAgo(p.updatedAt)}
         </p>
       </div>
@@ -142,7 +145,9 @@ export function PaperRow({
             ? "font-medium text-amber-700"
             : "text-slate-500"
         }`}>
-          {ready
+          {isWs
+            ? `${p.filled} ${p.filled === 1 ? "activity" : "activities"} · ${totalMarks} marks`
+            : ready
             ? (isFinal ? "Ready to print" : "✓ Quotas met, ready to finalize")
             : isImbalanced
             ? "⚠ Blueprint quota mismatch"
@@ -154,7 +159,7 @@ export function PaperRow({
         </p>
       </div>
       <div className="flex items-center gap-1.5 sm:justify-end">
-        <Link href={`/papers/${p.id}`} className="btn btn-sm">
+        <Link href={openHref} className="btn btn-sm">
           Open
         </Link>
         <Link href={`/papers/${p.id}/print`} target="_blank" className="btn btn-sm btn-ghost btn-icon" title="Print preview" aria-label={`Print preview for ${p.title}`}>

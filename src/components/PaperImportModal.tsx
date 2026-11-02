@@ -96,6 +96,8 @@ export function PaperImportModal({
         score += 4;
       }
       if (b.examType === "QUARTERLY" && lower.includes("quarterly")) score += 4;
+      if (b.examType === "PRE_BOARD" && /pre[-_\s]?board/.test(lower)) score += 4;
+      if (b.examType === "UNIT_TEST" && /unit[-_\s]?test/.test(lower)) score += 4;
       if (b.examType === "ANNUAL" && lower.includes("annual")) score += 4;
       if (b.academicSession && lower.includes(b.academicSession.toLowerCase())) score += 2;
       if (score > bestScore) {

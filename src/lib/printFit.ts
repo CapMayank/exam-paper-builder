@@ -25,6 +25,11 @@ export type PrintFit = {
   space: number;
   /** CSS zoom applied to the page content (text scale). */
   zoom: number;
+  /**
+   * Zoom the layout width is computed with (worksheets). Below this the layout stops getting wider and the
+   * page scales uniformly, so every further step really shrinks the content.
+   */
+  layoutZoom?: number;
   /** A5 page padding in mm: left/right, top, bottom. */
   padX: number;
   padTop: number;
@@ -42,8 +47,27 @@ export const FIT_LEVELS: readonly PrintFit[] = [
 
 export const LAST_FIT_LEVEL = FIT_LEVELS.length - 1;
 
-export function getFit(level: number): PrintFit {
-  return FIT_LEVELS[Math.min(Math.max(0, Math.floor(level)), LAST_FIT_LEVEL)];
+/**
+ * Nursery–KG worksheets print on one A4 sheet, front and back, so they must fit 2 pages no matter
+ * how many activities were added. The whole page content is scaled down step by step (and the gaps
+ * between activities tightened) until it fits. Activities are mostly pictures and boxes, so a uniform
+ * scale keeps them correct; the floor of 40% is only reached by a very long worksheet.
+ */
+export const WORKSHEET_MAX_PAGES = 2;
+export const WORKSHEET_FIT_LEVELS: readonly PrintFit[] = Array.from({ length: 16 }, (_, level) => ({
+  level,
+  gap: Math.max(0.3, 1 - level * 0.05),
+  lineHeight: 1.4,
+  space: Math.max(0.2, 1 - level * 0.06),
+  zoom: +(1 - level * 0.04).toFixed(2),
+  layoutZoom: Math.max(+(1 - level * 0.04).toFixed(2), 0.7),
+  padX: 0,
+  padTop: 0,
+  padBottom: 0,
+}));
+
+export function getFit(level: number, levels: readonly PrintFit[] = FIT_LEVELS): PrintFit {
+  return levels[Math.min(Math.max(0, Math.floor(level)), levels.length - 1)];
 }
 
 /** Scales a spacing in mm by the fit's gap multiplier, never below `floorMm`. */
@@ -56,9 +80,9 @@ export function fitMm(mm: number, fit: PrintFit, floorMm = 0.6): string {
  * Given the measured page count at `level`, decides the next level to try.
  * Returns null when no further step is needed (it fits, or the tightest level is already in use).
  */
-export function nextFitLevel(level: number, pages: number, maxPages = BOOKLET_MAX_PAGES): number | null {
+export function nextFitLevel(level: number, pages: number, maxPages = BOOKLET_MAX_PAGES, lastLevel = LAST_FIT_LEVEL): number | null {
   if (pages <= maxPages) return null;
-  return level >= LAST_FIT_LEVEL ? null : level + 1;
+  return level >= lastLevel ? null : level + 1;
 }
 
 export type FitStatus = {
@@ -69,8 +93,10 @@ export type FitStatus = {
   tightened: boolean;
   /** True when even the tightest level exceeds maxPages. */
   overLimit: boolean;
+  /** Text scale in use (1 = full size). */
+  scale: number;
 };
 
-export function describeFit(level: number, pages: number, maxPages = BOOKLET_MAX_PAGES): FitStatus {
-  return { level, pages, maxPages, tightened: level > 0, overLimit: pages > maxPages };
+export function describeFit(level: number, pages: number, maxPages = BOOKLET_MAX_PAGES, levels: readonly PrintFit[] = FIT_LEVELS): FitStatus {
+  return { level, pages, maxPages, tightened: level > 0, overLimit: pages > maxPages, scale: getFit(level, levels).zoom };
 }

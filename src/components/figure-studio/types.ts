@@ -171,6 +171,12 @@ export interface NumMark {
   v: number;
   open: boolean;
 }
+/** An arc drawn above a number line from one value to another (addition / subtraction jumps). */
+export interface NumJump {
+  from: number;
+  to: number;
+  label: string;
+}
 export interface NumLineObj extends Base, BoxFields {
   type: "numberline";
   min: number;
@@ -179,6 +185,39 @@ export interface NumLineObj extends Base, BoxFields {
   arrows: boolean;
   showNumbers: boolean;
   marks: NumMark[];
+  /** Tick labels as decimals (default) or stacked fractions. */
+  labels?: "number" | "fraction";
+  jumps?: NumJump[];
+  /** "step" = equal steps from min to max (default); "manual" = only the points listed in `ticks`. */
+  tickMode?: "step" | "manual";
+  /** Manual mode: tick values (the start and end are always drawn). */
+  ticks?: number[];
+  /** Draw a bracket under the line labelled with (max - min). */
+  showDifference?: boolean;
+}
+
+/** Rows x columns table; `cells[row][col]` is plain text ("3/4" is drawn as a stacked fraction). */
+export interface TableObj extends Base, BoxFields {
+  type: "table";
+  rows: number;
+  cols: number;
+  cells: string[][];
+  headerRow: boolean;
+  headerCol: boolean;
+  size: number;
+}
+
+export type FractionModel = "circle" | "bar" | "grid";
+/** Fraction model: a circle / bar / grid split into equal parts with some shaded (shade colour = style.fill). */
+export interface FractionObj extends Base, BoxFields {
+  type: "fraction";
+  model: FractionModel;
+  parts: number;
+  shaded: number;
+  /** grid model: number of rows. */
+  rows: number;
+  /** Show the shaded/total fraction under the model. */
+  showLabel: boolean;
 }
 
 export type Obj =
@@ -191,9 +230,11 @@ export type Obj =
   | StampObj
   | ImageObj
   | AxesObj
-  | NumLineObj;
+  | NumLineObj
+  | FractionObj
+  | TableObj;
 
-export type BoxObj = TextObj | ShapeObj | StampObj | ImageObj | AxesObj | NumLineObj;
+export type BoxObj = TextObj | ShapeObj | StampObj | ImageObj | AxesObj | NumLineObj | FractionObj | TableObj;
 export type ObjType = Obj["type"];
 
 export type GridStyle = "none" | "squares" | "dots";

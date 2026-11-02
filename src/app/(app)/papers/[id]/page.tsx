@@ -209,6 +209,10 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
 
   const adopt = useCallback((p: PaperData) => {
     cancelAutosave();
+    if (p.blueprint.curriculumMode === "KG_WORKSHEET") {
+      window.location.replace(`/worksheets/${p.id}`);
+      return;
+    }
     setPaper(p);
     setDetails({
       title: p.title,

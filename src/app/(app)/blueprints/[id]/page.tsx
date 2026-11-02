@@ -31,7 +31,7 @@ import {
   getBoardDefaultChoiceRequirement,
 } from "@/lib/internalChoiceRules";
 import { api } from "@/lib/client";
-import { DEFAULT_SCHOOL_NAME, EXAM_TYPES, EXAM_TYPE_LABEL, QUESTION_TYPES, QUESTION_TYPE_LABEL, STANDARD_QUESTION_TYPES, sortClassNames } from "@/lib/constants";
+import { DEFAULT_SCHOOL_NAME, EXAM_TYPES, EXAM_TYPE_LABEL, KINDERGARTEN_QUESTION_TYPES, QUESTION_TYPES, QUESTION_TYPE_LABEL, STANDARD_QUESTION_TYPES, defaultLayoutForClass, sortClassNames } from "@/lib/constants";
 import { BlueprintStartPicker } from "@/components/blueprints/BlueprintStartPicker";
 import { isSubjectMatching } from "@/lib/schoolCurriculum";
 import type { AcademicClassDto, Blueprint, Book, PaperData } from "@/lib/types";
@@ -804,7 +804,7 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
             title: `${name} — Draft Paper`,
             blueprintId: savedBlueprintId,
             examType,
-            layout: "BOOKLET_A4",
+            layout: defaultLayoutForClass(book?.className),
             schoolName: DEFAULT_SCHOOL_NAME,
             paperSet: "SET A",
             subjectCode,
@@ -832,7 +832,7 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
           title: `${name} — Draft Paper`,
           blueprintId: id,
           examType,
-          layout: "BOOKLET_A4",
+          layout: defaultLayoutForClass(book?.className),
           schoolName: DEFAULT_SCHOOL_NAME,
           paperSet: "SET A",
           subjectCode,
@@ -1295,7 +1295,7 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
                                   onChange={(e) => patchQuestionType(grp.key, qt.key, { type: e.target.value })}
                                   aria-label="Question type"
                                 >
-                                  {(isPrePrimary ? QUESTION_TYPES : STANDARD_QUESTION_TYPES).map((t) => (
+                                  {(isPrePrimary ? [...KINDERGARTEN_QUESTION_TYPES, ...STANDARD_QUESTION_TYPES] : STANDARD_QUESTION_TYPES).map((t) => (
                                     <option key={t} value={t}>
                                       {QUESTION_TYPE_LABEL[t]}
                                     </option>

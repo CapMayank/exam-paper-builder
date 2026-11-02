@@ -131,6 +131,7 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
 
   const booklet = isBookletLayout(paper.layout);
   const isA5 = paper.layout === "BOOKLET_A4";
+  const isWorksheet = paper.blueprint.curriculumMode === "KG_WORKSHEET";
   const defaultZoom = booklet && view === "sheets" ? 0.6 : 0.85;
   const effectiveZoom = zoom ?? defaultZoom;
   const currentExamType = resolvePaperExamType(paper);
@@ -143,10 +144,10 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
           {/* Left: Back & Title */}
           <div className="flex items-center gap-3">
             <Link
-              href={`/papers/${id}`}
+              href={paper.blueprint.curriculumMode === "KG_WORKSHEET" ? `/worksheets/${id}` : `/papers/${id}`}
               className="btn btn-sm text-slate-700 hover:text-indigo-700 hover:bg-slate-100"
             >
-              <ArrowLeft size={13} /> Workbench
+              <ArrowLeft size={13} /> {paper.blueprint.curriculumMode === "KG_WORKSHEET" ? "Worksheet" : "Workbench"}
             </Link>
             <div className="border-l border-slate-200 pl-3 flex items-center gap-2">
               <span className="font-bold text-slate-900">{paper.title}</span>
@@ -154,7 +155,7 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
                 className="inline-flex items-center rounded-md border border-indigo-200 bg-indigo-50/80 px-2 py-0.5 text-xs font-bold text-indigo-900 shadow-2xs"
                 title={`Exam Type locked to blueprint: ${EXAM_TYPE_LABEL[currentExamType]}`}
               >
-                {EXAM_TYPE_LABEL[currentExamType]} Exam
+                {paper.blueprint.curriculumMode === "KG_WORKSHEET" ? "Worksheet" : `${EXAM_TYPE_LABEL[currentExamType]} Exam`}
               </span>
               {paper.paperSet && (
                 <span className="badge !bg-purple-50 !text-purple-700 border border-purple-200 font-bold text-[10px]">
@@ -278,6 +279,19 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
               </div>
             )}
 
+            {/* Worksheets always scale to 2 pages = one A4 sheet printed on both sides */}
+            {isWorksheet && (
+              <div className="flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 p-0.5 text-xs font-semibold">
+                <span
+                  className="flex items-center gap-1.5 rounded-md bg-emerald-600 px-2.5 py-1 font-bold text-white shadow-xs"
+                  title="Activities are scaled automatically so the worksheet is never longer than 2 pages. Print double-sided (duplex) on one A4 sheet."
+                >
+                  <Sparkles size={13} />
+                  <span>Fit to 2 pages (duplex): AUTO</span>
+                </span>
+              </div>
+            )}
+
             {/* Automatic fit of booklet papers into 8 A5 pages (2 folded A4 sheets) */}
             {isA5 && (
               <div className="flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 p-0.5 text-xs font-semibold">
@@ -367,6 +381,18 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
           </div>
         </div>
 
+        {/* Worksheet 2-page fit status */}
+        {isWorksheet && info?.fit?.overLimit && (
+          <div className="mx-auto mt-2 max-w-7xl rounded-md border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-800">
+            ⚠ This worksheet is still {info.fit.pages} pages even at the smallest size ({Math.round(info.fit.scale * 100)}%). Remove an activity or two to fit one A4 sheet.
+          </div>
+        )}
+        {isWorksheet && !info?.fit?.overLimit && info?.fit?.tightened && (
+          <div className="mx-auto mt-2 max-w-7xl rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">
+            Scaled to {Math.round(info.fit.scale * 100)}% so the worksheet fits {info.fit.pages} {info.fit.pages === 1 ? "page" : "pages"} (one A4 sheet, both sides).
+          </div>
+        )}
+
         {/* Booklet page-limit status */}
         {isA5 && info?.fit?.overLimit && (
           <div className="mx-auto mt-2 max-w-7xl rounded-md border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-800">
@@ -390,7 +416,7 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
         )}
 
         {/* Draft Notice if incomplete */}
-        {!paper.progress.complete && (
+        {!paper.progress.complete && paper.blueprint.curriculumMode !== "KG_WORKSHEET" && (
           <div className="mx-auto mt-2 max-w-7xl rounded-md bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800 border border-amber-200">
             ⚠ Notice:{" "}
             {paper.progress.usedMarks === paper.progress.totalMarks

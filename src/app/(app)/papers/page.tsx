@@ -6,11 +6,12 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PaperCompareModal } from "@/components/PaperCompareModal";
 import { PaperImportModal } from "@/components/PaperImportModal";
+import { NewWorksheetModal } from "@/components/NewWorksheetModal";
 import { PaperRow } from "@/components/PaperRow";
 import { EmptyState, ErrorBanner, Field, ListSkeleton, Modal, PageHeader, Spinner, useConfirm, useToast } from "@/components/ui";
 import { normalizeSession, useAcademicSession } from "@/lib/academicSession";
 import { api } from "@/lib/client";
-import { ACADEMIC_SESSIONS, DEFAULT_ACADEMIC_SESSION, DEFAULT_SCHOOL_NAME, EXAM_TYPE_LABEL, LAYOUTS, LAYOUT_LABEL, sortClassNames, type ExamType } from "@/lib/constants";
+import { ACADEMIC_SESSIONS, DEFAULT_ACADEMIC_SESSION, DEFAULT_SCHOOL_NAME, EXAM_TYPES, EXAM_TYPE_LABEL, LAYOUTS, LAYOUT_LABEL, defaultLayoutForClass, isPrePrimaryClass, resolvePaperExamType, sortClassNames, type ExamType } from "@/lib/constants";
 import { resolveBoardAndSubjectCode } from "@/lib/curriculumContract";
 import type { Blueprint, PaperData, PaperListItem } from "@/lib/types";
 
@@ -28,6 +29,7 @@ export default function PapersPage() {
   const [currentUser, setCurrentUser] = useState<{ id: string; name: string; email: string; role: string; department?: string } | null>(null);
   const [creating, setCreating] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [worksheetOpen, setWorksheetOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selectedPaperIds, setSelectedPaperIds] = useState<Set<string>>(new Set());
   const [compareOpen, setCompareOpen] = useState(false);
@@ -37,6 +39,7 @@ export default function PapersPage() {
   const [classFilter, setClassFilter] = useState<string>("ALL");
   const [subjectFilter, setSubjectFilter] = useState<string>("ALL");
   const [filterStatus, setFilterStatus] = useState<Filter>("ALL");
+  const [examFilter, setExamFilter] = useState<"ALL" | ExamType>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [modalClassFilter, setModalClassFilter] = useState<string>("ALL");
   const [modalSubjectFilter, setModalSubjectFilter] = useState<string>("ALL");
@@ -118,6 +121,7 @@ export default function PapersPage() {
         title: initialTitle,
         blueprintId: defaultBp?.id || "",
         examType: (defaultBp?.examType as ExamType) || "ANNUAL",
+        layout: defaultBp ? defaultLayoutForClass(defaultBp.book.className) : f.layout,
         schoolName,
         paperSet: f.paperSet || "SET A",
         subjectCode: resolvedCode || defaultBp?.subjectCode || "",
@@ -211,6 +215,7 @@ export default function PapersPage() {
     return Array.from(new Set(pool.map((b) => b.book.subject))).sort();
   }, [blueprints, modalClassFilter]);
 
+  const modalBlueprintClass = blueprints.find((b) => b.id === form.blueprintId)?.book.className;
   const modalFilteredBlueprints = useMemo(() => {
     return blueprints.filter((b) => {
       if (modalClassFilter !== "ALL" && b.book.className !== modalClassFilter) return false;
@@ -228,12 +233,23 @@ export default function PapersPage() {
         if (classFilter !== "ALL" && p.blueprint.book.className !== classFilter) return false;
         if (subjectFilter !== "ALL" && p.blueprint.book.subject !== subjectFilter) return false;
         if (filterStatus !== "ALL" && p.status !== filterStatus) return false;
+        if (examFilter !== "ALL" && resolvePaperExamType(p) !== examFilter) return false;
         if (!query) return true;
         return [p.title, p.blueprint.book.subject, p.blueprint.book.className, p.blueprint.name, p.academicSession || ""].some((s) =>
           s.toLowerCase().includes(query),
         );
       });
-  }, [papers, sessionFilter, classFilter, subjectFilter, filterStatus, searchQuery]);
+  }, [papers, sessionFilter, classFilter, subjectFilter, filterStatus, examFilter, searchQuery]);
+
+  const examCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const p of papers) {
+      if (sessionFilter !== "ALL" && normalizeSession(p.academicSession) !== normalizeSession(sessionFilter)) continue;
+      const t = resolvePaperExamType(p);
+      counts[t] = (counts[t] ?? 0) + 1;
+    }
+    return counts;
+  }, [papers, sessionFilter]);
 
   const toggleSelectPaper = useCallback((p: PaperListItem) => {
     setSelectedPaperIds((prev) => {
@@ -349,6 +365,14 @@ export default function PapersPage() {
             </button>
             <button
               type="button"
+              className="btn btn-ghost border border-slate-200"
+              onClick={() => setWorksheetOpen(true)}
+              title="Nursery, LKG and UKG worksheets – no blueprint or book needed"
+            >
+              <Sparkles size={16} className="text-amber-500" /> New Nursery–KG worksheet
+            </button>
+            <button
+              type="button"
               className="btn btn-primary"
               disabled={blueprints.length === 0}
               onClick={openCreate}
@@ -359,11 +383,15 @@ export default function PapersPage() {
           </div>
         }
       />
+      {worksheetOpen && <NewWorksheetModal session={currentSession} onClose={() => setWorksheetOpen(false)} />}
 
       {loaded && blueprints.length === 0 && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           <p className="font-semibold">Create a blueprint first</p>
-          <p className="mt-0.5 leading-relaxed">A blueprint sets the sections, question counts and marks per chapter that every paper follows.</p>
+          <p className="mt-0.5 leading-relaxed">
+            A blueprint sets the sections, question counts and marks per chapter that every exam paper follows. Nursery, LKG and UKG
+            worksheets do not need one – use <strong>New Nursery–KG worksheet</strong>.
+          </p>
           <Link href="/blueprints" className="mt-2 inline-flex font-semibold underline underline-offset-2 hover:text-amber-950">
             Go to blueprints
           </Link>
@@ -374,6 +402,18 @@ export default function PapersPage() {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
+          <div className="segmented" role="group" aria-label="Filter by exam type">
+            <button type="button" aria-pressed={examFilter === "ALL"} onClick={() => setExamFilter("ALL")}>
+              All exams
+            </button>
+            {EXAM_TYPES.filter((t) => examCounts[t] || examFilter === t).map((t) => (
+              <button key={t} type="button" aria-pressed={examFilter === t} onClick={() => setExamFilter(t)}>
+                {EXAM_TYPE_LABEL[t]}
+                <span className="tabular-nums text-slate-400">{examCounts[t] ?? 0}</span>
+              </button>
+            ))}
+          </div>
+
           <div className="segmented" role="group" aria-label="Filter by status">
             {(
               [
@@ -736,6 +776,7 @@ export default function PapersPage() {
                         ...form,
                         blueprintId: e.target.value,
                         examType: (nextBp?.examType as ExamType) || "ANNUAL",
+                        ...(nextBp ? { layout: defaultLayoutForClass(nextBp.book.className) } : {}),
                         ...(resolved?.subjectCode || nextBp?.subjectCode
                           ? { subjectCode: resolved?.subjectCode || nextBp?.subjectCode || "" }
                           : {}),
@@ -769,6 +810,8 @@ export default function PapersPage() {
                   ? "Standard office printers: 1 A4 sheet (landscape) folded in half creates 4 A5 pages. Minimum 4 pages."
                   : form.layout === "BOOKLET"
                   ? "A3 sheets folded into an A4 booklet: 4 pages per sheet. Requires an A3 printer."
+                  : isPrePrimaryClass(modalBlueprintClass)
+                  ? "Nursery, LKG and UKG worksheets print as full A4 portrait pages (recommended for activity sheets)."
                   : "Continuous single A4 portrait pages."
               }
             >

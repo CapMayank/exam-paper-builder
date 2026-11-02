@@ -10,9 +10,10 @@ import {
   rotateAround,
   shapeContours,
 } from "./geometry";
+import { toFraction } from "./fractions";
 import { STAMP_REGISTRY } from "./stamps";
 import { layoutText, setMeasurer } from "./text";
-import type { AngleObj, AxesObj, BoxObj, Doc, GridSettings, LineObj, NumLineObj, Obj, PathObj, PointObj, Pt, Rect, ShapeObj, Style } from "./types";
+import type { AngleObj, AxesObj, BoxObj, Doc, FractionObj, GridSettings, TableObj, LineObj, NumLineObj, Obj, PathObj, PointObj, Pt, Rect, ShapeObj, Style } from "./types";
 
 // Install browser canvas measurer
 if (typeof document !== "undefined") {
@@ -194,6 +195,14 @@ export function renderObj(
     }
     case "numberline": {
       renderNumberLine(ctx, obj);
+      break;
+    }
+    case "fraction": {
+      renderFraction(ctx, obj);
+      break;
+    }
+    case "table": {
+      renderTable(ctx, obj);
       break;
     }
   }
@@ -625,53 +634,313 @@ function renderAxes(ctx: CanvasRenderingContext2D, obj: AxesObj) {
   ctx.restore();
 }
 
+/** Draws num over den (with a bar) centred at x, top at y. */
+function drawStacked(ctx: CanvasRenderingContext2D, num: string, den: string, neg: boolean, x: number, y: number, size: number) {
+  ctx.font = `${size}px system-ui, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  const w = Math.max(ctx.measureText(num).width, ctx.measureText(den).width) + 4;
+  if (neg) ctx.fillText("−", x - w / 2 - 4, y + size * 0.45);
+  ctx.fillText(num, x, y);
+  ctx.beginPath();
+  ctx.moveTo(x - w / 2, y + size + 2);
+  ctx.lineTo(x + w / 2, y + size + 2);
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillText(den, x, y + size + 3);
+}
+
+/** Draws a number or a stacked fraction centred at x with its top at y. */
+function drawTickLabel(ctx: CanvasRenderingContext2D, val: number, x: number, y: number, asFraction: boolean, size = 12) {
+  const frac = asFraction ? toFraction(val) : null;
+  if (!frac || frac.d === 1) {
+    ctx.font = `${size}px system-ui, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillText(String(frac ? frac.n : Number(val.toFixed(6))), x, y);
+    return;
+  }
+  drawStacked(ctx, String(Math.abs(frac.n)), String(frac.d), frac.n < 0, x, y, size);
+}
+
 function renderNumberLine(ctx: CanvasRenderingContext2D, obj: NumLineObj) {
+  const c = boxCenter(obj);
+  ctx.save();
+  ctx.translate(c.x, c.y);
+  ctx.rotate(obj.rot);
+  // In a tall box the line sits near the top, leaving room below for labels and the difference bracket.
+  ctx.translate(0, obj.h > 60 ? -obj.h / 2 + 58 : 0);
+
+  // Ticks live inside the box with a margin so end labels and arrows are never cut off.
+  const lineHalf = obj.w / 2 - 20;
+  const ext = obj.arrows ? 14 : 0;
+  ctx.beginPath();
+  ctx.moveTo(-lineHalf - ext, 0);
+  ctx.lineTo(lineHalf + ext, 0);
+  ctx.stroke();
+
+  if (obj.arrows) {
+    drawArrowhead(ctx, { x: lineHalf + ext, y: 0 }, { x: lineHalf + ext - 10, y: 0 }, "open", 8);
+    drawArrowhead(ctx, { x: -lineHalf - ext, y: 0 }, { x: -lineHalf - ext + 10, y: 0 }, "open", 8);
+  }
+
+  const span = obj.max - obj.min || 1;
+  const step = obj.step || 1;
+  const xOf = (v: number) => -lineHalf + ((v - obj.min) / span) * (2 * lineHalf);
+  const asFraction = obj.labels === "fraction";
+
+  // Tick values: equal steps, or the teacher's own points (start and end are always present).
+  let tickVals: number[];
+  if (obj.tickMode === "manual") {
+    const set = new Set<number>([obj.min, obj.max]);
+    for (const t of obj.ticks ?? []) if (t >= obj.min - 1e-9 && t <= obj.max + 1e-9) set.add(Number(t.toFixed(9)));
+    tickVals = [...set].sort((p, q) => p - q);
+  } else {
+    const count = Math.max(1, Math.min(200, Math.round(span / step)));
+    tickVals = Array.from({ length: count + 1 }, (_, i) => obj.min + i * step);
+  }
+
+  ctx.fillStyle = obj.style.stroke;
+  const minGap = asFraction ? 26 : 22;
+  let lastLabelX = -Infinity;
+  tickVals.forEach((val, i) => {
+    const px = xOf(val);
+    const isEnd = i === 0 || i === tickVals.length - 1;
+    const half = isEnd || Math.abs(val - Math.round(val)) < 1e-9 ? 6 : 4;
+    ctx.beginPath();
+    ctx.moveTo(px, -half);
+    ctx.lineTo(px, half);
+    ctx.stroke();
+    // Thin the labels out when crowded so they never overlap (the end points are always labelled).
+    if (obj.showNumbers && (px - lastLabelX >= minGap || isEnd)) {
+      drawTickLabel(ctx, val, px, 9, asFraction);
+      lastLabelX = px;
+    }
+  });
+
+  // Difference bracket under the labels
+  if (obj.showDifference) {
+    const x1 = xOf(obj.min);
+    const x2 = xOf(obj.max);
+    const y0 = asFraction ? 50 : 38;
+    ctx.beginPath();
+    ctx.moveTo(x1, y0 - 5);
+    ctx.lineTo(x1, y0);
+    ctx.lineTo(x2, y0);
+    ctx.lineTo(x2, y0 - 5);
+    ctx.stroke();
+    const mid = (x1 + x2) / 2;
+    const prefix = "difference = ";
+    ctx.font = "italic 12px system-ui, sans-serif";
+    ctx.textAlign = "right";
+    ctx.textBaseline = "top";
+    ctx.fillText(prefix, mid - 4, y0 + 9);
+    ctx.textAlign = "left";
+    const diff = obj.max - obj.min;
+    const f = toFraction(diff);
+    if (f && f.d > 1) drawStacked(ctx, String(Math.abs(f.n)), String(f.d), f.n < 0, mid + 12, y0 + 4, 12);
+    else {
+      ctx.font = "12px system-ui, sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText(f ? String(f.n) : String(Number(diff.toFixed(6))), mid, y0 + 9);
+    }
+  }
+
+  // Jumps (arcs above the line)
+  ctx.font = "12px system-ui, sans-serif";
+  for (const j of obj.jumps ?? []) {
+    const x1 = xOf(j.from);
+    const x2 = xOf(j.to);
+    const lift = Math.min(46, Math.max(16, Math.abs(x2 - x1) * 0.45));
+    ctx.beginPath();
+    ctx.moveTo(x1, -4);
+    ctx.quadraticCurveTo((x1 + x2) / 2, -4 - lift * 2, x2, -4);
+    ctx.stroke();
+    drawArrowhead(ctx, { x: x2, y: -4 }, { x: x2 + (x2 > x1 ? -5 : 5), y: -4 - lift * 0.6 }, "filled", 8);
+    const diff = j.to - j.from;
+    const text = j.label || `${diff >= 0 ? "+" : "−"}${Number(Math.abs(diff).toFixed(6))}`;
+    ctx.fillStyle = obj.style.stroke;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(text, (x1 + x2) / 2, -4 - lift - 3);
+  }
+
+  // Marked points (filled = included, hollow = excluded)
+  for (const m of obj.marks ?? []) {
+    const px = xOf(m.v);
+    ctx.beginPath();
+    ctx.arc(px, 0, 5, 0, Math.PI * 2);
+    ctx.fillStyle = m.open ? "#ffffff" : obj.style.stroke;
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function renderTable(ctx: CanvasRenderingContext2D, obj: TableObj) {
   const c = boxCenter(obj);
   ctx.save();
   ctx.translate(c.x, c.y);
   ctx.rotate(obj.rot);
 
   const hw = obj.w / 2;
-  ctx.beginPath();
-  ctx.moveTo(-hw, 0);
-  ctx.lineTo(hw, 0);
-  ctx.stroke();
+  const hh = obj.h / 2;
+  const rows = Math.max(1, obj.rows);
+  const cols = Math.max(1, obj.cols);
+  const cw = obj.w / cols;
+  const ch = obj.h / rows;
+  const ink = obj.style.stroke;
 
-  if (obj.arrows) {
-    drawArrowhead(ctx, { x: hw, y: 0 }, { x: hw - 10, y: 0 }, "open", 8);
-    drawArrowhead(ctx, { x: -hw, y: 0 }, { x: -hw + 10, y: 0 }, "open", 8);
-  }
+  for (let r = 0; r < rows; r++) {
+    for (let k = 0; k < cols; k++) {
+      const x = -hw + k * cw;
+      const y = -hh + r * ch;
+      const head = (obj.headerRow && r === 0) || (obj.headerCol && k === 0);
+      if (head) {
+        ctx.fillStyle = "#e2e8f0";
+        ctx.fillRect(x, y, cw, ch);
+      } else if (obj.style.fill) {
+        ctx.fillStyle = obj.style.fill;
+        ctx.fillRect(x, y, cw, ch);
+      }
+      ctx.strokeRect(x, y, cw, ch);
 
-  const span = obj.max - obj.min;
-  const step = obj.step || 1;
-  const count = Math.round(span / step);
-  const dx = obj.w / (count || 1);
-
-  ctx.font = "12px system-ui, sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "top";
-  ctx.fillStyle = obj.style.stroke;
-
-  for (let i = 0; i <= count; i++) {
-    const val = obj.min + i * step;
-    const px = -hw + i * dx;
-    ctx.beginPath();
-    ctx.moveTo(px, -5);
-    ctx.lineTo(px, 5);
-    ctx.stroke();
-    if (obj.showNumbers) ctx.fillText(String(val), px, 8);
+      const text = (obj.cells[r]?.[k] ?? "").trim();
+      if (!text) continue;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x + 1, y + 1, cw - 2, ch - 2);
+      ctx.clip();
+      ctx.fillStyle = ink;
+      const frac = text.match(/^(-?)(\d+)\s*\/\s*(\d+)$/);
+      if (frac) {
+        drawStacked(ctx, frac[2], frac[3], frac[1] === "-", x + cw / 2, y + ch / 2 - obj.size * 0.9, obj.size);
+      } else {
+        const face = (px: number) => `${head ? "bold " : ""}${px}px system-ui, sans-serif`;
+        ctx.font = face(obj.size);
+        // Shrink long text so it always fits inside its cell.
+        const fitW = ctx.measureText(text).width;
+        if (fitW > cw - 8) ctx.font = face(Math.max(8, (obj.size * (cw - 8)) / fitW));
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(text, x + cw / 2, y + ch / 2 + 1);
+      }
+      ctx.restore();
+    }
   }
 
   ctx.restore();
 }
 
+function renderFraction(ctx: CanvasRenderingContext2D, obj: FractionObj) {
+  const c = boxCenter(obj);
+  ctx.save();
+  ctx.translate(c.x, c.y);
+  ctx.rotate(obj.rot);
+
+  const hw = obj.w / 2;
+  const hh = obj.h / 2;
+  const shadeColor = obj.style.fill ?? "#93c5fd";
+  const rows = Math.max(1, Math.min(12, Math.round(obj.rows || 1)));
+  let parts = Math.max(1, Math.min(48, Math.round(obj.parts)));
+  if (obj.model === "grid") parts = rows * Math.max(1, Math.round(parts / rows));
+  const shaded = Math.max(0, Math.min(parts, Math.round(obj.shaded)));
+
+  ctx.lineJoin = "round";
+  if (obj.model === "circle") {
+    const r = Math.min(hw, hh);
+    for (let i = 0; i < parts; i++) {
+      const a0 = -Math.PI / 2 + (i * 2 * Math.PI) / parts;
+      const a1 = -Math.PI / 2 + ((i + 1) * 2 * Math.PI) / parts;
+      ctx.beginPath();
+      if (parts > 1) ctx.moveTo(0, 0);
+      ctx.arc(0, 0, r, a0, a1);
+      if (parts > 1) ctx.closePath();
+      if (i < shaded) {
+        ctx.fillStyle = shadeColor;
+        ctx.fill();
+      }
+      ctx.stroke();
+    }
+  } else {
+    const nRows = obj.model === "bar" ? 1 : rows;
+    const cols = obj.model === "bar" ? parts : parts / rows;
+    const cw = obj.w / cols;
+    const ch = obj.h / nRows;
+    for (let i = 0; i < parts; i++) {
+      const x = -hw + (i % cols) * cw;
+      const y = -hh + Math.floor(i / cols) * ch;
+      if (i < shaded) {
+        ctx.fillStyle = shadeColor;
+        ctx.fillRect(x, y, cw, ch);
+      }
+      ctx.strokeRect(x, y, cw, ch);
+    }
+  }
+
+  if (obj.showLabel) {
+    ctx.fillStyle = obj.style.stroke;
+    ctx.lineWidth = 1.5;
+    const size = 16;
+    const w = Math.max(String(shaded).length, String(parts).length) * size * 0.6 + 6;
+    const y = hh + 10;
+    ctx.font = `${size}px system-ui, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillText(String(shaded), 0, y);
+    ctx.beginPath();
+    ctx.moveTo(-w / 2, y + size + 3);
+    ctx.lineTo(w / 2, y + size + 3);
+    ctx.stroke();
+    ctx.fillText(String(parts), 0, y + size + 5);
+  }
+
+  ctx.restore();
+}
+
+/** Padding (scene px) kept around the drawing when the export is cropped to it. */
+const CROP_PADDING = 10;
+
+/** Pixel box (in canvas pixels) that contains everything drawn by the objects, or null for an empty drawing. */
+function drawingBox(doc: Doc, scale: number): { x: number; y: number; w: number; h: number } | null {
+  const probe = document.createElement("canvas");
+  probe.width = Math.round(doc.w * scale);
+  probe.height = Math.round(doc.h * scale);
+  const pctx = probe.getContext("2d", { willReadFrequently: true })!;
+  pctx.scale(scale, scale);
+  for (const obj of doc.objects) renderObj(pctx, obj);
+  const { data, width, height } = pctx.getImageData(0, 0, probe.width, probe.height);
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (data[(y * width + x) * 4 + 3] > 8) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  if (maxX < 0) return null;
+  const pad = Math.round(CROP_PADDING * scale);
+  const x = Math.max(0, minX - pad);
+  const y = Math.max(0, minY - pad);
+  return { x, y, w: Math.min(width, maxX + 1 + pad) - x, h: Math.min(height, maxY + 1 + pad) - y };
+}
+
 /**
- * High-resolution export renderer. Produces a 2x scale crisp PNG Blob.
+ * High-resolution export. With `crop` (default) the image is trimmed to the drawing plus a small margin,
+ * so a small figure is not saved on a large empty page.
  */
 export async function renderDocToBlob(
   doc: Doc,
   grid: GridSettings,
   scale = 2,
+  crop = true,
 ): Promise<Blob> {
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(doc.w * scale);
@@ -696,8 +965,17 @@ export async function renderDocToBlob(
     renderObj(ctx, obj);
   }
 
+  let out = canvas;
+  const box = crop ? drawingBox(doc, scale) : null;
+  if (box && (box.w < canvas.width || box.h < canvas.height)) {
+    out = document.createElement("canvas");
+    out.width = box.w;
+    out.height = box.h;
+    out.getContext("2d")!.drawImage(canvas, box.x, box.y, box.w, box.h, 0, 0, box.w, box.h);
+  }
+
   return new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob((b) => {
+    out.toBlob((b) => {
       if (b) resolve(b);
       else reject(new Error("Canvas toBlob failed"));
     }, "image/png");

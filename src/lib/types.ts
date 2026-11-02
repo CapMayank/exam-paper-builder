@@ -66,6 +66,8 @@ export type Blueprint = {
   language?: PaperLanguage;
   book: { id: string; title: string; subject: string; className: string };
   componentsJson?: string;
+  /** KG_WORKSHEET for Nursery–KG worksheets built without a blueprint. */
+  curriculumMode?: string;
   chapters: { chapterId: string; marks: number; unitKey?: string; unitTitle?: string; chapter: { id: string; number: number; title: string } }[];
   sections: Section[];
   _count: { papers: number };
@@ -212,7 +214,7 @@ export type PaperListItem = {
   schoolName: string;
   examDate: string;
   updatedAt: string;
-  blueprint: { name: string; examType: string; book: { title: string; subject: string; className: string } };
+  blueprint: { name: string; examType: string; curriculumMode?: string; book: { title: string; subject: string; className: string } };
   filled: number;
   needed: number;
   totalMarks?: number;
