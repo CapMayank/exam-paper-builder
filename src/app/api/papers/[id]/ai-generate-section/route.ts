@@ -21,7 +21,7 @@ export const POST = route(async (req, { id }, user) => {
     marksEach,
     language = "en",
     difficulty = "BALANCED",
-    model = "gemini-2.5-pro",
+    model = "gemini-pro-latest",
     teacherFocus = "",
     generateDiagrams = true,
     slots = [],
@@ -111,6 +111,10 @@ export const POST = route(async (req, { id }, user) => {
     existingQuestionTexts,
     apiKey: customKey || req.headers.get("x-gemini-api-key") || (user as any)?.apiKey || null,
   });
+
+  if (res.isMock && ["UNSEEN_PASSAGE", "REFERENCE_CONTEXT"].includes(String(sectionType || matchedSection?.type))) {
+    throw new HttpError(422, "Offline templates cannot write a real unseen passage. Connect a Gemini API key, or add the passage and its questions manually.");
+  }
 
   if (!res.success) {
     throw new HttpError(422, res.error || "Failed to generate valid curriculum-grounded questions for section.");

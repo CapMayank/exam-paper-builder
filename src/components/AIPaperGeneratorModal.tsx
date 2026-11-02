@@ -69,7 +69,7 @@ export function AIPaperGeneratorModal({
   // Form parameters
   const [language, setLanguage] = useState<PaperLanguage>("en");
   const [difficulty, setDifficulty] = useState<"BALANCED" | "EASY" | "MEDIUM" | "HARD">("BALANCED");
-  const [modelTier, setModelTier] = useState<string>("gemini-2.5-pro");
+  const [modelTier, setModelTier] = useState<string>("gemini-pro-latest");
   const [generateDiagrams, setGenerateDiagrams] = useState<boolean>(true);
   const [teacherFocus, setTeacherFocus] = useState<string>("");
   const [generationMode, setGenerationMode] = useState<"fill" | "fresh">("fresh");
@@ -673,8 +673,8 @@ export function AIPaperGeneratorModal({
                     value={modelTier}
                     onChange={(e) => setModelTier(e.target.value)}
                   >
-                    <option value="gemini-2.5-pro">Gemini 2.5 Pro (Senior Examiner Quality · Deep Thinking)</option>
-                    <option value="gemini-2.0-flash">Gemini 2.0 Flash (Fast generation)</option>
+                    <option value="gemini-pro-latest">Gemini Pro (latest · Senior Examiner Quality · Deep Thinking)</option>
+                    <option value="gemini-flash-latest">Gemini Flash (latest · Fast generation)</option>
                   </select>
                   <p className="text-[10px] text-slate-500">
                     Pro model enforces Bloom taxonomy, rigorous distractors, and clean LaTeX.

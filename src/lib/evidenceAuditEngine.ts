@@ -1,6 +1,6 @@
 import { cleanOptionText, isMcqLikeType } from "./constants";
 import { parseGeminiJsonWithLatexSafety, repairLatex } from "./math";
-import { getGeminiApiKey } from "./gemini";
+import { getGeminiApiKey, resolveModelChain, thinkingConfigFor } from "./gemini";
 
 export interface EvidenceAuditFinding {
   questionId?: string;
@@ -289,7 +289,7 @@ export async function auditPaperEvidenceBased(
   let modelCognitive: { r: number; u: number; a: number; h: number } | null = null;
   if (geminiApiKey && questions.length > 0) {
     try {
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`;
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${resolveModelChain(process.env.GEMINI_MODEL)[0]}:generateContent?key=${geminiApiKey}`;
       const auditPrompt = `You are a strict, forensic Chief Moderator for the Madhya Pradesh Board of Secondary Education (MPBSE).
 You are conducting an EVIDENCE-BASED audit of this ${className} ${subject} examination paper (Total Marks: ${totalMarks}).
 
@@ -350,8 +350,10 @@ Return a JSON object matching this schema:
           generationConfig: {
             temperature: 0.1, // low temperature for deterministic evaluation
             responseMimeType: "application/json",
+            ...thinkingConfigFor(resolveModelChain(process.env.GEMINI_MODEL)[0]),
           },
         }),
+        signal: AbortSignal.timeout(180_000),
       });
 
       if (res.ok) {

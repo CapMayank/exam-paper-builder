@@ -91,3 +91,17 @@ Not present: Class 1–8 MPBSE templates, other class 11/12 subjects (History, G
 - `scripts/e2e-blueprint.mjs` checks 16 behaviours against a live server on a copy of the database (all pass), including the original passage-MCQ leak.
 
 Still open: component assignment is manual (the scheme does not map components to question numbers), English 11/12 passage count, Urdu 10–12, NCERT/Sanskrit book variants, and a live-model run of the regeneration loop (not exercised: no model calls were made).
+
+---
+
+## Update 3: first live-model run (English Class 10, Reading + Grammar)
+
+Run on a copy of the database with the configured Gemini key (`scripts/e2e-live-generation.mjs`). It found and fixed real defects that no unit test could:
+- The app's model names (`gemini-2.5-*`, `gemini-2.0-*`) now return **404 for this key** ("no longer available to new users"), so generation silently fell back to offline templates. Names are mapped onto maintained `-latest` aliases; the audit used a hard-coded dead model too.
+- `gemini-flash-latest` / `gemini-pro-latest` are thinking models that exceeded 2 minutes; thinking effort is capped (`thinkingLevel: low`), calls have timeouts, and the output-token cap is raised.
+- The model returned `finishReason=RECITATION` (empty text) when asked for a passage "on" a textbook chapter. The unseen-passage prompt now demands an original passage independent of the chapter.
+- Offline mode used to commit a 3-sub-question stub as an "unseen passage"; it is now refused.
+
+Result after the fixes: 2 passages × 5 one-mark MCQs (4 options, answers, 5 marks), 5 grammar fill-in-the-blank items, all stored as `AI_GENERATED`; the audit's independent review ran (`aiStage: COMPLETED`).
+
+Observed limits (not fixed): the first passage still echoes the "A Letter to God" theme despite the instruction; one grammar item ("courage ___ the absence of fear": is not / does not mean) is ambiguous and neither validation nor the model audit flagged it.

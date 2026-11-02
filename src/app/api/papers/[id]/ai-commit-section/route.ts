@@ -76,6 +76,9 @@ export const POST = route(async (req, { id }, user) => {
   );
   const bodyIsMock = (body as { isMock?: boolean }).isMock === true;
   const templateFallbackIdx = new Set<number>();
+  if (bodyIsMock && ["UNSEEN_PASSAGE", "REFERENCE_CONTEXT"].includes(section.type)) {
+    throw new HttpError(422, "Offline templates cannot write a real unseen passage. Connect a Gemini API key, or add the passage and its questions manually.");
+  }
 
   // Enforce Subject & Curriculum Validation Gate before committing to paper or Question Bank
   const contractRes = buildAndValidateGenerationContract({

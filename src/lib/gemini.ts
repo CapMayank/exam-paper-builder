@@ -61,6 +61,46 @@ export interface GeminiCallResult<T> {
   validationIssues?: QuestionValidationIssue[];
 }
 
+/**
+ * Google retires dated model names ("no longer available to new users" => 404). Saved preferences and the
+ * UI still carry the old names, so they are mapped onto the maintained "-latest" aliases.
+ */
+const LEGACY_MODEL_ALIASES: Record<string, string> = {
+  "gemini-2.5-pro": "gemini-pro-latest",
+  "gemini-1.5-pro": "gemini-pro-latest",
+  "gemini-2.5-flash": "gemini-flash-latest",
+  "gemini-2.0-flash": "gemini-flash-latest",
+  "gemini-1.5-flash": "gemini-flash-latest",
+  "gemini-2.5-flash-lite": "gemini-flash-lite-latest",
+  "gemini-2.0-flash-lite": "gemini-flash-lite-latest",
+};
+
+export function normalizeModelName(model?: string | null): string | undefined {
+  const m = model?.trim();
+  if (!m) return undefined;
+  return LEGACY_MODEL_ALIASES[m] ?? m;
+}
+
+export function resolveModelChain(chosen?: string | null): string[] {
+  const first = normalizeModelName(chosen);
+  const isPro = Boolean(first?.includes("pro"));
+  const tier = isPro
+    ? ["gemini-pro-latest", "gemini-flash-latest", "gemini-flash-lite-latest"]
+    : ["gemini-flash-latest", "gemini-flash-lite-latest"];
+  return Array.from(new Set([first, normalizeModelName(process.env.GEMINI_MODEL), ...tier].filter((m): m is string => Boolean(m))));
+}
+
+/**
+ * The maintained "-latest" flash/pro aliases are thinking models that can run for minutes at their default
+ * effort and time out. Exam-question generation does not need deep reasoning, so cap it. Lite models do not think.
+ */
+export function thinkingConfigFor(model: string): Record<string, unknown> {
+  return /lite/.test(model) ? {} : { thinkingConfig: { thinkingLevel: "low" } };
+}
+
+/** Models that answered 404 in this process; skipped on later calls. */
+const deadModels = new Set<string>();
+
 export function getGeminiApiKey(customKey?: string | null): string | null {
   if (customKey && customKey.trim().length > 5) {
     return customKey.trim();
@@ -111,29 +151,7 @@ export async function callGeminiApi<T>(
     };
   }
 
-  // Model priority: configured model or gemini-2.5-pro / gemini-2.5-flash / gemini-2.5-flash-lite
-  const chosenModel = opts.model || process.env.GEMINI_MODEL;
-  const isPro = Boolean(chosenModel?.includes("pro"));
-  const fallbackList = isPro
-    ? [
-        chosenModel!,
-        "gemini-2.5-pro",
-        "gemini-2.5-flash",
-        "gemini-2.5-flash-lite",
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-lite",
-        "gemini-flash-lite-latest",
-      ]
-    : [
-        chosenModel || "gemini-2.5-flash",
-        "gemini-2.5-flash",
-        "gemini-2.5-flash-lite",
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-lite",
-        "gemini-flash-lite-latest",
-        "gemini-flash-latest",
-      ];
-  const candidateModels = Array.from(new Set(fallbackList.filter(Boolean)));
+  const candidateModels = resolveModelChain(opts.model || process.env.GEMINI_MODEL).filter((m) => !deadModels.has(m));
 
   const parts = typeof prompt === "string" ? [{ text: prompt }] : prompt;
 
@@ -150,6 +168,7 @@ export async function callGeminiApi<T>(
     generationConfig: {
       temperature: 0.3,
       topP: 0.95,
+      maxOutputTokens: 65536,
       ...(opts.json ? { responseMimeType: "application/json" } : {}),
     },
   };
@@ -165,12 +184,17 @@ export async function callGeminiApi<T>(
         const res = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            ...payload,
+            generationConfig: { ...(payload.generationConfig as object), ...thinkingConfigFor(model) },
+          }),
+          signal: AbortSignal.timeout(120_000),
         });
 
         if (!res.ok) {
           lastStatus = res.status;
           lastErrorText = await res.text();
+          if (res.status === 404) deadModels.add(model);
           // On transient 503 (High Demand / Unavailable) or 429, wait briefly once on the primary model before rotating
           if ((res.status === 503 || res.status === 429) && retry === 0 && model === candidateModels[0]) {
             await new Promise((r) => setTimeout(r, 450));
@@ -181,8 +205,14 @@ export async function callGeminiApi<T>(
         }
 
         const json = await res.json();
-        const candidateText =
-          json.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        const candidateText = (json.candidates?.[0]?.content?.parts ?? [])
+          .filter((p: { thought?: boolean; text?: string }) => !p.thought && typeof p.text === "string")
+          .map((p: { text: string }) => p.text)
+          .join("");
+        const finishReason = json.candidates?.[0]?.finishReason;
+        if (!candidateText || (finishReason && finishReason !== "STOP")) {
+          console.warn(`Gemini API Model ${model} returned finishReason=${finishReason} textLength=${candidateText.length}`);
+        }
 
         if (opts.json) {
           const parsedData = parseGeminiJsonWithLatexSafety<T>(candidateText);
@@ -1088,6 +1118,8 @@ ${contract.forbiddenCrossSubjectDomains.length > 0 ? `2. FORBIDDEN CROSS-SUBJECT
    - (A) is false, but (R) is true.
 6. For Match the Columns (MATCH_COLUMN): Generate EXACTLY 1 combined question containing all matching pairs across the section slots. Clearly list Column I items in 'text' and Column II items in 'options', with correct pairings in 'answer'. For Sanskrit use "स्तम्भ 'अ'" / "स्तम्भ 'ब'". For Hindi use "स्तम्भ 'क'" / "स्तम्भ 'ख'".
 7. For Case Study / Passage (CASE_STUDY, UNSEEN_PASSAGE, REFERENCE_CONTEXT): Provide a domain-authentic scenario/passage, followed by labeled subparts ((i), (ii), etc.) whose marks sum up exactly to ${marksEach}.
+   - UNSEEN_PASSAGE: write a NEW, ORIGINAL passage of 150-250 words (prose or poetry as the section says) in the paper's language. It must NOT quote, paraphrase or summarise any textbook lesson or any published text, and its topic must be independent of the slot's chapter (the chapter only sets the reading level and vocabulary). Every sub-question must be answerable from the passage alone.
+   - Any 1-mark sub-question must be a multiple-choice item: put exactly 4 distinct options in the subpart's "options" array and the correct option text in its "answer". Use the sub-question count that makes the marks add up to ${marksEach} (for 5 marks: five 1-mark MCQs unless the section instructions say otherwise).
 8. For subjective questions (VERY_SHORT, SHORT, LONG, NUMERICAL): Provide a detailed step-wise model answer and marking scheme breakdown.
 9. LaTeX Math: Enclose all mathematical expressions, equations, symbols, and formulas in standard LaTeX $...$ delimiters.
 10. Vector Diagram Prompt (Figure Studio): If diagram generation is enabled and a question naturally involves a visual diagram, provide a concise description in "figurePrompt". Otherwise leave "figurePrompt" as null.
