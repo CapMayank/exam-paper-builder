@@ -110,3 +110,13 @@ describe("describeFit", () => {
     expect(describeFit(LAST_FIT_LEVEL, 10)).toMatchObject({ tightened: true, overLimit: true, maxPages: 8 });
   });
 });
+
+describe("passage text scale", () => {
+  it("only shrinks passages at the tighter levels and never below a readable size", () => {
+    expect(FIT_LEVELS[0].passageScale).toBe(1);
+    for (let i = 1; i < FIT_LEVELS.length; i++) {
+      expect(FIT_LEVELS[i].passageScale).toBeLessThanOrEqual(FIT_LEVELS[i - 1].passageScale);
+    }
+    for (const f of FIT_LEVELS) expect(f.passageScale * f.zoom).toBeGreaterThanOrEqual(0.8);
+  });
+});

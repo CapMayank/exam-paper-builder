@@ -35,6 +35,10 @@ function subpartOptionColumns(options: string[]): string {
   return options.length === 4 && longest <= 14 ? "repeat(4, 1fr)" : "1fr 1fr";
 }
 
+function isPassageType(type: string): boolean {
+  return type === "UNSEEN_PASSAGE" || type === "CASE_STUDY" || type === "REFERENCE_CONTEXT";
+}
+
 export type QuestionRenderMode = "FULL" | "STEM_ONLY" | "SUBPART_ONLY";
 
 function SingleQuestionBody({
@@ -219,7 +223,7 @@ function SingleQuestionBody({
           </div>
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight }}>
+          <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight, ...(isA5 && fit && fit.passageScale !== 1 && (renderMode === "STEM_ONLY" || isPassageType(q.type)) ? { fontSize: `${fit.passageScale}em` } : null) }}>
             <QuestionContent text={stemText} isA5={isA5} />
             {marks !== undefined && marksStyle === "INLINE" && (
               <span style={{ fontWeight: 700, fontSize: marksFontSize, marginLeft: "2mm", whiteSpace: "nowrap", color: "#334155" }}>

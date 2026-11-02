@@ -30,6 +30,11 @@ export type PrintFit = {
    * page scales uniformly, so every further step really shrinks the content.
    */
   layoutZoom?: number;
+  /**
+   * Extra text scale for reading passages and their stems at the tighter levels (long passages are what
+   * push a booklet over its page limit). Combined with `zoom` it never drops below ~0.8 of normal size.
+   */
+  passageScale: number;
   /** A5 page padding in mm: left/right, top, bottom. */
   padX: number;
   padTop: number;
@@ -37,12 +42,12 @@ export type PrintFit = {
 };
 
 export const FIT_LEVELS: readonly PrintFit[] = [
-  { level: 0, gap: 1, lineHeight: 1.35, space: 1, zoom: 1, padX: 9, padTop: 8, padBottom: 14 },
-  { level: 1, gap: 0.8, lineHeight: 1.3, space: 0.75, zoom: 1, padX: 8.5, padTop: 7.5, padBottom: 13.5 },
-  { level: 2, gap: 0.65, lineHeight: 1.28, space: 0.55, zoom: 0.97, padX: 8, padTop: 7, padBottom: 13 },
-  { level: 3, gap: 0.5, lineHeight: 1.25, space: 0.4, zoom: 0.95, padX: 7.5, padTop: 6.5, padBottom: 12.5 },
-  { level: 4, gap: 0.4, lineHeight: 1.22, space: 0.3, zoom: 0.92, padX: 7, padTop: 6, padBottom: 12 },
-  { level: 5, gap: 0.3, lineHeight: MIN_LINE_HEIGHT, space: 0.2, zoom: MIN_FONT_ZOOM, padX: 6.5, padTop: 6, padBottom: 12 },
+  { level: 0, gap: 1, lineHeight: 1.35, space: 1, zoom: 1, passageScale: 1, padX: 9, padTop: 8, padBottom: 14 },
+  { level: 1, gap: 0.8, lineHeight: 1.3, space: 0.75, zoom: 1, passageScale: 1, padX: 8.5, padTop: 7.5, padBottom: 13.5 },
+  { level: 2, gap: 0.65, lineHeight: 1.28, space: 0.55, zoom: 0.97, passageScale: 1, padX: 8, padTop: 7, padBottom: 13 },
+  { level: 3, gap: 0.5, lineHeight: 1.25, space: 0.4, zoom: 0.95, passageScale: 0.96, padX: 7.5, padTop: 6.5, padBottom: 12.5 },
+  { level: 4, gap: 0.4, lineHeight: 1.22, space: 0.3, zoom: 0.92, passageScale: 0.93, padX: 7, padTop: 6, padBottom: 12 },
+  { level: 5, gap: 0.3, lineHeight: MIN_LINE_HEIGHT, space: 0.2, zoom: MIN_FONT_ZOOM, passageScale: 0.9, padX: 6.5, padTop: 6, padBottom: 12 },
 ];
 
 export const LAST_FIT_LEVEL = FIT_LEVELS.length - 1;
@@ -60,6 +65,7 @@ export const WORKSHEET_FIT_LEVELS: readonly PrintFit[] = Array.from({ length: 16
   lineHeight: 1.4,
   space: Math.max(0.2, 1 - level * 0.06),
   zoom: +(1 - level * 0.04).toFixed(2),
+  passageScale: 1,
   layoutZoom: Math.max(+(1 - level * 0.04).toFixed(2), 0.7),
   padX: 0,
   padTop: 0,
