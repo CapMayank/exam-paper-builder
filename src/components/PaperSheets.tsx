@@ -1,5 +1,6 @@
 "use client";
 import { questionSlotMarks } from "@/lib/blueprint";
+import { BOOKLET_MAX_PAGES, describeFit, fitMm, getFit, MIN_QUESTION_GAP_MM, nextFitLevel, type FitStatus, type PrintFit } from "@/lib/printFit";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { QuestionView } from "@/components/QuestionView";
@@ -71,7 +72,8 @@ function extractSectionLetter(title: string, fallbackIndex: number): string {
   return String.fromCharCode(65 + (fallbackIndex % 26));
 }
 
-function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSignatures?: boolean): Block[] {
+function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSignatures?: boolean, fit: PrintFit = getFit(0)): Block[] {
+  const g = (mm: number, floor?: number) => fitMm(mm, fit, floor);
   const { blueprint } = paper;
   const paperLang = detectPaperLanguage(paper, paper.items);
   const locale = getPaperLocale(paperLang);
@@ -99,12 +101,14 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
 
   const isEffectiveCompact = compact || paper.printDensity === "COMPACT";
   const effectiveShowSignatures = showSignatures !== undefined ? showSignatures : (paper.showSignatures === true);
-  const questionBottomPadding =
+  const questionBottomPadding = g(
     paper.printDensity === "COMPACT" || isEffectiveCompact
-      ? isA5 ? "2mm" : "2.5mm"
+      ? isA5 ? 2 : 2.5
       : paper.printDensity === "COMFORTABLE"
-      ? isA5 ? "4mm" : "5.5mm"
-      : isA5 ? "3mm" : "4mm";
+      ? isA5 ? 4 : 5.5
+      : isA5 ? 3 : 4,
+    MIN_QUESTION_GAP_MM
+  );
   const resolvedLogoSrc =
     paper.schoolLogo === "NONE"
       ? null
@@ -137,14 +141,14 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
       key: "header",
       keepWithNext: false,
       node: (
-        <div style={{ paddingBottom: isA5 ? "2mm" : "3mm" }}>
+        <div style={{ paddingBottom: g(isA5 ? 2 : 3) }}>
           {/* Top Board Meta Bar: Question Count, Set Box, Subject Code */}
           <div
           style={{
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
-            marginBottom: isA5 ? "1.5mm" : "2mm",
+            marginBottom: g(isA5 ? 1.5 : 2),
             fontSize: isA5 ? "7.5pt" : "8.5pt",
             borderBottom: "1px solid #cbd5e1",
             paddingBottom: "1.5mm",
@@ -428,7 +432,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
         key: `sec-main-${s.id}`,
         keepWithNext: true,
         node: (
-          <div style={{ padding: isA5 ? "2mm 0 1mm" : "3mm 0 1.5mm" }}>
+          <div style={{ padding: isA5 ? `${g(2)} 0 ${g(1)}` : `${g(3)} 0 ${g(1.5)}` }}>
             <div
               style={{
                 display: "flex",
@@ -474,7 +478,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
               backgroundColor: "#f8fafc",
               borderLeft: "2.5px solid #475569",
               padding: isA5 ? "0.8mm 1.5mm" : "1mm 2mm",
-              margin: isA5 ? "1mm 0 1.5mm" : "1.5mm 0 2mm",
+              margin: isA5 ? `${g(1)} 0 ${g(1.5)}` : `${g(1.5)} 0 ${g(2)}`,
             }}
           >
             <span>{typeLabel}</span>
@@ -558,7 +562,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
                 gap: "2.5mm",
                 alignItems: "flex-start",
                 paddingLeft: isA5 ? "4mm" : "5mm",
-                paddingBottom: isLastItem ? questionBottomPadding : isA5 ? "1.5mm" : "2mm",
+                paddingBottom: isLastItem ? questionBottomPadding : g(isA5 ? 1.5 : 2),
               }}
             >
               <span style={{ fontWeight: 600, minWidth: isA5 ? "5.5mm" : "6.5mm" }}>{subLabel}</span>
@@ -636,7 +640,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
             forceBreakBefore: Boolean(it.pageBreakBefore),
             groupId: it.id,
             render: () => (
-              <div style={{ paddingBottom: isA5 ? "1.5mm" : "2.5mm" }}>
+              <div style={{ paddingBottom: g(isA5 ? 1.5 : 2.5) }}>
                 <QuestionView
                   q={it.question}
                   number={currentN}
@@ -644,6 +648,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
                   marks={totalQuestionMarks}
                   marksStyle={paper.marksStyle || "RIGHT_COLUMN"}
                   compact={isEffectiveCompact}
+                  fit={fit}
                   renderMode="STEM_ONLY"
                   isA5={isA5}
                   lang={paperLang}
@@ -660,7 +665,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
               keepWithNext: false,
               groupId: it.id,
               render: ({ isContinuation }) => (
-                <div style={{ paddingBottom: isLastSubpart ? questionBottomPadding : isA5 ? "1.5mm" : "2.5mm" }}>
+                <div style={{ paddingBottom: isLastSubpart ? questionBottomPadding : g(isA5 ? 1.5 : 2.5) }}>
                   <QuestionView
                     q={it.question}
                     number={currentN}
@@ -668,6 +673,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
                     marks={s.marksEach}
                     marksStyle={paper.marksStyle || "RIGHT_COLUMN"}
                     compact={isEffectiveCompact}
+                  fit={fit}
                     renderMode="SUBPART_ONLY"
                     subpartIndex={spIdx}
                     isContinuation={isContinuation}
@@ -694,6 +700,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
                   marks={totalQuestionMarks}
                   marksStyle={paper.marksStyle || "RIGHT_COLUMN"}
                   compact={isEffectiveCompact}
+                  fit={fit}
                   isA5={isA5}
                   lang={paperLang}
                 />
@@ -712,13 +719,13 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
       <div
         style={{
           textAlign: "center",
-          paddingTop: isA5 ? "3mm" : "5mm",
+          paddingTop: g(isA5 ? 3 : 5),
           paddingBottom: "2mm",
           fontSize: isA5 ? "8.5pt" : "9pt",
           fontWeight: 700,
           letterSpacing: "0.06em",
           borderTop: "1.2px dashed #94a3b8",
-          marginTop: isA5 ? "2.5mm" : "4mm",
+          marginTop: g(isA5 ? 2.5 : 4),
           color: "#334155",
         }}
       >
@@ -739,6 +746,7 @@ function Page({
   watermark,
   watermarkText,
   lang = "en",
+  zoom = 1,
 }: {
   n: number;
   total: number;
@@ -748,6 +756,7 @@ function Page({
   watermark?: boolean;
   watermarkText?: string;
   lang?: PaperLanguage;
+  zoom?: number;
 }) {
   const isLastPage = n === total;
   const locale = getPaperLocale(lang);
@@ -787,7 +796,7 @@ function Page({
           </div>
         </div>
       )}
-      <div style={{ position: "relative", zIndex: 1 }}>
+      <div style={{ position: "relative", zIndex: 1, ...(zoom !== 1 ? { zoom, width: `${100 / zoom}%` } : null) }}>
         {blocks.map((b) => (
           <div key={b.key} style={{ display: "flow-root" }}>
             {renderBlock(b, continuationKeys?.has(b.key) ?? false)}
@@ -863,7 +872,7 @@ function BlankPage({ showTemplate = true, isA5 }: { showTemplate?: boolean; isA5
   );
 }
 
-export type SheetsInfo = { pages: number; sheets: number; isTwoUpCut?: boolean };
+export type SheetsInfo = { pages: number; sheets: number; isTwoUpCut?: boolean; fit?: FitStatus };
 
 /**
  * Lays the paper out on real A4 or A5 pages (measured in the browser), then stacks them (PAGE),
@@ -879,6 +888,8 @@ export function PaperSheets({
   watermark,
   watermarkText,
   twoUpCutMode,
+  autoFit = true,
+  maxPages = BOOKLET_MAX_PAGES,
   onInfo,
 }: {
   paper: PaperData;
@@ -890,6 +901,9 @@ export function PaperSheets({
   watermark?: boolean;
   watermarkText?: string;
   twoUpCutMode?: boolean;
+  /** Booklet papers only: tighten spacing step by step until the paper fits maxPages. */
+  autoFit?: boolean;
+  maxPages?: number;
   onInfo?: (i: SheetsInfo) => void;
 }) {
   const isA5 = paper.layout === "BOOKLET_A4";
@@ -897,13 +911,20 @@ export function PaperSheets({
   const paperLang = detectPaperLanguage(paper, paper.items);
   const effectiveWatermark = watermark ?? paper.securityWatermark ?? false;
   const effectiveWatermarkText = watermarkText || paper.watermarkText || "CONFIDENTIAL — SARVODAYA EXAM CELL";
+  const fitActive = isA5 && autoFit;
+  // Any change to the paper or print options restarts the fit from the configured spacing.
+  const fitInputKey = useMemo(() => ({}), [paper, compact, isA5, showSignatures, fitActive, maxPages]);
+  const [fitState, setFitState] = useState({ key: fitInputKey, level: 0 });
+  const fitLevel = fitActive && fitState.key === fitInputKey ? fitState.level : 0;
+  const fit = useMemo(() => getFit(fitLevel), [fitLevel]);
   const blocks = useMemo(
-    () => buildBlocks(paper, compact, isA5, showSignatures),
-    [paper, compact, isA5, showSignatures]
+    () => buildBlocks(paper, compact, isA5, showSignatures, fit),
+    [paper, compact, isA5, showSignatures, fit]
   );
   const measureRef = useRef<HTMLDivElement>(null);
   const probeRef = useRef<HTMLDivElement>(null);
   const [pages, setPages] = useState<number[][] | null>(null);
+  const [fitStatus, setFitStatus] = useState<FitStatus | undefined>(undefined);
 
   const contentW = isA5 ? A5_CONTENT_W_MM : CONTENT_W_MM;
   const contentH = isA5 ? A5_CONTENT_H_MM : CONTENT_H_MM;
@@ -924,20 +945,26 @@ export function PaperSheets({
       if (cancelled) return;
       const heights = Array.from(root.children).map((c) => (c as HTMLElement).getBoundingClientRect().height);
       const pageH = probe.getBoundingClientRect().height;
-      setPages(
-        paginate(
-          heights,
-          blocks.map((b) => b.keepWithNext),
-          pageH - 6, // 6px safety buffer above bottom margin to prevent footer collision
-          blocks.map((b) => b.groupId),
-          blocks.map((b) => Boolean(b.forceBreakBefore))
-        )
+      const paged = paginate(
+        heights,
+        blocks.map((b) => b.keepWithNext),
+        pageH - 6, // 6px safety buffer above bottom margin to prevent footer collision
+        blocks.map((b) => b.groupId),
+        blocks.map((b) => Boolean(b.forceBreakBefore))
       );
+      const next = fitActive ? nextFitLevel(fitLevel, paged.length, maxPages) : null;
+      if (next !== null) {
+        // Still too long: re-measure with tighter spacing before showing anything.
+        setFitState({ key: fitInputKey, level: next });
+        return;
+      }
+      setPages(paged);
+      setFitStatus(fitActive ? describeFit(fitLevel, paged.length, maxPages) : undefined);
     })();
     return () => {
       cancelled = true;
     };
-  }, [blocks]);
+  }, [blocks, fitActive, fitLevel, fitInputKey, maxPages]);
 
   const pageCount = pages?.length ?? 0;
   const isEligibleTwoUp = isA5 && pageCount > 0 && pageCount <= 2;
@@ -965,9 +992,9 @@ export function PaperSheets({
       const totalPages = isBookletPrint
         ? sheets.length * 4
         : pageCount + (includeRoughWork ? 1 : 0);
-      onInfo?.({ pages: totalPages, sheets: sheets.length, isTwoUpCut: isEffectiveTwoUp });
+      onInfo?.({ pages: totalPages, sheets: sheets.length, isTwoUpCut: isEffectiveTwoUp, fit: fitStatus });
     }
-  }, [pageCount, sheets.length, isBookletPrint, includeRoughWork, isEffectiveTwoUp, onInfo]);
+  }, [pageCount, sheets.length, isBookletPrint, includeRoughWork, isEffectiveTwoUp, fitStatus, onInfo]);
 
   const continuationKeys = useMemo(() => {
     if (!pages) return new Set<string>();
@@ -1005,6 +1032,7 @@ export function PaperSheets({
         watermark={effectiveWatermark}
         watermarkText={effectiveWatermarkText}
         lang={paperLang}
+        zoom={fit.zoom}
       />
     );
 
@@ -1084,7 +1112,7 @@ export function PaperSheets({
         <div
           ref={measureRef}
           className={`${isA5 ? "a5-measure" : "a4-measure"} paper-font`}
-          style={{ width: `${contentW}mm` }}
+          style={{ width: `${contentW / fit.zoom}mm`, ...(fit.zoom !== 1 ? { zoom: fit.zoom } : null) }}
         >
           {blocks.map((b) => (
             <div key={b.key} style={{ display: "flow-root" }}>

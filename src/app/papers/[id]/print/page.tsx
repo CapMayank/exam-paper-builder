@@ -22,6 +22,7 @@ import { use, useCallback, useEffect, useState } from "react";
 import { PaperSheets, type SheetsInfo } from "@/components/PaperSheets";
 import { Modal } from "@/components/ui";
 import { api } from "@/lib/client";
+import { BOOKLET_MAX_PAGES } from "@/lib/printFit";
 import { EXAM_TYPES, EXAM_TYPE_LABEL, isBookletLayout, resolvePaperExamType, type ExamType } from "@/lib/constants";
 import type { PaperData } from "@/lib/types";
 
@@ -52,6 +53,20 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
   const [twoUpCutMode, setTwoUpCutMode] = useState<boolean>(true);
   const [showGuide, setShowGuide] = useState(false);
   const [autoFitting, setAutoFitting] = useState(false);
+  const [autoFitPages, setAutoFitPages] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        return localStorage.getItem("epb:autoFitPages") !== "off";
+      } catch {}
+    }
+    return true;
+  });
+  const handleAutoFitPages = (on: boolean) => {
+    setAutoFitPages(on);
+    try {
+      localStorage.setItem("epb:autoFitPages", on ? "on" : "off");
+    } catch {}
+  };
 
   const handleAutoFit = async () => {
     setAutoFitting(true);
@@ -263,6 +278,23 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
               </div>
             )}
 
+            {/* Automatic fit of booklet papers into 8 A5 pages (2 folded A4 sheets) */}
+            {isA5 && (
+              <div className="flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 p-0.5 text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => handleAutoFitPages(!autoFitPages)}
+                  className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 transition ${
+                    autoFitPages ? "bg-amber-500 text-white shadow-xs font-bold" : "text-amber-900 hover:bg-amber-100/70"
+                  }`}
+                  title={`Tightens spacing step by step (never below readable size) until the paper fits ${BOOKLET_MAX_PAGES} A5 pages. Turn off to print the paper's own Print Density exactly.`}
+                >
+                  <Sparkles size={13} />
+                  <span>Fit to {BOOKLET_MAX_PAGES} pages: {autoFitPages ? "AUTO" : "OFF"}</span>
+                </button>
+              </div>
+            )}
+
             {/* Auto-Fit to 4 Pages button if slightly overflowing */}
             {info && info.pages === 5 && (
               <button
@@ -335,6 +367,28 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
           </div>
         </div>
 
+        {/* Booklet page-limit status */}
+        {isA5 && info?.fit?.overLimit && (
+          <div className="mx-auto mt-2 max-w-7xl rounded-md border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-800">
+            ⚠ This paper is {info.fit.pages} A5 pages — more than the {info.fit.maxPages}-page booklet limit
+            (2 folded A4 sheets)
+            {info.fit.tightened ? ", even at the tightest readable spacing" : ""}. Shorten some questions or
+            switch to &quot;Compact (Question Only)&quot;{autoFitPages ? "" : ", or turn on Fit to 8 pages"}.
+          </div>
+        )}
+        {isA5 && !info?.fit?.overLimit && info?.fit?.tightened && (
+          <div className="mx-auto mt-2 max-w-7xl rounded-md border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
+            Spacing was tightened automatically (level {info.fit.level}) to fit {info.fit.pages} of{" "}
+            {info.fit.maxPages} A5 pages.
+          </div>
+        )}
+        {isA5 && !autoFitPages && info && info.pages > BOOKLET_MAX_PAGES && (
+          <div className="mx-auto mt-2 max-w-7xl rounded-md border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-800">
+            ⚠ This paper is {info.pages} A5 pages — more than the {BOOKLET_MAX_PAGES}-page booklet limit. Turn on
+            Fit to {BOOKLET_MAX_PAGES} pages to tighten the spacing automatically.
+          </div>
+        )}
+
         {/* Draft Notice if incomplete */}
         {!paper.progress.complete && (
           <div className="mx-auto mt-2 max-w-7xl rounded-md bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800 border border-amber-200">
@@ -357,6 +411,7 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
           includeRoughWork={includeRoughWork}
           showSignatures={showSignatures}
           twoUpCutMode={twoUpCutMode}
+          autoFit={autoFitPages}
           onInfo={onInfo}
         />
       </div>

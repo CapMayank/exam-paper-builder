@@ -20,6 +20,7 @@ import {
 } from "@/lib/kindergarten/registry";
 import { getInternalChoiceSeparatorLabel } from "@/lib/internalChoiceRules";
 import { isTextPredominantlySanskrit, type PaperLanguage } from "@/lib/localization";
+import type { PrintFit } from "@/lib/printFit";
 import type { QuestionDto } from "@/lib/types";
 import { MathText } from "@/components/MathText";
 import { QuestionContent } from "@/components/QuestionContent";
@@ -42,6 +43,7 @@ function SingleQuestionBody({
   isContinuation,
   isA5,
   lang,
+  fit,
 }: {
   q: QuestionDto;
   number?: number;
@@ -54,6 +56,7 @@ function SingleQuestionBody({
   isContinuation?: boolean;
   isA5?: boolean;
   lang?: PaperLanguage;
+  fit?: PrintFit;
 }) {
   const displayLabel = numberLabel ?? (number !== undefined ? `${number}.` : undefined);
   const optFontSize = isA5 ? "9.5pt" : "10pt";
@@ -61,7 +64,7 @@ function SingleQuestionBody({
   const tableFontSize = isA5 ? "9pt" : "9.5pt";
   const metaFontSize = isA5 ? "8.5pt" : "9pt";
   const subpartMarginLeft = isA5 ? "6mm" : "7mm";
-  const lineHeight = isA5 ? 1.35 : 1.45;
+  const lineHeight = isA5 ? fit?.lineHeight ?? 1.35 : 1.45;
 
   const hasSanskrit = isTextPredominantlySanskrit(q.text) || q.options.some((o) => isTextPredominantlySanskrit(o));
   const hasHindi = /[\u0900-\u097F]/.test(q.text) || q.options.some((o) => /[\u0900-\u097F]/.test(o));
@@ -415,6 +418,7 @@ export function QuestionView({
   isContinuation,
   isA5,
   lang,
+  fit,
 }: {
   q: QuestionDto;
   orQuestion?: QuestionDto | null;
@@ -429,6 +433,7 @@ export function QuestionView({
   isContinuation?: boolean;
   isA5?: boolean;
   lang?: PaperLanguage;
+  fit?: PrintFit;
 }) {
   const hasSanskrit = isTextPredominantlySanskrit(q.text) || (orQuestion && isTextPredominantlySanskrit(orQuestion.text));
   const hasHindi = /[\u0900-\u097F]/.test(q.text) || (orQuestion && /[\u0900-\u097F]/.test(orQuestion.text));
@@ -449,13 +454,14 @@ export function QuestionView({
           isContinuation={isContinuation}
           isA5={isA5}
           lang={effectiveLang}
+          fit={fit}
         />
       </div>
     );
   }
 
   const isKdg = isKindergartenType(q.type);
-  const maxSpaceMm = compact || isKdg ? 0 : Math.max(q.spaceMm, orQuestion?.spaceMm ?? 0);
+  const maxSpaceMm = compact || isKdg ? 0 : Math.round(Math.max(q.spaceMm, orQuestion?.spaceMm ?? 0) * (fit?.space ?? 1));
   const showGrid = q.showGrid || !!orQuestion?.showGrid;
   const isDraw =
     q.type === "DRAW" ||
@@ -500,6 +506,7 @@ export function QuestionView({
         renderMode={renderMode}
         isA5={isA5}
         lang={effectiveLang}
+        fit={fit}
       />
 
       {orQuestion && (
