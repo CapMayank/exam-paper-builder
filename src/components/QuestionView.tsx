@@ -29,6 +29,12 @@ const LETTERS = "ABCDEFGHIJ";
 const LETTERS_LIST = ["(A)", "(B)", "(C)", "(D)", "(E)", "(F)", "(G)", "(H)", "(I)", "(J)"];
 const ROMAN_LOWER = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
 
+/** Four short options (e.g. numbers, single words) share one row instead of wrapping in two columns. */
+function subpartOptionColumns(options: string[]): string {
+  const longest = Math.max(0, ...options.map((o) => cleanOptionText(o).length));
+  return options.length === 4 && longest <= 14 ? "repeat(4, 1fr)" : "1fr 1fr";
+}
+
 export type QuestionRenderMode = "FULL" | "STEM_ONLY" | "SUBPART_ONLY";
 
 function SingleQuestionBody({
@@ -129,7 +135,7 @@ function SingleQuestionBody({
               <MathText text={sp.text} />
             </div>
             {sp.options && sp.options.length > 0 && (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: isA5 ? "1mm 3mm" : "1.5mm 4mm", marginTop: "1.5mm" }}>
+              <div style={{ display: "grid", gridTemplateColumns: subpartOptionColumns(sp.options), gap: isA5 ? "1mm 3mm" : "1.5mm 4mm", marginTop: "1.5mm" }}>
                 {sp.options.map((opt, optIdx) => (
                   <div key={optIdx} className="opt-text" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", fontSize: optFontSize }}>
                     <span style={{ fontWeight: 600 }}>({LETTERS[optIdx].toLowerCase()})</span>{" "}
@@ -318,7 +324,7 @@ function SingleQuestionBody({
                       <QuestionContent text={sp.text} isA5={isA5} />
                     </div>
                     {sp.options && sp.options.length > 0 && (
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: isA5 ? "1mm 3mm" : "1.5mm 4mm", marginTop: "1.5mm" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: subpartOptionColumns(sp.options), gap: isA5 ? "1mm 3mm" : "1.5mm 4mm", marginTop: "1.5mm" }}>
                         {sp.options.map((opt, optIdx) => (
                           <div key={optIdx} className="opt-text" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", fontSize: optFontSize }}>
                             <span style={{ fontWeight: 600 }}>({LETTERS[optIdx].toLowerCase()})</span>{" "}

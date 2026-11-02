@@ -62,9 +62,6 @@ function renderBlock(b: Block, isContinuation: boolean): ReactNode {
 const CONTENT_W_MM = 182;
 const CONTENT_H_MM = 267;
 
-// A5 minus page padding (see .a5 in globals.css): 9mm sides, 8mm top, 14mm bottom.
-const A5_CONTENT_W_MM = 130.5;
-const A5_CONTENT_H_MM = 188;
 
 function extractSectionLetter(title: string, fallbackIndex: number): string {
   const match = title.match(/\b([A-Z])\b/i);
@@ -747,6 +744,7 @@ function Page({
   watermarkText,
   lang = "en",
   zoom = 1,
+  fit,
 }: {
   n: number;
   total: number;
@@ -757,11 +755,15 @@ function Page({
   watermarkText?: string;
   lang?: PaperLanguage;
   zoom?: number;
+  fit?: PrintFit;
 }) {
   const isLastPage = n === total;
   const locale = getPaperLocale(lang);
   return (
-    <div className={`${isA5 ? "a5" : "a4"} paper-font relative overflow-hidden`}>
+    <div
+      className={`${isA5 ? "a5" : "a4"} paper-font relative overflow-hidden`}
+      style={isA5 && fit ? ({ "--pad-x": `${fit.padX}mm`, "--pad-t": `${fit.padTop}mm`, "--pad-b": `${fit.padBottom}mm` } as React.CSSProperties) : undefined}
+    >
       {watermark && (
         <div
           className="watermark-overlay"
@@ -796,7 +798,7 @@ function Page({
           </div>
         </div>
       )}
-      <div style={{ position: "relative", zIndex: 1, ...(zoom !== 1 ? { zoom, width: `${100 / zoom}%` } : null) }}>
+      <div style={{ position: "relative", zIndex: 1, ...(zoom !== 1 ? { zoom } : null) }}>
         {blocks.map((b) => (
           <div key={b.key} style={{ display: "flow-root" }}>
             {renderBlock(b, continuationKeys?.has(b.key) ?? false)}
@@ -926,8 +928,8 @@ export function PaperSheets({
   const [pages, setPages] = useState<number[][] | null>(null);
   const [fitStatus, setFitStatus] = useState<FitStatus | undefined>(undefined);
 
-  const contentW = isA5 ? A5_CONTENT_W_MM : CONTENT_W_MM;
-  const contentH = isA5 ? A5_CONTENT_H_MM : CONTENT_H_MM;
+  const contentW = isA5 ? 148.5 - 2 * fit.padX : CONTENT_W_MM;
+  const contentH = isA5 ? 210 - fit.padTop - fit.padBottom : CONTENT_H_MM;
 
   useEffect(() => {
     let cancelled = false;
@@ -1033,6 +1035,7 @@ export function PaperSheets({
         watermarkText={effectiveWatermarkText}
         lang={paperLang}
         zoom={fit.zoom}
+        fit={fit}
       />
     );
 

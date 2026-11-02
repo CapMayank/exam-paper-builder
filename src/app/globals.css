@@ -486,14 +486,14 @@ input[type="range"] {
   position: relative;
   overflow: hidden;
   box-sizing: border-box;
-  padding: 8mm 9mm 14mm 9mm;
+  padding: var(--pad-t, 8mm) var(--pad-x, 9mm) var(--pad-b, 14mm) var(--pad-x, 9mm);
 }
 .a5 .page-footer {
   position: absolute;
   bottom: 4mm;
-  left: 9mm;
-  right: 9mm;
-  width: calc(100% - 18mm);
+  left: var(--pad-x, 9mm);
+  right: var(--pad-x, 9mm);
+  width: calc(100% - 2 * var(--pad-x, 9mm));
   box-sizing: border-box;
   display: flex;
   justify-content: space-between;
@@ -641,7 +641,7 @@ input[type="range"] {
     max-height: 209.8mm !important;
     overflow: hidden !important;
     box-sizing: border-box !important;
-    padding: 8mm 9mm 14mm 9mm !important;
+    padding: var(--pad-t, 8mm) var(--pad-x, 9mm) var(--pad-b, 14mm) var(--pad-x, 9mm) !important;
   }
   .a4-sheet {
     width: 297mm !important;
@@ -674,9 +674,9 @@ input[type="range"] {
   .a5 .page-footer {
     position: absolute !important;
     bottom: 4mm !important;
-    left: 9mm !important;
-    right: 9mm !important;
-    width: calc(100% - 18mm) !important;
+    left: var(--pad-x, 9mm) !important;
+    right: var(--pad-x, 9mm) !important;
+    width: calc(100% - 2 * var(--pad-x, 9mm)) !important;
     box-sizing: border-box !important;
     display: flex !important;
     justify-content: space-between !important;

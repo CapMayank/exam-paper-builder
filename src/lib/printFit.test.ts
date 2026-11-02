@@ -36,6 +36,19 @@ describe("print fit levels", () => {
     }
   });
 
+  it("keeps a usable staple margin and footer room as page padding shrinks", () => {
+    for (let i = 1; i < FIT_LEVELS.length; i++) {
+      expect(FIT_LEVELS[i].padX).toBeLessThanOrEqual(FIT_LEVELS[i - 1].padX);
+      expect(FIT_LEVELS[i].padTop).toBeLessThanOrEqual(FIT_LEVELS[i - 1].padTop);
+      expect(FIT_LEVELS[i].padBottom).toBeLessThanOrEqual(FIT_LEVELS[i - 1].padBottom);
+    }
+    for (const f of FIT_LEVELS) {
+      expect(f.padX).toBeGreaterThanOrEqual(6);
+      expect(f.padTop).toBeGreaterThanOrEqual(6);
+      expect(f.padBottom).toBeGreaterThanOrEqual(12);
+    }
+  });
+
   it("clamps out-of-range levels", () => {
     expect(getFit(-3).level).toBe(0);
     expect(getFit(99).level).toBe(LAST_FIT_LEVEL);

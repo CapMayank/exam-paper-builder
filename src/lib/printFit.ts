@@ -25,15 +25,19 @@ export type PrintFit = {
   space: number;
   /** CSS zoom applied to the page content (text scale). */
   zoom: number;
+  /** A5 page padding in mm: left/right, top, bottom. */
+  padX: number;
+  padTop: number;
+  padBottom: number;
 };
 
 export const FIT_LEVELS: readonly PrintFit[] = [
-  { level: 0, gap: 1, lineHeight: 1.35, space: 1, zoom: 1 },
-  { level: 1, gap: 0.8, lineHeight: 1.3, space: 0.75, zoom: 1 },
-  { level: 2, gap: 0.65, lineHeight: 1.28, space: 0.55, zoom: 0.97 },
-  { level: 3, gap: 0.5, lineHeight: 1.25, space: 0.4, zoom: 0.95 },
-  { level: 4, gap: 0.4, lineHeight: 1.22, space: 0.3, zoom: 0.92 },
-  { level: 5, gap: 0.3, lineHeight: MIN_LINE_HEIGHT, space: 0.2, zoom: MIN_FONT_ZOOM },
+  { level: 0, gap: 1, lineHeight: 1.35, space: 1, zoom: 1, padX: 9, padTop: 8, padBottom: 14 },
+  { level: 1, gap: 0.8, lineHeight: 1.3, space: 0.75, zoom: 1, padX: 8.5, padTop: 7.5, padBottom: 13.5 },
+  { level: 2, gap: 0.65, lineHeight: 1.28, space: 0.55, zoom: 0.97, padX: 8, padTop: 7, padBottom: 13 },
+  { level: 3, gap: 0.5, lineHeight: 1.25, space: 0.4, zoom: 0.95, padX: 7.5, padTop: 6.5, padBottom: 12.5 },
+  { level: 4, gap: 0.4, lineHeight: 1.22, space: 0.3, zoom: 0.92, padX: 7, padTop: 6, padBottom: 12 },
+  { level: 5, gap: 0.3, lineHeight: MIN_LINE_HEIGHT, space: 0.2, zoom: MIN_FONT_ZOOM, padX: 6.5, padTop: 6, padBottom: 12 },
 ];
 
 export const LAST_FIT_LEVEL = FIT_LEVELS.length - 1;
