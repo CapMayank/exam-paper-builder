@@ -39,7 +39,8 @@ export function applySchemeCorrections(seed: SubjectSpec[]): void {
     if (s.name === "Hindi" && (s.classLevel === 11 || s.classLevel === 12)) {
       const part = s.classLevel - 10;
       const tb = s.textbooks[0];
-      if (tb && !tb.title.includes("वितान")) tb.title = `आरोह भाग-${part}, वितान भाग-${part}, अभिव्यक्ति और माध्यम`;
+      // keep the title stable (it keys stored rows); name the other prescribed books in the publisher note
+      if (tb) tb.publisher = `NCERT. Prescribed with: वितान भाग-${part}, अभिव्यक्ति और माध्यम (chapters here are the scheme's units)`;
     }
 
     // Social Science IX: map row

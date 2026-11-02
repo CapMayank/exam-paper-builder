@@ -90,8 +90,9 @@ describe("seeded curriculum for the school's subjects matches the 2026-27 scheme
     expect(names(9, "Hindi")).toContain("कृतिका भाग-1");
     expect(names(10, "Hindi")).toContain("क्षितिज भाग-2");
     expect(names(11, "Hindi")).toContain("आरोह भाग-1");
-    expect(names(11, "Hindi")).toContain("वितान भाग-1");
-    expect(names(12, "Hindi")).toContain("वितान भाग-2");
+    const pub = (cl: number) => seeds.find((x) => x.classLevel === cl && x.name === "Hindi")!.textbooks[0].publisher;
+    expect(pub(11)).toContain("वितान भाग-1");
+    expect(pub(12)).toContain("वितान भाग-2");
     expect(names(12, "Hindi")).toContain("आरोह भाग-2");
     expect(names(9, "English")).toContain("Beehive");
     expect(names(10, "English")).toContain("First Flight");

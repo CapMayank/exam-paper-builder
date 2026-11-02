@@ -809,6 +809,12 @@ export async function seedCurriculumData(client?: PrismaClient): Promise<{
       }
     }
 
+    // Drop curriculum textbooks (and their chapters) that are no longer in the seed, so a renamed or removed
+    // book can never leave duplicate chapters behind. Teacher-created Book rows are not touched.
+    await prisma.curriculumTextbook.deleteMany({
+      where: { subjectId: subject.id, title: { notIn: s.textbooks.map((t) => t.title) } },
+    });
+
     // Marks Scheme
     const existingMarksScheme = await prisma.curriculumMarksScheme.findFirst({
       where: {
