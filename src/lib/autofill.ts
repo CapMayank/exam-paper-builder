@@ -121,6 +121,8 @@ export function autoFillPaper(
   // Build list of empty slots
   const slots: Slot[] = [];
   const preAdded: AutoFillResult["added"] = [];
+  // quota already spent by questions chosen before the search (combined match questions)
+  const preCharges: Array<{ chapterId: string; marks: number }> = [];
   let order = 0;
   for (const sec of bp.sections) {
     if (actualOptions?.targetSectionId && sec.id !== actualOptions.targetSectionId) {
@@ -182,6 +184,7 @@ export function autoFillPaper(
           for (const c of picked) {
             usedQuestionIds.add(c.id);
             preAdded.push({ sectionId: sec.id, questionId: c.id, orQuestionId: null, requiresInternalChoice: false, chapterId: c.chapterId });
+            preCharges.push({ chapterId: c.chapterId, marks: c.matchPairs ?? 0 });
           }
           for (const [k, v] of budget) chapterRemaining.set(rep(k), v);
           continue;
@@ -321,6 +324,9 @@ export function autoFillPaper(
     chapterRemaining.clear();
     for (const c of bp.chapters) {
       chapterRemaining.set(rep(c.chapterId), (chapterRemaining.get(rep(c.chapterId)) ?? 0) + c.marks);
+    }
+    for (const pc of preCharges) {
+      chapterRemaining.set(rep(pc.chapterId), Math.max(0, (chapterRemaining.get(rep(pc.chapterId)) ?? 0) - pc.marks));
     }
     for (const item of currentItems) {
       const sec = sectionById.get(item.sectionId);

@@ -182,14 +182,15 @@ async function runTemplate(level, subject, t) {
   const bp = bpRes.data;
   note("blueprint keeps roles", bp.sections.some((s) => s.role !== "STANDARD") === t.sections.some((s) => s.role !== "STANDARD"));
 
-  // question bank in the chapters that carry marks
+  // question bank: every chapter that carries marks gets a few questions of every section type, like a real bank
   let n = 0;
   for (const sec of bp.sections) {
-    const per = Math.max(2, sec.count * 2);
-    for (let k = 0; k < per; k++) {
-      const ch = quotas[(k + n) % quotas.length];
-      const r = await call("POST", "/api/questions", makeQuestion(sec, book.id, ch.chapterId, n++));
-      if (r.status >= 300) { note("question creates", false, `${sec.type}: ${JSON.stringify(r.data)}`); break; }
+    const perChapter = sec.marksEach === 1 ? 3 : 2;
+    outer: for (const ch of quotas) {
+      for (let k = 0; k < perChapter; k++) {
+        const r = await call("POST", "/api/questions", makeQuestion(sec, book.id, ch.chapterId, n++));
+        if (r.status >= 300) { note("question creates", false, `${sec.type}: ${JSON.stringify(r.data)}`); break outer; }
+      }
     }
   }
 
