@@ -1,6 +1,8 @@
 import type { QuestionType } from "./constants";
+import { ENGLISH_BOOKS, englishSections } from "./englishBlueprint";
 import { FORMATS } from "./officialFormats";
-import { buildOfficialTemplates, sectionsFor } from "./officialTemplates";
+import { SCHEME_GROUPS_2026_27 } from "./officialSchemeData";
+import { buildOfficialTemplates, buildSchoolDefinedTemplates, sectionsFor, sourceFor } from "./officialTemplates";
 import {
   findOfficialScheme,
   type MarkingComponent,
@@ -592,222 +594,12 @@ export function generateStandard23Q80MSectionGroups(lang: "sa" | "hi" | "en" = "
   ];
 }
 
-export function generateEnglish16Q75MSectionGroups(): BlueprintTemplateSectionGroup[] {
-  return [
-    {
-      title: "Section A: Reading Comprehension (Unseen Passages)",
-      instructions: "Read the following passages carefully and answer the questions given below.",
-      questionTypes: [
-        {
-          // Official sample paper: Q1 and Q2 are each a passage with five 1-mark MCQs (1x5=5).
-          type: "UNSEEN_PASSAGE",
-          count: 2,
-          marksEach: 5,
-          orChoiceMode: "NOT_REQUIRED",
-          role: "PASSAGE",
-          groupKey: "reading.unseen-passage",
-          choicePolicy: createChoicePolicy("NO_CHOICE", 2, 2, "ANY_INCLUDED_CHAPTER", "Two unseen passages, 5 one-mark MCQs each"),
-        },
-      ],
-    },
-    {
-      title: "Section B: Writing Skills",
-      instructions: "Answer the writing section tasks as per instructions.",
-      questionTypes: [
-        {
-          type: "LONG",
-          count: 1,
-          marksEach: 4,
-          orChoiceMode: "NOT_REQUIRED",
-          choicePolicy: createChoicePolicy("NO_CHOICE", 1, 1, "ANY_INCLUDED_CHAPTER", "Note Making and Summary"),
-        },
-        {
-          type: "LONG",
-          count: 1,
-          marksEach: 4,
-          orChoiceMode: "REQUIRED",
-          orAlternativeCount: 1,
-          choicePolicy: createChoicePolicy("FULL_OR_ALTERNATIVE", 2, 1, "SAME_UNIT", "Formal / Informal Letter Writing with choice"),
-        },
-        {
-          type: "LONG",
-          count: 1,
-          marksEach: 5,
-          orChoiceMode: "REQUIRED",
-          orAlternativeCount: 1,
-          choicePolicy: createChoicePolicy("FULL_OR_ALTERNATIVE", 2, 1, "SAME_UNIT", "Long Composition / Essay with choice"),
-        },
-        {
-          type: "SHORT",
-          count: 1,
-          marksEach: 3,
-          orChoiceMode: "NOT_REQUIRED",
-          choicePolicy: createChoicePolicy("NO_CHOICE", 1, 1, "ANY_INCLUDED_CHAPTER", "Picture Guided Composition"),
-        },
-      ],
-    },
-    {
-      title: "Section C: Grammar",
-      instructions: "Answer the grammar exercises as directed.",
-      questionTypes: [
-        {
-          type: "FILL_BLANK",
-          count: 5,
-          marksEach: 1,
-          orChoiceMode: "NOT_REQUIRED",
-          choicePolicy: createChoicePolicy("ATTEMPT_K_OF_N", 6, 5, "ANY_INCLUDED_CHAPTER", "Grammar: Fill in the blanks (Attempt any 5 of 6)"),
-        },
-        {
-          type: "VERY_SHORT",
-          count: 5,
-          marksEach: 1,
-          orChoiceMode: "NOT_REQUIRED",
-          choicePolicy: createChoicePolicy("ATTEMPT_K_OF_N", 6, 5, "ANY_INCLUDED_CHAPTER", "Grammar: Do as directed (Attempt any 5 of 6)"),
-        },
-      ],
-    },
-    {
-      title: "Section D: Literature (Textbooks)",
-      instructions: "Answer textual extracts, short answers, and long answers from prescribed textbooks.",
-      questionTypes: [
-        {
-          type: "MCQ",
-          count: 10,
-          marksEach: 1,
-          orChoiceMode: "NOT_REQUIRED",
-          choicePolicy: createChoicePolicy("NO_CHOICE", 10, 10, "ANY_INCLUDED_CHAPTER", "Textual extracts (Beehive / Moments / First Flight)"),
-        },
-        {
-          type: "SHORT",
-          count: 10,
-          marksEach: 2,
-          orChoiceMode: "NOT_REQUIRED",
-          orAlternativeCount: 0,
-          choicePolicy: createChoicePolicy("NO_CHOICE", 10, 10, "ANY_INCLUDED_CHAPTER", "Circular 465/2026: Abolition of choice in 2-mark questions"),
-        },
-        {
-          type: "LONG",
-          count: 3,
-          marksEach: 3,
-          orChoiceMode: "REQUIRED",
-          orAlternativeCount: 1,
-          choicePolicy: createChoicePolicy("FULL_OR_ALTERNATIVE", 2, 1, "SAME_UNIT", "Circular 465/2026: Mandatory 100% internal choice in 3-mark questions"),
-        },
-      ],
-    },
-  ];
+export function generateEnglish16Q75MSectionGroups(classLevel: 9 | 10 = 9): BlueprintTemplateSectionGroup[] {
+  return englishSections("IX_X", ENGLISH_BOOKS[classLevel], { createChoicePolicy });
 }
 
-export function generateEnglish15Q80MSectionGroups(): BlueprintTemplateSectionGroup[] {
-  return [
-    {
-      title: "Section A: Reading Skills",
-      instructions: "Read the unseen passages and complete the comprehension and note-making tasks.",
-      questionTypes: [
-        {
-          type: "MCQ",
-          count: 10,
-          marksEach: 1,
-          orChoiceMode: "NOT_REQUIRED",
-          choicePolicy: createChoicePolicy("NO_CHOICE", 10, 10, "ANY_INCLUDED_CHAPTER", "Unseen passage comprehension questions"),
-        },
-        {
-          type: "SHORT",
-          count: 1,
-          marksEach: 4,
-          orChoiceMode: "NOT_REQUIRED",
-          choicePolicy: createChoicePolicy("NO_CHOICE", 1, 1, "ANY_INCLUDED_CHAPTER", "Note Making and Summary"),
-        },
-      ],
-    },
-    {
-      title: "Section B: Writing Skills",
-      instructions: "Complete the writing tasks following official format and word limits.",
-      questionTypes: [
-        {
-          type: "SHORT",
-          count: 1,
-          marksEach: 4,
-          orChoiceMode: "REQUIRED",
-          orAlternativeCount: 1,
-          choicePolicy: createChoicePolicy("FULL_OR_ALTERNATIVE", 2, 1, "SAME_UNIT", "Notice / Advertisement / Poster with choice"),
-        },
-        {
-          type: "LONG",
-          count: 1,
-          marksEach: 4,
-          orChoiceMode: "REQUIRED",
-          orAlternativeCount: 1,
-          choicePolicy: createChoicePolicy("FULL_OR_ALTERNATIVE", 2, 1, "SAME_UNIT", "Formal / Informal Letter with choice"),
-        },
-        {
-          type: "LONG",
-          count: 1,
-          marksEach: 4,
-          orChoiceMode: "REQUIRED",
-          orAlternativeCount: 1,
-          choicePolicy: createChoicePolicy("FULL_OR_ALTERNATIVE", 2, 1, "SAME_UNIT", "Article / Report / Speech with choice"),
-        },
-      ],
-    },
-    {
-      title: "Section C: Grammar",
-      instructions: "Answer the grammar exercises as directed.",
-      questionTypes: [
-        {
-          type: "FILL_BLANK",
-          count: 5,
-          marksEach: 1,
-          orChoiceMode: "NOT_REQUIRED",
-          choicePolicy: createChoicePolicy("ATTEMPT_K_OF_N", 6, 5, "ANY_INCLUDED_CHAPTER", "Sentence fillers (Attempt 5 of 6)"),
-        },
-        {
-          type: "VERY_SHORT",
-          count: 5,
-          marksEach: 1,
-          orChoiceMode: "NOT_REQUIRED",
-          choicePolicy: createChoicePolicy("ATTEMPT_K_OF_N", 6, 5, "ANY_INCLUDED_CHAPTER", "Do as directed (Attempt 5 of 6)"),
-        },
-      ],
-    },
-    {
-      title: "Section D: Textbooks (Flamingo & Vistas)",
-      instructions: "Answer extracts, short answers, and long answers from Flamingo and Vistas.",
-      questionTypes: [
-        {
-          type: "MCQ",
-          count: 9,
-          marksEach: 1,
-          orChoiceMode: "NOT_REQUIRED",
-          choicePolicy: createChoicePolicy("NO_CHOICE", 9, 9, "ANY_INCLUDED_CHAPTER", "Flamingo extracts"),
-        },
-        {
-          type: "SHORT",
-          count: 11,
-          marksEach: 2,
-          orChoiceMode: "NOT_REQUIRED",
-          orAlternativeCount: 0,
-          choicePolicy: createChoicePolicy("NO_CHOICE", 11, 11, "ANY_INCLUDED_CHAPTER", "Circular 465/2026: Abolition of choice in 2-mark questions"),
-        },
-        {
-          type: "LONG",
-          count: 3,
-          marksEach: 3,
-          orChoiceMode: "REQUIRED",
-          orAlternativeCount: 1,
-          choicePolicy: createChoicePolicy("FULL_OR_ALTERNATIVE", 2, 1, "SAME_UNIT", "Flamingo long answers with choice"),
-        },
-        {
-          type: "LONG",
-          count: 1,
-          marksEach: 4,
-          orChoiceMode: "REQUIRED",
-          orAlternativeCount: 1,
-          choicePolicy: createChoicePolicy("FULL_OR_ALTERNATIVE", 2, 1, "SAME_UNIT", "Vistas analytical long answer with choice"),
-        },
-      ],
-    },
-  ];
+export function generateEnglish15Q80MSectionGroups(classLevel: 11 | 12 = 11): BlueprintTemplateSectionGroup[] {
+  return englishSections("XI_XII", ENGLISH_BOOKS[classLevel], { createChoicePolicy });
 }
 
 // =============================================================================
@@ -856,7 +648,7 @@ const RAW_MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     subjectName: "English",
     language: "en",
     archetype: "ENGLISH_16Q_75M",
-    sections: generateEnglish16Q75MSectionGroups(),
+    sections: generateEnglish16Q75MSectionGroups(9),
     provenance: {
       documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
       circularReference: "465/विद्योचित/2026",
@@ -1023,7 +815,7 @@ const RAW_MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     subjectName: "English",
     language: "en",
     archetype: "ENGLISH_16Q_75M",
-    sections: generateEnglish16Q75MSectionGroups(),
+    sections: generateEnglish16Q75MSectionGroups(10),
     provenance: {
       documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
       circularReference: "465/विद्योचित/2026",
@@ -1213,7 +1005,7 @@ const RAW_MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     subjectName: "English",
     language: "en",
     archetype: "ENGLISH_15Q_80M",
-    sections: generateEnglish15Q80MSectionGroups(),
+    sections: generateEnglish15Q80MSectionGroups(11),
     provenance: {
       documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
       circularReference: "465/विद्योचित/2026",
@@ -1355,7 +1147,7 @@ const RAW_MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     subjectName: "English",
     language: "en",
     archetype: "ENGLISH_15Q_80M",
-    sections: generateEnglish15Q80MSectionGroups(),
+    sections: generateEnglish15Q80MSectionGroups(12),
     provenance: {
       documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
       circularReference: "465/विद्योचित/2026",
@@ -1492,14 +1284,26 @@ const RAW_MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
 /** Attaches official source + content components when a verified 2026-27 scheme exists. */
 function attachOfficialSource(t: BlueprintTemplate): BlueprintTemplate {
   const scheme = findOfficialScheme(t.classLevel, t.subjectName);
-  if (!scheme || scheme.totalMarks !== t.totalMarks) return t;
-  return { ...t, components: scheme.components, source: scheme.source };
+  if (scheme && scheme.totalMarks === t.totalMarks) return { ...t, components: scheme.components, source: scheme.source };
+  // Subjects without hand-curated components: the format is verified by official-scheme-conformance.test.ts,
+  // so cite the scheme page and keep the printed unit allocation for reference.
+  const g = SCHEME_GROUPS_2026_27.find(
+    (x) => x.classLevel === t.classLevel && x.subject === t.subjectName && x.totalMarks === t.totalMarks,
+  );
+  if (!g) return t;
+  return {
+    ...t,
+    source: sourceFor(g),
+    unitAllocation: g.rows.filter((row) => row.marks > 0).map((row) => ({ no: row.no, title: row.title, marks: row.marks })),
+  };
 }
 
 export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
   ...RAW_MPBSE_BLUEPRINT_TEMPLATES.map(attachOfficialSource),
   // every other written paper in the 2026-27 scheme
   ...buildOfficialTemplates({ getArchetypeHeading, createChoicePolicy }, RAW_MPBSE_BLUEPRINT_TEMPLATES),
+  // subjects the school teaches that MPBSE prints no paper for
+  ...buildSchoolDefinedTemplates({ getArchetypeHeading, createChoicePolicy }),
 ];
 
 // =============================================================================

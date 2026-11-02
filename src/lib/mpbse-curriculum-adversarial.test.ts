@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { SUBJECTS_SEED as SEED_FOR_COUNTS } from "./curriculumData";
 import { PrismaClient } from "@prisma/client";
 
 describe("Adversarial Empirical Challenge: Milestone 1 Schema & Seed Integrity", () => {
@@ -61,7 +62,7 @@ describe("Adversarial Empirical Challenge: Milestone 1 Schema & Seed Integrity",
       include: { chapters: true },
     });
 
-    expect(textbooks.length).toBe(37);
+    expect(textbooks.length).toBe(SEED_FOR_COUNTS.reduce((n, subj) => n + subj.textbooks.length, 0));
 
     for (const tb of textbooks) {
       expect(tb.legacyBookId).toBeTruthy();
@@ -152,16 +153,10 @@ describe("Adversarial Empirical Challenge: Milestone 1 Schema & Seed Integrity",
     const c9SanskritOverflow = mismatches.find((m) => m.classLevel === 9 && m.subject === "Sanskrit" && m.diff > 0);
     expect(c9SanskritOverflow).toBeUndefined();
 
-    // Legitimate deficits (e.g. Map Work or Literature subsets) are preserved:
-    const c9Social = mismatches.find((m) => m.classLevel === 9 && m.subject === "Social Science");
-    expect(c9Social).toBeDefined();
-    expect(c9Social?.chapterSum).toBe(71);
-    expect(c9Social?.theoryMarks).toBe(75);
-
-    const c9English = mismatches.find((m) => m.classLevel === 9 && m.subject === "English");
-    expect(c9English?.chapterSum).toBe(55);
-
-    const c10English = mismatches.find((m) => m.classLevel === 10 && m.subject === "English");
-    expect(c10English?.chapterSum).toBe(59);
+    // Social Science IX and English IX/X used to fall short (71, 55, 59); they now reconcile to 75, so they are
+    // no longer listed as mismatches.
+    for (const [lvl, sub] of [[9, "Social Science"], [9, "English"], [10, "English"]] as const) {
+      expect(mismatches.find((m) => m.classLevel === lvl && m.subject === sub), `${lvl} ${sub}`).toBeUndefined();
+    }
   });
 });

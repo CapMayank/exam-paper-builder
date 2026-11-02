@@ -3,6 +3,8 @@ import { ensureClassAndSubject } from "@/lib/classes";
 import { prisma } from "@/lib/prisma";
 import { bookSchema } from "@/lib/schemas";
 
+import { keepActive, scopeFromRequest } from "@/lib/viewScope";
+
 export const GET = route(async (req) => {
   const url = new URL(req.url);
   const session = url.searchParams.get("session");
@@ -10,11 +12,12 @@ export const GET = route(async (req) => {
     session && session !== "ALL"
       ? { academicSession: { in: [session.replace(/[–—]/g, "-"), session.replace(/-/g, "–")] } }
       : undefined;
-  return prisma.book.findMany({
+  const books = await prisma.book.findMany({
     where,
     orderBy: [{ className: "asc" }, { subject: "asc" }, { title: "asc" }],
     include: { chapters: { orderBy: { number: "asc" } }, _count: { select: { questions: true, blueprints: true } } },
   });
+  return keepActive(books, (b) => b, scopeFromRequest(req));
 });
 
 export const POST = route(async (req) => {

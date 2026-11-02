@@ -9,23 +9,44 @@ import {
 } from "@/lib/curriculumTemplates";
 import { QUESTION_TYPE_LABEL } from "@/lib/constants";
 import { Modal } from "./ui";
+import { useViewScope } from "./ViewScopeBar";
+import { classLevelOf, isActiveTemplate } from "@/lib/schoolProfile";
 
 interface BlueprintTemplateModalProps {
+  /** Narrow the list to one class, e.g. "Class 10". */
+  className?: string;
   isOpen: boolean;
   onClose: () => void;
   onSelectTemplate: (template: BlueprintTemplate) => void;
 }
 
 export function BlueprintTemplateModal({
+  className,
   isOpen,
   onClose,
   onSelectTemplate,
 }: BlueprintTemplateModalProps) {
-  const [selectedId, setSelectedId] = useState<string>(STANDARD_BLUEPRINT_TEMPLATES[0].id);
+  const [scope] = useViewScope();
+  const level = classLevelOf(className);
+  const templates = STANDARD_BLUEPRINT_TEMPLATES.filter(
+    (t) => isActiveTemplate(t, scope) && (!level || !t.classLevel || t.classLevel === level),
+  );
+  const [selectedId, setSelectedId] = useState<string>("");
 
   if (!isOpen) return null;
 
-  const current = STANDARD_BLUEPRINT_TEMPLATES.find((t) => t.id === selectedId) || STANDARD_BLUEPRINT_TEMPLATES[0];
+  const current = templates.find((t) => t.id === selectedId) || templates[0];
+  if (!current) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" role="dialog" aria-modal="true">
+        <div className="w-full max-w-md rounded-2xl bg-white p-6 text-sm text-slate-700 shadow-2xl">
+          <p className="font-semibold text-slate-900">No templates for this class and stream.</p>
+          <p className="mt-1 text-slate-600">Pick a class (9–12) or change the stream in the sidebar.</p>
+          <button type="button" className="btn btn-primary mt-4" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -64,7 +85,7 @@ export function BlueprintTemplateModal({
         <div className="grid grid-cols-1 md:grid-cols-12 flex-1 overflow-hidden">
           {/* Left: Template Selector List */}
           <div className="md:col-span-5 border-r border-slate-200 overflow-y-auto p-3 space-y-1.5 bg-slate-50/40">
-            {STANDARD_BLUEPRINT_TEMPLATES.map((tmpl) => {
+            {templates.map((tmpl) => {
               const isSelected = tmpl.id === selectedId;
               return (
                 <button
@@ -92,6 +113,14 @@ export function BlueprintTemplateModal({
                     </span>
                     <span>•</span>
                     <span>{tmpl.targetClasses}</span>
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px]">
+                    {tmpl.subjectName && <span className="rounded bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-700">{tmpl.subjectName}</span>}
+                    {tmpl.source ? (
+                      <span className="rounded bg-emerald-50 px-1.5 py-0.5 font-semibold text-emerald-800">MPBSE {tmpl.source.session} · p.{tmpl.source.pdfPage}</span>
+                    ) : (
+                      <span className="rounded bg-amber-50 px-1.5 py-0.5 font-semibold text-amber-800">School-defined, not an MPBSE pattern</span>
+                    )}
                   </div>
                 </button>
               );

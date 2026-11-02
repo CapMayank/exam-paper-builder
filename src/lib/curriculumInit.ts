@@ -371,13 +371,8 @@ export function generateEnglish15Q80MSections() {
  * strictly adhering to MPBSE Circular 465 rules and subject-specific heading languages.
  */
 export function templateSectionsToSectionsJson(template: BlueprintTemplate) {
-  if (template.archetype === "ENGLISH_16Q_75M") {
-    return generateEnglish16Q75MSections();
-  }
-  if (template.archetype === "ENGLISH_15Q_80M") {
-    return generateEnglish15Q80MSections();
-  }
-
+  // English papers are built from the template itself (their Reading section is a passage group), not from
+  // the legacy flat generators, so what a teacher gets matches the verified blueprint.
   let position = 1;
   const sections: any[] = [];
 
@@ -471,6 +466,8 @@ export function templateSectionsToSectionsJson(template: BlueprintTemplate) {
         orChoiceMode,
         orAlternativeCount,
         choicePolicy,
+        role: qt.role ?? "STANDARD",
+        groupKey: qt.groupKey ?? "",
       });
     }
   }
@@ -898,12 +895,22 @@ export async function seedCurriculumData(client?: PrismaClient): Promise<{
     totalBlueprintsCreated++;
   }
 
+  await prisma.curriculumBoard.update({ where: { code: "MPBSE" }, data: { seedVersion: curriculumSeedSignature() } });
+
   return {
     subjectsCount: SUBJECTS_SEED.length,
     textbooksCount: totalTextbooksCreated,
     chaptersCount: totalChaptersCreated,
     templatesCount: totalBlueprintsCreated,
   };
+}
+
+/** Changes whenever the seeded subjects, chapters or marks change, so stored curriculum is refreshed. */
+export function curriculumSeedSignature(): string {
+  const text = JSON.stringify(SUBJECTS_SEED) + JSON.stringify(MPBSE_BLUEPRINT_TEMPLATES.map((t) => [t.templateCode, t.totalMarks]));
+  let h = 5381;
+  for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) | 0;
+  return `v${(h >>> 0).toString(36)}`;
 }
 
 let initPromise: Promise<void> | null = null;
@@ -932,7 +939,13 @@ export async function ensureCurriculumSeeded(
     try {
       const templateCount = await prisma.curriculumBlueprintTemplate.count();
 
-      if (templateCount < 27 || forceRefresh) {
+      // keep stored system templates in step with the verified static templates (idempotent, cheap)
+      await syncBlueprintTemplates(prisma);
+
+      const board = await prisma.curriculumBoard.findUnique({ where: { code: "MPBSE" }, select: { seedVersion: true } });
+      const stale = board?.seedVersion !== curriculumSeedSignature();
+
+      if (templateCount < 27 || forceRefresh || stale) {
         console.log("🌱 [CurriculumInit] Seeding MPBSE curriculum and blueprint templates...");
         const result = await seedCurriculumData(prisma);
         console.log(

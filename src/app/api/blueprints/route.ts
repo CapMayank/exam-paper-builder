@@ -5,6 +5,8 @@ import { blueprintSchema } from "@/lib/schemas";
 import { DEFAULT_ACADEMIC_SESSION } from "@/lib/constants";
 import { ensureCurriculumSeeded } from "@/lib/curriculumInit";
 
+import { keepActive, scopeFromRequest } from "@/lib/viewScope";
+
 export const GET = route(async (req) => {
   await ensureCurriculumSeeded().catch((err) => {
     console.error("❌ Failed to ensure curriculum is seeded:", err);
@@ -15,7 +17,8 @@ export const GET = route(async (req) => {
     session && session !== "ALL"
       ? { academicSession: { in: [session.replace(/[–—]/g, "-"), session.replace(/-/g, "–")] } }
       : undefined;
-  return prisma.blueprint.findMany({ where, orderBy: { createdAt: "desc" }, include: blueprintInclude });
+  const list = await prisma.blueprint.findMany({ where, orderBy: { createdAt: "desc" }, include: blueprintInclude });
+  return keepActive(list, (b) => b.book, scopeFromRequest(req));
 });
 
 export const POST = route(async (req) => {

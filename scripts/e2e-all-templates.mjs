@@ -42,7 +42,7 @@ function makeQuestion(sec, bookId, chapterId, n) {
     case "FILL_BLANK":
       return { ...base, text: `${stem} ________ completes this.`, options: [], answer: `w${n}` };
     case "MATCH_COLUMN":
-      return { ...base, text: `Match the following (set ${n})`, options: ["Left1::Right1", "Left2::Right2", "Left3::Right3", "Left4::Right4", "Left5::Right5", "Left6::Right6"].slice(0, Math.max(3, sec.count)), answer: "1-1, 2-2, 3-3" };
+      return { ...base, text: `Match the following (set ${n})`, options: Array.from({ length: Math.max(3, sec.count) }, (_, k) => `Left${k + 1}::Right${k + 1}`), answer: "1-1, 2-2, 3-3" };
     case "UNSEEN_PASSAGE":
     case "CASE_STUDY":
     case "REFERENCE_CONTEXT": {

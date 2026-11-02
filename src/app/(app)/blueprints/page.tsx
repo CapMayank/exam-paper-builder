@@ -1058,6 +1058,7 @@ export default function BlueprintsPage() {
       />
 
       <BlueprintTemplateModal
+        className={classFilter !== "ALL" ? classFilter : undefined}
         isOpen={templateModalOpen}
         onClose={() => setTemplateModalOpen(false)}
         onSelectTemplate={(tmpl) => {

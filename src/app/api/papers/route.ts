@@ -1,4 +1,5 @@
 import { body, HttpError, route } from "@/lib/api";
+import { keepActive, scopeFromRequest } from "@/lib/viewScope";
 import { recordAudit } from "@/lib/audit";
 import { paperStatus } from "@/lib/blueprint";
 import { resolvePaperExamType } from "@/lib/constants";
@@ -8,8 +9,9 @@ import { loadPaperView, toPlacedItems } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { paperCreateSchema } from "@/lib/schemas";
 
-export const GET = route(async () => {
-  const papers = await prisma.paper.findMany({
+export const GET = route(async (req) => {
+  const scope = scopeFromRequest(req);
+  const allPapers = await prisma.paper.findMany({
     orderBy: { updatedAt: "desc" },
     include: {
       blueprint: {
@@ -37,6 +39,7 @@ export const GET = route(async () => {
       },
     },
   });
+  const papers = keepActive(allPapers, (p) => p.blueprint.book, scope);
   return papers.map(({ blueprint, items, ...p }) => {
     const resolvedExamType = resolvePaperExamType({ ...p, blueprint });
     const placedItems = toPlacedItems(blueprint.sections, items);

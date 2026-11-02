@@ -9,17 +9,14 @@ describe("blueprint structure audit", () => {
     for (const t of MPBSE_BLUEPRINT_TEMPLATES) expect(codes(t)).not.toContain("MARKS_MISMATCH");
   });
 
-  it("English class 9/10 reading is two passage groups; 11/12 stays flagged until the passage count is verified", () => {
+  it("every English template models reading as passage groups (2x5 for class 9/10, 1x10 for 11/12)", () => {
     const en = MPBSE_BLUEPRINT_TEMPLATES.filter((t) => t.subjectName === "English");
     expect(en.length).toBe(4);
     for (const t of en) {
-      if (t.classLevel! <= 10) {
-        expect(codes(t)).not.toContain("PASSAGE_SECTION_IS_FLAT_OBJECTIVE");
-        const reading = t.sections[0].questionTypes[0];
-        expect([reading.type, reading.count, reading.marksEach, reading.role]).toEqual(["UNSEEN_PASSAGE", 2, 5, "PASSAGE"]);
-      } else {
-        expect(codes(t)).toContain("PASSAGE_SECTION_IS_FLAT_OBJECTIVE");
-      }
+      expect(codes(t)).not.toContain("PASSAGE_SECTION_IS_FLAT_OBJECTIVE");
+      const reading = t.sections[0].questionTypes[0];
+      const expected = t.classLevel! <= 10 ? ["UNSEEN_PASSAGE", 2, 5, "PASSAGE"] : ["UNSEEN_PASSAGE", 1, 10, "PASSAGE"];
+      expect([reading.type, reading.count, reading.marksEach, reading.role]).toEqual(expected);
     }
   });
 
@@ -37,8 +34,12 @@ describe("blueprint structure audit", () => {
     for (const t of MPBSE_BLUEPRINT_TEMPLATES) {
       expect(codes(t).includes("MISSING_SOURCE_REFERENCE")).toBe(!t.source);
     }
-    const urdu10 = MPBSE_BLUEPRINT_TEMPLATES.find((t) => t.subjectName === "Urdu")!;
-    expect(urdu10.source).toBeUndefined();
+    // every written paper in the 2026-27 scheme is now sourced; a template with no scheme page would be flagged
+    for (const t of MPBSE_BLUEPRINT_TEMPLATES.filter((x) => !x.archetype.startsWith("SCHOOL_"))) {
+      expect(t.source?.url, t.templateCode).toContain("mpbse.nic.in");
+    }
+    // school-defined papers (Disaster Management) must never claim an MPBSE source
+    for (const t of MPBSE_BLUEPRINT_TEMPLATES.filter((x) => x.archetype.startsWith("SCHOOL_"))) expect(t.source).toBeUndefined();
   });
 
   it("accepts a language template with a passage parent group, grammar and writing", () => {

@@ -1,5 +1,6 @@
 import { DEFAULT_ACADEMIC_SESSION, inferClassOrder, sortClassNames } from "./constants";
 import { prisma } from "./prisma";
+import { canonicalSubject, classLevelOf, PROFILE_CLASS_LEVELS, profileSubjectsFor } from "./schoolProfile";
 import type { AcademicClassDto, SectionDetail } from "./types";
 
 export { inferClassOrder, sortClassNames };
@@ -121,6 +122,29 @@ export async function ensureClassAndSubject(
  * Syncs existing Book records into AcademicClass & ClassSubject tables so no existing
  * books/blueprints/papers are ever orphaned from the class hierarchy.
  */
+/**
+ * Makes sure every class of 9-12 has the school's required subjects (e.g. Disaster Management).
+ * Only adds what is missing; nothing is removed, so books and papers of other subjects stay intact.
+ */
+export async function ensureSchoolSubjects(sessionFilter?: string | null) {
+  const where =
+    sessionFilter && sessionFilter !== "ALL" ? { academicSession: normalizeAcademicSession(sessionFilter) } : undefined;
+  const classes = await prisma.academicClass.findMany({ where, include: { subjects: true } });
+  for (const c of classes) {
+    const level = classLevelOf(c.name);
+    if (!level || !(PROFILE_CLASS_LEVELS as readonly number[]).includes(level)) continue;
+    const have = new Set(c.subjects.map((s) => canonicalSubject(s.name)).filter(Boolean));
+    for (const sub of profileSubjectsFor(level)) {
+      if (have.has(sub.name)) continue;
+      await prisma.classSubject.upsert({
+        where: { classId_name: { classId: c.id, name: sub.name } },
+        update: {},
+        create: { classId: c.id, name: sub.name, code: "" },
+      });
+    }
+  }
+}
+
 export async function syncClassesFromBooks(sessionFilter?: string | null) {
   const books = await prisma.book.findMany({
     select: { className: true, subject: true, academicSession: true },

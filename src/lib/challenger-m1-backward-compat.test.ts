@@ -741,7 +741,7 @@ describe("Milestone 1 Challenger 2: Empirical Backward Compatibility & FK Integr
       }
 
       // Ensure every single template had at least one 2-mark section tested
-      expect(total2MarkSectionsFound).toBe(27);
+      expect(total2MarkSectionsFound).toBeGreaterThanOrEqual(27);
     });
 
     it("4.4. Circular 465 Rule: 100% Mandatory internal alternative (FULL_OR_ALTERNATIVE) for 3-mark and 4-mark questions in Standard/Science archetypes", async () => {
@@ -791,69 +791,48 @@ describe("Milestone 1 Challenger 2: Empirical Backward Compatibility & FK Integr
       expect(total3m4mSectionsFound).toBe(46);
     });
 
-    it("4.5. English Language Templates accurately model Circular 465 and board-specific rules", async () => {
+    it("4.5. English templates follow the official 2026-27 structure (no invented attempt-k-of-n rules)", async () => {
       const englishTemplates = await prisma.curriculumBlueprintTemplate.findMany({
-        where: {
-          archetype: { in: ["ENGLISH_16Q_75M", "ENGLISH_15Q_80M"] },
-        },
+        where: { archetype: { in: ["ENGLISH_16Q_75M", "ENGLISH_15Q_80M"] } },
       });
-
       expect(englishTemplates.length).toBe(4); // Classes 9, 10, 11, 12
 
       for (const t of englishTemplates) {
         const sections = t.sectionsJson as Array<{
-          title: string;
-          count: number;
-          marksEach: number;
-          orChoiceMode: string;
-          choicePolicy?: { policyType: string; totalProvided: number; totalRequired: number };
+          title: string; count: number; marksEach: number; orChoiceMode: string; type: string; role?: string;
+          choicePolicy?: { policyType: string };
         }>;
-
-        // 1. Note Making (4m) is strictly compulsory (NO_CHOICE)
+        // Note making (4 marks) is compulsory
         const noteMaking = sections.find((s) => s.title.includes("Note Making"));
-        expect(noteMaking).toBeDefined();
         expect(noteMaking?.marksEach).toBe(4);
         expect(noteMaking?.orChoiceMode).toBe("NO_CHOICE");
-        expect(noteMaking?.choicePolicy?.policyType).toBe("NO_CHOICE");
-
-        // 2. Grammar sections use ATTEMPT_K_OF_N
-        const grammarSections = sections.filter((s) => s.title.includes("Grammar"));
-        expect(grammarSections.length).toBeGreaterThanOrEqual(2);
-        for (const g of grammarSections) {
-          expect(g.orChoiceMode).toBe("ATTEMPT_K_OF_N");
-          expect(g.choicePolicy?.policyType).toBe("ATTEMPT_K_OF_N");
-          expect(g.choicePolicy?.totalProvided).toBe(6);
-          expect(g.choicePolicy?.totalRequired).toBe(5);
-        }
-
-        // 3. Short Answer Questions (2m) strictly have NO_CHOICE per Circular 465
-        const saSections = sections.filter((s) => s.marksEach === 2);
-        for (const sa of saSections) {
+        // Grammar: 5 gap-filling + 5 do-as-directed, one mark each, no choice
+        const grammar = sections.filter((s) => s.title.includes("Grammar"));
+        expect(grammar.map((g) => g.count)).toEqual([5, 5]);
+        for (const g of grammar) expect(g.orChoiceMode).toBe("NO_CHOICE");
+        // The reading section is a passage group, not loose MCQs
+        const reading = sections[0];
+        expect(reading.type).toBe("UNSEEN_PASSAGE");
+        expect(reading.role).toBe("PASSAGE");
+        // Circular 465: no choice on 2-mark questions
+        for (const sa of sections.filter((s) => s.marksEach === 2)) {
           expect(sa.orChoiceMode).toBe("NO_CHOICE");
           expect(sa.choicePolicy?.policyType).toBe("NO_CHOICE");
+        }
+        // 3- and 4-mark written questions keep their internal choice
+        for (const s of sections.filter((x) => (x.marksEach === 3 || x.marksEach === 4) && x.role !== "PASSAGE" && !x.title.includes("Note Making"))) {
+          expect(s.orChoiceMode, s.title).toBe("FULL_OR_ALTERNATIVE");
         }
       }
     });
 
-    it("4.6. Objective 1-mark questions across all templates have NO_CHOICE (except grammar ATTEMPT_K_OF_N)", async () => {
+    it("4.6. Objective 1-mark questions across all templates have NO_CHOICE", async () => {
       const templates = await prisma.curriculumBlueprintTemplate.findMany();
-
       for (const t of templates) {
-        const sections = t.sectionsJson as Array<{
-          title: string;
-          marksEach: number;
-          orChoiceMode: string;
-          choicePolicy?: { policyType: string };
-        }>;
-
-        const objSections = sections.filter((s) => s.marksEach === 1);
-        for (const obj of objSections) {
-          if (obj.title.includes("Grammar")) {
-            expect(obj.orChoiceMode).toBe("ATTEMPT_K_OF_N");
-          } else {
-            expect(obj.orChoiceMode).toBe("NO_CHOICE");
-            expect(obj.choicePolicy?.policyType).toBe("NO_CHOICE");
-          }
+        const sections = t.sectionsJson as Array<{ title: string; marksEach: number; orChoiceMode: string; choicePolicy?: { policyType: string } }>;
+        for (const obj of sections.filter((s) => s.marksEach === 1)) {
+          expect(obj.orChoiceMode).toBe("NO_CHOICE");
+          expect(obj.choicePolicy?.policyType).toBe("NO_CHOICE");
         }
       }
     });

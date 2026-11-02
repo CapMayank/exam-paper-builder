@@ -304,6 +304,7 @@ model CurriculumBoard {
   state         String               @default("Madhya Pradesh")
   websiteUrl    String               @default("https://mpbse.nic.in")
   activeSession String               @default("2026-27")
+  seedVersion   String               @default("") // signature of the seeded curriculum data; a change re-seeds
   createdAt     DateTime             @default(now())
   updatedAt     DateTime             @updatedAt
   documents     CurriculumDocument[]

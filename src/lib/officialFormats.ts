@@ -19,7 +19,8 @@ export type FormatId =
   | "F25_MUSIC"
   | "ENGLISH_IX_X"
   | "ENGLISH_XI_XII"
-  | "PRACTICAL";
+  | "PRACTICAL"
+  | "SCHOOL_DM_50";
 
 export type FormatDef = {
   id: FormatId;
@@ -34,6 +35,9 @@ const o80: FormatDef["objective"] = [6, 6, 6, 7, 7];
 const o70: FormatDef["objective"] = [6, 6, 6, 5, 5];
 
 export const FORMATS: Record<Exclude<FormatId, "ENGLISH_IX_X" | "ENGLISH_XI_XII" | "PRACTICAL" | "F50_MUSIC" | "F25_MUSIC">, FormatDef> = {
+  // School-defined (no MPBSE paper exists for Disaster Management in the 2026-27 documents): 20 objective,
+  // 5 x 2, 4 x 3, 2 x 4 = 50 marks.
+  SCHOOL_DM_50: { id: "SCHOOL_DM_50", objective: [4, 4, 4, 4, 4], written: [{ marksEach: 2, count: 5 }, { marksEach: 3, count: 4 }, { marksEach: 4, count: 2 }] },
   F75: { id: "F75", objective: o75, written: [{ marksEach: 2, count: 12 }, { marksEach: 3, count: 3 }, { marksEach: 4, count: 3 }] },
   F75_MARATHI: { id: "F75_MARATHI", objective: o75, written: [{ marksEach: 2, count: 12 }, { marksEach: 3, count: 2 }, { marksEach: 5, count: 3 }] },
   // Social Science IX/X: Q23 is a map question worth 4 marks

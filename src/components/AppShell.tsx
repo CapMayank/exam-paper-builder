@@ -22,6 +22,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { api } from "@/lib/client";
 import { AcademicSessionProvider } from "@/lib/academicSession";
 import { AcademicSessionSelector } from "./AcademicSessionSelector";
+import { ViewScopeBar } from "./ViewScopeBar";
 import { BrandMark } from "./BrandMark";
 import { UiProvider } from "./ui";
 import { UserProfileModal } from "./UserProfileModal";
@@ -242,6 +243,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className={`mb-4 px-1 ${collapsed ? "flex justify-center" : ""}`}>
             <AcademicSessionSelector compact={collapsed} className={collapsed ? "" : "w-full"} />
           </div>
+          {!collapsed && (
+            <div className="mb-4 px-1">
+              <ViewScopeBar role={user?.role} />
+            </div>
+          )}
 
           <NavList pathname={pathname} rail={collapsed} role={user?.role} />
 
@@ -326,6 +332,9 @@ export function AppShell({ children }: { children: ReactNode }) {
               </div>
               <div className="mb-4 px-1.5">
                 <AcademicSessionSelector className="w-full" />
+              </div>
+              <div className="mb-4 px-1.5">
+                <ViewScopeBar role={user?.role} />
               </div>
               <NavList pathname={pathname} rail={false} role={user?.role} onNavigate={() => setDrawerPath(null)} />
               <div className="mt-auto">

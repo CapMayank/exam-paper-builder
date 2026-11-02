@@ -105,3 +105,23 @@ Run on a copy of the database with the configured Gemini key (`scripts/e2e-live-
 Result after the fixes: 2 passages × 5 one-mark MCQs (4 options, answers, 5 marks), 5 grammar fill-in-the-blank items, all stored as `AI_GENERATED`; the audit's independent review ran (`aiStage: COMPLETED`).
 
 Observed limits (not fixed): the first passage still echoes the "A Letter to God" theme despite the instruction; one grammar item ("courage ___ the absence of fear": is not / does not mean) is ambiguous and neither validation nor the model audit flagged it.
+
+---
+
+## Update 4: complete read of the 2026-27 marking scheme and syllabus
+
+Method: all 133 pages of `MarksScheme_2026_27.pdf` (scanned) and all 128 pages of `Syllabus_2026_27.pdf` were rendered to images and read page by page by parallel reviewers; every table's row marks were checked against its printed total (all 99 subject/class tables add up). Hindi 10/11, Sanskrit 10/12 and several others were additionally re-read by the lead. Everything else is single-reader; Urdu tables are medium confidence (small Urdu script).
+
+Result: `src/lib/officialSchemeData.ts` holds every table; `src/lib/officialFormats.ts` the question-format skeletons (checked against the printed notes AND totals); `src/lib/officialTemplates.ts` builds a template for every written paper (92 templates for classes 9–12). `docs/audit/COVERAGE_MATRIX.md` lists class × subject × format × scheme page × template.
+
+Defects the conformance test found in the hand-written templates: the six 70-mark science templates had the wrong Q1–5 split (official: Physics 6/6/5/6/5, Chemistry/Biology 6/6/6/5/5).
+
+Findings that change earlier assumptions:
+- MPBSE's own documents do **not** name any Sanskrit textbook; there is one combined syllabus per class (grammar items and reader items in the same list). The "separate grammar book" distinction exists only on the NCERT side (Shemushi / Vyakaranavithi / Bhaswati) and could not be verified (ncert.nic.in failed TLS from this machine). The app therefore does not model Sanskrit book variants from MPBSE data.
+- The syllabus prints no marks and no publisher; textbook titles are printed only for English, Hindi, Urdu, Social Science, Geography and Political Science.
+- Studio/practical papers (Painting 9/10, Drawing and Painting, Still Life and Design, Drawing and Designing 11/12) have no written question format; they are listed in the matrix and are not templated.
+- Subject codes are not printed in the scheme; templates generated from it carry none. The codes on the older hand-written templates (401, 411, 512 …) remain unverified.
+- Music papers (25/50 marks) print five objective types for four (or two) objective questions without saying which is which; the template is flagged for adjustment.
+- Marathi 9/10 use 3 and 5-mark questions (no 4-mark); History 11/12 and Geography have map questions worth 5 marks; Social Science 9/10 Q23 is a 4-mark map question.
+
+Autofill fixes found by running every template end to end: a multi-pair match question fills the whole match section (several short ones are combined only when their pair counts add up exactly), and the search now branches on chapters so exact-quota papers solve instead of falling back to a greedy fill.

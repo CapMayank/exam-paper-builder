@@ -1,5 +1,6 @@
 import type { BlueprintTemplate, BlueprintTemplateSectionGroup, ChoicePolicy } from "./curriculumTemplates";
 import { FORMATS, MUSIC_FORMATS, formatIdFor, type FormatDef } from "./officialFormats";
+import { profileSubjectsFor } from "./schoolProfile";
 import type { MarkingComponent, OfficialSource } from "./officialMarkingSchemes";
 import { SCHEME_GROUPS_2026_27, type SchemeGroup } from "./officialSchemeData";
 
@@ -181,6 +182,37 @@ export function buildOfficialTemplates(
         : { unitAllocation: rows.map((r) => ({ no: r.no, title: r.title, marks: r.marks })) }),
     };
     out.push(t);
+  }
+  return out;
+}
+
+/**
+ * Papers the school teaches that MPBSE's 2026-27 documents do not define (currently Disaster Management).
+ * They carry no `source`, so the UI labels them "School-defined, not an MPBSE pattern"; the blueprint stays
+ * fully editable. Marks and format were chosen by the school (50-mark theory paper).
+ */
+export function buildSchoolDefinedTemplates(h: TemplateHelpers): BlueprintTemplate[] {
+  const out: BlueprintTemplate[] = [];
+  for (const level of [9, 10, 11, 12] as const) {
+    for (const sub of profileSubjectsFor(level).filter((x) => !x.officialBlueprint)) {
+      const code = `school-${level}th-${slugify(sub.name)}-50m`;
+      out.push({
+        id: code,
+        templateCode: code,
+        title: `Class ${level} ${sub.name} (${sub.nameHi}) — School Blueprint (50 Marks)`,
+        description: `School-defined 50-mark theory paper. MPBSE's 2026-27 marking scheme and syllabus contain no ${sub.name} paper, so this pattern is not an MPBSE pattern; edit it in the blueprint editor if the school's pattern changes.`,
+        examType: "ANNUAL",
+        durationMin: 120,
+        totalMarks: 50,
+        targetClasses: `Class ${level}`,
+        classLevel: level,
+        stream: level <= 10 ? "SECONDARY_GENERAL" : "HIGHER_SECONDARY_GENERAL",
+        subjectName: sub.name,
+        language: "en",
+        archetype: "SCHOOL_DM_50",
+        sections: sectionsFor(FORMATS.SCHOOL_DM_50, "en", h),
+      });
+    }
   }
   return out;
 }

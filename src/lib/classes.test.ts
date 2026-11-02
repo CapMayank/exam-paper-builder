@@ -76,8 +76,11 @@ describe("Academic Class & Subject Hierarchy", () => {
 
     const class10 = STANDARD_SCHOOL_CLASSES.find((c) => c.name === "Class 10");
     expect(class10).toBeDefined();
-    expect(class10?.subjects.some((s) => s.name === "Mathematics" && s.code === "041")).toBe(true);
-    expect(class10?.subjects.some((s) => s.name === "Science" && s.code === "086")).toBe(true);
+    // classes 9-12 follow the school profile; the scheme prints no subject codes, so none are invented
+    expect(class10?.subjects.map((s) => s.name)).toEqual([
+      "Hindi", "English", "Mathematics", "Science", "Social Science", "Sanskrit", "Disaster Management",
+    ]);
+    expect(class10?.subjects.every((s) => s.code === "")).toBe(true);
   });
 
   it("maps database rows to AcademicClassDto safely with legacy string sections", () => {

@@ -117,6 +117,7 @@ export function autoFillPaper(
 
   // Build list of empty slots
   const slots: Slot[] = [];
+  const preAdded: AutoFillResult["added"] = [];
   let order = 0;
   for (const sec of bp.sections) {
     if (actualOptions?.targetSectionId && sec.id !== actualOptions.targetSectionId) {
@@ -152,6 +153,37 @@ export function autoFillPaper(
       sec.marksEach === 1 &&
       candidatePool.some((c) => c.type === "MATCH_COLUMN" && c.matchPairs !== undefined);
     if (multiMatch && needed > 0) {
+      const pool = candidatePool.filter((c) => c.type === "MATCH_COLUMN" && !usedQuestionIds.has(c.id) && (c.matchPairs ?? 0) > 0);
+      const hasSingle = pool.some((c) => (c.matchPairs ?? 0) >= needed && (chapterRemaining.get(c.chapterId) ?? 0) >= needed);
+      if (!hasSingle) {
+        // No single question has enough pairs: combine up to three whose pair counts add up EXACTLY to the
+        // section (a question always counts all of its pairs, so overshooting would overfill the section).
+        const budget = new Map(chapterRemaining);
+        const sorted = [...pool].sort((x, y) => (y.matchPairs ?? 0) - (x.matchPairs ?? 0));
+        const search = (start: number, left: number, picked: CandidateQuestion[]): CandidateQuestion[] | null => {
+          if (left === 0) return picked;
+          if (picked.length >= 3) return null;
+          for (let i = start; i < sorted.length; i++) {
+            const c = sorted[i];
+            const n = c.matchPairs ?? 0;
+            if (n > left || (budget.get(c.chapterId) ?? 0) < n) continue;
+            budget.set(c.chapterId, (budget.get(c.chapterId) ?? 0) - n);
+            const found = search(i + 1, left - n, [...picked, c]);
+            if (found) return found;
+            budget.set(c.chapterId, (budget.get(c.chapterId) ?? 0) + n);
+          }
+          return null;
+        };
+        const picked = search(0, needed, []);
+        if (picked) {
+          for (const c of picked) {
+            usedQuestionIds.add(c.id);
+            preAdded.push({ sectionId: sec.id, questionId: c.id, orQuestionId: null, requiresInternalChoice: false, chapterId: c.chapterId });
+          }
+          for (const [k, v] of budget) chapterRemaining.set(k, v);
+          continue;
+        }
+      }
       slots.push({
         sectionId: sec.id,
         title: sec.title,
@@ -192,7 +224,7 @@ export function autoFillPaper(
   }
 
   if (slots.length === 0) {
-    return { added: [], unfilled: [], complete: true };
+    return { added: preAdded, unfilled: [], complete: true };
   }
 
   // Available unused candidates
@@ -358,7 +390,8 @@ export function autoFillPaper(
     count: info.count,
   }));
 
-  const complete = unfilled.length === 0 && slots.length === added.length;
+  added.unshift(...preAdded);
+  const complete = unfilled.length === 0 && slots.length === added.length - preAdded.length;
   // a collapsed multi-pair match slot reports every slot it stands for
   for (const u of unfilled) {
     const s = slots.find((x) => x.sectionId === u.sectionId && x.needsPairs !== undefined);

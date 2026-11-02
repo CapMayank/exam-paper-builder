@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { SUBJECTS_SEED as SEED_FOR_COUNTS } from "./curriculumData";
 import { PrismaClient } from "@prisma/client";
 
 describe("MPBSE Curriculum Schema & Seed Data Integrity Suite (Milestone 1)", () => {
@@ -235,7 +236,7 @@ describe("MPBSE Curriculum Schema & Seed Data Integrity Suite (Milestone 1)", ()
       include: { chapters: true },
     });
 
-    expect(textbooks.length).toBe(37);
+    expect(textbooks.length).toBe(SEED_FOR_COUNTS.reduce((n, subj) => n + subj.textbooks.length, 0));
 
     for (const tb of textbooks) {
       const book = await prisma.book.findUnique({
@@ -380,7 +381,7 @@ describe("MPBSE Curriculum Schema & Seed Data Integrity Suite (Milestone 1)", ()
   // ---------------------------------------------------------------------------
   // 11. Invariant C: Class 9 Social Science 71m Chapters + 4m Map Work = 75m
   // ---------------------------------------------------------------------------
-  it("11. Invariant C: Class 9 Social Science active chapters sum to 71 marks with exactly 4 marks reserved for Q23 Map Work (total 75m)", async () => {
+  it("11. Invariant C: Class 9 Social Science chapters (71) plus the 4-mark map row add up to 75", async () => {
     const c9Soc = await prisma.curriculumSubject.findFirst({
       where: {
         code: "300",
@@ -405,19 +406,19 @@ describe("MPBSE Curriculum Schema & Seed Data Integrity Suite (Milestone 1)", ()
       .flatMap((tb) => tb.chapters)
       .filter((ch) => !ch.isDeleted);
 
-    expect(activeChapters.length).toBe(20);
+    // 20 textbook chapters + the 4-mark map row the scheme lists separately (row 5)
+    expect(activeChapters.length).toBe(21);
 
     const activeChaptersSum = activeChapters.reduce(
       (acc, ch) => acc + (ch.officialMarks ?? 0),
       0
     );
 
-    // Active chapters sum must be exactly 71 marks
-    expect(activeChaptersSum).toBe(71);
-
-    // Exactly 4 marks are reserved for Question 23 (India Outline Map Work)
-    const reservedMapMarks = c9Soc!.theoryMarks - activeChaptersSum;
-    expect(reservedMapMarks).toBe(4);
+    // Chapters (71) plus the map row (4) now account for all 75 marks
+    expect(activeChaptersSum).toBe(75);
+    const mapChapter = activeChapters.find((ch) => ch.title.includes("मानचित्र"));
+    expect(mapChapter?.officialMarks).toBe(4);
+    const reservedMapMarks = 0;
 
     // Chapter sum + map work reservation must equal total theory marks
     expect(activeChaptersSum + reservedMapMarks).toBe(c9Soc!.theoryMarks);
@@ -438,11 +439,11 @@ describe("MPBSE Curriculum Schema & Seed Data Integrity Suite (Milestone 1)", ()
     const polSum = polSci!.chapters.filter((c) => !c.isDeleted).reduce((s, c) => s + (c.officialMarks ?? 0), 0);
     const econSum = economics!.chapters.filter((c) => !c.isDeleted).reduce((s, c) => s + (c.officialMarks ?? 0), 0);
 
-    expect(geoSum).toBe(21); // 17 theory + 4 map work
+    expect(geoSum).toBe(25); // scheme rows 1.1-1.6 = 21, plus the separate 4-mark map row
     expect(histSum).toBe(15);
     expect(polSum).toBe(20);
     expect(econSum).toBe(15);
-    expect(geoSum + histSum + polSum + econSum).toBe(71);
+    expect(geoSum + histSum + polSum + econSum).toBe(75);
   });
 
   // ---------------------------------------------------------------------------

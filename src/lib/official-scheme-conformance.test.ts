@@ -23,7 +23,7 @@ describe("official 2026-27 scheme data", () => {
 
   it("every question-format skeleton adds up to the printed total", () => {
     for (const f of Object.values(FORMATS)) {
-      const expected = f.id.startsWith("F75") ? 75 : f.id.startsWith("F80") ? 80 : 70;
+      const expected = f.id.startsWith("F75") ? 75 : f.id.startsWith("F80") ? 80 : f.id === "SCHOOL_DM_50" ? 50 : 70;
       expect(skeletonMarks(f as FormatDef), f.id).toBe(expected);
     }
     expect(MUSIC_FORMATS.F50_MUSIC.objective + MUSIC_FORMATS.F50_MUSIC.written.reduce((a, w) => a + w.marksEach * w.count, 0)).toBe(50);
@@ -69,4 +69,32 @@ describe("papers the app cannot template yet are listed, not dropped", () => {
       "12 Drawing and Designing", "12 Drawing and Painting", "12 Still Life and Design", "9 Painting",
     ]);
   });
+});
+
+describe("English papers match the printed question-by-question tables", () => {
+  const roleSums = (t: BlueprintTemplate) => {
+    const out: Record<string, number> = {};
+    for (const g of t.sections) for (const q of g.questionTypes) out[q.role ?? "STANDARD"] = (out[q.role ?? "STANDARD"] ?? 0) + q.count * q.marksEach;
+    return out;
+  };
+  const countAt = (t: BlueprintTemplate, marks: number, notType?: string) =>
+    t.sections.flatMap((g) => g.questionTypes).filter((q) => q.marksEach === marks && q.type !== notType).reduce((a, q) => a + q.count, 0);
+
+  for (const lvl of [9, 10, 11, 12]) {
+    it(`Class ${lvl}`, () => {
+      const t = MPBSE_BLUEPRINT_TEMPLATES.find((x) => x.classLevel === lvl && x.subjectName === "English")!;
+      if (lvl <= 10) {
+        expect(roleSums(t)).toEqual({ PASSAGE: 10, WRITING: 16, GRAMMAR: 10, LITERATURE: 39 });
+        expect([countAt(t, 2), countAt(t, 3), countAt(t, 4)]).toEqual([10, 4, 2]);
+        expect(countAt(t, 5, "UNSEEN_PASSAGE")).toBe(1);
+      } else {
+        expect(roleSums(t)).toEqual({ PASSAGE: 10, WRITING: 16, GRAMMAR: 10, LITERATURE: 44 });
+        expect([countAt(t, 2), countAt(t, 3), countAt(t, 4)]).toEqual([10, 4, 4]);
+      }
+      // textbook names are the ones printed in the syllabus
+      const titles = t.sections.map((g) => g.title).join(" | ");
+      const books = { 9: ["Beehive", "Moments"], 10: ["First Flight", "Footprints without Feet"], 11: ["Hornbill", "Snapshots"], 12: ["Flamingo", "Vistas"] }[lvl as 9 | 10 | 11 | 12];
+      for (const b of books) expect(titles).toContain(b);
+    });
+  }
 });

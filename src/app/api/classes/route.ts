@@ -1,7 +1,10 @@
 import { z } from "zod";
+import { isActiveSubject } from "@/lib/schoolProfile";
+import { scopeFromRequest } from "@/lib/viewScope";
 import { body, route } from "@/lib/api";
 import {
   ensureClassAndSubject,
+  ensureSchoolSubjects,
   inferClassOrder,
   normalizeAcademicSession,
   normalizeSectionDetails,
@@ -28,9 +31,11 @@ const postClassUnionSchema = z.union([
 ]);
 
 export const GET = route(async (req) => {
+  const scope = scopeFromRequest(req);
   const url = new URL(req.url);
   const sessionParam = url.searchParams.get("session");
   await syncClassesFromBooks(sessionParam);
+  await ensureSchoolSubjects(sessionParam);
 
   const where =
     sessionParam && sessionParam !== "ALL"
@@ -47,7 +52,10 @@ export const GET = route(async (req) => {
     },
   });
 
-  return rows.map(toAcademicClassDto);
+  return rows.map((row) => {
+    const dto = toAcademicClassDto(row);
+    return { ...dto, subjects: dto.subjects.filter((sub) => isActiveSubject(row.name, sub.name, scope)) };
+  });
 });
 
 export const POST = route(

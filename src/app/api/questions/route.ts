@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { keepActive, scopeFromRequest } from "@/lib/viewScope";
 import { body, HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { toQuestionDto } from "@/lib/dto";
@@ -56,8 +57,20 @@ export const GET = route(async (req) => {
   const q = sp.get("q")?.trim();
   const excludePaperId = sp.get("excludePaperId");
 
+  const scope = scopeFromRequest(req);
   if (bookId) {
     where.bookId = bookId;
+  } else if (!scope.showOther) {
+    // outside an explicit book, only offer questions from books of the active subjects
+    const books = await prisma.book.findMany({ select: { id: true, className: true, subject: true } });
+    const ids = keepActive(books, (b) => b, scope).map((b) => b.id);
+    where.bookId = { in: ids };
+    if (className || subject) {
+      where.book = {
+        ...(className && className !== "ALL" ? { className } : {}),
+        ...(subject && subject !== "ALL" ? { subject } : {}),
+      };
+    }
   } else if (className || subject) {
     where.book = {
       ...(className && className !== "ALL" ? { className } : {}),

@@ -89,3 +89,23 @@ describe("autofill with multi-pair match questions", () => {
     expect(res.unfilled[0]).toMatchObject({ sectionId: "m", count: 6 });
   });
 });
+
+describe("autofill combines short match questions", () => {
+  const def: BlueprintDef = {
+    sections: [{ id: "m", title: "Match", type: "MATCH_COLUMN", count: 7, marksEach: 1 }],
+    chapters: [{ chapterId: "c1", marks: 4 }, { chapterId: "c2", marks: 4 }],
+  };
+  it("covers a 7-pair section with a 4-pair and a 3-pair question", () => {
+    const res = autoFillPaper(def, [], [
+      { id: "a", chapterId: "c1", type: "MATCH_COLUMN", matchPairs: 4 },
+      { id: "b", chapterId: "c2", type: "MATCH_COLUMN", matchPairs: 3 },
+    ]);
+    expect(res.added.map((x) => x.questionId).sort()).toEqual(["a", "b"]);
+    expect(res.complete).toBe(true);
+  });
+  it("stays unfilled when the pairs cannot add up", () => {
+    const res = autoFillPaper(def, [], [{ id: "a", chapterId: "c1", type: "MATCH_COLUMN", matchPairs: 4 }]);
+    expect(res.complete).toBe(false);
+    expect(res.unfilled[0].count).toBe(7);
+  });
+});
