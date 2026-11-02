@@ -3,6 +3,7 @@ import { parseMatchColumnPairs } from "@/lib/constants";
 import { auditPaperEvidenceBased, type EvidenceAuditFinding } from "@/lib/evidenceAuditEngine";
 import { evaluateMPBoardStandardCompliance } from "@/lib/mpbseStandardEngine";
 import { validatePaperCompleteness } from "@/lib/paperCompletenessEngine";
+import { questionSlotMarks } from "@/lib/blueprint";
 import { loadPaperView } from "@/lib/papers";
 import { subpartsTotalMarks } from "@/lib/types";
 import { z } from "zod";
@@ -51,17 +52,7 @@ export const POST = route(async (req, _ctx, user) => {
 
     const questions = paper.items.map((it, idx: number) => {
       const sec = paper.blueprint.sections.find((s) => s.id === it.sectionId);
-      const marksEach = sec?.marksEach ?? 1;
-      const isMatch = it.question.type === "MATCH_COLUMN" || sec?.type === "MATCH_COLUMN";
-      const matchPairCount = isMatch
-        ? (parseMatchColumnPairs(it.question.options, it.question.text, (it.question as any).explanation).length || sec?.count || 1)
-        : 0;
-      const subpartsMarks = subpartsTotalMarks(it.question.subparts);
-      const actualMarks = isMatch
-        ? (sec?.count === 1 ? marksEach : Math.min(matchPairCount * marksEach, (sec?.count || 1) * marksEach))
-        : subpartsMarks > 0
-        ? subpartsMarks
-        : marksEach;
+      const actualMarks = sec ? questionSlotMarks(sec, it.question as never).marks : 1;
 
       return {
         id: it.question.id,

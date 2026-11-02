@@ -1,3 +1,4 @@
+import { questionSlotMarks } from "./blueprint";
 import { referencesMissingVisual } from "./evidenceAuditEngine";
 import { parseMatchColumnPairs } from "./constants";
 import { subpartsTotalMarks } from "./types";
@@ -115,19 +116,14 @@ export function validatePaperCompleteness(
 
     for (const it of secItems) {
       const q = it.question;
-      const isMatch = q.type === "MATCH_COLUMN" || sec.type === "MATCH_COLUMN";
-      const subMarks = subpartsTotalMarks(q.subparts);
-
-      let qMarks = sec.marksEach;
-      if (isMatch) {
-        const pairsCount = parseMatchColumnPairs(q.options, q.text, q.explanation).length;
-        qMarks = sec.count === 1 ? sec.marksEach : Math.min(pairsCount * sec.marksEach, expectedSecMarks);
-      } else if (subMarks > 0) {
-        qMarks = subMarks;
-      } else if (typeof q.marks === "number" && q.marks > 0) {
-        qMarks = q.marks;
-      }
-
+      // Same rule as the builder, print and DOCX. A bare q.marks is only a fallback for items
+      // that carry no sub-questions (test fixtures); stored questions have none.
+      const slot = questionSlotMarks(sec, q as never);
+      const hasSub = subpartsTotalMarks(q.subparts) > 0;
+      const qMarks =
+        !hasSub && q.type !== "MATCH_COLUMN" && typeof q.marks === "number" && q.marks > 0 && sec.type !== "MATCH_COLUMN"
+          ? q.marks
+          : slot.marks;
       actualSecMarks += qMarks;
     }
 

@@ -2,7 +2,8 @@ import "server-only";
 import { HttpError, type SessionUser } from "./api";
 import { isSubpartQuestionType, parseMatchColumnPairs, resolvePaperExamType } from "./constants";
 import { toQuestionDto } from "./dto";
-import { diagnosePaperImplications, paperStatus, toPlacedItems } from "./blueprint";
+import { diagnosePaperImplications, paperStatus, questionSlotMarks, toPlacedItems } from "./blueprint";
+import { componentImplications, parseComponents } from "./languageComponents";
 import { blueprintInclude } from "./blueprints";
 import { evaluatePaperInternalChoiceCompliance } from "./internalChoiceRules";
 import { prisma } from "./prisma";
@@ -137,49 +138,30 @@ export async function loadPaperView(id: string) {
       })),
     },
     items.map((i) => {
-      const isMatch = i.question.type === "MATCH_COLUMN";
-      let matchCount = 0;
-      if (isMatch) {
-        let opts: string[] = [];
-        try {
-          const p = JSON.parse(i.question.optionsJson || "[]");
-          opts = Array.isArray(p) ? p : [];
-        } catch {}
-        matchCount = parseMatchColumnPairs(opts, i.question.text, (i.question as any).explanation).length;
-      }
-      const { subparts, attemptCount } = parseSubpartsPayload(i.question.subpartsJson);
-      const submarks = attemptCount
-        ? attemptCount * (subparts[0]?.marks || 1)
-        : subpartsTotalMarks(subparts);
-      const sec = blueprint.sections.find((s) => s.id === i.sectionId);
-      const secMarksEach = sec?.marksEach ?? 1;
-      const secCount = sec?.count ?? 1;
-      const secIsMatch = sec?.type === "MATCH_COLUMN";
-      const isMultiUnitMatch = isMatch && secIsMatch && secCount > 1;
-
-      const matchMarks = isMatch
-        ? (isMultiUnitMatch
-            ? Math.min(matchCount || secCount, secCount) * secMarksEach
-            : secMarksEach)
-        : 0;
-      const effectiveMarks = isMatch
-        ? matchMarks
-        : submarks > 0
-        ? (secMarksEach > 0 ? Math.min(submarks, secMarksEach) : submarks)
-        : secMarksEach;
-      const effectiveUnits = isMultiUnitMatch
-        ? Math.min(matchCount > 0 ? matchCount : secCount, secCount)
-        : undefined;
+      const sec = blueprint.sections.find((x) => x.id === i.sectionId) ?? { count: 1, marksEach: 1 };
+      const { marks, units } = questionSlotMarks(sec, i.question as never);
+      const multiUnitMatch =
+        i.question.type === "MATCH_COLUMN" && (sec as { type?: string }).type === "MATCH_COLUMN" && sec.count > 1;
       return {
         id: i.id,
         sectionId: i.sectionId,
         chapterId: i.question.chapterId,
         type: i.question.type,
         text: i.question.text,
-        marks: effectiveMarks,
-        subpartsCount: effectiveUnits,
+        marks,
+        subpartsCount: multiUnitMatch ? units : undefined,
       };
     }),
+  );
+  const components = parseComponents((blueprint as { componentsJson?: string }).componentsJson);
+  implications.push(
+    ...componentImplications(
+      components,
+      items.map((i, idx) => ({
+        componentKey: i.componentKey,
+        marks: placedItems[idx]?.marks ?? 0,
+      })),
+    ),
   );
   const resolvedExamType = resolvePaperExamType(paper);
   const dtoItems = items.map((i) => ({
@@ -187,6 +169,7 @@ export async function loadPaperView(id: string) {
     sectionId: i.sectionId,
     position: i.position,
     pageBreakBefore: Boolean(i.pageBreakBefore),
+    componentKey: i.componentKey || "",
     question: toQuestionDto(i.question),
     orQuestion: i.orQuestion ? toQuestionDto(i.orQuestion) : null,
   }));

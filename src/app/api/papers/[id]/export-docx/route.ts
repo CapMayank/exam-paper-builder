@@ -1,3 +1,4 @@
+import { questionSlotMarks } from "@/lib/blueprint";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -708,13 +709,6 @@ export async function buildPaperDocx(
 
       // Question line
       const isMatch = q.type === "MATCH_COLUMN";
-      let matchCount = 0;
-      if (isMatch && q.optionsJson) {
-        try {
-          const opts = JSON.parse(q.optionsJson);
-          matchCount = parseMatchColumnPairs(opts, q.text, (q as any).explanation).length;
-        } catch {}
-      }
       const { subparts: rawSubparts, attemptCount } = parseSubpartsPayload(q.subpartsJson);
       let parsedSubparts = canHaveSubparts(q.type) ? rawSubparts : [];
       let baseQText = isMatch ? getMatchColumnInstruction(q.text) : q.text;
@@ -725,16 +719,7 @@ export async function buildPaperDocx(
           parsedSubparts = decomp.subparts;
         }
       }
-      const subpartsMarks = attemptCount
-        ? attemptCount * (parsedSubparts[0]?.marks || 1)
-        : subpartsTotalMarks(parsedSubparts);
-      const qTotalMarks = isMatch
-        ? (section.count === 1 ? section.marksEach : Math.min(matchCount * section.marksEach, section.count * section.marksEach))
-        : section.marksEach > 0 && subpartsMarks > section.marksEach
-        ? section.marksEach
-        : subpartsMarks > 0
-        ? subpartsMarks
-        : section.marksEach;
+      const qTotalMarks = questionSlotMarks(section, { ...q, subparts: parsedSubparts, subpartsJson: null, attemptCount } as never).marks;
       const qText = baseQText;
 
       renderQuestionTextWithTable(

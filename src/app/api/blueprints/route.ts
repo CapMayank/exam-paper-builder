@@ -68,6 +68,7 @@ export const POST = route(async (req) => {
       sourceRef: input.sourceRef ?? "",
       textbookVariant: input.textbookVariant ?? "",
       blueprintVersion: input.blueprintVersion ?? "",
+      componentsJson: input.componentsJson ?? "[]",
       chapters: { create: input.chapters },
       sections: {
         create: input.sections.map((s, position) => ({

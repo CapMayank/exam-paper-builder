@@ -7,6 +7,7 @@ import {
 } from "@/lib/curriculumContract";
 import type { GeneratedPaperQuestion } from "@/lib/gemini";
 import { toPlacedItems, whyCannotAdd } from "@/lib/blueprint";
+import { parseComponents } from "@/lib/languageComponents";
 import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { isQuestionContaminated, validateGeneratedQuestion } from "@/lib/questionValidator";
@@ -68,6 +69,9 @@ export const POST = route(async (req, { id }, user) => {
     if (validChapterIds.size === 1) return fallbackChapterId;
     throw new HttpError(422, `Question ${idx + 1} has no chapter; refusing to guess one for a multi-chapter blueprint.`);
   };
+  const allowedComponentKeys = new Set(
+    parseComponents((paper.blueprint as { componentsJson?: string }).componentsJson).map((c) => c.key),
+  );
   const bodyIsMock = (body as { isMock?: boolean }).isMock === true;
   const templateFallbackIdx = new Set<number>();
 
@@ -336,6 +340,9 @@ export const POST = route(async (req, { id }, user) => {
           questionId: createdQuestion.id,
           orQuestionId: createdOrQuestionId,
           position: nextPos++,
+          componentKey: allowedComponentKeys.has((q as { componentKey?: string }).componentKey ?? "")
+            ? ((q as { componentKey?: string }).componentKey as string)
+            : "",
         },
       });
     }

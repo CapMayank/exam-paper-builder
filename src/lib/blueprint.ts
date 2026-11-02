@@ -492,7 +492,10 @@ export type PaperImplication = {
     | "ORPHANED_SECTION"
     | "MISSING_INTERNAL_CHOICE"
     | "FORBIDDEN_INTERNAL_CHOICE"
-    | "INVALID_INTERNAL_CHOICE";
+    | "INVALID_INTERNAL_CHOICE"
+    | "COMPONENT_EXCESS"
+    | "COMPONENT_DEFICIT"
+    | "COMPONENT_UNTAGGED";
   severity: "error" | "warning";
   sectionId?: string;
   sectionTitle?: string;
@@ -635,6 +638,56 @@ export function diagnosePaperImplications(
   return implications;
 }
 
+/**
+ * Single source of truth for what one placed question is worth in its slot.
+ * Used by the builder, print, DOCX, completeness and audit so totals can never disagree.
+ *  - MATCH_COLUMN in a multi-slot match section: one unit per pair, capped at the section count.
+ *  - Sub-questions: their total (attempt-count aware), capped at the slot's marks.
+ *  - Otherwise: the slot's marks.
+ */
+export function questionSlotMarks(
+  section: { type?: string; count: number; marksEach: number },
+  q: {
+    type: string;
+    text?: string;
+    options?: string[] | null;
+    optionsJson?: string | null;
+    explanation?: string | null;
+    subparts?: Array<{ marks: number }> | null;
+    subpartsJson?: string | null;
+    attemptCount?: number | null;
+  },
+): { marks: number; units: number } {
+  const secMarksEach = section.marksEach ?? 1;
+  const secCount = section.count ?? 1;
+  const isMatch = q.type === "MATCH_COLUMN";
+  const secIsMatch = section.type === "MATCH_COLUMN";
+  if (isMatch) {
+    let opts: string[] = [];
+    if (Array.isArray(q.options)) opts = q.options;
+    else {
+      try {
+        const parsed = JSON.parse(q.optionsJson || "[]");
+        opts = Array.isArray(parsed) ? parsed : [];
+      } catch {}
+    }
+    const pairs = parseMatchColumnPairs(opts, q.text ?? "", q.explanation).length;
+    if (secIsMatch && secCount > 1) {
+      const units = Math.min(pairs > 0 ? pairs : secCount, secCount);
+      return { marks: units * secMarksEach, units };
+    }
+    return { marks: secMarksEach, units: 1 };
+  }
+  const payload = parseSubpartsPayload(q.subpartsJson);
+  const subparts = Array.isArray(q.subparts) && q.subparts.length > 0 ? q.subparts : payload.subparts;
+  const attemptCount = q.attemptCount || payload.attemptCount;
+  const submarks = attemptCount
+    ? attemptCount * (subparts[0]?.marks || 1)
+    : subpartsTotalMarks(subparts as never);
+  const marks = submarks > 0 ? (secMarksEach > 0 ? Math.min(submarks, secMarksEach) : submarks) : secMarksEach;
+  return { marks, units: 1 };
+}
+
 /** Map raw paper items or DTO items to normalized PlacedItem representation for blueprint calculation */
 export function toPlacedItems(
   blueprintOrSections:
@@ -659,55 +712,19 @@ export function toPlacedItems(
     ? blueprintOrSections
     : blueprintOrSections?.sections || [];
   return items.map((i) => {
-    const isMatch = i.question.type === "MATCH_COLUMN";
-    let matchCount = 0;
-    if (isMatch) {
-      let opts: string[] = [];
-      if (Array.isArray(i.question.options)) {
-        opts = i.question.options;
-      } else {
-        try {
-          const p = JSON.parse(i.question.optionsJson || "[]");
-          opts = Array.isArray(p) ? p : [];
-        } catch {}
-      }
-      matchCount = parseMatchColumnPairs(opts, i.question.text, (i.question as any).explanation).length;
-    }
-    const parsedPayload = parseSubpartsPayload(i.question.subpartsJson);
-    const subparts = Array.isArray(i.question.subparts) && i.question.subparts.length > 0
-      ? i.question.subparts
-      : parsedPayload.subparts;
-    const attemptCount = (i.question as any).attemptCount || parsedPayload.attemptCount;
-    const submarks = attemptCount
-      ? attemptCount * (subparts[0]?.marks || 1)
-      : subpartsTotalMarks(subparts as any);
-    const sec = sections.find((s) => s.id === i.sectionId);
-    const secMarksEach = sec?.marksEach ?? 1;
-    const secCount = sec?.count ?? 1;
-    const secIsMatch = sec?.type === "MATCH_COLUMN";
-    const isMultiUnitMatch = isMatch && secIsMatch && secCount > 1;
-
-    const matchMarks = isMatch
-      ? (isMultiUnitMatch
-          ? Math.min(matchCount || secCount, secCount) * secMarksEach
-          : secMarksEach)
-      : 0;
-    // Cap question marks at the section quota so subparts (with or without attempt choices)
-    // never artificially inflate paper or chapter totals above blueprint specifications.
-    // Note: Internal choices (OR / अथवा) are alternatives for the same slot and contribute 0 extra marks.
-    const effectiveMarks = isMatch
-      ? matchMarks
-      : submarks > 0
-      ? (secMarksEach > 0 ? Math.min(submarks, secMarksEach) : submarks)
-      : secMarksEach;
-    const effectiveUnits = isMultiUnitMatch
-      ? Math.min(matchCount > 0 ? matchCount : secCount, secCount)
-      : undefined;
+    const sec = sections.find((x) => x.id === i.sectionId) ?? { count: 1, marksEach: 1 };
+    const { marks, units } = questionSlotMarks(sec, {
+      ...i.question,
+      explanation: (i.question as { explanation?: string | null }).explanation,
+      attemptCount: (i.question as { attemptCount?: number | null }).attemptCount,
+    });
+    const isMultiUnitMatch =
+      i.question.type === "MATCH_COLUMN" && (sec as { type?: string }).type === "MATCH_COLUMN" && sec.count > 1;
     return {
       sectionId: i.sectionId,
       chapterId: i.question.chapterId,
-      marks: effectiveMarks,
-      subpartsCount: effectiveUnits,
+      marks,
+      subpartsCount: isMultiUnitMatch ? units : undefined,
       questionId: i.questionId || i.question.id || undefined,
     };
   });

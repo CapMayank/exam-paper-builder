@@ -227,6 +227,7 @@ export async function mapCurriculumTemplateToBlueprintInput(
     verificationStatus: staticTemplate?.source?.url ? ("SOURCE_CITED" as const) : ("UNVERIFIED" as const),
     sourceRef: staticTemplate?.source ? `${staticTemplate.source.url} (p.${staticTemplate.source.pdfPage})` : "",
     blueprintVersion: staticTemplate?.source?.session ?? "",
+    componentsJson: JSON.stringify(staticTemplate?.components ?? []),
     sections,
     chapters: finalChapters,
   };

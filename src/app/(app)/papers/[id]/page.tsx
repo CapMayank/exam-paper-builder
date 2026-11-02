@@ -76,6 +76,8 @@ import {
   type ExamType,
   type PaperLanguage,
 } from "@/lib/constants";
+import { questionSlotMarks } from "@/lib/blueprint";
+import { componentCoverage, parseComponents } from "@/lib/languageComponents";
 import { formatQuestionNumber, computeDisplayedPaperNumbering } from "@/lib/layout";
 import { nextSetIdentifier } from "@/lib/multiset";
 import { resolveInternalChoiceRequirement } from "@/lib/internalChoiceRules";
@@ -327,6 +329,19 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
     }
   }
 
+  async function handleSetComponent(itemId: string, componentKey: string) {
+    cancelAutosave();
+    try {
+      const updated = await api<PaperData>(`/api/papers/${id}/questions/${itemId}`, {
+        method: "PATCH",
+        json: { componentKey },
+      });
+      adopt(updated);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
   async function handleOpenQuickSwap(itemId: string) {
     setQuickSwapItemId(itemId);
     setSiblingLoading(true);
@@ -514,6 +529,17 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   }
 
   const { blueprint, progress } = paper;
+  const blueprintComponents = parseComponents(blueprint.componentsJson);
+  const componentRows = componentCoverage(
+    blueprintComponents,
+    paper.items.map((it) => ({
+      componentKey: it.componentKey,
+      marks: questionSlotMarks(
+        blueprint.sections.find((x) => x.id === it.sectionId) ?? { count: 1, marksEach: 1 },
+        it.question as never,
+      ).marks,
+    })),
+  ).rows;
   const final = paper.status === "FINAL";
   const isAdmin = currentUser?.role === "ADMIN";
   const isHod = currentUser?.role === "HOD";
@@ -1650,30 +1676,28 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
             </div>
           )}
 
+          {componentRows.length > 0 && (
+            <div className="mb-4 rounded-xl border border-slate-200 bg-white p-3 text-xs">
+              <div className="mb-1.5 font-semibold text-slate-800">Syllabus components (official allocation)</div>
+              <ul className="grid gap-x-4 gap-y-0.5 sm:grid-cols-2">
+                {componentRows.map((c) => (
+                  <li key={c.key} className="flex justify-between gap-2">
+                    <span className="truncate">{c.title}</span>
+                    <span className={c.used > c.target ? "font-bold text-red-700" : c.used === c.target ? "font-bold text-emerald-700" : "text-slate-600"}>
+                      {c.used}/{c.target}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {blueprint.sections.map((s, si) => {
             const items = paper.items.filter((i) => i.sectionId === s.id);
             const st = progress.sections.find((x) => x.id === s.id)!;
-            const effectiveUnits = items.reduce((sum, it) => {
-              if (it.question.type === "MATCH_COLUMN" && s.type === "MATCH_COLUMN" && s.count > 1 && s.marksEach === 1) {
-                const pairs = parseMatchColumnPairs(it.question.options, it.question.text, (it.question as any).explanation);
-                return sum + (pairs.length > 0 ? Math.min(pairs.length, s.count) : s.count);
-              }
-              return sum + 1;
-            }, 0);
-            const placedSectionMarks = items.reduce((sum, it) => {
-              if (it.question.type === "MATCH_COLUMN" && s.type === "MATCH_COLUMN" && s.count > 1 && s.marksEach === 1) {
-                const pairs = parseMatchColumnPairs(it.question.options, it.question.text, (it.question as any).explanation);
-                return sum + (pairs.length > 0 ? Math.min(pairs.length, s.count) : s.count) * s.marksEach;
-              }
-              const hasSubparts = canHaveSubparts(it.question.type) && it.question.subparts && it.question.subparts.length > 0;
-              const subTotal = hasSubparts
-                ? (it.question as any).attemptCount
-                  ? (it.question as any).attemptCount * (it.question.subparts![0]?.marks || 1)
-                  : it.question.subparts!.reduce((subSum, sp) => subSum + (sp.marks || 1), 0)
-                : 0;
-              const effectiveQMarks = subTotal > 0 ? (s.marksEach > 0 ? Math.min(subTotal, s.marksEach) : subTotal) : s.marksEach;
-              return sum + effectiveQMarks;
-            }, 0);
+            const slotValues = items.map((it) => questionSlotMarks(s, it.question as never));
+            const effectiveUnits = slotValues.reduce((sum, v) => sum + v.units, 0);
+            const placedSectionMarks = slotValues.reduce((sum, v) => sum + v.marks, 0);
             const targetSectionMarks = s.count * s.marksEach;
             const isOverfilled = effectiveUnits > s.count;
             const isSectionFull = effectiveUnits === s.count;
@@ -1851,16 +1875,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                       {items.length === 0
                         ? "No questions added yet."
                         : (() => {
-                            const secMarksTotal = items.reduce((sum, it) => {
-                              if (it.question.type === "MATCH_COLUMN" && s.type === "MATCH_COLUMN" && s.count > 1 && s.marksEach === 1) {
-                                const pairs = parseMatchColumnPairs(it.question.options, it.question.text, (it.question as any).explanation);
-                                return sum + (pairs.length > 0 ? Math.min(pairs.length, s.count) : s.count) * s.marksEach;
-                              }
-                              const subTotal = it.question.subparts && it.question.subparts.length > 0
-                                ? it.question.subparts.reduce((subSum, sp) => subSum + (sp.marks || 1), 0)
-                                : 0;
-                              return sum + (subTotal > 0 ? subTotal : s.marksEach);
-                            }, 0);
+                            const secMarksTotal = placedSectionMarks;
                             return `${items.length} question(s) placed (${secMarksTotal} marks).`;
                           })()}
                     </span>
@@ -1904,20 +1919,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                         const isExcess = idx >= s.count || effectiveUnits > s.count;
 
                         const isMatchQ = it.question.type === "MATCH_COLUMN" || s.type === "MATCH_COLUMN";
-                        const matchCount = isMatchQ
-                          ? (parseMatchColumnPairs(it.question.options, it.question.text, (it.question as any).explanation).length || s.count)
-                          : 0;
-                        const hasSubparts = canHaveSubparts(it.question.type) && it.question.subparts && it.question.subparts.length > 0;
-                        const subpartsMarks = hasSubparts
-                          ? (it.question as any).attemptCount
-                            ? (it.question as any).attemptCount * (it.question.subparts![0]?.marks || 1)
-                            : it.question.subparts!.reduce((sum, sp) => sum + (sp.marks || 1), 0)
-                          : 0;
-                        const questionTotalMarks = isMatchQ
-                          ? (s.count === 1 ? s.marksEach : Math.min(matchCount * s.marksEach, s.count * s.marksEach))
-                          : subpartsMarks > 0
-                          ? (s.marksEach > 0 ? Math.min(subpartsMarks, s.marksEach) : subpartsMarks)
-                          : s.marksEach;
+                        const questionTotalMarks = questionSlotMarks(s, it.question as never).marks;
                         const targetSlotMarksForQ = isMatchQ && s.count > 1
                           ? s.count * s.marksEach
                           : s.marksEach;
@@ -1966,6 +1968,26 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                   </span>
                                 )}
                               </div>
+                            )}
+
+                            {blueprintComponents.length > 0 && (
+                              <label className="mb-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600">
+                                <span className="font-semibold">Syllabus component:</span>
+                                <select
+                                  className="input !py-0.5 !text-[11px]"
+                                  value={it.componentKey || ""}
+                                  disabled={!canEditPaper || final}
+                                  onChange={(e) => handleSetComponent(it.id, e.target.value)}
+                                  aria-label="Syllabus component"
+                                >
+                                  <option value="">Not assigned</option>
+                                  {blueprintComponents.map((c) => (
+                                    <option key={c.key} value={c.key}>
+                                      {c.title} ({c.marks})
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
                             )}
 
                             {/* Question Content View */}

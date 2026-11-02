@@ -3,6 +3,7 @@ import { whyCannotAdd } from "@/lib/blueprint";
 import { parseMatchColumnPairs } from "@/lib/constants";
 import { resolveInternalChoiceRequirement } from "@/lib/internalChoiceRules";
 import { assertCanModifyPaper, assertCanModifyQuestion, loadPaperView, toPlacedItems } from "@/lib/papers";
+import { parseComponents } from "@/lib/languageComponents";
 import { prisma } from "@/lib/prisma";
 import { editPaperItemSchema, moveItemSchema, replaceItemSchema } from "@/lib/schemas";
 import { parseSubparts, parseSubpartsPayload, subpartsTotalMarks, validateSubPartsSum } from "@/lib/types";
@@ -41,6 +42,16 @@ export const PATCH = route(async (req, { id, itemId }, user) => {
       where: { id: itemId },
       data: { pageBreakBefore },
     });
+    await prisma.paper.update({ where: { id }, data: { updatedAt: new Date() } });
+    return loadPaperView(id);
+  }
+
+  if ("componentKey" in raw) {
+    const key = String(raw.componentKey ?? "").trim();
+    const bp = await prisma.blueprint.findUnique({ where: { id: (await prisma.paper.findUnique({ where: { id }, select: { blueprintId: true } }))!.blueprintId }, select: { componentsJson: true } });
+    const allowed = parseComponents(bp?.componentsJson).map((c) => c.key);
+    if (key && !allowed.includes(key)) throw new HttpError(400, "That component is not part of this blueprint.");
+    await prisma.paperQuestion.update({ where: { id: itemId }, data: { componentKey: key } });
     await prisma.paper.update({ where: { id }, data: { updatedAt: new Date() } });
     return loadPaperView(id);
   }

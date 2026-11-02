@@ -181,6 +181,7 @@ export const PUT = route(async (req, { id }, user) => {
         ...(input.sourceRef !== undefined ? { sourceRef: input.sourceRef } : {}),
         ...(input.textbookVariant !== undefined ? { textbookVariant: input.textbookVariant } : {}),
         ...(input.blueprintVersion !== undefined ? { blueprintVersion: input.blueprintVersion } : {}),
+        ...(input.componentsJson !== undefined ? { componentsJson: input.componentsJson } : {}),
       },
     });
   });

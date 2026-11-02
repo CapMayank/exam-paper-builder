@@ -1,4 +1,5 @@
 "use client";
+import { questionSlotMarks } from "@/lib/blueprint";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { QuestionView } from "@/components/QuestionView";
@@ -625,23 +626,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
           ? decomposeStemSubparts(it.question.text)?.subparts ?? []
           : [];
         const canDecompose = !isPrePrimary && !it.orQuestion && subparts && subparts.length > 1;
-        const isMatch = s.type === "MATCH_COLUMN" || it.question.type === "MATCH_COLUMN";
-        const matchPairCount = isMatch
-          ? (parseMatchColumnPairs(it.question.options, it.question.text, (it.question as any).explanation).length || s.count)
-          : 0;
-        const attemptCount = it.question.attemptCount;
-        const subpartsMarks = subparts && subparts.length > 0
-          ? attemptCount
-            ? attemptCount * (subparts[0]?.marks || 1)
-            : subparts.reduce((sum, sp) => sum + (sp.marks || 1), 0)
-          : 0;
-        const totalQuestionMarks = isMatch
-          ? (s.count === 1 ? s.marksEach : Math.min(matchPairCount * s.marksEach, s.count * s.marksEach))
-          : s.marksEach > 0 && subpartsMarks > s.marksEach
-          ? s.marksEach
-          : subpartsMarks > 0
-          ? subpartsMarks
-          : s.marksEach;
+        const totalQuestionMarks = questionSlotMarks(s, { ...it.question, subparts } as never).marks;
 
         if (canDecompose) {
           // Passage stem keepWithNext: true ensures stems are never detached from first subpart
