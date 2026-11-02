@@ -2,6 +2,7 @@ import { HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { autoFillPaper } from "@/lib/autofill";
 import { quotaRepresentatives } from "@/lib/blueprint";
+import { suggestComponentsForPaper } from "@/lib/paperComponents";
 import {
   buildAndValidateGenerationContract,
   generateCurriculumGroundedSectionQuestions,
@@ -607,6 +608,9 @@ export const POST = route(async (req, { id }, user) => {
     repairedChoicesCount,
     complete: finalUnfilled.length === 0,
   });
+
+  // language papers: label the new questions with a suggested syllabus component
+  await suggestComponentsForPaper(id);
 
   const updatedPaper = await loadPaperView(id);
 

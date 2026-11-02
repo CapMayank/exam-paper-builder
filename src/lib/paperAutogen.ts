@@ -21,6 +21,9 @@ export interface PaperAutogenSlot {
   requiresInternalChoice?: boolean;
   choicePolicy?: ChoicePolicy;
   curriculumPayload?: CurriculumGenerationPayload;
+  /** Suggested syllabus component (language papers); the question is generated for it and tagged with it. */
+  componentKey?: string;
+  componentTitle?: string;
 }
 
 export interface PaperAutogenSectionPlan {
@@ -79,6 +82,7 @@ export interface PaperAutogenInput {
     chapters: Array<{
       chapterId: string;
       marks: number;
+      unitKey?: string | null;
       chapter: {
         id: string;
         number: number;
@@ -145,6 +149,8 @@ export function planPaperSlotAssignments(paper: PaperAutogenInput): PaperAutogen
     alreadyPlacedMarks: number;
     remainingQuota: number;
     plannedMarks: number;
+    /** chapters of the same unit: they share one budget */
+    peers: ChapterState[];
   };
 
   const chapterMap = new Map<string, ChapterState>();
@@ -158,7 +164,24 @@ export function planPaperSlotAssignments(paper: PaperAutogenInput): PaperAutogen
       alreadyPlacedMarks: alreadyPlaced,
       remainingQuota: Math.max(0, c.marks - alreadyPlaced),
       plannedMarks: 0,
+      peers: [],
     });
+  }
+
+  // lessons of one unit share a budget (the scheme allocates marks by unit)
+  const unitGroups = new Map<string, ChapterState[]>();
+  for (const c of blueprint.chapters) {
+    const st = chapterMap.get(c.chapterId)!;
+    const key = c.unitKey ? `u:${c.unitKey}` : `c:${c.chapterId}`;
+    unitGroups.set(key, [...(unitGroups.get(key) ?? []), st]);
+  }
+  for (const group of unitGroups.values()) {
+    const target = group.reduce((a, g) => a + g.targetMarks, 0);
+    const placed = group.reduce((a, g) => a + g.alreadyPlacedMarks, 0);
+    for (const g of group) {
+      g.peers = group;
+      g.remainingQuota = Math.max(0, target - placed);
+    }
   }
 
   // Fallback chapter list if blueprint has chapters
@@ -248,7 +271,7 @@ export function planPaperSlotAssignments(paper: PaperAutogenInput): PaperAutogen
       chosen = sortedByRem[0];
     }
 
-    chosen.remainingQuota -= unit.totalMarks;
+    for (const peer of chosen.peers) peer.remainingQuota -= unit.totalMarks;
     chosen.plannedMarks += unit.totalMarks;
     unitAssignments.set(unit, chosen);
   }

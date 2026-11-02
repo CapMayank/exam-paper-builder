@@ -329,6 +329,17 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
     }
   }
 
+  async function handleSuggestComponents() {
+    cancelAutosave();
+    try {
+      const res = await api<{ assigned: number; paper: PaperData }>(`/api/papers/${id}/suggest-components`, { method: "POST", json: {} });
+      adopt(res.paper);
+      toast.success(`Suggested a component for ${res.assigned} question(s). You can change any of them.`);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
   async function handleSetComponent(itemId: string, componentKey: string) {
     cancelAutosave();
     try {
@@ -1678,7 +1689,14 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
 
           {componentRows.length > 0 && (
             <div className="mb-4 rounded-xl border border-slate-200 bg-white p-3 text-xs">
-              <div className="mb-1.5 font-semibold text-slate-800">Syllabus components (official allocation)</div>
+              <div className="mb-1.5 flex items-center justify-between gap-2 font-semibold text-slate-800">
+                <span>Syllabus components (official allocation)</span>
+                {canEditPaper && !final && (
+                  <button type="button" className="btn btn-ghost !px-2 !py-0.5 text-[11px]" onClick={handleSuggestComponents}>
+                    Suggest components
+                  </button>
+                )}
+              </div>
               <ul className="grid gap-x-4 gap-y-0.5 sm:grid-cols-2">
                 {componentRows.map((c) => (
                   <li key={c.key} className="flex justify-between gap-2">

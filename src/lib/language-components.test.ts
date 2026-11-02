@@ -44,3 +44,26 @@ describe("component coverage", () => {
     }
   });
 });
+
+import { allocateComponents } from "./languageComponents";
+import { MPBSE_BLUEPRINT_TEMPLATES as TEMPLATES } from "./curriculumTemplates";
+
+describe("allocateComponents", () => {
+  for (const [lvl, subj] of [[9, "Hindi"], [10, "Hindi"], [11, "Hindi"], [12, "Hindi"], [9, "Sanskrit"], [10, "Sanskrit"], [11, "Sanskrit"], [12, "Sanskrit"]] as const) {
+    it(`gives every ${lvl} ${subj} component exactly its official marks`, () => {
+      const t = TEMPLATES.find((x) => x.classLevel === lvl && x.subjectName === subj)!;
+      const units: Array<{ id: string; marks: number; type: string }> = [];
+      let n = 0;
+      for (const g of t.sections) for (const q of g.questionTypes) {
+        const multi = q.type === "MATCH_COLUMN" && q.count > 1 && q.marksEach === 1;
+        if (multi) units.push({ id: `u${n++}`, marks: q.count, type: q.type });
+        else for (let i = 0; i < q.count; i++) units.push({ id: `u${n++}`, marks: q.marksEach, type: q.type });
+      }
+      const out = allocateComponents(units, t.components!);
+      const sums = new Map<string, number>();
+      for (const u of units) if (out[u.id]) sums.set(out[u.id], (sums.get(out[u.id]) ?? 0) + u.marks);
+      for (const c of t.components!) expect(sums.get(c.key) ?? 0, `${c.title}`).toBe(c.marks);
+      expect(units.every((u) => out[u.id])).toBe(true);
+    });
+  }
+});

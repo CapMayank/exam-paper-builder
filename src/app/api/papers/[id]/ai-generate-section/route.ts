@@ -75,11 +75,13 @@ export const POST = route(async (req, { id }, user) => {
       reqChoice = choiceRule.required;
     }
     const slotId = slot.slotId || (matchedSection ? `slot_${matchedSection.id}_${slotIdx}` : `slot_${slotIdx}`);
+    const cTitle = (slot as { componentTitle?: string }).componentTitle;
     return {
       ...slot,
       slotId,
       slotIndex: slotIdx,
       requiresInternalChoice: reqChoice,
+      ...(cTitle ? { topicFocus: `Syllabus component: ${cTitle}. Keep the question inside this component.` } : {}),
     };
   });
 
@@ -120,10 +122,19 @@ export const POST = route(async (req, { id }, user) => {
     throw new HttpError(422, res.error || "Failed to generate valid curriculum-grounded questions for section.");
   }
 
+  // label each generated question with the component its slot was planned for
+  const keyBySlot = new Map<number, string>(
+    (slots as Array<{ slotIndex?: number; componentKey?: string }>).map((sl, i) => [sl.slotIndex ?? i, sl.componentKey ?? ""] as [number, string]),
+  );
+  const labelled = (res.data ?? []).map((q, i) => ({
+    ...q,
+    componentKey: keyBySlot.get(typeof q.slotIndex === "number" ? q.slotIndex : i) || undefined,
+  }));
+
   return {
     success: true,
     isMock: res.isMock,
-    questions: res.data,
+    questions: labelled,
     trace: res.trace,
     contract: res.contract,
     validationIssues: res.validationIssues,

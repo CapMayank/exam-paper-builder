@@ -10,6 +10,7 @@ const data = JSON.parse(readFileSync(process.argv[3], "utf8"));
 const only = process.argv[4];
 let cookie = "";
 let viewCookie = "";
+const AI = process.env.AI === "1"; // also run LIVE model generation (sends text to Gemini)
 const failures = [];
 
 async function call(method, path, json, raw = false) {
@@ -82,6 +83,41 @@ async function scopeChecks(level, profileSubjects) {
   if (!row || row.subjects.length <= profileSubjects.length) issues.push(`Class ${level}: "show other subjects" does not reveal the archived subjects`);
   setView("ALL", false);
   return issues;
+}
+
+// Live generation of a representative set of sections: language papers get passage, grammar, writing and
+// literature; other subjects get an objective block, a 3-mark block and (where present) the map question.
+async function aiChecks(t, bp, book, note) {
+  const paper = (await call("POST", "/api/papers", { title: `${t.code} ai`, blueprintId: bp.id, layout: "PAGE", schoolName: "School", language: ["en", "hi", "sa", "bilingual"].includes(t.language) ? t.language : "en" })).data;
+  const planRes = await call("GET", `/api/papers/${paper.id}/ai-plan`);
+  const plan = planRes.data?.plan;
+  note("AI plan builds", planRes.status === 200 && plan?.sections?.length > 0, JSON.stringify(planRes.data).slice(0, 160));
+  if (!plan?.sections?.length) return;
+  const bySecRole = (role) => bp.sections.find((x) => x.role === role);
+  const wanted = new Set();
+  for (const role of ["PASSAGE", "GRAMMAR", "WRITING", "LITERATURE"]) { const x = bySecRole(role); if (x) wanted.add(x.id); }
+  const firstMcq = bp.sections.find((x) => x.type === "MCQ"); if (firstMcq) wanted.add(firstMcq.id);
+  const three = bp.sections.find((x) => x.marksEach === 3); if (three) wanted.add(three.id);
+  const map = bp.sections.find((x) => x.type === "MAP_WORK"); if (map) wanted.add(map.id);
+  for (const secPlan of plan.sections.filter((x) => wanted.has(x.sectionId))) {
+    const label = `${secPlan.sectionTitle.slice(0, 34)} [${secPlan.sectionType}]`;
+    const gen = await call("POST", `/api/papers/${paper.id}/ai-generate-section`, {
+      sectionId: secPlan.sectionId, sectionTitle: secPlan.sectionTitle, sectionType: secPlan.sectionType, sectionInstructions: secPlan.sectionInstructions,
+      marksEach: secPlan.marksEach, language: t.language === "en" ? "en" : t.language, difficulty: "BALANCED", model: "gemini-flash-lite-latest", generateDiagrams: false, slots: secPlan.slots,
+    });
+    note(`AI generates ${label}`, gen.status === 200 && gen.data?.isMock === false && gen.data?.questions?.length === secPlan.slots.length, `${gen.status} mock=${gen.data?.isMock} n=${gen.data?.questions?.length}/${secPlan.slots.length} ${JSON.stringify(gen.data).slice(0, 140)}`);
+    if (gen.status !== 200) continue;
+    const qs = gen.data.questions;
+    const commit = await call("POST", `/api/papers/${paper.id}/ai-commit-section`, { sectionId: secPlan.sectionId, questions: qs, isMock: gen.data.isMock });
+    note(`AI commit ${label}`, commit.status === 200 && commit.data?.templateFallbackCount === 0, `${commit.status} ${JSON.stringify(commit.data).slice(0, 200)}`);
+    if (commit.status !== 200) continue;
+    const v = (await call("GET", `/api/papers/${paper.id}`)).data;
+    const placed = v.items.filter((i) => i.sectionId === secPlan.sectionId);
+    if (secPlan.sectionType === "MCQ") note(`AI ${label}: every MCQ has 4 options and an answer`, placed.every((i) => i.question.options.length === 4 && i.question.answer), "");
+    if (["UNSEEN_PASSAGE"].includes(secPlan.sectionType)) {
+      note(`AI ${label}: a real passage with sub-questions worth ${secPlan.marksEach}`, placed.every((i) => i.question.text.split(/s+/).length >= 60 && (i.question.subparts ?? []).reduce((a, sp) => a + (sp.marks || 0), 0) === secPlan.marksEach), placed.map((i) => `${i.question.text.split(/s+/).length}w/${(i.question.subparts ?? []).length}sp`).join(","));
+    }
+  }
 }
 
 async function runTemplate(level, subject, t) {
@@ -165,6 +201,11 @@ async function runTemplate(level, subject, t) {
   note("total marks equal the blueprint", view.progress.usedMarks === t.total, `${view.progress.usedMarks}/${t.total}`);
   note("no error-level implications", (view.implications ?? []).filter((i) => i.severity === "error").length === 0, (view.implications ?? []).filter((i) => i.severity === "error").map((i) => i.message).join(" | "));
 
+  if (t.components.length) {
+    const compIssues = (view.implications ?? []).filter((i) => String(i.code).startsWith("COMPONENT_"));
+    note("language paper: every question is assigned a syllabus component and each gets exactly its official marks", compIssues.length === 0, compIssues.map((i) => i.message).slice(0, 3).join(" | "));
+  }
+
   // MANUAL assembly: rebuild the same paper item by item, with the wrong type refused
   const paper2 = (await call("POST", "/api/papers", { title: `${t.code} manual`, blueprintId: bp.id, layout: "PAGE", schoolName: "School", language: ["en", "hi", "sa", "bilingual"].includes(t.language) ? t.language : "en" })).data;
   const wrongSec = bp.sections.find((s) => s.type !== "MAP_WORK");
@@ -198,6 +239,7 @@ async function runTemplate(level, subject, t) {
   note("print page renders", pr.status === 200 && pr.buf.length > 2000, `${pr.status}`);
   const dx = await call("GET", `/api/papers/${paper.id}/export-docx`, null, true);
   note("DOCX exports", dx.status === 200 && dx.buf.slice(0, 2).toString() === "PK" && dx.buf.length > 5000, `${dx.status} ${dx.buf.length}`);
+  if (AI) await aiChecks(t, bp, book, note);
   return issues;
 }
 

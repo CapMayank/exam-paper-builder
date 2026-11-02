@@ -95,3 +95,103 @@ export function componentImplications(
   }
   return out;
 }
+
+// ---------------------------------------------------------------------------------------------
+// Suggested component assignment
+// ---------------------------------------------------------------------------------------------
+
+export type AllocUnit = { id: string; marks: number; type: string };
+
+const OBJECTIVE_TYPES = new Set(["MCQ", "FILL_BLANK", "TRUE_FALSE", "MATCH_COLUMN", "VERY_SHORT", "ASSERTION_REASON"]);
+
+function fits(unit: AllocUnit, comp: MarkingComponent): boolean {
+  switch (comp.role) {
+    case "PASSAGE":
+      // an unseen passage is one passage question, or a written answer worth at least 2 marks
+      return unit.type === "UNSEEN_PASSAGE" || (unit.marks >= 2 && !OBJECTIVE_TYPES.has(unit.type));
+    case "WRITING":
+      return unit.marks >= 3 && ["LONG", "SHORT", "WRITING_SKILL"].includes(unit.type);
+    case "GRAMMAR":
+      return unit.marks <= 3 && unit.type !== "UNSEEN_PASSAGE";
+    default:
+      return true;
+  }
+}
+
+/**
+ * Proposes which component each placed question counts toward so that every component gets exactly its
+ * official marks. The scheme does not say which question number carries which component, so this is a
+ * suggestion the teacher can change; it is deterministic. Units it cannot place are left unassigned.
+ */
+export function allocateComponents(units: AllocUnit[], components: MarkingComponent[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (components.length === 0 || units.length === 0) return out;
+
+  const order: Record<string, number> = { PASSAGE: 0, WRITING: 1, GRAMMAR: 2, LITERATURE: 3, STANDARD: 4 };
+  // most constrained roles first, then bigger components
+  const comps = [...components].sort((a, b) => (order[a.role] ?? 4) - (order[b.role] ?? 4) || b.marks - a.marks);
+  const taken = new Set<string>();
+  let budget = 300000;
+
+  const ranked = (comp: MarkingComponent) =>
+    units
+      .filter((u) => !taken.has(u.id) && fits(u, comp))
+      // grammar prefers objective items, literature prefers written ones; larger first keeps the search short
+      .sort((a, b) => {
+        const objA = OBJECTIVE_TYPES.has(a.type) ? 1 : 0;
+        const objB = OBJECTIVE_TYPES.has(b.type) ? 1 : 0;
+        if (comp.role === "GRAMMAR" && objA !== objB) return objB - objA;
+        if (comp.role === "LITERATURE" && objA !== objB) return objA - objB;
+        return b.marks - a.marks || a.id.localeCompare(b.id);
+      });
+
+  // Depth-first search over components; for each, over every subset of units adding up to its marks.
+  const solve = (idx: number): boolean => {
+    if (idx >= comps.length) return true;
+    const comp = comps[idx];
+    const cand = ranked(comp);
+    const chosen: AllocUnit[] = [];
+    const sameKind = (x: AllocUnit, y: AllocUnit) => x.type === y.type && x.marks === y.marks;
+    const go = (start: number, left: number): boolean => {
+      if (left === 0) {
+        for (const u of chosen) taken.add(u.id);
+        if (solve(idx + 1)) {
+          for (const u of chosen) out[u.id] = comp.key;
+          return true;
+        }
+        for (const u of chosen) taken.delete(u.id);
+        return false;
+      }
+      if (--budget < 0) return false;
+      for (let k = start; k < cand.length; k++) {
+        const u = cand[k];
+        if (u.marks > left) continue;
+        // interchangeable units (same type and marks) are only tried in order, never as permutations
+        if (k > start && sameKind(cand[k - 1], u)) continue;
+        chosen.push(u);
+        if (go(k + 1, left - u.marks)) return true;
+        chosen.pop();
+      }
+      return false;
+    };
+    return go(0, comp.marks);
+  };
+
+  if (!solve(0)) {
+    // No exact cover: fill what fits greedily so teachers still get a starting point.
+    for (const k of Object.keys(out)) delete out[k];
+    taken.clear();
+    for (const comp of comps) {
+      let left = comp.marks;
+      for (const u of ranked(comp)) {
+        if (u.marks <= left) {
+          out[u.id] = comp.key;
+          taken.add(u.id);
+          left -= u.marks;
+        }
+        if (left === 0) break;
+      }
+    }
+  }
+  return out;
+}
