@@ -101,10 +101,13 @@ async function aiChecks(t, bp, book, note) {
   const map = bp.sections.find((x) => x.type === "MAP_WORK"); if (map) wanted.add(map.id);
   for (const secPlan of plan.sections.filter((x) => wanted.has(x.sectionId))) {
     const label = `${secPlan.sectionTitle.slice(0, 34)} [${secPlan.sectionType}]`;
-    const gen = await call("POST", `/api/papers/${paper.id}/ai-generate-section`, {
+    const genBody = {
       sectionId: secPlan.sectionId, sectionTitle: secPlan.sectionTitle, sectionType: secPlan.sectionType, sectionInstructions: secPlan.sectionInstructions,
       marksEach: secPlan.marksEach, language: t.language === "en" ? "en" : t.language, difficulty: "BALANCED", model: "gemini-flash-lite-latest", generateDiagrams: false, slots: secPlan.slots,
-    });
+    };
+    let gen = await call("POST", `/api/papers/${paper.id}/ai-generate-section`, genBody);
+    // a busy or rate-limited model is reported honestly (502); give it one more go after a pause
+    if (gen.status === 502) { await new Promise((res) => setTimeout(res, 25000)); gen = await call("POST", `/api/papers/${paper.id}/ai-generate-section`, genBody); }
     note(`AI generates ${label}`, gen.status === 200 && gen.data?.isMock === false && gen.data?.questions?.length === secPlan.slots.length, `${gen.status} mock=${gen.data?.isMock} n=${gen.data?.questions?.length}/${secPlan.slots.length} ${JSON.stringify(gen.data).slice(0, 140)}`);
     if (gen.status !== 200) continue;
     const qs = gen.data.questions;
