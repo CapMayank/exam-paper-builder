@@ -1198,7 +1198,7 @@ export function validateGeneratedQuestion(
     });
   }
 
-  // 1b. An unseen passage must be a real passage, not a stub (official ones run 150-250 words)
+  // 1b. An unseen passage must be a real passage, not a stub (the generators ask for roughly 100-220 words; the printed booklet has a page limit)
   if (qType === "UNSEEN_PASSAGE" && opts?.strictPassage) {
     // the passage may sit in the stem or be spread over the sub-questions' texts
     const words = [text, ...subparts.map((sp) => String(sp.text ?? ""))].join(" ").split(/s+/).filter(Boolean).length;

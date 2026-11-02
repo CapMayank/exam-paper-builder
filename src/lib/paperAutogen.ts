@@ -175,7 +175,7 @@ export function slotTaskDirective(role: ChapterRole, rowTitle: string, type: str
       return `Grammar item on "${rowTitle}": test this grammar point directly with your own words or sentences (e.g. form, identify, join or change them). Do not base it on any passage, poem, story or textbook lesson, and do not refer to an unseen passage.`;
     case "PASSAGE":
       return type === "UNSEEN_PASSAGE"
-        ? `Unseen passage worth ${marks} marks: write a new, original passage of at least ${marks >= 8 ? 250 : marks >= 5 ? 180 : 130} words (count them; a shorter passage is rejected), then sub-questions whose marks add up to exactly ${marks}.`
+        ? `Unseen passage worth ${marks} marks: write a new, original passage of ${marks >= 8 ? "180-220" : marks >= 5 ? "130-170" : "100-130"} words (count them; under 100 is rejected and over ${marks >= 8 ? 240 : marks >= 5 ? 190 : 150} is too long for the printed booklet), then sub-questions whose marks add up to exactly ${marks}.`
         : `Unseen passage worth ${marks} marks: write a NEW, ORIGINAL passage (100-150 words, not from any textbook or published text) in the paper's language as the question text, then put comprehension sub-questions in "subparts" (answerable from the passage alone) whose marks add up to exactly ${marks}.`;
     case "WRITING":
       return `Writing task on "${rowTitle}": set one realistic task in the paper's language (for a letter/application: who writes to whom and why; for an essay/paragraph: the topic with 3-4 guiding points). Do not ask about a textbook lesson. The answer is a complete model response in the correct format, followed by the marking scheme (format, content, expression) adding up to ${marks} marks.`;
