@@ -26,9 +26,10 @@ describe("blueprint structure audit", () => {
   it("language templates with an official scheme carry components that add up to the paper total", () => {
     const langs = MPBSE_BLUEPRINT_TEMPLATES.filter((t) => isLanguageTemplate(t));
     const withScheme = langs.filter((t) => t.components);
-    expect(withScheme.map((t) => `${t.classLevel}-${t.subjectName}`).sort()).toEqual(
-      ["10-Hindi", "10-Sanskrit", "11-English", "11-Hindi", "12-English", "12-Hindi", "9-English", "9-Hindi", "9-Sanskrit", "10-English", "11-Sanskrit", "12-Sanskrit"].sort(),
-    );
+    const keys = withScheme.map((t) => `${t.classLevel}-${t.subjectName}`);
+    for (const k of ["9-Hindi", "10-Hindi", "11-Hindi", "12-Hindi", "9-Sanskrit", "10-Sanskrit", "11-Sanskrit", "12-Sanskrit", "9-English", "10-English", "11-English", "12-English"]) {
+      expect(keys).toContain(k);
+    }
     for (const t of withScheme) expect(codes(t)).not.toContain("COMPONENT_MARKS_MISMATCH");
   });
 

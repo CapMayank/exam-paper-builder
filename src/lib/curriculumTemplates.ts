@@ -1,4 +1,6 @@
 import type { QuestionType } from "./constants";
+import { FORMATS } from "./officialFormats";
+import { buildOfficialTemplates, sectionsFor } from "./officialTemplates";
 import {
   findOfficialScheme,
   type MarkingComponent,
@@ -55,6 +57,8 @@ export interface BlueprintTemplate {
   sections: BlueprintTemplateSectionGroup[];
   /** Official content allocation (language subjects: by component, not chapter). */
   components?: MarkingComponent[];
+  /** Official per-unit/chapter marks for non-language subjects (reference; chapter quotas come from the book). */
+  unitAllocation?: Array<{ no: string; title: string; marks: number }>;
   /** Present only when the pattern was read from an official document. */
   source?: OfficialSource;
   provenance?: {
@@ -198,7 +202,7 @@ export function validateCircular465Blueprint(
 // ARCHETYPE GENERATORS (SUBJECT-AWARE HEADINGS: EN, HI, SA)
 // =============================================================================
 
-function getArchetypeHeading(
+export function getArchetypeHeading(
   position: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8,
   rangeOrCountStr: string,
   lang: "sa" | "hi" | "en" = "en"
@@ -459,125 +463,12 @@ export function generateStandard23Q75MSectionGroups(lang: "sa" | "hi" | "en" = "
   ];
 }
 
-export function generateScience20Q70MSectionGroups(lang: "sa" | "hi" | "en" = "en"): BlueprintTemplateSectionGroup[] {
-  const h1 = getArchetypeHeading(1, "1", lang);
-  const h2 = getArchetypeHeading(2, "2", lang);
-  const h3 = getArchetypeHeading(3, "3", lang);
-  const h4 = getArchetypeHeading(4, "4", lang);
-  const h5 = getArchetypeHeading(5, "5", lang);
-  const h6 = getArchetypeHeading(6, "6 to 12", lang);
-  const h7 = getArchetypeHeading(7, "13 to 16", lang);
-  const h8 = getArchetypeHeading(8, "17 to 20", lang);
-
-  return [
-    {
-      title: h1.title,
-      instructions: h1.instructions,
-      questionTypes: [
-        {
-          type: "MCQ",
-          count: 6,
-          marksEach: 1,
-          orChoiceMode: "NOT_REQUIRED",
-          choicePolicy: createChoicePolicy("NO_CHOICE", 6, 6, "ANY_INCLUDED_CHAPTER", "Compulsory objective items"),
-        },
-      ],
-    },
-    {
-      title: h2.title,
-      instructions: h2.instructions,
-      questionTypes: [
-        {
-          type: "FILL_BLANK",
-          count: 6,
-          marksEach: 1,
-          orChoiceMode: "NOT_REQUIRED",
-          choicePolicy: createChoicePolicy("NO_CHOICE", 6, 6, "ANY_INCLUDED_CHAPTER", "Compulsory objective items"),
-        },
-      ],
-    },
-    {
-      title: h3.title,
-      instructions: h3.instructions,
-      questionTypes: [
-        {
-          type: "TRUE_FALSE",
-          count: 5,
-          marksEach: 1,
-          orChoiceMode: "NOT_REQUIRED",
-          choicePolicy: createChoicePolicy("NO_CHOICE", 5, 5, "ANY_INCLUDED_CHAPTER", "Compulsory objective items"),
-        },
-      ],
-    },
-    {
-      title: h4.title,
-      instructions: h4.instructions,
-      questionTypes: [
-        {
-          type: "MATCH_COLUMN",
-          count: 5,
-          marksEach: 1,
-          orChoiceMode: "NOT_REQUIRED",
-          choicePolicy: createChoicePolicy("NO_CHOICE", 5, 5, "ANY_INCLUDED_CHAPTER", "Compulsory objective items"),
-        },
-      ],
-    },
-    {
-      title: h5.title,
-      instructions: h5.instructions,
-      questionTypes: [
-        {
-          type: "VERY_SHORT",
-          count: 6,
-          marksEach: 1,
-          orChoiceMode: "NOT_REQUIRED",
-          choicePolicy: createChoicePolicy("NO_CHOICE", 6, 6, "ANY_INCLUDED_CHAPTER", "Compulsory objective items"),
-        },
-      ],
-    },
-    {
-      title: h6.title,
-      instructions: h6.instructions,
-      questionTypes: [
-        {
-          type: "VERY_SHORT",
-          count: 7,
-          marksEach: 2,
-          orChoiceMode: "NOT_REQUIRED",
-          orAlternativeCount: 0,
-          choicePolicy: createChoicePolicy("NO_CHOICE", 7, 7, "ANY_INCLUDED_CHAPTER", "Circular 465/2026: Abolition of internal choice in 2-mark questions"),
-        },
-      ],
-    },
-    {
-      title: h7.title,
-      instructions: h7.instructions,
-      questionTypes: [
-        {
-          type: "SHORT",
-          count: 4,
-          marksEach: 3,
-          orChoiceMode: "REQUIRED",
-          orAlternativeCount: 1,
-          choicePolicy: createChoicePolicy("FULL_OR_ALTERNATIVE", 2, 1, "SAME_UNIT", "Circular 465/2026: Mandatory 100% internal choice in 3-mark questions from same unit"),
-        },
-      ],
-    },
-    {
-      title: h8.title,
-      instructions: h8.instructions,
-      questionTypes: [
-        {
-          type: "LONG",
-          count: 4,
-          marksEach: 4,
-          orChoiceMode: "REQUIRED",
-          orAlternativeCount: 1,
-          choicePolicy: createChoicePolicy("FULL_OR_ALTERNATIVE", 2, 1, "SAME_UNIT", "Circular 465/2026: Mandatory 100% internal choice in 4-mark questions from same unit"),
-        },
-      ],
-    },
-  ];
+/** 70-mark papers (Q1-5 objective, 7x2, 4x3, 4x4). Physics has its own Q1-5 split (6/6/5/6/5), per the 2026-27 अंक योजना. */
+export function generateScience20Q70MSectionGroups(
+  lang: "sa" | "hi" | "en" = "en",
+  format: "F70" | "F70_PHYSICS" = "F70",
+): BlueprintTemplateSectionGroup[] {
+  return sectionsFor(FORMATS[format], lang, { getArchetypeHeading, createChoicePolicy });
 }
 
 export function generateStandard23Q80MSectionGroups(lang: "sa" | "hi" | "en" = "en"): BlueprintTemplateSectionGroup[] {
@@ -1345,7 +1236,7 @@ const RAW_MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     subjectName: "Physics",
     language: "en",
     archetype: "SCIENCE_20Q_70M",
-    sections: generateScience20Q70MSectionGroups("en"),
+    sections: generateScience20Q70MSectionGroups("en", "F70_PHYSICS"),
     provenance: {
       documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
       circularReference: "465/विद्योचित/2026",
@@ -1487,7 +1378,7 @@ const RAW_MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
     subjectName: "Physics",
     language: "en",
     archetype: "SCIENCE_20Q_70M",
-    sections: generateScience20Q70MSectionGroups("en"),
+    sections: generateScience20Q70MSectionGroups("en", "F70_PHYSICS"),
     provenance: {
       documentTitle: "अंकयोजना 2026-27 (Marks Distribution Scheme)",
       circularReference: "465/विद्योचित/2026",
@@ -1605,7 +1496,11 @@ function attachOfficialSource(t: BlueprintTemplate): BlueprintTemplate {
   return { ...t, components: scheme.components, source: scheme.source };
 }
 
-export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = RAW_MPBSE_BLUEPRINT_TEMPLATES.map(attachOfficialSource);
+export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
+  ...RAW_MPBSE_BLUEPRINT_TEMPLATES.map(attachOfficialSource),
+  // every other written paper in the 2026-27 scheme
+  ...buildOfficialTemplates({ getArchetypeHeading, createChoicePolicy }, RAW_MPBSE_BLUEPRINT_TEMPLATES),
+];
 
 // =============================================================================
 // LEGACY & STARTER TEMPLATES PRESERVED FOR FULL BACKWARD COMPATIBILITY

@@ -12,7 +12,17 @@ import {
 import { assertCanModifyPaper, loadPaperView, toPlacedItems } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { isQuestionContaminated } from "@/lib/questionValidator";
+import { parseMatchColumnPairs } from "@/lib/constants";
 import { parseSubparts, subpartsTotalMarks } from "@/lib/types";
+
+function safeJsonArray(json: string | null): string[] {
+  try {
+    const v = JSON.parse(json || "[]");
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
 
 /**
  * 1-Click Smart Auto-Fill:
@@ -151,6 +161,10 @@ export const POST = route(async (req, { id }, user) => {
       difficulty: q.difficulty,
       subpartsMarks: subMarks > 0 ? subMarks : undefined,
       passageGroupId: q.passageGroupId,
+      matchPairs:
+        q.type === "MATCH_COLUMN"
+          ? parseMatchColumnPairs(safeJsonArray(q.optionsJson), q.text, q.explanation).length
+          : undefined,
     };
   });
 
@@ -250,7 +264,11 @@ export const POST = route(async (req, { id }, user) => {
       const sec = sectionMap.get(u.sectionId);
       if (!sec) continue;
 
-      for (let slotI = 0; slotI < u.count; slotI++) {
+      // A passage cannot be faked from a template, and a multi-pair match section is one question.
+      if (["UNSEEN_PASSAGE", "REFERENCE_CONTEXT"].includes(sec.type)) continue;
+      const collapsedMatch = sec.type === "MATCH_COLUMN" && sec.count > 1 && sec.marksEach === 1;
+      const synthSlots = collapsedMatch ? 1 : u.count;
+      for (let slotI = 0; slotI < synthSlots; slotI++) {
         // Find best chapter with quota deficit (preferring exact quota matches)
         const sortedChapters = [...paper.blueprint.chapters].sort((a, b) => {
           const remA = chapterRemainingMarks.get(a.chapterId) ?? 0;
@@ -338,7 +356,7 @@ export const POST = route(async (req, { id }, user) => {
             });
 
             const cur = chapterRemainingMarks.get(chosenBpChapter.chapterId) ?? 0;
-            chapterRemainingMarks.set(chosenBpChapter.chapterId, Math.max(0, cur - sec.marksEach));
+            chapterRemainingMarks.set(chosenBpChapter.chapterId, Math.max(0, cur - (collapsedMatch ? u.count * sec.marksEach : sec.marksEach)));
           }
         }
       }
@@ -432,6 +450,7 @@ export const POST = route(async (req, { id }, user) => {
         difficulty: candidate.difficulty || "MEDIUM",
         cognitiveLevel: candidate.cognitiveLevel || "APPLYING",
         explanation: candidate.explanation || null,
+        sourceProvenance: "TEMPLATE_FALLBACK: offline curriculum template, not AI-generated; teacher review required",
         createdById: user.id,
       },
     });
@@ -523,6 +542,7 @@ export const POST = route(async (req, { id }, user) => {
           difficulty: syn.question.difficulty || "MEDIUM",
           cognitiveLevel: syn.question.cognitiveLevel || "APPLYING",
           explanation: syn.question.explanation || null,
+          sourceProvenance: "TEMPLATE_FALLBACK: offline curriculum template, not AI-generated; teacher review required",
           createdById: user.id,
         },
       });
@@ -541,6 +561,7 @@ export const POST = route(async (req, { id }, user) => {
             difficulty: syn.orQuestion.difficulty || "MEDIUM",
             cognitiveLevel: syn.orQuestion.cognitiveLevel || "APPLYING",
             explanation: syn.orQuestion.explanation || null,
+            sourceProvenance: "TEMPLATE_FALLBACK: offline curriculum template, not AI-generated; teacher review required",
             createdById: user.id,
           },
         });
@@ -565,7 +586,11 @@ export const POST = route(async (req, { id }, user) => {
   });
 
   const totalAdded = result.added.length + synthesizedItems.length;
-  const totalNeededUnfilled = result.unfilled.reduce((sum, u) => sum + u.count, 0);
+  const totalNeededUnfilled = result.unfilled.reduce((sum, u) => {
+    const sec = sectionMap.get(u.sectionId);
+    const collapsed = sec && sec.type === "MATCH_COLUMN" && sec.count > 1 && sec.marksEach === 1;
+    return sum + (collapsed ? 1 : u.count);
+  }, 0);
   const finalUnfilled = synthesizedItems.length >= totalNeededUnfilled ? [] : result.unfilled;
 
   await recordAudit(user, "PAPER_UPDATE", "PAPER", id, {

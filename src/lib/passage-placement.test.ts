@@ -68,3 +68,24 @@ describe("autofill honours passage roles", () => {
     expect(res.unfilled.map((u) => u.sectionId)).toContain("read");
   });
 });
+
+describe("autofill with multi-pair match questions", () => {
+  const def: BlueprintDef = {
+    sections: [{ id: "m", title: "Match", type: "MATCH_COLUMN", count: 6, marksEach: 1 }],
+    chapters: [{ chapterId: "c1", marks: 6 }],
+  };
+  it("uses one 6-pair question for the whole six-slot match section", () => {
+    const res = autoFillPaper(def, [], [
+      { id: "short", chapterId: "c1", type: "MATCH_COLUMN", matchPairs: 3 },
+      { id: "full", chapterId: "c1", type: "MATCH_COLUMN", matchPairs: 6 },
+      { id: "full2", chapterId: "c1", type: "MATCH_COLUMN", matchPairs: 6 },
+    ]);
+    expect(res.added.map((a) => a.questionId)).toEqual(["full"]);
+    expect(res.complete).toBe(true);
+  });
+  it("reports the section unfilled when no question has enough pairs", () => {
+    const res = autoFillPaper(def, [], [{ id: "short", chapterId: "c1", type: "MATCH_COLUMN", matchPairs: 3 }]);
+    expect(res.added).toEqual([]);
+    expect(res.unfilled[0]).toMatchObject({ sectionId: "m", count: 6 });
+  });
+});

@@ -8,6 +8,8 @@ export type CandidateQuestion = {
   subpartsMarks?: number;
   /** Shared by the sub-questions of one passage; such a question only fits a PASSAGE section. */
   passageGroupId?: string | null;
+  /** MATCH_COLUMN: number of pairs. A multi-pair question fills that many slots of a match section at once. */
+  matchPairs?: number;
 };
 
 const PASSAGE_PARENT_TYPES = new Set(["UNSEEN_PASSAGE", "CASE_STUDY", "REFERENCE_CONTEXT"]);
@@ -37,6 +39,10 @@ type Slot = {
   type: string;
   poolKey: string;
   marksEach: number;
+  /** Slots consumed (a multi-pair match question fills several) and the marks it carries. */
+  units: number;
+  cost: number;
+  needsPairs?: number;
   order: number;
   requiresInternalChoice?: boolean;
 };
@@ -140,6 +146,27 @@ export function autoFillPaper(
         ? false
         : Boolean(actualOptions?.internalChoiceSectionIds?.has(sec.id));
 
+    const multiMatch =
+      sec.type === "MATCH_COLUMN" &&
+      sec.count > 1 &&
+      sec.marksEach === 1 &&
+      candidatePool.some((c) => c.type === "MATCH_COLUMN" && c.matchPairs !== undefined);
+    if (multiMatch && needed > 0) {
+      slots.push({
+        sectionId: sec.id,
+        title: sec.title,
+        type: sec.type,
+        poolKey: poolKey(sec.type, false),
+        marksEach: sec.marksEach,
+        units: needed,
+        cost: needed * sec.marksEach,
+        needsPairs: needed,
+        order: order++,
+        requiresInternalChoice: false,
+      });
+      continue;
+    }
+
     for (let i = 0; i < needed; i++) {
       const slotIndex = placed + i;
       let requiresInternalChoice = defaultRequires;
@@ -156,6 +183,8 @@ export function autoFillPaper(
         type: sec.type,
         poolKey: poolKey(sec.type, sec.role === "PASSAGE"),
         marksEach: sec.marksEach,
+        units: 1,
+        cost: sec.marksEach,
         order: order++,
         requiresInternalChoice,
       });
@@ -170,7 +199,7 @@ export function autoFillPaper(
   const available = candidatePool.filter((q) => !usedQuestionIds.has(q.id));
 
   // Sort slots by marksEach descending to fill larger marks first (avoids quota fragmentation)
-  const sortedSlots = [...slots].sort((a, b) => b.marksEach - a.marksEach || a.order - b.order);
+  const sortedSlots = [...slots].sort((a, b) => b.cost / b.units - a.cost / a.units || a.order - b.order);
 
   // Group candidates by type
   const candidatesByType = new Map<string, CandidateQuestion[]>();
@@ -181,12 +210,38 @@ export function autoFillPaper(
     candidatesByType.set(key, list);
   }
 
-  // Backtracking solver
+  // Backtracking solver. It branches on WHICH CHAPTER a slot goes to (few options), not on which of many
+  // interchangeable questions to use (huge), so exact-quota papers are solved in a handful of steps.
   const chosen = new Map<number, CandidateQuestion>();
   const chosenQuestionIds = new Set<string>();
+  const chapterIds = bp.chapters.map((c) => c.chapterId);
+
+  const difficultyRank = (c: CandidateQuestion) =>
+    actualOptions?.preferredDifficulty &&
+    actualOptions.preferredDifficulty !== "ANY" &&
+    c.difficulty !== actualOptions.preferredDifficulty
+      ? 1
+      : 0;
+  // candidates bucketed by pool and chapter, preferred difficulty first
+  const buckets = new Map<string, CandidateQuestion[]>();
+  for (const [key, list] of candidatesByType) {
+    for (const ch of chapterIds) {
+      buckets.set(
+        `${key}#${ch}`,
+        list.filter((c) => c.chapterId === ch).sort((x, y) => difficultyRank(x) - difficultyRank(y)),
+      );
+    }
+  }
+  const fits = (c: CandidateQuestion, slot: Slot) => {
+    if (chosenQuestionIds.has(c.id)) return false;
+    if (slot.needsPairs !== undefined) return (c.matchPairs ?? 0) >= slot.needsPairs;
+    return c.subpartsMarks === undefined || c.subpartsMarks === slot.marksEach;
+  };
+  const firstFit = (slot: Slot, ch: string) =>
+    (buckets.get(`${slot.poolKey}#${ch}`) ?? []).find((c) => fits(c, slot));
 
   let steps = 0;
-  const maxSteps = 4000;
+  const maxSteps = 200000;
   let hitStepLimit = false;
 
   function solve(slotIdx: number): boolean {
@@ -195,46 +250,27 @@ export function autoFillPaper(
       hitStepLimit = true;
       return false;
     }
-
     const slot = sortedSlots[slotIdx];
-    const pool = candidatesByType.get(slot.poolKey) ?? [];
-
-    // Filter valid candidates for this slot
-    const validCandidates = pool.filter((c) => {
-      if (chosenQuestionIds.has(c.id)) return false;
-      // If the candidate has explicit subpart marks, they must strictly match the slot marks
-      if (c.subpartsMarks !== undefined && c.subpartsMarks !== slot.marksEach) return false;
-      const rem = chapterRemaining.get(c.chapterId) ?? 0;
-      return rem >= slot.marksEach;
-    });
-
-    // Heuristic: Pick from preferred difficulty first, then highest remaining chapter quota
-    validCandidates.sort((a, b) => {
-      if (actualOptions?.preferredDifficulty && actualOptions.preferredDifficulty !== "ANY") {
-        const aDiff = a.difficulty === actualOptions.preferredDifficulty ? 0 : 1;
-        const bDiff = b.difficulty === actualOptions.preferredDifficulty ? 0 : 1;
-        if (aDiff !== bDiff) return aDiff - bDiff;
-      }
-      const remA = chapterRemaining.get(a.chapterId) ?? 0;
-      const remB = chapterRemaining.get(b.chapterId) ?? 0;
-      return remB - remA;
-    });
-
-    for (const cand of validCandidates) {
-      // Pick
+    const options = chapterIds
+      .filter((ch) => (chapterRemaining.get(ch) ?? 0) >= slot.cost)
+      .map((ch) => ({ ch, cand: firstFit(slot, ch) }))
+      .filter((o): o is { ch: string; cand: CandidateQuestion } => Boolean(o.cand))
+      .sort((x, y) => difficultyRank(x.cand) - difficultyRank(y.cand) || (chapterRemaining.get(y.ch) ?? 0) - (chapterRemaining.get(x.ch) ?? 0));
+    const triedRemaining = new Set<string>();
+    for (const { ch, cand } of options) {
+      // chapters with identical remaining quota and nothing else different are interchangeable for feasibility
+      const sig = `${chapterRemaining.get(ch)}|${(buckets.get(`${slot.poolKey}#${ch}`) ?? []).filter((c) => !chosenQuestionIds.has(c.id)).length}`;
+      if (triedRemaining.has(sig)) continue;
+      triedRemaining.add(sig);
       chosen.set(slot.order, cand);
       chosenQuestionIds.add(cand.id);
-      const rem = chapterRemaining.get(cand.chapterId) ?? 0;
-      chapterRemaining.set(cand.chapterId, rem - slot.marksEach);
-
+      const rem = chapterRemaining.get(ch) ?? 0;
+      chapterRemaining.set(ch, rem - slot.cost);
       if (solve(slotIdx + 1)) return true;
-
-      // Undo
       chosen.delete(slot.order);
       chosenQuestionIds.delete(cand.id);
-      chapterRemaining.set(cand.chapterId, rem);
+      chapterRemaining.set(ch, rem);
     }
-
     return false;
   }
 
@@ -262,8 +298,10 @@ export function autoFillPaper(
       const valid = pool
         .filter((c) => {
           if (chosenQuestionIds.has(c.id)) return false;
-          if (c.subpartsMarks !== undefined && c.subpartsMarks !== slot.marksEach) return false;
-          return (chapterRemaining.get(c.chapterId) ?? 0) >= slot.marksEach;
+          if (slot.needsPairs !== undefined) {
+            if ((c.matchPairs ?? 0) < slot.needsPairs) return false;
+          } else if (c.subpartsMarks !== undefined && c.subpartsMarks !== slot.marksEach) return false;
+          return (chapterRemaining.get(c.chapterId) ?? 0) >= slot.cost;
         })
         .sort((a, b) => (chapterRemaining.get(b.chapterId) ?? 0) - (chapterRemaining.get(a.chapterId) ?? 0));
 
@@ -272,7 +310,7 @@ export function autoFillPaper(
         chosen.set(slot.order, cand);
         chosenQuestionIds.add(cand.id);
         const rem = chapterRemaining.get(cand.chapterId) ?? 0;
-        chapterRemaining.set(cand.chapterId, rem - slot.marksEach);
+        chapterRemaining.set(cand.chapterId, rem - slot.cost);
       }
     }
   }
@@ -292,6 +330,7 @@ export function autoFillPaper(
             c.id !== q.id &&
             !chosenQuestionIds.has(c.id) &&
             c.chapterId === q.chapterId &&
+            slot.needsPairs === undefined &&
             (c.subpartsMarks === undefined || c.subpartsMarks === slot.marksEach),
         );
         if (orCand) {
@@ -320,6 +359,11 @@ export function autoFillPaper(
   }));
 
   const complete = unfilled.length === 0 && slots.length === added.length;
+  // a collapsed multi-pair match slot reports every slot it stands for
+  for (const u of unfilled) {
+    const s = slots.find((x) => x.sectionId === u.sectionId && x.needsPairs !== undefined);
+    if (s) u.count = s.units;
+  }
   const solverMode = success ? "optimal" : "greedy";
 
   return { added, unfilled, complete, solverMode, exhaustedBudget: hitStepLimit };
