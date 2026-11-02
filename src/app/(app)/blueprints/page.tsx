@@ -330,7 +330,7 @@ export default function BlueprintsPage() {
               type="button"
               onClick={() => setTemplateModalOpen(true)}
               className="btn btn-ghost border border-purple-200 bg-purple-50/80 text-purple-900 hover:bg-purple-100 text-xs py-1.5 font-semibold flex items-center gap-1.5"
-              title="Browse standard CBSE/ICSE board blueprint starter templates"
+              title="Start from an MPBSE 2026-27 blueprint template"
             >
               <Layers size={15} className="text-purple-600" /> Starter Templates
             </button>
@@ -486,7 +486,7 @@ export default function BlueprintsPage() {
       ) : (
         <>
           {/* Mobile Tab Switcher (< lg screens) */}
-          <div className="flex items-center gap-1.5 p-1 bg-slate-200/80 rounded-xl lg:hidden">
+          <div className="flex items-center gap-1.5 p-1 bg-slate-200/80 rounded-xl xl:hidden">
             <button
               type="button"
               onClick={() => setMobileTab("directory")}
@@ -508,11 +508,11 @@ export default function BlueprintsPage() {
             </button>
           </div>
 
-          <div className="grid items-start gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
+          <div className="grid items-start gap-6 xl:grid-cols-[22rem_minmax(0,1fr)]">
             {/* LEFT COLUMN: Blueprints List */}
             <div
-              className={`lg:sticky lg:top-6 lg:max-h-[calc(100vh-3.5rem)] flex-col rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden ${
-                mobileTab === "details" ? "hidden lg:flex" : "flex"
+              className={`xl:sticky xl:top-16 xl:max-h-[calc(100vh-5rem)] flex-col rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden ${
+                mobileTab === "details" ? "hidden xl:flex" : "flex"
               }`}
             >
               <div className="p-3 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between gap-2 shrink-0">
@@ -625,10 +625,10 @@ export default function BlueprintsPage() {
           {selected && (
             <div
               id="blueprint-detail-workspace"
-              className={`space-y-6 ${mobileTab === "directory" ? "hidden lg:block" : "block"}`}
+              className={`space-y-6 ${mobileTab === "directory" ? "hidden xl:block" : "block"}`}
             >
               {/* Mobile Back to Blueprints Button */}
-              <div className="lg:hidden flex items-center justify-between gap-2 pb-1">
+              <div className="xl:hidden flex items-center justify-between gap-2 pb-1">
                 <button
                   type="button"
                   onClick={() => setMobileTab("directory")}
