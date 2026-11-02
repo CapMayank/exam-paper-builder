@@ -106,6 +106,8 @@ model BlueprintChapter {
   blueprintId String
   chapterId   String
   marks       Int
+  unitKey     String    @default("") // chapters sharing a unitKey share one quota (the scheme allocates by unit)
+  unitTitle   String    @default("")
   blueprint   Blueprint @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
   chapter     Chapter   @relation(fields: [chapterId], references: [id], onDelete: Restrict)
 

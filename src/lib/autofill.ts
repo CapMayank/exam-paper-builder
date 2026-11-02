@@ -1,4 +1,4 @@
-import type { BlueprintDef, PlacedItem } from "./blueprint";
+import { quotaRepresentatives, type BlueprintDef, type PlacedItem } from "./blueprint";
 
 export type CandidateQuestion = {
   id: string;
@@ -96,15 +96,18 @@ export function autoFillPaper(
   ]);
 
   // Compute remaining quota for each chapter
+  // Quota groups: lessons of one unit share a budget (a lesson reports its unit's representative chapter).
+  const repOf = quotaRepresentatives(bp.chapters);
+  const rep = (id: string) => repOf.get(id) ?? id;
   const chapterRemaining = new Map<string, number>();
   for (const c of bp.chapters) {
-    chapterRemaining.set(c.chapterId, c.marks);
+    chapterRemaining.set(rep(c.chapterId), (chapterRemaining.get(rep(c.chapterId)) ?? 0) + c.marks);
   }
   for (const item of currentItems) {
     const sec = sectionById.get(item.sectionId);
     const marks = getItemMarks(item, sec?.marksEach ?? 0);
-    const cur = chapterRemaining.get(item.chapterId) ?? 0;
-    chapterRemaining.set(item.chapterId, Math.max(0, cur - marks));
+    const cur = (chapterRemaining.get(rep(item.chapterId)) ?? 0);
+    chapterRemaining.set(rep(item.chapterId), Math.max(0, cur - marks));
   }
 
   // Count placed items per section
@@ -154,7 +157,7 @@ export function autoFillPaper(
       candidatePool.some((c) => c.type === "MATCH_COLUMN" && c.matchPairs !== undefined);
     if (multiMatch && needed > 0) {
       const pool = candidatePool.filter((c) => c.type === "MATCH_COLUMN" && !usedQuestionIds.has(c.id) && (c.matchPairs ?? 0) > 0);
-      const hasSingle = pool.some((c) => (c.matchPairs ?? 0) >= needed && (chapterRemaining.get(c.chapterId) ?? 0) >= needed);
+      const hasSingle = pool.some((c) => (c.matchPairs ?? 0) >= needed && ((chapterRemaining.get(rep(c.chapterId)) ?? 0)) >= needed);
       if (!hasSingle) {
         // No single question has enough pairs: combine up to three whose pair counts add up EXACTLY to the
         // section (a question always counts all of its pairs, so overshooting would overfill the section).
@@ -166,11 +169,11 @@ export function autoFillPaper(
           for (let i = start; i < sorted.length; i++) {
             const c = sorted[i];
             const n = c.matchPairs ?? 0;
-            if (n > left || (budget.get(c.chapterId) ?? 0) < n) continue;
-            budget.set(c.chapterId, (budget.get(c.chapterId) ?? 0) - n);
+            if (n > left || (budget.get(rep(c.chapterId)) ?? 0) < n) continue;
+            budget.set(rep(c.chapterId), (budget.get(rep(c.chapterId)) ?? 0) - n);
             const found = search(i + 1, left - n, [...picked, c]);
             if (found) return found;
-            budget.set(c.chapterId, (budget.get(c.chapterId) ?? 0) + n);
+            budget.set(rep(c.chapterId), (budget.get(rep(c.chapterId)) ?? 0) + n);
           }
           return null;
         };
@@ -180,7 +183,7 @@ export function autoFillPaper(
             usedQuestionIds.add(c.id);
             preAdded.push({ sectionId: sec.id, questionId: c.id, orQuestionId: null, requiresInternalChoice: false, chapterId: c.chapterId });
           }
-          for (const [k, v] of budget) chapterRemaining.set(k, v);
+          for (const [k, v] of budget) chapterRemaining.set(rep(k), v);
           continue;
         }
       }
@@ -284,24 +287,24 @@ export function autoFillPaper(
     }
     const slot = sortedSlots[slotIdx];
     const options = chapterIds
-      .filter((ch) => (chapterRemaining.get(ch) ?? 0) >= slot.cost)
+      .filter((ch) => ((chapterRemaining.get(rep(ch)) ?? 0)) >= slot.cost)
       .map((ch) => ({ ch, cand: firstFit(slot, ch) }))
       .filter((o): o is { ch: string; cand: CandidateQuestion } => Boolean(o.cand))
-      .sort((x, y) => difficultyRank(x.cand) - difficultyRank(y.cand) || (chapterRemaining.get(y.ch) ?? 0) - (chapterRemaining.get(x.ch) ?? 0));
+      .sort((x, y) => difficultyRank(x.cand) - difficultyRank(y.cand) || ((chapterRemaining.get(rep(y.ch)) ?? 0)) - ((chapterRemaining.get(rep(x.ch)) ?? 0)));
     const triedRemaining = new Set<string>();
     for (const { ch, cand } of options) {
       // chapters with identical remaining quota and nothing else different are interchangeable for feasibility
-      const sig = `${chapterRemaining.get(ch)}|${(buckets.get(`${slot.poolKey}#${ch}`) ?? []).filter((c) => !chosenQuestionIds.has(c.id)).length}`;
+      const sig = `${chapterRemaining.get(rep(ch))}|${(buckets.get(`${slot.poolKey}#${ch}`) ?? []).filter((c) => !chosenQuestionIds.has(c.id)).length}`;
       if (triedRemaining.has(sig)) continue;
       triedRemaining.add(sig);
       chosen.set(slot.order, cand);
       chosenQuestionIds.add(cand.id);
-      const rem = chapterRemaining.get(ch) ?? 0;
-      chapterRemaining.set(ch, rem - slot.cost);
+      const rem = (chapterRemaining.get(rep(ch)) ?? 0);
+      chapterRemaining.set(rep(ch), rem - slot.cost);
       if (solve(slotIdx + 1)) return true;
       chosen.delete(slot.order);
       chosenQuestionIds.delete(cand.id);
-      chapterRemaining.set(ch, rem);
+      chapterRemaining.set(rep(ch), rem);
     }
     return false;
   }
@@ -315,14 +318,15 @@ export function autoFillPaper(
     chosenQuestionIds.clear();
 
     // Reset remaining quota
+    chapterRemaining.clear();
     for (const c of bp.chapters) {
-      chapterRemaining.set(c.chapterId, c.marks);
+      chapterRemaining.set(rep(c.chapterId), (chapterRemaining.get(rep(c.chapterId)) ?? 0) + c.marks);
     }
     for (const item of currentItems) {
       const sec = sectionById.get(item.sectionId);
       const marks = getItemMarks(item, sec?.marksEach ?? 0);
-      const cur = chapterRemaining.get(item.chapterId) ?? 0;
-      chapterRemaining.set(item.chapterId, Math.max(0, cur - marks));
+      const cur = (chapterRemaining.get(rep(item.chapterId)) ?? 0);
+      chapterRemaining.set(rep(item.chapterId), Math.max(0, cur - marks));
     }
 
     for (const slot of sortedSlots) {
@@ -333,16 +337,16 @@ export function autoFillPaper(
           if (slot.needsPairs !== undefined) {
             if ((c.matchPairs ?? 0) < slot.needsPairs) return false;
           } else if (c.subpartsMarks !== undefined && c.subpartsMarks !== slot.marksEach) return false;
-          return (chapterRemaining.get(c.chapterId) ?? 0) >= slot.cost;
+          return ((chapterRemaining.get(rep(c.chapterId)) ?? 0)) >= slot.cost;
         })
-        .sort((a, b) => (chapterRemaining.get(b.chapterId) ?? 0) - (chapterRemaining.get(a.chapterId) ?? 0));
+        .sort((a, b) => ((chapterRemaining.get(rep(b.chapterId)) ?? 0)) - ((chapterRemaining.get(rep(a.chapterId)) ?? 0)));
 
       if (valid.length > 0) {
         const cand = valid[0];
         chosen.set(slot.order, cand);
         chosenQuestionIds.add(cand.id);
-        const rem = chapterRemaining.get(cand.chapterId) ?? 0;
-        chapterRemaining.set(cand.chapterId, rem - slot.cost);
+        const rem = (chapterRemaining.get(rep(cand.chapterId)) ?? 0);
+        chapterRemaining.set(rep(cand.chapterId), rem - slot.cost);
       }
     }
   }

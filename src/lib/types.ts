@@ -66,7 +66,7 @@ export type Blueprint = {
   language?: PaperLanguage;
   book: { id: string; title: string; subject: string; className: string };
   componentsJson?: string;
-  chapters: { chapterId: string; marks: number; chapter: { id: string; number: number; title: string } }[];
+  chapters: { chapterId: string; marks: number; unitKey?: string; unitTitle?: string; chapter: { id: string; number: number; title: string } }[];
   sections: Section[];
   _count: { papers: number };
 };

@@ -159,6 +159,8 @@ export const PUT = route(async (req, { id }, user) => {
           blueprintId: id,
           chapterId: c.chapterId,
           marks: c.marks,
+          unitKey: c.unitKey ?? "",
+          unitTitle: c.unitTitle ?? "",
         })),
       });
     }

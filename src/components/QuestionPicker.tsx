@@ -83,7 +83,7 @@ export function QuestionPicker({
   const def: BlueprintDef = useMemo(
     () => ({
       sections: paper.blueprint.sections,
-      chapters: paper.blueprint.chapters.map((c) => ({ chapterId: c.chapterId, marks: c.marks })),
+      chapters: paper.blueprint.chapters.map((c) => ({ chapterId: c.chapterId, marks: c.marks, unitKey: c.unitKey, unitTitle: c.unitTitle })),
     }),
     [paper.blueprint],
   );

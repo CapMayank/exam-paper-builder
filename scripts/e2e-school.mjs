@@ -46,7 +46,7 @@ function makeQuestion(sec, bookId, chapterId, n) {
     case "MCQ": return { ...b, text: stem, options: [`A${n}`, `B${n}`, `C${n}`, `D${n}`], answer: `A${n}` };
     case "TRUE_FALSE": return { ...b, text: `${stem} statement.`, options: [], answer: "True" };
     case "FILL_BLANK": return { ...b, text: `${stem} ________ here.`, options: [], answer: `w${n}` };
-    case "MATCH_COLUMN": return { ...b, text: `Match the following ${n}`, options: Array.from({ length: Math.max(3, sec.count) }, (_, k) => `L${k + 1}::R${k + 1}`), answer: "1-1" };
+    case "MATCH_COLUMN": { const pairs = n % 2 === 0 ? Math.ceil(sec.count / 2) : Math.floor(sec.count / 2) || 1; return { ...b, text: `Match the following ${n}`, options: Array.from({ length: Math.max(2, pairs) }, (_, k) => `L${k + 1}::R${k + 1}`), answer: "1-1" }; }
     case "UNSEEN_PASSAGE": case "CASE_STUDY": case "REFERENCE_CONTEXT": {
       const parts = []; let left = sec.marksEach; let i = 1;
       while (left > 0) { parts.push({ label: `(${i})`, text: `Sub ${i} of ${stem}`, marks: 1, answer: `a${i}`, options: ["p", "q", "r", "s"] }); left--; i++; }
@@ -115,11 +115,12 @@ async function runTemplate(level, subject, t) {
   const tData = (await call("GET", `/api/curriculum/templates/${t.code}`)).data;
   const official = (tData?.subject?.textbooks ?? []).flatMap((tb) => tb.chapters ?? []);
   const marks = {};
+  const unitOf = {};
   if (official.length) {
     const used = new Set();
     for (const bc of book.chapters) {
       const oc = official.find((o) => !used.has(o) && ((o.legacyChapterId && o.legacyChapterId === bc.id) || norm(o.title) === norm(bc.title)));
-      if (oc) { used.add(oc); marks[bc.id] = oc.isDeleted ? 0 : oc.officialMarks ?? 0; }
+      if (oc) { used.add(oc); marks[bc.id] = oc.isDeleted ? 0 : oc.officialMarks ?? 0; if (oc.unitNumber != null && !oc.isDeleted) unitOf[bc.id] = { key: `u${oc.unitNumber}`, title: oc.unitTitle ?? "" }; }
     }
   }
   let sum = Object.values(marks).reduce((a, b) => a + b, 0);
@@ -132,7 +133,7 @@ async function runTemplate(level, subject, t) {
     if (official.length) note("official chapter marks map onto the book (no even-split fallback needed)", false, `matched sum ${sum} of ${t.total}`);
     sum = t.total;
   } else note("official chapter marks map onto the book", true);
-  const quotas = book.chapters.filter((c) => marks[c.id] > 0).map((c) => ({ chapterId: c.id, marks: marks[c.id] }));
+  const quotas = book.chapters.filter((c) => marks[c.id] > 0).map((c) => ({ chapterId: c.id, marks: marks[c.id], unitKey: unitOf[c.id]?.key ?? "", unitTitle: unitOf[c.id]?.title ?? "" }));
 
   const bpRes = await call("POST", "/api/blueprints", {
     name: `${t.code} ${Date.now() % 100000}`, bookId: book.id, examType: "ANNUAL", durationMin: 180, academicSession: "2026–27",

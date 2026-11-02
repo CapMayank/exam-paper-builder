@@ -124,7 +124,7 @@ export async function loadPaperView(id: string) {
   const progress = paperStatus(
     {
       sections: blueprint.sections,
-      chapters: blueprint.chapters.map((c) => ({ chapterId: c.chapterId, marks: c.marks })),
+      chapters: blueprint.chapters.map((c) => ({ chapterId: c.chapterId, marks: c.marks, unitKey: c.unitKey, unitTitle: c.unitTitle })),
     },
     placedItems,
   );
@@ -135,6 +135,8 @@ export async function loadPaperView(id: string) {
         chapterId: c.chapterId,
         title: c.chapter?.title,
         marks: c.marks,
+        unitKey: c.unitKey,
+        unitTitle: c.unitTitle,
       })),
     },
     items.map((i) => {

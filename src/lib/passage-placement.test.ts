@@ -109,3 +109,40 @@ describe("autofill combines short match questions", () => {
     expect(res.unfilled[0].count).toBe(7);
   });
 });
+
+import { paperStatus, quotaRepresentatives } from "./blueprint";
+
+describe("unit-level chapter quotas", () => {
+  const def: BlueprintDef = {
+    sections: [{ id: "s", title: "S", type: "SHORT", count: 3, marksEach: 2 }],
+    chapters: [
+      { chapterId: "a", marks: 2, unitKey: "u1" },
+      { chapterId: "b", marks: 2, unitKey: "u1" },
+      { chapterId: "c", marks: 2 },
+    ],
+  };
+  it("lessons of a unit share one budget", () => {
+    expect(quotaRepresentatives(def.chapters).get("b")).toBe("a");
+    const st = paperStatus(def, [{ sectionId: "s", chapterId: "b", marks: 2 }]);
+    const a = st.chapters.find((c) => c.chapterId === "a")!;
+    expect([a.target, a.used]).toEqual([4, 2]);
+    expect(st.chapters.find((c) => c.chapterId === "c")).toMatchObject({ target: 2, used: 0 });
+  });
+  it("accepts two questions from different lessons of the same unit but not a third", () => {
+    const placed = [
+      { sectionId: "s", chapterId: "a", marks: 2 },
+      { sectionId: "s", chapterId: "b", marks: 2 },
+    ];
+    expect(whyCannotAdd(def, [placed[0]], { sectionId: "s", chapterId: "b", type: "SHORT" })).toBeNull();
+    expect(whyCannotAdd({ ...def, sections: [{ ...def.sections[0], count: 4 }] }, placed, { sectionId: "s", chapterId: "a", type: "SHORT" })).toMatch(/only 4 marks/);
+  });
+  it("autofill draws on the unit's budget across lessons", () => {
+    const res = autoFillPaper(def, [], [
+      { id: "1", chapterId: "a", type: "SHORT" },
+      { id: "2", chapterId: "a", type: "SHORT" },
+      { id: "3", chapterId: "c", type: "SHORT" },
+    ]);
+    expect(res.complete).toBe(true);
+    expect(res.added.filter((x) => x.chapterId === "a")).toHaveLength(2);
+  });
+});

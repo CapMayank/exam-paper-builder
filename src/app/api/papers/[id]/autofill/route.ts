@@ -1,6 +1,7 @@
 import { HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { autoFillPaper } from "@/lib/autofill";
+import { quotaRepresentatives } from "@/lib/blueprint";
 import {
   buildAndValidateGenerationContract,
   generateCurriculumGroundedSectionQuestions,
@@ -175,7 +176,7 @@ export const POST = route(async (req, { id }, user) => {
   const result = autoFillPaper(
     {
       sections: paper.blueprint.sections,
-      chapters: paper.blueprint.chapters.map((c) => ({ chapterId: c.chapterId, marks: c.marks })),
+      chapters: paper.blueprint.chapters.map((c) => ({ chapterId: c.chapterId, marks: c.marks, unitKey: c.unitKey, unitTitle: c.unitTitle })),
     },
     toPlacedItems(paper.blueprint.sections, paper.items),
     candidatePool,
@@ -243,21 +244,24 @@ export const POST = route(async (req, { id }, user) => {
   }> = [];
 
   if (result.unfilled.length > 0) {
+    // quota groups: lessons of one unit share a budget
+    const repOf = quotaRepresentatives(paper.blueprint.chapters);
+    const rep = (id: string) => repOf.get(id) ?? id;
     const chapterRemainingMarks = new Map<string, number>();
     for (const c of paper.blueprint.chapters) {
-      chapterRemainingMarks.set(c.chapterId, c.marks);
+      chapterRemainingMarks.set(rep(c.chapterId), (chapterRemainingMarks.get(rep(c.chapterId)) ?? 0) + c.marks);
     }
     for (const item of paper.items) {
       const sec = sectionMap.get(item.sectionId);
       const marks = (item as any).marks || sec?.marksEach || 1;
       const chId = item.question.chapter?.id || (item.question as any).chapterId;
-      const cur = chapterRemainingMarks.get(chId) ?? 0;
-      chapterRemainingMarks.set(chId, Math.max(0, cur - marks));
+      const cur = (chapterRemainingMarks.get(rep(chId)) ?? 0);
+      chapterRemainingMarks.set(rep(chId), Math.max(0, cur - marks));
     }
     for (const a of result.added) {
       const sec = sectionMap.get(a.sectionId);
-      const cur = chapterRemainingMarks.get(a.chapterId) ?? 0;
-      chapterRemainingMarks.set(a.chapterId, Math.max(0, cur - (sec?.marksEach ?? 0)));
+      const cur = (chapterRemainingMarks.get(rep(a.chapterId)) ?? 0);
+      chapterRemainingMarks.set(rep(a.chapterId), Math.max(0, cur - (sec?.marksEach ?? 0)));
     }
 
     for (const u of result.unfilled) {
@@ -271,8 +275,8 @@ export const POST = route(async (req, { id }, user) => {
       for (let slotI = 0; slotI < synthSlots; slotI++) {
         // Find best chapter with quota deficit (preferring exact quota matches)
         const sortedChapters = [...paper.blueprint.chapters].sort((a, b) => {
-          const remA = chapterRemainingMarks.get(a.chapterId) ?? 0;
-          const remB = chapterRemainingMarks.get(b.chapterId) ?? 0;
+          const remA = (chapterRemainingMarks.get(rep(a.chapterId)) ?? 0);
+          const remB = (chapterRemainingMarks.get(rep(b.chapterId)) ?? 0);
 
           // 1. Exact match first (remaining quota exactly equals slot marks)
           const exactA = remA === sec.marksEach ? 1 : 0;
@@ -290,6 +294,9 @@ export const POST = route(async (req, { id }, user) => {
 
         const chosenBpChapter = sortedChapters[0] || paper.blueprint.chapters[0];
         if (!chosenBpChapter) break;
+        const needMarks = collapsedMatch ? u.count * sec.marksEach : sec.marksEach;
+        // a template question must never push a chapter or unit past its quota
+        if ((chapterRemainingMarks.get(rep(chosenBpChapter.chapterId)) ?? 0) < needMarks) break;
 
         const currentPlacedInSection =
           paper.items.filter((i) => i.sectionId === sec.id).length +
@@ -355,8 +362,8 @@ export const POST = route(async (req, { id }, user) => {
               orQuestion: slotReq.required ? grounded.orQuestion : undefined,
             });
 
-            const cur = chapterRemainingMarks.get(chosenBpChapter.chapterId) ?? 0;
-            chapterRemainingMarks.set(chosenBpChapter.chapterId, Math.max(0, cur - (collapsedMatch ? u.count * sec.marksEach : sec.marksEach)));
+            const cur = (chapterRemainingMarks.get(rep(chosenBpChapter.chapterId)) ?? 0);
+            chapterRemainingMarks.set(rep(chosenBpChapter.chapterId), Math.max(0, cur - (collapsedMatch ? u.count * sec.marksEach : sec.marksEach)));
           }
         }
       }

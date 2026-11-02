@@ -75,6 +75,8 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
   const [durationMin, setDurationMin] = useState(60);
   const [subjectCode, setSubjectCode] = useState("");
   const [marks, setMarks] = useState<Record<string, number>>({});
+  // quota groups: lessons of one unit share a quota (the scheme allocates marks by unit)
+  const [unitKeys, setUnitKeys] = useState<Record<string, { key: string; title: string }>>({});
   const [sectionGroups, setSectionGroups] = useState<SectionGroup[]>([]);
   const [paperCount, setPaperCount] = useState(0);
   const [loaded, setLoaded] = useState(false);
@@ -129,6 +131,13 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
           setDurationMin(source.durationMin);
           setSubjectCode(source.subjectCode || "");
           setMarks(Object.fromEntries(source.chapters.map((c) => [c.chapterId, c.marks])));
+          setUnitKeys(
+            Object.fromEntries(
+              source.chapters
+                .filter((c) => c.unitKey)
+                .map((c) => [c.chapterId, { key: c.unitKey as string, title: c.unitTitle ?? "" }]),
+            ),
+          );
           setSectionGroups(groupSectionsFromFlat(source.sections));
           setPaperCount(id === "new" ? 0 : source._count.papers);
           setCurriculumMode(((source as any).curriculumMode as any) || "BLANK_CUSTOM");
@@ -209,6 +218,8 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
     marks: marks[c.id] ?? 0,
     title: c.title,
     number: c.number,
+    unitKey: unitKeys[c.id]?.key ?? "",
+    unitTitle: unitKeys[c.id]?.title ?? "",
   }));
   const sections = flattenSectionGroups(sectionGroups);
   const total = blueprintTotalMarks(sections);
@@ -634,11 +645,13 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
 
       if (officialChapters.length > 0 && targetBook?.chapters?.length) {
         // match official marks onto the book's chapters, also when several textbooks were combined into one book
-        const newMarks: Record<string, number> = matchOfficialChapterMarks(
+        const matchedOfficial = matchOfficialChapterMarks(
           targetBook.chapters.map((c: any) => ({ id: c.id, number: c.number, title: c.title })),
           tData?.subject?.textbooks || [],
           template.totalMarks,
-        ).marks;
+        );
+        const newMarks: Record<string, number> = matchedOfficial.marks;
+        setUnitKeys(matchedOfficial.units);
 
         const currentSum = Object.values(newMarks).reduce((a, b) => a + b, 0);
         if (currentSum === template.totalMarks) {

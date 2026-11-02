@@ -130,7 +130,7 @@ export const PATCH = route(async (req, { id, itemId }, user) => {
     const reason = whyCannotAdd(
       {
         sections: paper.blueprint.sections,
-        chapters: paper.blueprint.chapters.map((c) => ({ chapterId: c.chapterId, marks: c.marks })),
+        chapters: paper.blueprint.chapters.map((c) => ({ chapterId: c.chapterId, marks: c.marks, unitKey: c.unitKey, unitTitle: c.unitTitle })),
       },
       itemsWithoutCurrent,
       {
@@ -285,7 +285,7 @@ export const PUT = route(async (req, { id, itemId }, user) => {
   const reason = whyCannotAdd(
     {
       sections: paper.blueprint.sections,
-      chapters: paper.blueprint.chapters.map((c) => ({ chapterId: c.chapterId, marks: c.marks })),
+      chapters: paper.blueprint.chapters.map((c) => ({ chapterId: c.chapterId, marks: c.marks, unitKey: c.unitKey, unitTitle: c.unitTitle })),
     },
     itemsWithoutCurrent,
     {

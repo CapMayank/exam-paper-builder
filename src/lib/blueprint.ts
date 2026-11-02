@@ -45,7 +45,30 @@ export function roleMismatchReason(
   }
   return null;
 }
-export type ChapterQuota = { chapterId: string; marks: number; title?: string; number?: number | null };
+export type ChapterQuota = {
+  chapterId: string;
+  marks: number;
+  title?: string;
+  number?: number | null;
+  /** Chapters with the same unitKey share one quota: the scheme allocates marks by unit, not by lesson. */
+  unitKey?: string | null;
+  unitTitle?: string | null;
+};
+
+/** Representative chapter id of each chapter's quota group (itself when it has no unit). */
+export function quotaRepresentatives(chapters: Array<Pick<ChapterQuota, "chapterId" | "unitKey">>): Map<string, string> {
+  const firstOfUnit = new Map<string, string>();
+  const rep = new Map<string, string>();
+  for (const c of chapters) {
+    if (c.unitKey) {
+      if (!firstOfUnit.has(c.unitKey)) firstOfUnit.set(c.unitKey, c.chapterId);
+      rep.set(c.chapterId, firstOfUnit.get(c.unitKey)!);
+    } else {
+      rep.set(c.chapterId, c.chapterId);
+    }
+  }
+  return rep;
+}
 export type BlueprintDef = { sections: SectionDef[]; chapters: ChapterQuota[] };
 export type PlacedItem = {
   sectionId: string;
@@ -427,16 +450,19 @@ export function paperStatus(bp: BlueprintDef, items: PlacedItem[]): PaperStatus 
       filled: filledUnits,
     };
   });
-  const chapters = bp.chapters.map((c) => ({
-    chapterId: c.chapterId,
-    target: c.marks,
-    used: items
-      .filter((i) => i.chapterId === c.chapterId)
-      .reduce((sum, i) => {
-        const sec = sectionById.get(i.sectionId);
-        return sum + getItemMarks(i, sec?.marksEach ?? 1);
-      }, 0),
-  }));
+  const rep = quotaRepresentatives(bp.chapters);
+  const targetOf = new Map<string, number>();
+  for (const c of bp.chapters) targetOf.set(rep.get(c.chapterId)!, (targetOf.get(rep.get(c.chapterId)!) ?? 0) + c.marks);
+  const usedOf = new Map<string, number>();
+  for (const i of items) {
+    const key = rep.get(i.chapterId) ?? i.chapterId;
+    usedOf.set(key, (usedOf.get(key) ?? 0) + getItemMarks(i, sectionById.get(i.sectionId)?.marksEach ?? 1));
+  }
+  // every chapter reports its quota group's numbers, so a lesson inside a unit shares the unit's budget
+  const chapters = bp.chapters.map((c) => {
+    const key = rep.get(c.chapterId)!;
+    return { chapterId: c.chapterId, target: targetOf.get(key) ?? 0, used: usedOf.get(key) ?? 0 };
+  });
   const usedMarks = items.reduce((sum, i) => {
     const sec = sectionById.get(i.sectionId);
     return sum + getItemMarks(i, sec?.marksEach ?? 1);
@@ -520,7 +546,7 @@ export type DiagnosticItem = {
 export function diagnosePaperImplications(
   bp: {
     sections: { id: string; title: string; type: string; count: number; marksEach: number }[];
-    chapters: { chapterId: string; title?: string; marks: number }[];
+    chapters: { chapterId: string; title?: string; marks: number; unitKey?: string | null; unitTitle?: string | null }[];
   },
   items: DiagnosticItem[],
 ): PaperImplication[] {
@@ -601,36 +627,46 @@ export function diagnosePaperImplications(
     });
   }
 
-  // 3. Check chapter mark allocations
+  // 3. Check chapter / unit mark allocations (one finding per quota group)
+  const rep = quotaRepresentatives(bp.chapters);
+  const groups = new Map<string, { chapterId: string; title?: string; target: number; used: number }>();
   for (const c of bp.chapters) {
-    const used = items
-      .filter((i) => i.chapterId === c.chapterId)
-      .reduce((sum, i) => {
-        const itemMarks = i.marks && i.marks > 0 ? i.marks : (marksBySection.get(i.sectionId) ?? 0);
-        return sum + itemMarks;
-      }, 0);
-
-    const chapterName = c.title ? c.title : `Chapter ${c.chapterId}`;
-
-    if (used > c.marks) {
-      const excess = used - c.marks;
+    const key = rep.get(c.chapterId)!;
+    const g = groups.get(key) ?? {
+      chapterId: key,
+      title: (c as { unitTitle?: string | null }).unitTitle || c.title,
+      target: 0,
+      used: 0,
+    };
+    g.target += c.marks;
+    groups.set(key, g);
+  }
+  for (const i of items) {
+    const g = groups.get(rep.get(i.chapterId) ?? i.chapterId);
+    if (!g) continue;
+    g.used += i.marks && i.marks > 0 ? i.marks : (marksBySection.get(i.sectionId) ?? 0);
+  }
+  for (const g of groups.values()) {
+    const chapterName = g.title ? g.title : `Chapter ${g.chapterId}`;
+    if (g.used > g.target) {
+      const excess = g.used - g.target;
       implications.push({
         code: "CHAPTER_EXCESS",
         severity: "error",
-        chapterId: c.chapterId,
-        chapterTitle: c.title,
-        message: `${chapterName} has ${used} marks placed, exceeding updated blueprint quota of ${c.marks} marks (+${excess}m excess).`,
-        details: { target: c.marks, used, excess },
+        chapterId: g.chapterId,
+        chapterTitle: g.title,
+        message: `${chapterName} has ${g.used} marks placed, exceeding updated blueprint quota of ${g.target} marks (+${excess}m excess).`,
+        details: { target: g.target, used: g.used, excess },
       });
-    } else if (used < c.marks) {
-      const deficit = c.marks - used;
+    } else if (g.used < g.target) {
+      const deficit = g.target - g.used;
       implications.push({
         code: "CHAPTER_DEFICIT",
         severity: "warning",
-        chapterId: c.chapterId,
-        chapterTitle: c.title,
-        message: `${chapterName} has ${used} marks placed, below updated blueprint quota of ${c.marks} marks (${deficit}m needed).`,
-        details: { target: c.marks, used, deficit },
+        chapterId: g.chapterId,
+        chapterTitle: g.title,
+        message: `${chapterName} has ${g.used} marks placed, below updated blueprint quota of ${g.target} marks (${deficit}m needed).`,
+        details: { target: g.target, used: g.used, deficit },
       });
     }
   }

@@ -253,7 +253,7 @@ export const POST = route(async (req, { id }, user) => {
   const placedSoFar = toPlacedItems(paper.blueprint.sections, paper.items);
   const bpDef = {
     sections: paper.blueprint.sections,
-    chapters: paper.blueprint.chapters.map((c) => ({ chapterId: c.chapterId, marks: c.marks })),
+    chapters: paper.blueprint.chapters.map((c) => ({ chapterId: c.chapterId, marks: c.marks, unitKey: c.unitKey, unitTitle: c.unitTitle })),
   };
   for (let i = 0; i < questions.length; i++) {
     const q = questions[i];

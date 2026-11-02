@@ -174,6 +174,8 @@ export async function mapCurriculumTemplateToBlueprintInput(
       chapterId: ch.id,
       officialMarks,
       isDeleted: Boolean(currCh?.isDeleted),
+      unitKey: currCh?.unitNumber != null ? `u${currCh.unitNumber}` : "",
+      unitTitle: currCh?.unitTitle ?? "",
     };
   });
 
@@ -182,12 +184,14 @@ export async function mapCurriculumTemplateToBlueprintInput(
   const nonDeletedChapters = rawChapterAllocations.filter((c) => !c.isDeleted);
   const currentChapterSum = nonDeletedChapters.reduce((sum, c) => sum + c.officialMarks, 0);
 
-  let finalChapters: Array<{ chapterId: string; marks: number }>;
+  let finalChapters: Array<{ chapterId: string; marks: number; unitKey: string; unitTitle: string }>;
   if (currentChapterSum === targetSectionMarks && nonDeletedChapters.length > 0) {
     // Exact official match
     finalChapters = rawChapterAllocations.map((c) => ({
       chapterId: c.chapterId,
       marks: c.isDeleted ? 0 : c.officialMarks,
+      unitKey: c.unitKey,
+      unitTitle: c.unitTitle,
     }));
   } else if (nonDeletedChapters.length > 0) {
     // Reconcile using Hamilton-Hare largest remainder method
@@ -201,6 +205,8 @@ export async function mapCurriculumTemplateToBlueprintInput(
     finalChapters = rawChapterAllocations.map((c) => ({
       chapterId: c.chapterId,
       marks: c.isDeleted ? 0 : (adaptedMap.get(c.chapterId) || 0),
+      unitKey: c.unitKey,
+      unitTitle: c.unitTitle,
     }));
   } else {
     // Fallback: equal distribution across all book chapters
@@ -210,6 +216,8 @@ export async function mapCurriculumTemplateToBlueprintInput(
     finalChapters = book.chapters.map((ch, idx) => ({
       chapterId: ch.id,
       marks: baseMark + (idx < remainder ? 1 : 0),
+      unitKey: "",
+      unitTitle: "",
     }));
   }
 
@@ -303,6 +311,8 @@ export async function adaptCustomSchoolBlueprint(
   const finalChapters = baseInput.chapters.map((ch) => ({
     chapterId: ch.chapterId,
     marks: activeMarksMap.get(ch.chapterId) || 0,
+    unitKey: ch.unitKey,
+    unitTitle: ch.unitTitle,
   }));
 
   return {

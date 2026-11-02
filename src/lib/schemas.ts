@@ -208,7 +208,7 @@ export const blueprintSchema = z.object({
   textbookVariant: z.string().trim().max(200).optional(),
   blueprintVersion: z.string().trim().max(50).optional(),
   componentsJson: z.string().max(20000).optional(),
-  chapters: z.array(z.object({ chapterId: z.string().min(1), marks: z.number().int().min(0).max(1000) })),
+  chapters: z.array(z.object({ chapterId: z.string().min(1), marks: z.number().int().min(0).max(1000), unitKey: z.string().trim().max(60).optional().default(""), unitTitle: z.string().trim().max(200).optional().default("") })),
   sections: z
     .array(
       z.object({

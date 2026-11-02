@@ -74,7 +74,7 @@ export const POST = route(async (req, params, user) => {
 
   const blueprintDef = {
     sections: paper.blueprint.sections,
-    chapters: paper.blueprint.chapters.map((c) => ({ chapterId: c.chapterId, marks: c.marks })),
+    chapters: paper.blueprint.chapters.map((c) => ({ chapterId: c.chapterId, marks: c.marks, unitKey: c.unitKey, unitTitle: c.unitTitle })),
   };
 
   for (const q of questions) {

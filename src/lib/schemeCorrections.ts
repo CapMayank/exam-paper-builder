@@ -12,6 +12,15 @@ import type { ChapterSpec, SubjectSpec, TextbookSpec } from "./curriculumData";
 
 const SOURCE = "https://mpbse.nic.in/MarksScheme_2026_27.pdf";
 
+/** Lessons of one textbook share a single quota: the scheme allocates marks to the book, not to each lesson. */
+function groupAsUnit(chapters: ChapterSpec[], unitNumber: number, unitTitle: string): void {
+  for (const c of chapters) {
+    if (c.isDeleted) continue;
+    c.unitNumber = unitNumber;
+    c.unitTitle = unitTitle;
+  }
+}
+
 function setMarks(chapters: ChapterSpec[], marks: number[]): void {
   const active = chapters.filter((c) => !c.isDeleted);
   active.forEach((c, i) => {
@@ -61,6 +70,8 @@ export function applySchemeCorrections(seed: SubjectSpec[]): void {
       if (main && supp && !s.textbooks.some((t) => t.title.startsWith("Reading, Writing"))) {
         setMarks(main.chapters, [4, 4, 4, 4, 4, 3, 3, 3, 3]); // 32 = textual MCQ 4 + extracts 6 + short 16 + long 6
         setMarks(supp.chapters, [1, 1, 1, 1, 1, 1, 1, 0, 0]); // 7 = short 4 + long 3
+        groupAsUnit(main.chapters, 60, `${main.title} (textbook items)`);
+        groupAsUnit(supp.chapters, 61, `${supp.title} (textbook items)`);
         s.textbooks.unshift(
           componentBook(
             "Reading, Writing & Grammar (examination components)",
@@ -81,6 +92,7 @@ export function applySchemeCorrections(seed: SubjectSpec[]): void {
       const lessons = s.textbooks[0];
       if (lessons && !s.textbooks.some((t) => t.title.includes("परीक्षा घटक"))) {
         setMarks(lessons.chapters, [3, 3, 3, 3, 3, 3, 3, 2, 2, 2]); // 27 lesson-based marks
+        groupAsUnit(lessons.chapters, 50, "पाठ्यपुस्तक पाठ (lesson-based items)");
         s.textbooks.push(
           componentBook(
             "संस्कृत व्याकरण एवं रचना (परीक्षा घटक)",

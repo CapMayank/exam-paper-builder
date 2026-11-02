@@ -12,6 +12,8 @@ export type OfficialChapterLite = {
   chapterNumber: number;
   title: string;
   officialMarks?: number | null;
+  unitNumber?: number | null;
+  unitTitle?: string | null;
   isDeleted?: boolean;
   legacyChapterId?: string | null;
 };
@@ -26,6 +28,8 @@ const norm = (s: string) =>
 
 export type OfficialMarksResult = {
   marks: Record<string, number>;
+  /** Quota group (unit) of each matched chapter, when the official data has units. */
+  units: Record<string, { key: string; title: string }>;
   matched: number;
   total: number;
   /** true when the matched marks add up to the template total */
@@ -39,11 +43,13 @@ export function matchOfficialChapterMarks(
 ): OfficialMarksResult {
   const official = textbooks.flatMap((t) => t.chapters);
   const marks: Record<string, number> = {};
+  const units: Record<string, { key: string; title: string }> = {};
   let matched = 0;
   const used = new Set<OfficialChapterLite>();
 
   const take = (bc: BookChapterLite, oc: OfficialChapterLite) => {
     marks[bc.id] = oc.isDeleted ? 0 : typeof oc.officialMarks === "number" ? oc.officialMarks : 0;
+    if (oc.unitNumber != null && !oc.isDeleted) units[bc.id] = { key: `u${oc.unitNumber}`, title: oc.unitTitle ?? "" };
     used.add(oc);
     matched++;
   };
@@ -69,5 +75,5 @@ export function matchOfficialChapterMarks(
   }
 
   const sum = Object.values(marks).reduce((a, b) => a + b, 0);
-  return { marks, matched, total: sum, exact: sum === templateTotal };
+  return { marks, units, matched, total: sum, exact: sum === templateTotal };
 }

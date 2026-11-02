@@ -20,7 +20,7 @@ export const GET = route(async (req) => {
           examType: true,
           book: { select: { title: true, subject: true, className: true } },
           sections: { select: { id: true, title: true, type: true, count: true, marksEach: true } },
-          chapters: { select: { chapterId: true, marks: true } },
+          chapters: { select: { chapterId: true, marks: true, unitKey: true, unitTitle: true } },
         },
       },
       items: {
@@ -46,7 +46,7 @@ export const GET = route(async (req) => {
     const status = paperStatus(
       {
         sections: blueprint.sections,
-        chapters: blueprint.chapters.map((c) => ({ chapterId: c.chapterId, marks: c.marks })),
+        chapters: blueprint.chapters.map((c) => ({ chapterId: c.chapterId, marks: c.marks, unitKey: c.unitKey, unitTitle: c.unitTitle })),
       },
       placedItems,
     );
