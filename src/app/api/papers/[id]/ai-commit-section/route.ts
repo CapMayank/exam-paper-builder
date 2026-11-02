@@ -287,7 +287,10 @@ export const POST = route(async (req, { id }, user) => {
 
       // Balance subpart marks when subparts are present
       let normalizedSubparts = Array.isArray(q.subparts) && q.subparts.length > 0 ? q.subparts : [];
-      const attemptCount = typeof (q as any).attemptCount === "number" && (q as any).attemptCount > 0 ? (q as any).attemptCount : undefined;
+      const attemptCount =
+        typeof (q as any).attemptCount === "number" && (q as any).attemptCount > 0 && Array.isArray(q.subparts) && q.subparts.length > 1
+          ? (q as any).attemptCount
+          : undefined;
       if (normalizedSubparts.length > 0) {
         normalizedSubparts = normalizeSubpartMarks(normalizedSubparts, section.marksEach, attemptCount);
       }
@@ -334,7 +337,7 @@ export const POST = route(async (req, { id }, user) => {
             ? q.orQuestion.subparts
             : [];
         const orAttemptCount =
-          typeof (q.orQuestion as any).attemptCount === "number" && (q.orQuestion as any).attemptCount > 0
+          typeof (q.orQuestion as any).attemptCount === "number" && (q.orQuestion as any).attemptCount > 0 && orSubparts.length > 1
             ? (q.orQuestion as any).attemptCount
             : undefined;
         if (orSubparts.length > 0) {

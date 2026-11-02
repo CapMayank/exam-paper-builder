@@ -1085,59 +1085,82 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
             {/* Chapter Weightage Quotas */}
             <section className="card space-y-2.5 p-4 shadow-xs">
               <div className="flex items-center justify-between">
-                <h2 className="text-xs font-bold uppercase tracking-wider text-slate-600">
-                  Chapter Weightage
-                </h2>
-                <span className="text-[11px] text-slate-400 font-medium">Marks Quota</span>
+                <h2 className="text-sm font-semibold text-slate-800">Chapter weightage</h2>
+                <span className="text-[11px] text-slate-400 font-medium">Marks used / quota</span>
               </div>
-              <div className="space-y-2.5 pt-1">
-                {(showAllChapters || blueprint.chapters.length <= 6
-                  ? blueprint.chapters
-                  : blueprint.chapters.slice(0, 6)
-                ).map((c) => {
-                  const used = progress.chapters.find((p) => p.chapterId === c.chapterId)?.used ?? 0;
-                  const isMatched = used === c.marks;
-                  const isOver = used > c.marks;
-                  const remaining = c.marks - used;
-                  return (
-                    <div key={c.chapterId} className="space-y-1">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="truncate pr-2 font-medium text-slate-700" title={c.chapter.title}>
-                          Ch {c.chapter.number}. {c.chapter.title}
-                        </span>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {isMatched ? (
-                            <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.2 bg-emerald-50 text-[10px] font-bold text-emerald-700 border border-emerald-200">
-                              ✓ {used}/{c.marks}m
-                            </span>
-                          ) : isOver ? (
-                            <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.2 bg-red-50 text-[10px] font-bold text-red-700 border border-red-200">
-                              ⚠ {used}/{c.marks}m
-                            </span>
-                          ) : (
-                            <span className="text-[11px] font-medium text-slate-500">
-                              {used}/{c.marks}m{" "}
-                              <span className="text-amber-700 font-normal">({remaining}m left)</span>
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <Bar used={used} target={c.marks} />
+              {(() => {
+                // Lessons that share a unit share one quota, and progress reports that group's total for each
+                // of them. Show one row per quota group so a unit is never compared with a single lesson's share.
+                const rows: Array<{ key: string; title: string; unitTitle: string; lessons: number; target: number; used: number }> = [];
+                const seen = new Map<string, number>();
+                for (const c of blueprint.chapters) {
+                  const key = c.unitKey ? `u:${c.unitKey}` : `c:${c.chapterId}`;
+                  const prog = progress.chapters.find((p) => p.chapterId === c.chapterId);
+                  const at = seen.get(key);
+                  if (at !== undefined) {
+                    rows[at].lessons += 1;
+                    continue;
+                  }
+                  seen.set(key, rows.length);
+                  rows.push({
+                    key,
+                    title: c.chapter.title.replace(/^\[[^\]]+\]\s*/, ""),
+                    unitTitle: c.unitKey && c.unitTitle ? c.unitTitle : "",
+                    lessons: 1,
+                    target: prog?.target ?? c.marks,
+                    used: prog?.used ?? 0,
+                  });
+                }
+                // a unit of several lessons is named after the unit; a single row keeps its own name
+                for (const r of rows) if (r.lessons > 1 && r.unitTitle) r.title = r.unitTitle;
+                const visibleRows = rows.filter((r) => r.target > 0 || r.used > 0);
+                const shown = showAllChapters || visibleRows.length <= 6 ? visibleRows : visibleRows.slice(0, 6);
+                return (
+                  <>
+                    <div className="space-y-2.5 pt-1">
+                      {shown.map((r) => {
+                        const isMatched = r.used === r.target;
+                        const isOver = r.used > r.target;
+                        return (
+                          <div key={r.key} className="space-y-1">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="truncate pr-2 font-medium text-slate-700" title={r.title}>
+                                {r.title}
+                                {r.lessons > 1 && <span className="font-normal text-slate-400"> · {r.lessons} lessons</span>}
+                              </span>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {isMatched ? (
+                                  <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.2 bg-emerald-50 text-[10px] font-bold text-emerald-700 border border-emerald-200">
+                                    ✓ {r.used}/{r.target}m
+                                  </span>
+                                ) : isOver ? (
+                                  <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.2 bg-red-50 text-[10px] font-bold text-red-700 border border-red-200">
+                                    ⚠ {r.used}/{r.target}m
+                                  </span>
+                                ) : (
+                                  <span className="text-[11px] font-medium text-slate-500">
+                                    {r.used}/{r.target}m <span className="text-amber-700 font-normal">({r.target - r.used}m left)</span>
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <Bar used={r.used} target={r.target} />
+                          </div>
+                        );
+                      })}
                     </div>
-                  );
-                })}
-              </div>
-              {blueprint.chapters.length > 6 && (
-                <button
-                  type="button"
-                  onClick={() => setShowAllChapters((v) => !v)}
-                  className="w-full text-center text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 pt-1.5 border-t border-slate-100 transition"
-                >
-                  {showAllChapters
-                    ? "Show fewer chapters ▴"
-                    : `Show all ${blueprint.chapters.length} chapters (${blueprint.chapters.length - 6} more) ▾`}
-                </button>
-              )}
+                    {visibleRows.length > 6 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowAllChapters((v) => !v)}
+                        className="w-full text-center text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 pt-1.5 border-t border-slate-100 transition"
+                      >
+                        {showAllChapters ? "Show fewer ▴" : `Show all ${visibleRows.length} (${visibleRows.length - 6} more) ▾`}
+                      </button>
+                    )}
+                  </>
+                );
+              })()}
             </section>
           </div>
 
@@ -1152,7 +1175,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
             <fieldset disabled={!canEditPaper} className="space-y-3.5 border-none p-0 m-0">
             {/* Card 1: Exam & School Identity */}
             <section className="card space-y-3 p-4 shadow-xs">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-600">
+              <h2 className="text-sm font-semibold text-slate-800">
                 School &amp; Exam Identity
               </h2>
 
@@ -1326,7 +1349,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
 
             {/* Card 2: Print Formatting & Layout */}
             <section className="card space-y-3 p-4 shadow-xs">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-600">
+              <h2 className="text-sm font-semibold text-slate-800">
                 Print Formatting &amp; Styles
               </h2>
 
@@ -1464,7 +1487,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
 
             {/* Card 3: General Instructions */}
             <section className="card space-y-3 p-4 shadow-xs">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-600">
+              <h2 className="text-sm font-semibold text-slate-800">
                 General Instructions
               </h2>
 
@@ -1725,8 +1748,10 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
 
             const openChaptersForSection = (blueprint.chapters || [])
               .map((bc) => {
-                const used = progress.chapters.find((p) => p.chapterId === bc.chapterId)?.used ?? 0;
-                const rem = bc.marks - used;
+                // used and target are the quota group's totals (lessons of one unit share a budget)
+                const prog = progress.chapters.find((p) => p.chapterId === bc.chapterId);
+                const used = prog?.used ?? 0;
+                const rem = (prog?.target ?? bc.marks) - used;
                 return {
                   id: bc.chapterId,
                   number: bc.chapter?.number ?? 0,

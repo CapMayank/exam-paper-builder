@@ -128,8 +128,8 @@ describe("Milestone 1: Constants & Enums Integrity", () => {
     expect(DEFAULT_MARKS_STYLE).toBe("INLINE");
   });
 
-  it("defaults academic session to 2025–26", () => {
-    expect(DEFAULT_ACADEMIC_SESSION).toBe("2025–26");
+  it("defaults academic session to 2026–27", () => {
+    expect(DEFAULT_ACADEMIC_SESSION).toBe("2026–27");
   });
 });
 
@@ -317,7 +317,7 @@ describe("Milestone 1: Zod Schemas & Backward Compatible Defaults", () => {
     };
 
     const parsed = paperCreateSchema.parse(minimalInput);
-    expect(parsed.academicSession).toBe("2025–26");
+    expect(parsed.academicSession).toBe("2026–27");
     expect(parsed.printDensity).toBe("STANDARD");
     expect(parsed.twoColumn).toBe(false);
     expect(parsed.numberingStyle).toBe("CONTINUOUS");

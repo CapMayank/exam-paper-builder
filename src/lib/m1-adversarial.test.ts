@@ -226,7 +226,7 @@ describe("Adversarial Challenge: paperCreateSchema & paperUpdateSchema Customiza
 
   it("verifies all default values are correctly populated on minimal creation", () => {
     const parsed = paperCreateSchema.parse(minimalPaper);
-    expect(parsed.academicSession).toBe("2025–26");
+    expect(parsed.academicSession).toBe("2026–27");
     expect(parsed.printDensity).toBe("STANDARD");
     expect(parsed.numberingStyle).toBe("CONTINUOUS");
     expect(parsed.marksStyle).toBe("INLINE");

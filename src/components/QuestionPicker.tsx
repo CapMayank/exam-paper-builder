@@ -113,11 +113,13 @@ export function QuestionPicker({
   const openChapters = isAlternate
     ? paper.blueprint.chapters.filter((c) => (activeItem ? c.chapterId === activeItem.question.chapterId : true))
     : paper.blueprint.chapters.filter((c) => {
-        let used = paper.progress.chapters.find((p) => p.chapterId === c.chapterId)?.used ?? 0;
+        const prog = paper.progress.chapters.find((p) => p.chapterId === c.chapterId);
+        let used = prog?.used ?? 0;
         if (activeItem && activeItem.question.chapterId === c.chapterId && isReplacing) {
           used -= activeItemMarks;
         }
-        return used + targetSlotMarks <= c.marks;
+        // the quota is the lesson's unit total, not the lesson's own share
+        return used + targetSlotMarks <= (prog?.target ?? c.marks);
       });
 
   useEffect(() => {
@@ -872,14 +874,16 @@ export function QuestionPicker({
                     >
                       {openChapters.map((c) => {
                         const ch = paper.blueprint.chapters.find((x) => x.chapterId === c.chapterId)?.chapter;
-                        const used = paper.progress.chapters.find((p) => p.chapterId === c.chapterId)?.used ?? 0;
+                        const prog = paper.progress.chapters.find((p) => p.chapterId === c.chapterId);
+                        const used = prog?.used ?? 0;
+                        const quota = prog?.target ?? c.marks;
                         const adjustedUsed = (activeItem && activeItem.question.chapterId === c.chapterId && isReplacing)
                           ? Math.max(0, used - activeItemMarks)
                           : used;
-                        const remaining = Math.max(0, c.marks - adjustedUsed);
+                        const remaining = Math.max(0, quota - adjustedUsed);
                         return (
                           <option key={c.chapterId} value={c.chapterId}>
-                            Ch {ch?.number}: {ch?.title} ({remaining}m available of {c.marks}m quota)
+                            Ch {ch?.number}: {ch?.title} ({remaining}m available of {quota}m quota)
                           </option>
                         );
                       })}

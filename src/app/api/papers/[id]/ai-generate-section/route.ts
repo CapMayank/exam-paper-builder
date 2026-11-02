@@ -2,6 +2,7 @@ import { HttpError, route } from "@/lib/api";
 import { generatePaperSectionWithGemini, getGeminiApiKey, type GeneratePaperSectionSlot } from "@/lib/gemini";
 import { resolveInternalChoiceRequirement } from "@/lib/internalChoiceRules";
 import { detectPaperLanguage, type PaperLanguage } from "@/lib/localization";
+import { slotRowRole, slotTaskDirective } from "@/lib/paperAutogen";
 import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
 
 export const POST = route(async (req, { id }, user) => {
@@ -76,12 +77,23 @@ export const POST = route(async (req, { id }, user) => {
     }
     const slotId = slot.slotId || (matchedSection ? `slot_${matchedSection.id}_${slotIdx}` : `slot_${slotIdx}`);
     const cTitle = (slot as { componentTitle?: string }).componentTitle;
+    const subjectName = paper.blueprint.book.subject;
+    const task = slotTaskDirective(
+      slotRowRole(slot.chapterTitle, subjectName, (matchedSection as { role?: string } | undefined)?.role),
+      slot.chapterTitle,
+      matchedSection?.type || String(sectionType || ""),
+      matchedSection?.marksEach ?? (Number(marksEach) || 1),
+      subjectName,
+    );
+    const focus = [cTitle ? `Syllabus component: ${cTitle}. Keep the question inside this component.` : "", task]
+      .filter(Boolean)
+      .join(" ");
     return {
       ...slot,
       slotId,
       slotIndex: slotIdx,
       requiresInternalChoice: reqChoice,
-      ...(cTitle ? { topicFocus: `Syllabus component: ${cTitle}. Keep the question inside this component.` } : {}),
+      ...(focus ? { topicFocus: focus } : {}),
     };
   });
 

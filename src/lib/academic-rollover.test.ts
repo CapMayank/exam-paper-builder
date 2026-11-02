@@ -66,7 +66,7 @@ describe("Academic Session Normalization", () => {
 
   it("trims whitespace and falls back gracefully", () => {
     expect(normalizeSession("  2024-25  ")).toBe("2024–25");
-    expect(normalizeSession("")).toBe("2025–26");
+    expect(normalizeSession("")).toBe("2026–27");
   });
 });
 

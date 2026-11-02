@@ -1,9 +1,9 @@
 "use client";
 
-import { ArrowDown, ArrowUp, BookOpen, Code2, Download, FileText, Layers, Plus, Scale, ShieldCheck, Sparkles, Trash2, Upload } from "lucide-react";
+import { ArrowDown, ArrowUp, BookOpen, Code2, Download, FileText, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { use, useEffect, useMemo, useState } from "react";
+import { Fragment, use, useEffect, useMemo, useState } from "react";
 import { ErrorBanner, Field, useConfirm, useToast } from "@/components/ui";
 import { BlueprintImportModal } from "@/components/BlueprintImportModal";
 import { BlueprintJsonModal } from "@/components/BlueprintJsonModal";
@@ -31,7 +31,8 @@ import {
   getBoardDefaultChoiceRequirement,
 } from "@/lib/internalChoiceRules";
 import { api } from "@/lib/client";
-import { DEFAULT_SCHOOL_NAME, EXAM_TYPES, EXAM_TYPE_LABEL, QUESTION_TYPES, QUESTION_TYPE_LABEL, sortClassNames } from "@/lib/constants";
+import { DEFAULT_SCHOOL_NAME, EXAM_TYPES, EXAM_TYPE_LABEL, QUESTION_TYPES, QUESTION_TYPE_LABEL, STANDARD_QUESTION_TYPES, sortClassNames } from "@/lib/constants";
+import { BlueprintStartPicker } from "@/components/blueprints/BlueprintStartPicker";
 import { isSubjectMatching } from "@/lib/schoolCurriculum";
 import type { AcademicClassDto, Blueprint, Book, PaperData } from "@/lib/types";
 
@@ -67,6 +68,8 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
 
   const [books, setBooks] = useState<Book[]>([]);
   const [classes, setClasses] = useState<AcademicClassDto[]>([]);
+  // every class the school has, in any session: a class does not stop existing when the session changes
+  const [allClasses, setAllClasses] = useState<AcademicClassDto[]>([]);
   const [currentUser, setCurrentUser] = useState<{ id: string; role?: string } | null>(null);
   const [name, setName] = useState("");
   const [academicSession, setAcademicSession] = useState(currentSession);
@@ -92,6 +95,9 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
   const [selectedSubjectFilter, setSelectedSubjectFilter] = useState("");
 
   const [curriculumMode, setCurriculumMode] = useState<"STANDARD_MPBSE" | "CUSTOM_SCHOOL" | "BLANK_CUSTOM">("BLANK_CUSTOM");
+  // a new blueprint starts with the class / subject / pattern picker; the editor opens once something is chosen
+  const [started, setStarted] = useState(id !== "new" || Boolean(from));
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const [curriculumTemplateId, setCurriculumTemplateId] = useState<string | null>(null);
   const [curriculumVariantId, setCurriculumVariantId] = useState<string | null>(null);
   const [selectedTerm, setSelectedTerm] = useState<ExaminationTerm>("QUARTERLY");
@@ -117,6 +123,7 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
         ]);
         setBooks(bs);
         setClasses(clsList);
+        void api<AcademicClassDto[]>("/api/classes?session=ALL").then(setAllClasses, () => setAllClasses(clsList));
         setCurrentUser(me);
         if (source) {
           setName(id === "new" ? `${source.name} (copy)` : source.name);
@@ -157,7 +164,7 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
                 isSubjectMatching(b.subject, urlSubject)
             )) ||
             (urlClassName && !urlSubject && bs.find((b) => b.className.trim().toLowerCase() === urlClassName.trim().toLowerCase())) ||
-            (!urlClassName && !urlSubject ? (bs[0] ?? null) : null);
+            null;
 
           setBookId(initialBook?.id ?? "");
           if (initialBook) {
@@ -181,27 +188,10 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
           setAcademicSession(currentSession);
           const urlTemplateId = typeof sp.templateId === "string" ? sp.templateId : undefined;
           const matchedTmpl = urlTemplateId ? (STANDARD_BLUEPRINT_TEMPLATES.find((t) => t.id === urlTemplateId) || MPBSE_BLUEPRINT_TEMPLATES.find((t) => t.id === urlTemplateId)) : null;
+          // otherwise the class / subject / pattern picker is shown first
           if (matchedTmpl) {
+            setStarted(true);
             void handleLoadOfficialTemplate(matchedTmpl as any, bs);
-          } else {
-            setCurriculumMode("STANDARD_MPBSE");
-            const targetClassNum = urlClassName
-              ? (parseInt(urlClassName.replace(/[^0-9]/g, ""), 10) || 10)
-              : (initialBook?.className ? (parseInt(initialBook.className.replace(/[^0-9]/g, ""), 10) || 10) : 10);
-            const targetSubCode = urlCode || matchingSubject?.code || "100";
-            const defaultTmpl =
-              MPBSE_BLUEPRINT_TEMPLATES.find(
-                (t) => t.classLevel === targetClassNum && (t.subjectCode === targetSubCode || isSubjectMatching(t.subjectName || "", activeSub))
-              ) ||
-              MPBSE_BLUEPRINT_TEMPLATES.find(
-                (t) => t.classLevel === targetClassNum
-              ) ||
-              MPBSE_BLUEPRINT_TEMPLATES.find((t) => t.templateCode === "mpbse-10th-mathematics-standard-100-75m") ||
-              MPBSE_BLUEPRINT_TEMPLATES[0];
-
-            if (defaultTmpl) {
-              void handleLoadOfficialTemplate(defaultTmpl, bs);
-            }
           }
         }
         setLoaded(true);
@@ -213,6 +203,8 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
 
   const hasPapers = paperCount > 0;
   const book = books.find((b) => b.id === bookId);
+  // tracing / counting activity types belong to nursery-KG papers only
+  const isPrePrimary = /nursery|kg|lkg|ukg|pre[-\s]?primary/i.test(book?.className ?? selectedClassFilter);
   const chapterQuotas = (book?.chapters ?? []).map((c) => ({
     chapterId: c.id,
     marks: marks[c.id] ?? 0,
@@ -515,6 +507,33 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
     patchQuestionType(grpKey, qtKey, { orSlotsJson: undefined });
   }
 
+  function startBlank(pick?: { className: string; subject: string }) {
+    setStarted(true);
+    setCurriculumMode("BLANK_CUSTOM");
+    if (pick?.className) {
+      const wanted = pick.subject;
+      const first = books.find((b) => b.className === pick.className && (!wanted || isSubjectMatching(b.subject, wanted)));
+      setSelectedClassFilter(pick.className);
+      setSelectedSubjectFilter(wanted);
+      setBookId(first?.id ?? "");
+      setName(`${pick.className} ${wanted} – Blueprint`.trim());
+      const cls = classes.find((c) => c.name === pick.className);
+      const sub = cls?.subjects.find((s) => isSubjectMatching(s.name, wanted));
+      if (sub?.code) setSubjectCode(sub.code);
+    }
+    setSectionGroups([
+      newSectionGroup(
+        {
+          title: "Section A",
+          instructions: "All questions are compulsory.",
+          questionTypes: [newQuestionType({ type: "MCQ", count: 10, marksEach: 1 })],
+        },
+        0,
+      ),
+    ]);
+    setMarks({});
+  }
+
   function handleImportedBlueprint(imported: {
     name: string;
     examType: string;
@@ -550,6 +569,7 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
       setSubjectCode(imported.subjectCode);
     }
     if (imported.sections && imported.sections.length > 0) {
+      setStarted(true);
       setSectionGroups(groupSectionsFromFlat(imported.sections));
     }
     if (imported.chapterMarks && Object.keys(imported.chapterMarks).length > 0) {
@@ -627,11 +647,27 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
         setCurriculumTemplateId(null);
       }
 
-      // If tData has textbooks with legacyBookId, try to match book directly
-      const officialTb = tData?.subject?.textbooks?.[0];
-      if (officialTb?.legacyBookId) {
-        const legacyMatch = bookList.find((b) => b.id === officialTb.legacyBookId);
+      // The paper covers every prescribed book (e.g. Kshitij + Kritika + writing/grammar components), so the
+      // blueprint needs all of them as one syllabus. Reuse the combined book if it already exists.
+      const officialTbs: Array<{ legacyBookId?: string | null }> = tData?.subject?.textbooks ?? [];
+      const legacyIds = officialTbs.map((tb) => tb.legacyBookId).filter((x): x is string => Boolean(x));
+      if (legacyIds.length === 1) {
+        const legacyMatch = bookList.find((b) => b.id === legacyIds[0]);
         if (legacyMatch) matchedBook = legacyMatch;
+      } else if (legacyIds.length > 1) {
+        const className = `Class ${template.classLevel}`;
+        const subjectName = template.subjectName || tData?.subject?.name || "";
+        const combinedTitle = `${subjectName} ${className} – all prescribed books${template.variant ? ` (${template.variant})` : ""}`;
+        let combined = bookList.find((b) => b.title === combinedTitle && b.className === className);
+        if (!combined) {
+          const res = await api<{ book: Book }>("/api/books/combine", {
+            method: "POST",
+            json: { bookIds: legacyIds, compositeTitle: combinedTitle, className, subject: subjectName, keepOriginals: true, academicSession },
+          });
+          combined = res.book;
+          setBooks((prev) => [...prev.filter((b) => b.id !== res.book.id), res.book]);
+        }
+        matchedBook = combined;
       }
 
       if (matchedBook) {
@@ -816,63 +852,59 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
   return (
     <form onSubmit={isReadOnly ? (e) => e.preventDefault() : save} className="space-y-4 pb-20">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">
-          {id === "new" ? "New blueprint" : isReadOnly ? "View blueprint" : "Edit blueprint"}
-        </h1>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setJsonModalOpen(true)}
-            className="btn btn-ghost border border-slate-200 bg-white text-slate-800 hover:bg-slate-50 flex items-center gap-1.5 text-xs font-semibold shadow-2xs"
-            title="View blueprint specification in JSON format"
-          >
-            <Code2 size={14} className="text-slate-600" /> View JSON
-          </button>
-          <button
-            type="button"
-            onClick={() => downloadBlueprintJson(currentBlueprintData, book)}
-            className="btn btn-ghost border border-slate-200 bg-white text-slate-800 hover:bg-slate-50 flex items-center gap-1.5 text-xs font-semibold shadow-2xs"
-            title="Download blueprint specification as a .json file"
-          >
-            <Download size={14} className="text-slate-600" /> Download JSON
-          </button>
-          {!isReadOnly && (
-            <>
+        <div className="min-w-0">
+          <h1 className="text-xl font-semibold">
+            {id === "new" ? "New blueprint" : isReadOnly ? "View blueprint" : "Edit blueprint"}
+          </h1>
+          {started && (book || selectedClassFilter) && (
+            <p className="mt-0.5 text-sm text-slate-500">
+              {book?.className ?? selectedClassFilter} · {book?.subject ?? selectedSubjectFilter}
+              {curriculumMode === "STANDARD_MPBSE" ? " · MPBSE 2026–27 board pattern" : curriculumMode === "CUSTOM_SCHOOL" ? " · school exam adapted from the board pattern" : " · custom pattern"}
+              {id === "new" && !isReadOnly && (
+                <button type="button" className="ml-2 font-medium text-indigo-700 hover:underline" onClick={() => setStarted(false)}>
+                  Change
+                </button>
+              )}
+            </p>
+          )}
+        </div>
+        {started && (
+          <div className="flex flex-wrap items-center gap-2">
+            {!isReadOnly && (
               <button
                 type="button"
                 onClick={() => {
                   setImportModalTab("ai");
                   setImportModalOpen(true);
                 }}
-                className="btn btn-ghost border border-indigo-200 bg-indigo-50/80 text-indigo-900 hover:bg-indigo-100 flex items-center gap-1.5 text-xs font-semibold shadow-2xs"
-                title="Parse blueprint circular, syllabus image, PDF, or text using Gemini AI"
+                className="btn btn-ghost border border-slate-200 bg-white text-xs"
+                title="Read a blueprint from a circular, syllabus image, PDF or text with AI"
               >
-                <Sparkles size={14} className="text-indigo-600" /> AI Blueprint Creator
+                <Sparkles size={14} className="text-indigo-600" /> Read from a document
               </button>
-              <button
-                type="button"
-                onClick={() => setTemplateModalOpen(true)}
-                className="btn btn-ghost border border-purple-200 bg-purple-50/80 text-purple-900 hover:bg-purple-100 flex items-center gap-1.5 text-xs font-semibold shadow-2xs"
-                title="Populate blueprint sections using standard CBSE/ICSE patterns"
-              >
-                <Layers size={14} className="text-purple-600" /> Starter Templates
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setImportModalTab("import");
-                  setImportModalOpen(true);
-                }}
-                className="btn btn-ghost border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 text-xs font-semibold shadow-2xs"
-                title="Import blueprint specification from JSON or CSV"
-              >
-                <Upload size={14} className="text-slate-600" /> Import blueprint
-              </button>
-            </>
-          )}
-        </div>
+            )}
+            <button
+              type="button"
+              onClick={() => setJsonModalOpen(true)}
+              className="btn btn-ghost border border-slate-200 bg-white text-xs"
+              title="View this blueprint as JSON"
+            >
+              <Code2 size={14} className="text-slate-600" /> JSON
+            </button>
+            <button
+              type="button"
+              onClick={() => downloadBlueprintJson(currentBlueprintData, book)}
+              className="btn btn-ghost border border-slate-200 bg-white text-xs"
+              title="Download this blueprint as a .json file"
+            >
+              <Download size={14} className="text-slate-600" /> Download
+            </button>
+          </div>
+        )}
       </div>
 
+      {started ? (
+      <>
       {isReadOnly && (
         <div className="rounded-xl border border-sky-200 bg-sky-50/90 p-4 text-xs text-sky-950 shadow-2xs space-y-1.5">
           <div className="flex items-center gap-2 font-bold text-sky-900">
@@ -900,146 +932,8 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
         </div>
       )}
 
-      {isSanskrit10 && (
-        <div className="rounded-xl border border-amber-300 bg-amber-50/80 p-4 text-xs text-amber-950 shadow-2xs space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2 font-bold text-amber-900 text-sm">
-              <Sparkles size={16} className="text-amber-600 shrink-0" />
-              <span>MPBSE Class 10 Sanskrit (2026–27) Official Examination Blueprint</span>
-            </div>
-            {!isReadOnly && (
-              <button
-                type="button"
-                onClick={() => {
-                  const tmpl = STANDARD_BLUEPRINT_TEMPLATES.find((t) => t.id === "mpbse-sanskrit-10th-75m");
-                  if (tmpl) applyStarterTemplate(tmpl);
-                }}
-                className="btn btn-sm btn-ghost border border-amber-300 bg-white hover:bg-amber-100 text-amber-900 font-semibold flex items-center gap-1.5 shadow-2xs"
-                title="Populate with the 23-question, 75-mark official MPBSE 2026–27 model paper structure"
-              >
-                <Layers size={13} className="text-amber-700" /> Load Official 23-Q / 75-Mark Pattern
-              </button>
-            )}
-          </div>
-          <p className="leading-relaxed text-amber-900">
-            Aligned with the official Board Model Paper (Subject Code 512, Shemushi Part 2 &amp; Vyakaranavithi): 
-            23 numbered parent questions, 75 maximum marks, five 6-mark objective groups (Q1–Q5), 
-            compulsory 2-mark textbook exercises without OR choices (Q6–Q17), attempt-4-of-5 for Q21 unseen comprehension, 
-            and 4 default essay topics for Q23.
-          </p>
-          {(total !== 75 || sections.length !== 19 || (subjectCode && subjectCode !== "512")) && (
-            <div className="flex items-center gap-1.5 text-amber-800 font-medium pt-1 border-t border-amber-200">
-              <span>⚠️ Configuration notice:</span>
-              <span>
-                {total !== 75 ? `Total marks: ${total}m (official standard is 75m). ` : ""}
-                {sections.length !== 19 ? `Section items: ${sections.length} (official blueprint uses 19 section items mapping to 23 questions). ` : ""}
-                {subjectCode && subjectCode !== "512" ? `Subject code: ${subjectCode} (MPBSE Sanskrit is 512, CBSE is 122).` : ""}
-              </span>
-            </div>
-          )}
-        </div>
-      )}
 
       <ErrorBanner message={error} />
-
-      {/* Blueprint Mode Selector */}
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden">
-        <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-          <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
-            <Layers size={14} className="text-indigo-600" /> Blueprint Creation Mode
-          </span>
-          <span className="text-[11px] text-slate-500">
-            {curriculumMode === "STANDARD_MPBSE"
-              ? "Official MPBSE Board blueprint with Circular 465 rules"
-              : curriculumMode === "CUSTOM_SCHOOL"
-              ? "Adapted for School Examination Terms (Quarterly/Half-Yearly/Pre-Board)"
-              : "Manual blueprint configuration"}
-          </span>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-slate-100">
-          <button
-            type="button"
-            onClick={() => setCurriculumMode("STANDARD_MPBSE")}
-            className={`flex items-start gap-3 p-3.5 text-left transition ${
-              curriculumMode === "STANDARD_MPBSE"
-                ? "bg-emerald-50/70 border-l-4 border-l-emerald-600"
-                : "hover:bg-slate-50"
-            }`}
-          >
-            <ShieldCheck size={20} className={curriculumMode === "STANDARD_MPBSE" ? "text-emerald-600 shrink-0 mt-0.5" : "text-slate-400 shrink-0 mt-0.5"} />
-            <div>
-              <div className={`text-xs font-bold flex items-center gap-1.5 ${curriculumMode === "STANDARD_MPBSE" ? "text-emerald-950" : "text-slate-800"}`}>
-                <span>Mode 1: Standard MPBSE Pattern</span>
-                <span className="bg-emerald-200/80 text-emerald-900 text-[10px] font-bold px-1.5 py-0.2 rounded">Recommended</span>
-              </div>
-              <div className="text-[11px] text-slate-600 mt-1 leading-relaxed">
-                Auto-configures official Board question denominations, marks per chapter, and Circular 465 statutory choice rules.
-              </div>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setCurriculumMode("CUSTOM_SCHOOL")}
-            className={`flex items-start gap-3 p-3.5 text-left transition ${
-              curriculumMode === "CUSTOM_SCHOOL"
-                ? "bg-indigo-50/70 border-l-4 border-l-indigo-600"
-                : "hover:bg-slate-50"
-            }`}
-          >
-            <Scale size={20} className={curriculumMode === "CUSTOM_SCHOOL" ? "text-indigo-600 shrink-0 mt-0.5" : "text-slate-400 shrink-0 mt-0.5"} />
-            <div>
-              <div className={`text-xs font-bold ${curriculumMode === "CUSTOM_SCHOOL" ? "text-indigo-950" : "text-slate-800"}`}>
-                Mode 2: Custom School Exam
-              </div>
-              <div className="text-[11px] text-slate-600 mt-1 leading-relaxed">
-                Quarterly, Half-Yearly, or Pre-Board with syllabus reduction and proportional mark scaling.
-              </div>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setCurriculumMode("BLANK_CUSTOM");
-              setSectionGroups([
-                newSectionGroup(
-                  {
-                    title: "Section A",
-                    instructions: "All questions are compulsory.",
-                    questionTypes: [newQuestionType({ type: "MCQ", count: 10, marksEach: 1 })],
-                  },
-                  0
-                ),
-              ]);
-              setMarks({});
-            }}
-            className={`flex items-start gap-3 p-3.5 text-left transition ${
-              curriculumMode === "BLANK_CUSTOM"
-                ? "bg-slate-100 border-l-4 border-l-slate-700"
-                : "hover:bg-slate-50"
-            }`}
-          >
-            <Code2 size={20} className={curriculumMode === "BLANK_CUSTOM" ? "text-slate-800 shrink-0 mt-0.5" : "text-slate-400 shrink-0 mt-0.5"} />
-            <div>
-              <div className={`text-xs font-bold ${curriculumMode === "BLANK_CUSTOM" ? "text-slate-900" : "text-slate-800"}`}>
-                Mode 3: Blank Custom Blueprint
-              </div>
-              <div className="text-[11px] text-slate-600 mt-1 leading-relaxed">
-                Build completely custom sections, question types, and manual chapter allocations from scratch.
-              </div>
-            </div>
-          </button>
-        </div>
-      </div>
-
-      {curriculumMode === "STANDARD_MPBSE" && (
-        <StandardMpbseConfigurator
-          onLoadTemplate={handleLoadOfficialTemplate}
-          isReadOnly={isReadOnly}
-          currentTemplateId={curriculumTemplateId}
-        />
-      )}
 
       {curriculumMode === "CUSTOM_SCHOOL" && (
         <CustomSchoolTermConfigurator
@@ -1260,6 +1154,34 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
                 );
               }, 0);
 
+              // an official pattern is read, not edited, most of the time: show each section as one line
+              if (curriculumMode === "STANDARD_MPBSE" && !openGroups[grp.key]) {
+                return (
+                  <div key={grp.key} className="flex items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3.5 py-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-900">{grp.title || `Section ${String.fromCharCode(65 + i)}`}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {grp.questionTypes
+                          .map((qt) => `${QUESTION_TYPE_LABEL[qt.type as keyof typeof QUESTION_TYPE_LABEL] ?? qt.type} × ${qt.count} (${qt.marksEach} each)`)
+                          .join(", ")}
+                        {` · ${grpMarks} marks`}
+                        {grpOrCount > 0 ? ` · OR choice on ${grpOrCount}` : ""}
+                      </p>
+                    </div>
+                    {!isReadOnly && (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-ghost shrink-0 border border-slate-200"
+                        onClick={() => setOpenGroups((g) => ({ ...g, [grp.key]: true }))}
+                        aria-label={`Edit ${grp.title}`}
+                      >
+                        <Pencil size={13} /> Edit
+                      </button>
+                    )}
+                  </div>
+                );
+              }
+
               return (
                 <fieldset key={grp.key} className="space-y-3 rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs">
                   {/* Section Title & Reordering */}
@@ -1373,7 +1295,7 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
                                   onChange={(e) => patchQuestionType(grp.key, qt.key, { type: e.target.value })}
                                   aria-label="Question type"
                                 >
-                                  {QUESTION_TYPES.map((t) => (
+                                  {(isPrePrimary ? QUESTION_TYPES : STANDARD_QUESTION_TYPES).map((t) => (
                                     <option key={t} value={t}>
                                       {QUESTION_TYPE_LABEL[t]}
                                     </option>
@@ -1432,11 +1354,6 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
 
                             {/* Internal Choice (OR / अथवा) Configuration */}
                             <div className="pt-2 border-t border-slate-200/80 space-y-2">
-                              {curriculumMode === "STANDARD_MPBSE" && (
-                                <div className="flex items-center gap-1.5 text-[10px] bg-emerald-50 text-emerald-900 border border-emerald-300 font-semibold px-2 py-0.5 rounded">
-                                  <span>🔒 Locked: MPBSE Circular 465 requires {qt.marksEach === 2 ? "strictly NO internal choice for 2-mark questions" : qt.marksEach >= 3 ? "100% internal OR choice for 3m/4m analytical questions" : "objective questions without choice"}</span>
-                                </div>
-                              )}
                               <div className="flex flex-wrap items-center justify-between gap-2">
                                 <div className="flex flex-wrap items-center gap-1.5">
                                   <span className="text-[11px] font-semibold text-slate-700">
@@ -1507,7 +1424,8 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
                               </div>
 
                               {/* Conflict warning banner if school override conflicts with board circular */}
-                              {conflict.hasConflict && (
+                              {/* an official MPBSE pattern is the board rule itself, so only flag edits made outside it */}
+                              {conflict.hasConflict && curriculumMode !== "STANDARD_MPBSE" && (
                                 <div className="text-[11px] bg-amber-50 text-amber-900 border border-amber-200 rounded p-1.5 flex items-start gap-1.5">
                                   <span className="font-bold shrink-0">⚠️ Conflict Notice:</span>
                                   <div className="flex-1">
@@ -1630,7 +1548,7 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
                 {chapterTotal}/{total}m {chapterTotal === total && total > 0 ? "✓ Balanced" : chapterTotal < total ? `(${total - chapterTotal}m needed)` : `(${chapterTotal - total}m over)`}
               </span>
             </div>
-            {!isReadOnly && book && book.chapters.length > 0 && total > 0 && (
+            {!isReadOnly && book && book.chapters.length > 0 && total > 0 && chapterTotal !== total && (
               <button
                 type="button"
                 className="btn btn-sm text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200"
@@ -1646,96 +1564,44 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
           ) : (
             <table className="w-full text-sm">
               <tbody>
-                {book.chapters.map((c) => (
-                  <tr key={c.id} className="border-t border-slate-100">
-                    <td className="w-10 py-1.5 text-slate-500">{c.number}</td>
-                    <td className="py-1.5">{c.title}</td>
-                    <td className="w-24 py-1.5">
-                      <input
-                        type="number"
-                        min={0}
-                        className="input"
-                        aria-label={`Marks for chapter ${c.number}`}
-                        value={marks[c.id] ?? 0}
-                        onChange={(e) => setMarks({ ...marks, [c.id]: num(e.target.value) })}
-                      />
-                    </td>
-                  </tr>
-                ))}
+                {book.chapters.map((c, idx) => {
+                  // a combined book prefixes each chapter with its source book: show that once, as a heading
+                  const m = c.title.match(/^\[([^\]]+)\]\s*(.*)$/);
+                  const source = m?.[1] ?? "";
+                  const prev = idx > 0 ? book.chapters[idx - 1].title.match(/^\[([^\]]+)\]/)?.[1] ?? "" : null;
+                  return (
+                    <Fragment key={c.id}>
+                      {source && source !== prev && (
+                        <tr>
+                          <th colSpan={3} className="pt-3 pb-1 text-left text-xs font-semibold text-slate-500">
+                            {source}
+                          </th>
+                        </tr>
+                      )}
+                      <tr className="border-t border-slate-100">
+                        <td className="w-10 py-1.5 text-slate-500">{c.number}</td>
+                        <td className="py-1.5">{m ? m[2] : c.title}</td>
+                        <td className="w-24 py-1.5">
+                          <input
+                            type="number"
+                            min={0}
+                            className="input"
+                            aria-label={`Marks for chapter ${c.number}`}
+                            value={marks[c.id] ?? 0}
+                            onChange={(e) => setMarks({ ...marks, [c.id]: num(e.target.value) })}
+                          />
+                        </td>
+                      </tr>
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           )}
-          <div className="pt-2 border-t border-slate-100">
-            {chapterTotal === total && total > 0 ? (
-              <div className="flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 border border-emerald-200">
-                <span>✓ Quota Balanced: Chapter marks ({chapterTotal}m) exactly match section total ({total}m).</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 border border-amber-200">
-                <span>
-                  ⚠ Quota Imbalance: Chapters sum to {chapterTotal} marks, but sections require {total} marks (
-                  {Math.abs(total - chapterTotal)}m {chapterTotal < total ? "needed" : "in excess"}).
-                </span>
-              </div>
-            )}
-          </div>
         </section>
       </div>
 
-      {isSanskrit10 && (
-        <div className="rounded-xl border border-indigo-200 bg-white p-4 text-xs shadow-2xs space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
-            <div className="flex items-center gap-2">
-              <Sparkles size={16} className="text-indigo-600" />
-              <h3 className="font-bold text-slate-900 text-sm">
-                Application-defined Sanskrit Competency Taxonomy (16 Syllabus Competencies)
-              </h3>
-            </div>
-            <span className="badge badge-indigo text-[10px] font-bold">
-              MPBSE Class 10 Syllabus Mapping · 75 Marks Reference
-            </span>
-          </div>
-          <p className="text-slate-600 leading-relaxed text-[11px]">
-            This application-defined taxonomy maps the 16 core curriculum competencies of Shemushi Part 2 and Vyakaranavithi across 
-            Grammar (18M), Vocabulary/Wisdom (12M), Textual Comprehension (21M), and Epistolary/Thematic Composition (8M).
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
-            {SANSKRIT_COMPETENCY_TAXONOMY.map((c) => (
-              <div
-                key={c.id}
-                className="rounded-lg border border-slate-200 bg-slate-50/60 p-2.5 flex flex-col justify-between"
-              >
-                <div>
-                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-800">
-                    <span>{c.nameSanskrit}</span>
-                    <span className="text-indigo-600 font-extrabold">{c.defaultExpectedMarks}m</span>
-                  </div>
-                  <div className="text-[10px] text-slate-500 font-medium mt-0.5">{c.name}</div>
-                  <div className="text-[9.5px] text-slate-600 line-clamp-2 mt-1 italic">
-                    {c.syllabusDescription}
-                  </div>
-                </div>
-                <div className="mt-1.5 pt-1 border-t border-slate-200/60 flex items-center justify-between text-[9px] text-slate-400 font-semibold uppercase">
-                  <span>{c.category}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
-      {feasibilityWarnings.length > 0 && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-3.5 text-xs text-amber-900 shadow-2xs space-y-1">
-          <div className="font-bold text-amber-950">Mathematical Feasibility Notice:</div>
-          <ul className="list-disc pl-5 space-y-0.5">
-            {feasibilityWarnings.map((w) => (
-              <li key={w} className="text-amber-800 font-medium">
-                {w}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
 
       </fieldset>
 
@@ -1814,6 +1680,29 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
         </div>
       )}
 
+      </>
+      ) : (
+        <BlueprintStartPicker
+          classes={allClasses.length ? allClasses : classes}
+          books={books}
+          initialClassName={typeof sp.className === "string" ? sp.className : undefined}
+          initialSubject={typeof sp.subject === "string" ? sp.subject : undefined}
+          onUsePattern={(t) => {
+            setStarted(true);
+            void handleLoadOfficialTemplate(t);
+          }}
+          onAdaptPattern={(t) => {
+            setStarted(true);
+            void handleLoadOfficialTemplate(t).then(() => setCurriculumMode("CUSTOM_SCHOOL"));
+          }}
+          onBlank={startBlank}
+          onImport={() => {
+            setImportModalTab("import");
+            setImportModalOpen(true);
+          }}
+        />
+      )}
+
       <BlueprintImportModal
         isOpen={importModalOpen}
         initialTab={importModalTab}
@@ -1836,12 +1725,13 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
         onSelectTemplate={applyStarterTemplate}
       />
 
-      {/* Sticky Blueprint Budget Bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-slate-200/90 bg-white/95 backdrop-blur-md px-4 py-2.5 shadow-lg">
+      {/* Sticky budget bar: stays inside the content column, never over the sidebar */}
+      {started && (
+      <div className="sticky bottom-0 z-20 -mx-4 border-t border-slate-200/90 bg-white/95 px-4 py-2.5 backdrop-blur-md sm:-mx-8 sm:px-8">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-3 text-xs">
             <div className="flex items-center gap-1.5">
-              <span className="text-slate-500 font-medium">Logical Qs:</span>
+              <span className="text-slate-500 font-medium">Questions:</span>
               <span className="font-mono font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
                 {totalLogicalQuestions}
               </span>
@@ -1907,6 +1797,7 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
           </div>
         </div>
       </div>
+      )}
     </form>
   );
 }

@@ -31,7 +31,7 @@ describe("Academic Class & Subject Hierarchy", () => {
   it("normalizes academic sessions consistently with en-dash", () => {
     expect(normalizeAcademicSession("2026-27")).toBe("2026–27");
     expect(normalizeAcademicSession(" 2025–26 ")).toBe("2025–26");
-    expect(normalizeAcademicSession("")).toBe("2025–26");
+    expect(normalizeAcademicSession("")).toBe("2026–27");
   });
 
   it("infers natural display order for school classes (Pre-Primary through Class 12)", () => {

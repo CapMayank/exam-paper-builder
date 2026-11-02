@@ -805,7 +805,7 @@ export const MARKS_STYLE_LABEL: Record<MarksStyle, string> = {
 };
 export const DEFAULT_MARKS_STYLE: MarksStyle = "INLINE";
 
-export const DEFAULT_ACADEMIC_SESSION = "2025–26";
+export const DEFAULT_ACADEMIC_SESSION = "2026–27";
 export const ACADEMIC_SESSIONS = [
   "2023–24",
   "2024–25",

@@ -1025,6 +1025,20 @@ export interface GeneratedPaperQuestion {
   };
 }
 
+/**
+ * The words or forms earlier questions in the paper test: quoted items ('पठितवान्', "photosynthesis") and the
+ * word a grammar question is about ("अस्मद् शब्दस्य", "गम् धातुः"). Listing them stops the model from asking
+ * about the same word again in another section.
+ */
+export function extractTestedTerms(texts: string[]): string[] {
+  const terms = new Set<string>();
+  for (const t of texts) {
+    for (const m of t.matchAll(/[‘'"“]([^‘’'"“”\n]{2,40})[’'"”]/g)) terms.add(m[1].trim());
+    for (const m of t.matchAll(/([ऀ-ॿ]+)\s*(?:शब्दस्य|धातोः|धातुः|इत्यस्य|इत्यस्मिन्|इत्यत्र|पदस्य)/g)) terms.add(m[1]);
+  }
+  return [...terms].filter((x) => x.length >= 2).slice(-60);
+}
+
 export async function generatePaperSectionWithGemini(
   params: GeneratePaperSectionInput,
 ): Promise<GeminiCallResult<GeneratedPaperQuestion[]>> {
@@ -1137,7 +1151,7 @@ ${contract.forbiddenCrossSubjectDomains.length > 0 ? `2. FORBIDDEN CROSS-SUBJECT
 12. QUESTION STEM & CLEAN FORMATTING RULES:
    - DO NOT prepend question numbers, Roman numerals, or letter bullets (like "1.", "(a)", "(i)", "(क)") to the "text" field. All question numbering is automatically formatted by the exam layout engine.
    - DO NOT append marks annotations (like "[1 Mark]", "[2 Marks]", "[1 अंक]", "[1 अङ्कः]") inside the "text" field. Marks are rendered dynamically in the right margin.
-   - For FILL_BLANK: Write ONLY the statement with blank(s) indicated as "________" (at least 8 underscores). NEVER append meta-instructions like "इति रिक्तस्थानं पूरयत", "fill in the blanks", or "रिक्त स्थान भरिए" to the "text" field.
+   - For FILL_BLANK: Write ONLY the statement with blank(s) indicated as "________" (at least 8 underscores), as one complete sentence that reads correctly on its own. Never begin with a lead-in instruction ("Fill in the blank with...", "with the correct...", "Complete the sentence"); put any grammar point in brackets after the sentence, e.g. "Students ________ submit their work on time. (modal verb)". NEVER append meta-instructions like "इति रिक्तस्थानं पूरयत", "fill in the blanks", or "रिक्त स्थान भरिए" to the "text" field.
    - For TRUE_FALSE: Write ONLY a single declarative factual statement. NEVER append questions or prompt wrappers like "अयम् आशयः सत्यः अस्ति वा?", "सत्यं वा असत्यं", or "state whether true or false". The answer field MUST be "आम्" or "न" for Sanskrit, "सत्य" or "असत्य" for Hindi, "True" or "False" for English.
 13. LANGUAGE PURITY & SANSKRIT ACADEMIC INTEGRITY:
    - When language is "sa" (Sanskrit), generate 100% authentic Sanskrit in Devanagari script. Follow Paninian grammar and NCERT Shemushi standards.
@@ -1195,6 +1209,7 @@ ${subjectDirectives.completenessRules.map((r) => `  * ${r}`).join("\n")}
     .join("\n");
 
   const isMatchSection = normalizedType === "MATCH_COLUMN";
+  const testedTerms = extractTestedTerms(existingQuestionTexts ?? []);
 
   const baseUserPrompt = isMatchSection
     ? `Generate EXACTLY 1 combined Match the Columns question containing all ${slots.length} matching pairs for the following exam section:
@@ -1291,7 +1306,11 @@ ${
     ? `\nALREADY-PLACED QUESTIONS IN THIS PAPER (STRICTLY FORBIDDEN TO REPEAT, REUSE, OR ASK THE SAME PROBLEM TEMPLATE):\n${existingQuestionTexts
         .slice(-40)
         .map((t, idx) => `${idx + 1}. ${t.replace(/\s+/g, " ").trim().slice(0, 200)}`)
-        .join("\n")}\nCRITICAL: Every question you generate in this section MUST test a DIFFERENT topic/sub-concept or problem type than the questions listed above. Never repeat the same question or merely change numbers in an already-asked question.\n`
+        .join("\n")}\nCRITICAL: Every question you generate in this section MUST test a DIFFERENT topic/sub-concept or problem type than the questions listed above. Never repeat the same question or merely change numbers in an already-asked question.\n${
+        testedTerms.length > 0
+          ? `WORDS / FORMS ALREADY TESTED IN THIS PAPER (do not ask about any of these again, in any question type): ${testedTerms.join(", ")}\n`
+          : ""
+      }`
     : ""
 }
 SUBPARTS RULE:

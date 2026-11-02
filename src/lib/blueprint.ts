@@ -439,6 +439,30 @@ function getItemMarks(item: PlacedItem, secMarksEach: number): number {
   return secMarksEach;
 }
 
+/**
+ * A combined match question carries several pairs, usually from different chapters, but is stored against one
+ * chapter. When that chapter's group ends up over its quota only because of the match question, the overflow is
+ * counted towards groups that are still short instead of being reported as an excess.
+ */
+function spillMatchOverflow(
+  groups: Map<string, { target: number; used: number }>,
+  matches: Array<{ key: string; marks: number }>,
+): void {
+  for (const m of matches) {
+    const g = groups.get(m.key);
+    if (!g) continue;
+    let spill = Math.min(m.marks, g.used - g.target);
+    for (const other of groups.values()) {
+      if (spill <= 0) break;
+      if (other === g || other.used >= other.target) continue;
+      const moved = Math.min(spill, other.target - other.used);
+      other.used += moved;
+      g.used -= moved;
+      spill -= moved;
+    }
+  }
+}
+
 export function paperStatus(bp: BlueprintDef, items: PlacedItem[]): PaperStatus {
   const sectionById = new Map(bp.sections.map((s) => [s.id, s]));
   const sections = bp.sections.map((s) => {
@@ -457,6 +481,16 @@ export function paperStatus(bp: BlueprintDef, items: PlacedItem[]): PaperStatus 
   for (const i of items) {
     const key = rep.get(i.chapterId) ?? i.chapterId;
     usedOf.set(key, (usedOf.get(key) ?? 0) + getItemMarks(i, sectionById.get(i.sectionId)?.marksEach ?? 1));
+  }
+  {
+    const groupTotals = new Map([...targetOf.keys()].map((k) => [k, { target: targetOf.get(k) ?? 0, used: usedOf.get(k) ?? 0 }]));
+    spillMatchOverflow(
+      groupTotals,
+      items
+        .filter((i) => (i.subpartsCount ?? 0) > 1 && sectionById.get(i.sectionId)?.type === "MATCH_COLUMN")
+        .map((i) => ({ key: rep.get(i.chapterId) ?? i.chapterId, marks: getItemMarks(i, sectionById.get(i.sectionId)?.marksEach ?? 1) })),
+    );
+    for (const [k, g] of groupTotals) usedOf.set(k, g.used);
   }
   // every chapter reports its quota group's numbers, so a lesson inside a unit shares the unit's budget
   const chapters = bp.chapters.map((c) => {
@@ -646,6 +680,12 @@ export function diagnosePaperImplications(
     if (!g) continue;
     g.used += i.marks && i.marks > 0 ? i.marks : (marksBySection.get(i.sectionId) ?? 0);
   }
+  spillMatchOverflow(
+    groups,
+    items
+      .filter((i) => i.type === "MATCH_COLUMN" && (i.subpartsCount ?? 0) > 1)
+      .map((i) => ({ key: rep.get(i.chapterId) ?? i.chapterId, marks: i.marks ?? 0 })),
+  );
   for (const g of groups.values()) {
     const chapterName = g.title ? g.title : `Chapter ${g.chapterId}`;
     if (g.used > g.target) {
@@ -716,7 +756,9 @@ export function questionSlotMarks(
   }
   const payload = parseSubpartsPayload(q.subpartsJson);
   const subparts = Array.isArray(q.subparts) && q.subparts.length > 0 ? q.subparts : payload.subparts;
-  const attemptCount = q.attemptCount || payload.attemptCount;
+  // "attempt k of n" only means something when there are sub-questions to choose from; a stray attemptCount on
+  // a question without sub-parts (some models echo the schema example) must not shrink its marks
+  const attemptCount = subparts.length > 0 ? q.attemptCount || payload.attemptCount : undefined;
   const submarks = attemptCount
     ? attemptCount * (subparts[0]?.marks || 1)
     : subpartsTotalMarks(subparts as never);

@@ -58,7 +58,8 @@ function makeQuestion(sec, bookId, chapterId, n) {
 }
 
 async function scopeChecks(level, profileSubjects) {
-  const streams = level >= 11 ? ["ALL", "PCM", "PCB"] : ["ALL"];
+  // every required subject is listed for every class (the stream filter was removed from the UI)
+  const streams = ["ALL"];
   const issues = [];
   for (const stream of streams) {
     setView(stream, false);
@@ -76,11 +77,11 @@ async function scopeChecks(level, profileSubjects) {
     checks++;
     if (bad.length) issues.push(`Class ${level} ${stream}: books outside the profile are listed: ${bad.slice(0, 4).map((b) => b.subject)}`);
   }
+  // "show other subjects" reveals archived books (a reset database keeps only the required subjects as classes)
   setView("ALL", true);
-  const all = (await call("GET", "/api/classes?session=ALL")).data ?? [];
-  const row = all.find((c) => c.name === `Class ${level}`);
+  const allBooks = (await call("GET", "/api/books?session=ALL")).data ?? [];
   checks++;
-  if (!row || row.subjects.length <= profileSubjects.length) issues.push(`Class ${level}: "show other subjects" does not reveal the archived subjects`);
+  if (!allBooks.some((b) => b.className === `Class ${level}` && !profileSubjects.some((p) => p.name === canon(b.subject)))) issues.push(`Class ${level}: "show other subjects" does not reveal the archived subjects`);
   setView("ALL", false);
   return issues;
 }

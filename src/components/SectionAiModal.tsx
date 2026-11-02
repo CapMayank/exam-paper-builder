@@ -82,13 +82,15 @@ export function SectionAiModal({
   // Track chapter quotas and remaining deficits
   const chapterQuotas = React.useMemo(() => {
     return (paper.blueprint.chapters || []).map((bc) => {
-      const used = paper.progress.chapters.find((p) => p.chapterId === bc.chapterId)?.used ?? 0;
-      const remaining = Math.max(0, bc.marks - used);
+      const prog = paper.progress.chapters.find((p) => p.chapterId === bc.chapterId);
+      const used = prog?.used ?? 0;
+      const target = prog?.target ?? bc.marks;
+      const remaining = Math.max(0, target - used);
       return {
         id: bc.chapterId,
         number: bc.chapter?.number ?? 0,
         title: bc.chapter?.title ?? "General",
-        targetMarks: bc.marks,
+        targetMarks: target,
         usedMarks: used,
         remainingMarks: remaining,
       };
