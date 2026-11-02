@@ -7,6 +7,7 @@ import {
 } from "@/lib/curriculumContract";
 import type { GeneratedPaperQuestion } from "@/lib/gemini";
 import { toPlacedItems, whyCannotAdd } from "@/lib/blueprint";
+import { regenerateSlot } from "@/lib/slotRegeneration";
 import { parseComponents } from "@/lib/languageComponents";
 import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
@@ -26,6 +27,7 @@ export const POST = route(async (req, { id }, user) => {
   }
 
   const body = await req.json();
+  const customKey = (body as { customKey?: string }).customKey || req.headers.get("x-gemini-api-key") || null;
   const { sectionId, questions } = body as {
     sectionId: string;
     questions: (GeneratedPaperQuestion & { imagePath?: string; figureScene?: unknown })[];
@@ -182,9 +184,33 @@ export const POST = route(async (req, { id }, user) => {
       }
     }
 
-    if (!valRes.valid || vRes.status === "FAIL") {
-      // If surgical repair could not resolve all issues, recover using curriculum-grounded question
-      // rather than throwing a 422 that aborts whole-paper generation.
+    // Still failing: regenerate just this slot (up to 2 times), feeding the rejection reasons back,
+    // and re-validate each replacement. Offline mode has no model to regenerate with, so it uses the
+    // curriculum template (already flagged as TEMPLATE_FALLBACK).
+    for (let attempt = 0; attempt < 2 && (!valRes.valid || vRes.status === "FAIL") && !bodyIsMock; attempt++) {
+      const reasons = [...valRes.issues.map((x) => x.message), ...vRes.allIssues.map((x) => x.message)];
+      const regenerated = await regenerateSlot({
+        paper,
+        section,
+        slot: contractRes.contract.slots[i] ?? contractRes.contract.slots[0],
+        reasons,
+        apiKey: customKey,
+      });
+      if (!regenerated) break;
+      const candidate = { ...q, ...regenerated, type: q.type || section.type } as never;
+      const v2 = validateGeneratedQuestion(candidate, contractRes.contract, { slotIndex: i });
+      const vr2 = verifyQuestionAcademicQuality(candidate, contractRes.contract, { slotIndex: i });
+      if (v2.valid && vr2.status !== "FAIL") {
+        questions[i] = candidate;
+        valRes = v2;
+        vRes = vr2;
+      } else {
+        valRes = v2;
+        vRes = vr2;
+      }
+    }
+
+    if ((!valRes.valid || vRes.status === "FAIL") && bodyIsMock) {
       const grounded = generateCurriculumGroundedSectionQuestions(contractRes.contract, {
         generateDiagrams: false,
         existingQuestionTexts: questions.map((item) => item.text).filter((t): t is string => Boolean(t)),
@@ -202,9 +228,9 @@ export const POST = route(async (req, { id }, user) => {
           explanation: grounded.explanation || q.explanation,
           orQuestion: grounded.orQuestion ?? q.orQuestion,
           requiresInternalChoice: grounded.requiresInternalChoice ?? q.requiresInternalChoice,
-        } as any;
-        valRes = validateGeneratedQuestion(questions[i] as any, contractRes.contract, { slotIndex: i });
-        vRes = verifyQuestionAcademicQuality(questions[i] as any, contractRes.contract, { slotIndex: i });
+        } as never;
+        valRes = validateGeneratedQuestion(questions[i] as never, contractRes.contract, { slotIndex: i });
+        vRes = verifyQuestionAcademicQuality(questions[i] as never, contractRes.contract, { slotIndex: i });
       }
     }
 

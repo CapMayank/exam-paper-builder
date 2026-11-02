@@ -78,3 +78,16 @@ Not present: Class 1–8 MPBSE templates, other class 11/12 subjects (History, G
 4. Marks are still computed in ~6 places with different rules.
 5. Numbering/export still title-regex driven; passage groups not rendered specially.
 6. English class 11/12 Reading passage count unverified (left flat); Urdu 10–12 and Sanskrit book variants unresearched.
+
+---
+
+## Update 2: shared marks, components, regeneration (verified against a running server)
+
+- `questionSlotMarks()` is now the only marks rule (builder, print, DOCX, completeness, audit, paper view).
+- Language components: `Blueprint.componentsJson`, `PaperQuestion.componentKey`, coverage implications and a builder panel/selector.
+- Passage groups: `passageGroupId` is settable from the question API and form; placement and autofill honour it.
+- Rejected AI slots are regenerated one at a time with the rejection reasons, and re-validated; junk-distractor padding was removed. Template output is used only offline, flagged `TEMPLATE_FALLBACK`.
+- AI generation refuses a passage-role section made of plain MCQ slots instead of producing stand-alone MCQs for it.
+- `scripts/e2e-blueprint.mjs` checks 16 behaviours against a live server on a copy of the database (all pass), including the original passage-MCQ leak.
+
+Still open: component assignment is manual (the scheme does not map components to question numbers), English 11/12 passage count, Urdu 10–12, NCERT/Sanskrit book variants, and a live-model run of the regeneration loop (not exercised: no model calls were made).

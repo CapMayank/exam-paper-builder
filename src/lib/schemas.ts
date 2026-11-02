@@ -159,6 +159,8 @@ export const questionSchema = z
       .default(null),
     spaceMm: z.number().int().min(0).max(250).default(0),
     showGrid: z.boolean().default(false),
+    /** Shared id for the sub-questions of one passage; they can only be placed in a passage section. */
+    passageGroupId: z.string().trim().min(1).max(64).nullable().optional(),
   })
   .superRefine((q, ctx) => {
     if (q.type === "MCQ" || q.type === "ASSERTION_REASON") {
@@ -187,6 +189,7 @@ export const questionPatchSchema = z.object({
   difficulty: z.enum(DIFFICULTIES).optional(),
   spaceMm: z.number().int().min(0).max(250).optional(),
   showGrid: z.boolean().optional(),
+  passageGroupId: z.string().trim().min(1).max(64).nullable().optional(),
 });
 
 export const blueprintSchema = z.object({

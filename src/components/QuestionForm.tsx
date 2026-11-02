@@ -196,6 +196,7 @@ export function QuestionForm({
   const [imagePath, setImagePath] = useState<string | null>(initial?.imagePath ?? null);
   const [spaceMm, setSpaceMm] = useState(initial?.spaceMm ?? DEFAULT_SPACE[resolvedInitialType] ?? 0);
   const [showGrid, setShowGrid] = useState(initial?.showGrid ?? false);
+  const [passageGroupId, setPassageGroupId] = useState(initial?.passageGroupId ?? "");
   const [secondaryText, setSecondaryText] = useState("");
   const [bloomsLevel, setBloomsLevel] = useState("");
   const [sketching, setSketching] = useState(false);
@@ -364,6 +365,7 @@ export function QuestionForm({
         imagePath,
         spaceMm,
         showGrid: (type === "DRAW" || type === "MAP_WORK") && showGrid,
+        passageGroupId: passageGroupId.trim() || null,
         subparts: usesSubparts
           ? subparts.map((sp) => ({
               ...sp,
@@ -1298,6 +1300,18 @@ export function QuestionForm({
           </label>
         )}
       </div>
+      <Field label="Passage group (optional)">
+        <input
+          className="input"
+          maxLength={64}
+          placeholder="e.g. unseen-1: same value for every question of one passage"
+          value={passageGroupId}
+          onChange={(e) => setPassageGroupId(e.target.value)}
+        />
+        <p className="mt-1 text-[11px] text-slate-500">
+          Questions that share a value belong to one passage. They can only be placed in a passage section, never in a general objective section.
+        </p>
+      </Field>
       </>
       )}
 

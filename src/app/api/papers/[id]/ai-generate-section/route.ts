@@ -35,6 +35,16 @@ export const POST = route(async (req, { id }, user) => {
   const matchedSection = paper.blueprint.sections.find(
     (s) => (sectionId && s.id === sectionId) || s.title === sectionTitle,
   );
+  if (
+    matchedSection &&
+    (matchedSection as { role?: string }).role === "PASSAGE" &&
+    !["UNSEEN_PASSAGE", "CASE_STUDY", "REFERENCE_CONTEXT"].includes(matchedSection.type)
+  ) {
+    throw new HttpError(
+      422,
+      `"${matchedSection.title}" is a passage section made of ${matchedSection.type} slots. AI generates a passage with its sub-questions as one unit, so set the section type to Unseen passage (or add passage questions manually).`,
+    );
+  }
   const effectiveInstructions = sectionInstructions ?? matchedSection?.instructions ?? null;
 
   const validBookChapterIds = new Set(paper.blueprint.chapters.map((c) => c.chapterId));

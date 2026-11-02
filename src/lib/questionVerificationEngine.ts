@@ -610,37 +610,9 @@ export async function repairOrRegenerateQuestion(
         }
       }
 
-      // Add valid distractor numbers or concepts to reach exactly 4
-      const slot = contract.slots[opts.slotIndex || 0] || contract.slots[0];
-      const fallbackDistractors = [
-        "1",
-        "2",
-        "3",
-        "4",
-        "None of the above",
-        "All of the above",
-        "Cannot be determined",
-      ];
-      let distractorIdx = 0;
-      while (deduped.length < 4) {
-        const candidate = fallbackDistractors[distractorIdx] || `Option ${deduped.length + 1}`;
-        if (!uniqueOpts.has(candidate.toLowerCase())) {
-          uniqueOpts.add(candidate.toLowerCase());
-          deduped.push(candidate);
-        }
-        distractorIdx++;
-      }
-
-      currentQuestion.options = deduped.slice(0, 4);
-
-      // 2. Ensure answer is in options
-      if (currentQuestion.answer) {
-        const cleanedAns = cleanOptionText(currentQuestion.answer);
-        if (!deduped.some((d) => d.toLowerCase() === cleanedAns.toLowerCase())) {
-          // If answer is not in options, make option A the answer
-          currentQuestion.options[0] = cleanedAns;
-        }
-      }
+      // Only lossless repairs: de-duplicate and drop blank options. Never invent distractors or
+      // overwrite an option with the answer; a question that still fails goes back for regeneration.
+      currentQuestion.options = deduped;
     }
 
     // Repair subparts marks mismatch

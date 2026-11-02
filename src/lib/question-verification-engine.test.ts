@@ -227,7 +227,7 @@ describe("Question Verification Engine (TDD)", () => {
   });
 
   describe("4. Question Repair & Regeneration", () => {
-    it("repairs a flawed MCQ by rectifying missing/invalid distractors or miscalculated answer", async () => {
+    it("removes a duplicate option but never invents distractors; the slot is left for regeneration", async () => {
       const contract = makeDummyContract();
       const flawedQuestion: ValidatableQuestion = {
         type: "MCQ",
@@ -243,11 +243,9 @@ describe("Question Verification Engine (TDD)", () => {
         maxRetries: 2,
       });
 
-      expect(repairResult.success).toBe(true);
-      expect(repairResult.question.options?.length).toBe(4);
-      const uniqueOpts = new Set(repairResult.question.options);
-      expect(uniqueOpts.size).toBe(4);
-      expect(repairResult.verificationResult.status).toBe("PASS");
+      expect(repairResult.question.options).toEqual(["6", "12", "18"]);
+      expect(repairResult.question.options).not.toContain("None of the above");
+      expect(repairResult.success).toBe(false);
     });
   });
 
