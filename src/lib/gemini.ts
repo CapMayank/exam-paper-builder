@@ -235,6 +235,8 @@ export async function callGeminiApi<T>(
       } catch (err: any) {
         lastErrorText = err?.message || String(err);
         console.warn(`Gemini API Model ${model} fetch/parse failed:`, lastErrorText);
+        // malformed JSON is usually a one-off: ask the same model once more before moving to the next one
+        if (retry === 0 && err instanceof SyntaxError) continue;
         break;
       }
     }

@@ -1,5 +1,5 @@
 import { HttpError, route } from "@/lib/api";
-import { generatePaperSectionWithGemini, type GeneratePaperSectionSlot } from "@/lib/gemini";
+import { generatePaperSectionWithGemini, getGeminiApiKey, type GeneratePaperSectionSlot } from "@/lib/gemini";
 import { resolveInternalChoiceRequirement } from "@/lib/internalChoiceRules";
 import { detectPaperLanguage, type PaperLanguage } from "@/lib/localization";
 import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
@@ -116,6 +116,14 @@ export const POST = route(async (req, { id }, user) => {
 
   if (res.isMock && ["UNSEEN_PASSAGE", "REFERENCE_CONTEXT"].includes(String(sectionType || matchedSection?.type))) {
     throw new HttpError(422, "Offline templates cannot write a real unseen passage. Connect a Gemini API key, or add the passage and its questions manually.");
+  }
+
+  // A configured model that still failed after retries must not silently hand back template text.
+  if (res.isMock && getGeminiApiKey(customKey || req.headers.get("x-gemini-api-key"))) {
+    throw new HttpError(
+      502,
+      "The AI model did not return valid questions for this section after retrying (it may be busy or over quota). Nothing was added; please try again.",
+    );
   }
 
   if (!res.success) {

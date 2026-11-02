@@ -1174,6 +1174,8 @@ export function validateGeneratedQuestion(
     slotIndex?: number;
     existingNormalizedTexts?: Set<string>;
     skipInternalChoiceCheck?: boolean;
+    /** Generated questions must carry a full passage; stored/imported papers are not held to this. */
+    strictPassage?: boolean;
   },
 ): QuestionValidationResult {
   const issues: QuestionValidationIssue[] = [];
@@ -1194,6 +1196,21 @@ export function validateGeneratedQuestion(
       message: `Slot ${slotIdx + 1}: Question stem text is empty or too short.`,
       slotIndex: slotIdx,
     });
+  }
+
+  // 1b. An unseen passage must be a real passage, not a stub (official ones run 150-250 words)
+  if (qType === "UNSEEN_PASSAGE" && opts?.strictPassage) {
+    // the passage may sit in the stem or be spread over the sub-questions' texts
+    const words = [text, ...subparts.map((sp) => String(sp.text ?? ""))].join(" ").split(/s+/).filter(Boolean).length;
+    const min = /[ऀ-ॿ]/.test(text) ? 60 : 100;
+    if (words < min) {
+      issues.push({
+        code: "INCOMPLETE_CONTENT",
+        severity: "ERROR",
+        message: `Slot ${slotIdx + 1}: the unseen passage has only ${words} words; it must be at least ${min}.`,
+        slotIndex: slotIdx,
+      });
+    }
   }
 
   // 2. Contamination & generic fallback check
@@ -1587,6 +1604,7 @@ export function validateGeneratedSection(
     const res = validateGeneratedQuestion(q, contract, {
       slotIndex: slot.slotIndex,
       existingNormalizedTexts: seenTexts,
+      strictPassage: true,
     });
     allIssues.push(...res.issues);
 

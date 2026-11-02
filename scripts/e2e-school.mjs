@@ -42,7 +42,7 @@ const norm = (s) => String(s).replace(/^\s*\[[^\]]*\]\s*/, "").replace(/\s+/g, "
 
 function makeQuestion(sec, bookId, chapterId, n) {
   const b = { bookId, chapterId, type: sec.type, difficulty: ["EASY", "MEDIUM", "HARD"][n % 3] };
-  const stem = `Q${n} ${sec.title.slice(0, 30)}`;
+  const stem = `Q${n} ${sec.title.slice(0, 30)} ${["alpha", "bravo", "cedar", "delta", "ember", "fjord", "gamma", "hotel"].map((w, i) => `${w}${(n * 7 + i * 13) % 97}`).join(" ")}`;
   switch (sec.type) {
     case "MCQ": return { ...b, text: stem, options: [`A${n}`, `B${n}`, `C${n}`, `D${n}`], answer: `A${n}` };
     case "TRUE_FALSE": return { ...b, text: `${stem} statement.`, options: [], answer: "True" };
@@ -115,7 +115,8 @@ async function aiChecks(t, bp, book, note) {
     const placed = v.items.filter((i) => i.sectionId === secPlan.sectionId);
     if (secPlan.sectionType === "MCQ") note(`AI ${label}: every MCQ has 4 options and an answer`, placed.every((i) => i.question.options.length === 4 && i.question.answer), "");
     if (["UNSEEN_PASSAGE"].includes(secPlan.sectionType)) {
-      note(`AI ${label}: a real passage with sub-questions worth ${secPlan.marksEach}`, placed.every((i) => i.question.text.split(/s+/).length >= 60 && (i.question.subparts ?? []).reduce((a, sp) => a + (sp.marks || 0), 0) === secPlan.marksEach), placed.map((i) => `${i.question.text.split(/s+/).length}w/${(i.question.subparts ?? []).length}sp`).join(","));
+      const words = (q) => q.text.split(/\s+/).filter(Boolean).length;
+      note(`AI ${label}: a real passage with sub-questions worth ${secPlan.marksEach}`, placed.every((i) => words(i.question) >= (t.language === "en" ? 100 : 60) && (i.question.subparts ?? []).reduce((a, sp) => a + (sp.marks || 0), 0) === secPlan.marksEach), placed.map((i) => `${words(i.question)}w/${(i.question.subparts ?? []).length}sp`).join(","));
     }
   }
 }
