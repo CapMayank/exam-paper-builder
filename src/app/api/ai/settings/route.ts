@@ -1,11 +1,19 @@
 import { route } from "@/lib/api";
 import { getGeminiApiKey } from "@/lib/gemini";
+import { configuredKeys, poolStatus } from "@/lib/geminiPool";
 
-export const GET = route(async () => {
-  const hasEnvKey = Boolean(getGeminiApiKey());
+export const GET = route(async (_req, _ctx, user) => {
+  const keys = configuredKeys().length;
+  const privileged = user.role === "ADMIN" || user.role === "HOD";
   return {
-    hasEnvApiKey: hasEnvKey,
+    hasEnvApiKey: Boolean(getGeminiApiKey()),
     model: process.env.GEMINI_MODEL || "gemini-flash-lite-latest",
-    freeQuotaInfo: "15 Requests/min, 1,500 Requests/day free on Google AI Studio",
+    keyCount: keys,
+    freeQuotaInfo:
+      keys > 1
+        ? `Requests are spread over ${keys} API keys. Google's free tier limits requests per minute and per day for each model and project; the daily count resets at midnight Pacific time.`
+        : "Google's free tier limits requests per minute and per day for each model; add more API keys (GEMINI_API_KEYS) from separate Google projects to raise the limit.",
+    // masked key endings and live cooldowns, for administrators only
+    keys: privileged ? poolStatus() : undefined,
   };
 });

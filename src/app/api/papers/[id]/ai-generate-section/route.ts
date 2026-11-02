@@ -1,5 +1,5 @@
 import { HttpError, route } from "@/lib/api";
-import { generatePaperSectionWithGemini, getGeminiApiKey, type GeneratePaperSectionSlot } from "@/lib/gemini";
+import { generatePaperSectionWithGemini, getGeminiApiKey, quotaErrorText, type GeneratePaperSectionSlot } from "@/lib/gemini";
 import { resolveInternalChoiceRequirement } from "@/lib/internalChoiceRules";
 import { detectPaperLanguage, type PaperLanguage } from "@/lib/localization";
 import { slotRowRole, slotTaskDirective } from "@/lib/paperAutogen";
@@ -132,6 +132,8 @@ export const POST = route(async (req, { id }, user) => {
 
   // A configured model that still failed after retries must not silently hand back template text.
   if (res.isMock && getGeminiApiKey(customKey || req.headers.get("x-gemini-api-key"))) {
+    const quota = quotaErrorText();
+    if (quota) throw new HttpError(429, quota);
     throw new HttpError(
       502,
       "The AI model did not return valid questions for this section after retrying (it may be busy or over quota). Nothing was added; please try again.",

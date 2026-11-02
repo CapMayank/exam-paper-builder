@@ -1,6 +1,7 @@
 import { cleanOptionText, isMcqLikeType } from "./constants";
 import { parseGeminiJsonWithLatexSafety, repairLatex } from "./math";
 import { getGeminiApiKey, resolveModelChain, thinkingConfigFor } from "./gemini";
+import { geminiGenerate } from "./geminiPool";
 
 export interface EvidenceAuditFinding {
   questionId?: string;
@@ -289,7 +290,7 @@ export async function auditPaperEvidenceBased(
   let modelCognitive: { r: number; u: number; a: number; h: number } | null = null;
   if (geminiApiKey && questions.length > 0) {
     try {
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${resolveModelChain(process.env.GEMINI_MODEL)[0]}:generateContent?key=${geminiApiKey}`;
+      const auditModel = resolveModelChain(process.env.GEMINI_MODEL)[0];
       const auditPrompt = `You are a strict, forensic Chief Moderator for the Madhya Pradesh Board of Secondary Education (MPBSE).
 You are conducting an EVIDENCE-BASED audit of this ${className} ${subject} examination paper (Total Marks: ${totalMarks}).
 
@@ -342,22 +343,21 @@ Return a JSON object matching this schema:
   "overallVerdict": "Summary of audit"
 }`;
 
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const res = await geminiGenerate(
+        auditModel,
+        {
           contents: [{ role: "user", parts: [{ text: auditPrompt }] }],
           generationConfig: {
             temperature: 0.1, // low temperature for deterministic evaluation
             responseMimeType: "application/json",
-            ...thinkingConfigFor(resolveModelChain(process.env.GEMINI_MODEL)[0]),
+            ...thinkingConfigFor(auditModel),
           },
-        }),
-        signal: AbortSignal.timeout(180_000),
-      });
+        },
+        { customKey: apiKey, timeoutMs: 180_000 },
+      );
 
       if (res.ok) {
-        const json = await res.json();
+        const json = res.json;
         const candText = json.candidates?.[0]?.content?.parts?.[0]?.text;
         if (candText) {
           const parsed = parseGeminiJsonWithLatexSafety<any>(candText);

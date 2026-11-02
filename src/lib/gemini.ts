@@ -42,6 +42,7 @@ import { normalizeQuestionType } from "./paperImport";
 import { ensureLanguageNonChapterUnits } from "./syllabusImport";
 import { parseGeminiJsonWithLatexSafety, repairLatex } from "./math";
 import { normalizeSubpartMarks, type SubPart } from "./types";
+import { allKeysBlocked, configuredKeys, geminiGenerate, quotaMessage } from "./geminiPool";
 import { getSubjectPromptDirectives } from "./subjectPrompts";
 import {
   verifyQuestionAcademicQuality,
@@ -101,11 +102,12 @@ export function thinkingConfigFor(model: string): Record<string, unknown> {
 /** Models that answered 404 in this process; skipped on later calls. */
 const deadModels = new Set<string>();
 
+/** A key to call with: the caller's own, else the first configured one (every configured key is used by the pool). */
 export function getGeminiApiKey(customKey?: string | null): string | null {
   if (customKey && customKey.trim().length > 5) {
     return customKey.trim();
   }
-  return process.env.GEMINI_API_KEY?.trim() || null;
+  return configuredKeys()[0] ?? null;
 }
 
 export function isGeminiConfigured(customKey?: string | null): boolean {
@@ -177,26 +179,21 @@ export async function callGeminiApi<T>(
   let lastErrorText = "";
 
   for (const model of candidateModels) {
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-
     for (let retry = 0; retry < 2; retry++) {
       try {
-        const res = await fetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ...payload,
-            generationConfig: { ...(payload.generationConfig as object), ...thinkingConfigFor(model) },
-          }),
-          signal: AbortSignal.timeout(120_000),
-        });
+        // the pool spreads the call over every configured key and skips keys whose quota is used up
+        const res = await geminiGenerate(
+          model,
+          { ...payload, generationConfig: { ...(payload.generationConfig as object), ...thinkingConfigFor(model) } },
+          { customKey: opts.apiKey, timeoutMs: 120_000 },
+        );
 
         if (!res.ok) {
           lastStatus = res.status;
-          lastErrorText = await res.text();
+          lastErrorText = res.errorText;
           if (res.status === 404) deadModels.add(model);
-          // On transient 503 (High Demand / Unavailable) or 429, wait briefly once on the primary model before rotating
-          if ((res.status === 503 || res.status === 429) && retry === 0 && model === candidateModels[0]) {
+          // a busy model (503) is worth one more try on the primary model; a 429 means every key is spent for it
+          if (res.status === 503 && retry === 0 && model === candidateModels[0]) {
             await new Promise((r) => setTimeout(r, 450));
             continue;
           }
@@ -204,7 +201,7 @@ export async function callGeminiApi<T>(
           break;
         }
 
-        const json = await res.json();
+        const json = res.json;
         const candidateText = (json.candidates?.[0]?.content?.parts ?? [])
           .filter((p: { thought?: boolean; text?: string }) => !p.thought && typeof p.text === "string")
           .map((p: { text: string }) => p.text)
@@ -249,16 +246,26 @@ export async function callGeminiApi<T>(
       isMock: true,
       modelUsed: "curriculum-grounded-fallback",
       data: opts.mockFallback(),
-      error: `Gemini API returned status ${lastStatus || 503}; served from curriculum-grounded engine.`,
+      error: quotaErrorText(candidateModels[0]) ?? `Gemini API returned status ${lastStatus || 503}; served from curriculum-grounded engine.`,
     };
   }
 
   return {
     success: false,
     isMock: false,
-    error: `Gemini API Error (${lastStatus || "PARSE_OR_NETWORK"}): ${lastErrorText || "All model endpoints unavailable"}`,
+    error: quotaErrorText(candidateModels[0]) ?? `Gemini API Error (${lastStatus || "PARSE_OR_NETWORK"}): ${lastErrorText || "All model endpoints unavailable"}`,
     data: null as unknown as T,
   };
+}
+
+/** A plain-language reason when the failure is the free-tier quota, else null. */
+export function quotaErrorText(model?: string): string | null {
+  const first = model ?? resolveModelChain(process.env.GEMINI_MODEL)[0];
+  // the whole chain is exhausted when even the lightest model has no key left
+  const state = allKeysBlocked(first);
+  const lite = allKeysBlocked("gemini-flash-lite-latest");
+  if (!state.blocked || !lite.blocked) return null;
+  return quotaMessage(Math.min(state.retryAfterMs, lite.retryAfterMs), state.daily && lite.daily);
 }
 
 /* ------------------------------------------------------------------ */
