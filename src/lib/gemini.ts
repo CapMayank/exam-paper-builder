@@ -2218,6 +2218,91 @@ Return a JSON object strictly matching this TypeScript structure:
 }
 
 /* ------------------------------------------------------------------ */
+/* 2b. Answer Key Backfill (answers for questions stored without one)  */
+/* ------------------------------------------------------------------ */
+
+export interface AnswerKeyRequestItem {
+  id: string;
+  type: string;
+  text: string;
+  options: string[];
+  marks?: number;
+  /** The question itself needs an answer (it has no subparts). */
+  main: boolean;
+  subparts: Array<{ path: string; label: string; text: string; options: string[] }>;
+}
+
+export interface AnswerKeyResultItem {
+  id: string;
+  answer?: string;
+  subparts?: Record<string, string>;
+}
+
+const hasDevanagari = (s: string) => /[ऀ-ॿ]/.test(s);
+const hasLatinWords = (s: string) => /[A-Za-z]{3,}/.test(s.replace(/\$[^$]*\$/g, ""));
+
+/**
+ * Writes model answers for a batch of questions that have none stored.
+ * No offline fallback on purpose: these answers are saved to the question bank,
+ * so a made-up placeholder must never come back as a success.
+ */
+export async function generateAnswerKeyWithGemini(params: {
+  className: string;
+  subject: string;
+  items: AnswerKeyRequestItem[];
+  apiKey?: string | null;
+}): Promise<GeminiCallResult<{ answers: AnswerKeyResultItem[] }>> {
+  const { className, subject, items, apiKey } = params;
+
+  const systemPrompt = `You are a senior board-exam paper setter writing the official marking scheme for ${className} ${subject}.
+Write correct, textbook-accurate model answers. Use LaTeX inside $...$ for every formula or symbol.`;
+
+  const payload = items.map((it) => {
+    const bilingual = hasDevanagari(it.text) && hasLatinWords(it.text);
+    return {
+      id: it.id,
+      type: it.type,
+      marks: it.marks,
+      language: bilingual ? "BILINGUAL (English + Hindi)" : hasDevanagari(it.text) ? "HINDI/DEVANAGARI" : "ENGLISH",
+      question: it.text,
+      options: it.options.length ? it.options : undefined,
+      needsAnswer: it.main,
+      subpartsNeedingAnswers: it.subparts.length
+        ? it.subparts.map((sp) => ({ path: sp.path, label: sp.label, text: sp.text, options: sp.options.length ? sp.options : undefined }))
+        : undefined,
+    };
+  });
+
+  const userPrompt = `Write the missing answers for these exam questions.
+
+Answer format by type:
+- MCQ / ASSERTION_REASON: only the correct option letter, e.g. "B".
+- TRUE_FALSE: "True" or "False" (bilingual: "True (सत्य)" / "False (असत्य)").
+- FILL_BLANK: only the word(s) that fill the blank.
+- MATCH_COLUMN: the correct pairing using the labels in the question, e.g. "(A) → (ii), (B) → (iv), (C) → (i), (D) → (iii)".
+- VERY_SHORT: one word or one sentence.
+- SHORT / LONG / other descriptive types: a model answer with the key points an examiner expects, in proportion to the marks.
+- A subpart that has options: only the correct option letter.
+Write in the question's language. For BILINGUAL questions give the answer in English followed by Hindi.
+Only answer what is asked: fill "answer" when needsAnswer is true, and fill "subparts" only for the listed subpart paths.
+
+Questions:
+${JSON.stringify(payload, null, 1)}
+
+Return JSON exactly in this shape, one entry per question id:
+{
+  "answers": [
+    { "id": "question id", "answer": "answer text when needsAnswer is true", "subparts": { "<path>": "answer for that subpart" } }
+  ]
+}`;
+
+  return callGeminiApi<{ answers: AnswerKeyResultItem[] }>(userPrompt, systemPrompt, {
+    json: true,
+    apiKey,
+  });
+}
+
+/* ------------------------------------------------------------------ */
 /* 3. Exam Paper Auditor & Bloom's Taxonomy Checker                   */
 /* ------------------------------------------------------------------ */
 

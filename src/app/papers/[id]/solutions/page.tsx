@@ -1,8 +1,8 @@
 "use client";
 
-import { ArrowLeft, CheckCircle2, FileDown, FileText, Grid3X3, ListChecks, Printer, Table } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, FileDown, FileText, Grid3X3, ListChecks, Loader2, Printer, Sparkles, Table } from "lucide-react";
 import Link from "next/link";
-import { use, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 import { MathText } from "@/components/MathText";
 import { QuestionContent } from "@/components/QuestionContent";
 import { api, imageUrl } from "@/lib/client";
@@ -38,15 +38,52 @@ function getMarksRubric(marks: number, type: string) {
   return [`${marks} marks: Full marks for complete and structured answer`];
 }
 
+type AnswerKeyFill = {
+  requested: number;
+  saved: string[];
+  keptTeacherAnswer: string[];
+  failed: { id: string; reason: string }[];
+  paper: PaperData;
+};
+
+type FillState =
+  | { status: "running" }
+  | { status: "done"; saved: number; failed: { id: string; reason: string }[] }
+  | { status: "error"; message: string };
+
 export default function SolutionsPage({ params }: PageProps<"/papers/[id]/solutions">) {
   const { id } = use(params);
   const [paper, setPaper] = useState<PaperData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"SOLUTIONS" | "AWARD_LIST">("SOLUTIONS");
 
-  useEffect(() => {
-    api<PaperData>(`/api/papers/${id}`).then(setPaper, (e) => setError(e.message));
+  const [fill, setFill] = useState<FillState | null>(null);
+  const fillStarted = useRef<string | null>(null);
+
+  // Stored answers are used as they are; only questions without one are generated and saved to the bank.
+  const fillMissingAnswers = useCallback(async () => {
+    setFill({ status: "running" });
+    try {
+      const customKey = localStorage.getItem("exam_gemini_api_key") || "";
+      const res = await api<AnswerKeyFill>(`/api/papers/${id}/answer-key`, {
+        method: "POST",
+        headers: customKey ? { "x-gemini-api-key": customKey } : undefined,
+      });
+      setPaper(res.paper);
+      setFill(res.requested === 0 ? null : { status: "done", saved: res.saved.length, failed: res.failed });
+    } catch (e) {
+      setFill({ status: "error", message: e instanceof Error ? e.message : String(e) });
+    }
   }, [id]);
+
+  useEffect(() => {
+    // the fill response carries a fresher paper, so a slower plain load must not replace it
+    api<PaperData>(`/api/papers/${id}`).then((p) => setPaper((prev) => prev ?? p), (e) => setError(e.message));
+    if (fillStarted.current !== id) {
+      fillStarted.current = id;
+      void fillMissingAnswers();
+    }
+  }, [id, fillMissingAnswers]);
 
   if (error) return <p className="p-8 text-red-700">{error}</p>;
   if (!paper) return <p className="p-8 text-sm text-slate-500">Loading…</p>;
@@ -131,6 +168,14 @@ export default function SolutionsPage({ params }: PageProps<"/papers/[id]/soluti
     }
   }
 
+  const questionLabel = (questionId: string) => {
+    const item = allNumberedItems.find((x) => x.question.id === questionId || x.orQuestion?.id === questionId);
+    if (!item) return "A question";
+    const label = /^[A-Za-z]/.test(item.label) ? item.label : `Q${item.label}`;
+    return item.orQuestion?.id === questionId ? `${label} (OR)` : label;
+  };
+  const filling = fill?.status === "running";
+
   return (
     <div className="min-h-screen bg-slate-100 pb-12 print:bg-white print:pb-0">
       {/* Top action bar (hidden in print) */}
@@ -158,16 +203,62 @@ export default function SolutionsPage({ params }: PageProps<"/papers/[id]/soluti
             <a
               href={`/api/papers/${id}/export-docx?markingScheme=true`}
               download
-              className="btn btn-sm border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+              aria-disabled={filling}
+              title={filling ? "Waiting for missing answers to be generated" : undefined}
+              className={`btn btn-sm border-slate-300 bg-white text-slate-700 hover:bg-slate-50 ${filling ? "pointer-events-none opacity-50" : ""}`}
             >
               <FileDown size={14} /> Word (.docx)
             </a>
-            <button className="btn btn-sm btn-primary" onClick={() => window.print()}>
+            <button className="btn btn-sm btn-primary" disabled={filling} onClick={() => window.print()}>
               <Printer size={14} /> Print {activeTab === "SOLUTIONS" ? "Solution Key" : "Award Sheet"}
             </button>
           </div>
         </div>
       </div>
+
+      {fill && (
+        <div className="no-print mx-auto mt-4 max-w-4xl px-4 sm:px-0">
+          {fill.status === "running" ? (
+            <div className="flex items-center gap-2 rounded border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-900">
+              <Loader2 size={14} className="animate-spin" />
+              Generating answers for questions that have none stored. Answers already in the question bank are kept as they are.
+            </div>
+          ) : fill.status === "error" ? (
+            <div className="flex flex-wrap items-center gap-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              <AlertTriangle size={14} />
+              <span>Missing answers were not generated: {fill.message}</span>
+              <button className="btn btn-sm ml-auto" onClick={() => void fillMissingAnswers()}>Retry</button>
+            </div>
+          ) : (
+            <div
+              className={`space-y-1.5 rounded border px-3 py-2 text-xs ${fill.failed.length ? "border-amber-300 bg-amber-50 text-amber-900" : "border-emerald-200 bg-emerald-50 text-emerald-900"}`}
+            >
+              {fill.saved > 0 && (
+                <div className="flex items-center gap-2">
+                  <Sparkles size={14} />
+                  Generated and saved {fill.saved} missing answer{fill.saved === 1 ? "" : "s"} to the question bank. Please review them before printing.
+                </div>
+              )}
+              {fill.failed.length > 0 && (
+                <>
+                  <div className="flex flex-wrap items-center gap-2 font-semibold">
+                    <AlertTriangle size={14} />
+                    {fill.failed.length} question{fill.failed.length === 1 ? " is" : "s are"} still missing an answer:
+                    <button className="btn btn-sm ml-auto" onClick={() => void fillMissingAnswers()}>Retry missing</button>
+                  </div>
+                  <ul className="list-inside list-disc pl-1">
+                    {fill.failed.map((f) => (
+                      <li key={f.id}>
+                        <b>{questionLabel(f.id)}</b>: {f.reason}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Main Container */}
       <div className="mx-auto my-6 max-w-4xl rounded-lg border border-slate-200 bg-white p-8 shadow-sm print:my-0 print:border-none print:p-0 print:shadow-none">
