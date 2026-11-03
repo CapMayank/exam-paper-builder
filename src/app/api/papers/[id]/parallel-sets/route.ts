@@ -11,7 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { isQuestionContaminated } from "@/lib/questionValidator";
 import { parseSubparts } from "@/lib/types";
 
-export const parallelSetsSchema = z.object({
+const parallelSetsSchema = z.object({
   sets: z.array(z.string().trim().min(1)).min(1, "Specify at least one target set"),
   commonRatio: z.number().min(0).max(1).default(0.6),
   shufflePositions: z.boolean().default(true),

@@ -223,9 +223,11 @@ export function verifyQuestionAcademicQuality(
     if (qAns) {
       const cleanedAns = cleanOptionText(qAns).toLowerCase();
       const cleanOptions = options.map((o) => o.toLowerCase());
-      const answerFound = cleanOptions.some(
-        (o) => o === cleanedAns || o.startsWith(cleanedAns) || cleanedAns.startsWith(o),
-      );
+      // MCQ answers are stored as a letter (A-F) pointing at an option; judge those by position, not by text.
+      const letterAnswer = qAns.trim().match(/^\(?([A-Fa-f])\)?[.)]?$/);
+      const answerFound = letterAnswer
+        ? "ABCDEF".indexOf(letterAnswer[1].toUpperCase()) < options.length
+        : cleanOptions.some((o) => o === cleanedAns || o.startsWith(cleanedAns) || cleanedAns.startsWith(o));
 
       if (!answerFound && options.length > 0) {
         addIssue(dimensions, "answerability", {
@@ -468,7 +470,7 @@ export function verifyQuestionAcademicQuality(
   // -------------------------------------------------------------
   if (opts.existingQuestionTexts && opts.existingQuestionTexts.length > 0) {
     for (const existing of opts.existingQuestionTexts) {
-      if (isParaphraseOrDuplicateChoice(qText, existing)) {
+      if (isParaphraseOrDuplicateChoice(qText, existing).isDuplicateOrParaphrase) {
         addIssue(dimensions, "duplication", {
           code: "DUPLICATE_QUESTION",
           severity: "ERROR",

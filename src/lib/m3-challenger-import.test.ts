@@ -616,15 +616,24 @@ describe("Challenger M3.1 Suite 8: Export Round-Trip Fidelity & Zero Data Loss",
 describe("Challenger M3.1 Suite 9: Empirical Findings & Boundary Exploration", () => {
   const chapters = [{ id: "ch_1", number: 1, title: "Chemical Reactions" }];
 
-  it("proves empirically that parseQuestionJson fails when JSON has UTF-8 BOM", () => {
-    // Windows PowerShell or Notepad files often include UTF-8 BOM
+  it("parseQuestionJson accepts JSON saved with a UTF-8 BOM", () => {
+    // Windows PowerShell or Notepad files often include UTF-8 BOM; CSV import already tolerates it
     const rawBomJson = "\uFEFF[{\"type\":\"SHORT\",\"text\":\"BOM test question\",\"chapterNumber\":1,\"marks\":2}]";
     const report = parseQuestionJson(rawBomJson, { bookId: "b1", chapters });
-    // Empirical finding: JSON.parse does NOT natively strip \uFEFF BOM
-    expect(report.success).toBe(false);
+    expect(report.success).toBe(true);
+    expect(report.validCount).toBe(1);
+  });
+
+  it("rejects an MCQ whose answer matches none of its options", () => {
+    const json = JSON.stringify([
+      { type: "MCQ", text: "Which gas is released when zinc reacts with HCl?", options: ["Hydrogen", "Oxygen", "Chlorine", "Nitrogen"], answer: "Z9", chapterNumber: 1 },
+      { type: "MCQ", text: "Which gas do plants release in photosynthesis?", options: ["Hydrogen", "Oxygen", "Chlorine", "Nitrogen"], answer: "Oxygen", chapterNumber: 1 },
+    ]);
+    const report = parseQuestionJson(json, { bookId: "b1", chapters });
     expect(report.errorCount).toBe(1);
-    expect(report.errors[0].field).toBe("json");
-    expect(report.errors[0].error).toContain("Invalid JSON syntax");
+    expect(report.errors[0].field).toBe("answer");
+    expect(report.validCount).toBe(1);
+    expect(report.items[0].answer).toBe("B");
   });
 
   it("proves empirically that exportQuestionsToCsv drops Option E and Option F", () => {

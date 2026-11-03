@@ -1061,7 +1061,7 @@ export default function QuestionsPage() {
   );
 }
 
-export function QuestionImportModal({
+function QuestionImportModal({
   books,
   defaultBookId,
   defaultChapterId,
@@ -1452,7 +1452,7 @@ export function QuestionImportModal({
   );
 }
 
-export function QuestionExportModal({
+function QuestionExportModal({
   books,
   activeFilters,
   currentQuestionsCount,

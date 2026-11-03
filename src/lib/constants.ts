@@ -747,6 +747,21 @@ export function normalizeMcqAnswer(
   };
 }
 
+/**
+ * The letter (A-F) an MCQ answer points to, for storing one convention everywhere. AI models often answer with the
+ * option text ("Cytokinin") instead of a letter; an exact option-text match wins over reading a short answer as a
+ * number, so answer "3" with options ["10", "3", ...] means B, not C. Returns the answer unchanged when it matches nothing.
+ */
+export function canonicalMcqAnswer(answer: string | null | undefined, options: string[] = []): string {
+  const raw = (answer ?? "").trim();
+  if (!raw || options.length === 0) return answer ?? "";
+  const target = cleanOptionText(raw).trim().toLowerCase();
+  const byText = options.findIndex((o) => cleanOptionText(o).trim().toLowerCase() === target);
+  if (byText >= 0 && byText < MCQ_LETTERS.length) return MCQ_LETTERS[byText];
+  const idx = MCQ_LETTERS.indexOf(normalizeMcqAnswer(raw, options).letter);
+  return idx >= 0 && idx < options.length ? MCQ_LETTERS[idx] : answer ?? "";
+}
+
 /** Blueprint.curriculumMode of the hidden blueprint behind a Nursery / LKG / UKG worksheet (no blueprint or book needed by the teacher). */
 export const WORKSHEET_MODE = "KG_WORKSHEET";
 export const KG_CLASSES = ["Nursery", "LKG", "UKG"] as const;

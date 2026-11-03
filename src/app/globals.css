@@ -161,36 +161,39 @@ body,
 }
 
 /* ---------- UI primitives ---------- */
-.btn {
-  @apply inline-flex min-h-9 select-none items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3.5 py-1.5 text-sm font-medium text-slate-700 shadow-xs transition duration-150 hover:border-slate-400 hover:bg-slate-50 hover:text-slate-900 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none disabled:hover:border-slate-300 disabled:hover:bg-white;
-}
-.btn-primary {
-  @apply border-indigo-700 bg-indigo-600 text-white hover:border-indigo-800 hover:bg-indigo-700 hover:text-white active:bg-indigo-800 disabled:hover:border-indigo-700 disabled:hover:bg-indigo-600;
-  box-shadow: 0 1px 0 rgb(255 255 255 / 0.18) inset, 0 1px 2px rgb(13 45 56 / 0.25);
-}
-.btn-success {
-  @apply border-emerald-700 bg-emerald-600 text-white hover:border-emerald-800 hover:bg-emerald-700 hover:text-white disabled:hover:bg-emerald-600;
-}
-.btn-secondary {
-  @apply border-slate-200 bg-slate-100 text-slate-700 shadow-none hover:bg-slate-200;
-}
-.btn-ghost {
-  @apply border-transparent bg-transparent text-slate-600 shadow-none hover:border-transparent hover:bg-slate-200/60 hover:text-slate-900;
-}
-.btn-danger {
-  @apply border-red-200 bg-white text-red-700 hover:border-red-300 hover:bg-red-50 hover:text-red-800;
-}
-.btn-danger-solid {
-  @apply border-red-700 bg-red-600 text-white hover:border-red-800 hover:bg-red-700 hover:text-white;
-}
-.btn-sm {
-  @apply min-h-8 gap-1 rounded-md px-2.5 py-1 text-xs;
-}
-.btn-lg {
-  @apply min-h-11 px-5 text-base;
-}
-.btn-icon {
-  @apply min-h-0 p-2;
+/* in a layer so colour/size utilities on the element (bg-indigo-600 text-white, py-2) override these defaults */
+@layer components {
+  .btn {
+    @apply inline-flex min-h-9 select-none items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3.5 py-1.5 text-sm font-medium text-slate-700 shadow-xs transition duration-150 hover:border-slate-400 hover:bg-slate-50 hover:text-slate-900 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none disabled:hover:border-slate-300 disabled:hover:bg-white;
+  }
+  .btn-primary {
+    @apply border-indigo-700 bg-indigo-600 text-white hover:border-indigo-800 hover:bg-indigo-700 hover:text-white active:bg-indigo-800 disabled:hover:border-indigo-700 disabled:hover:bg-indigo-600;
+    box-shadow: 0 1px 0 rgb(255 255 255 / 0.18) inset, 0 1px 2px rgb(13 45 56 / 0.25);
+  }
+  .btn-success {
+    @apply border-emerald-700 bg-emerald-600 text-white hover:border-emerald-800 hover:bg-emerald-700 hover:text-white disabled:hover:bg-emerald-600;
+  }
+  .btn-secondary {
+    @apply border-slate-200 bg-slate-100 text-slate-700 shadow-none hover:bg-slate-200;
+  }
+  .btn-ghost {
+    @apply border-transparent bg-transparent text-slate-600 shadow-none hover:border-transparent hover:bg-slate-200/60 hover:text-slate-900;
+  }
+  .btn-danger {
+    @apply border-red-200 bg-white text-red-700 hover:border-red-300 hover:bg-red-50 hover:text-red-800;
+  }
+  .btn-danger-solid {
+    @apply border-red-700 bg-red-600 text-white hover:border-red-800 hover:bg-red-700 hover:text-white;
+  }
+  .btn-sm {
+    @apply min-h-8 gap-1 rounded-md px-2.5 py-1 text-xs;
+  }
+  .btn-lg {
+    @apply min-h-11 px-5 text-base;
+  }
+  .btn-icon {
+    @apply min-h-0 p-2;
+  }
 }
 
 /* in a layer so size utilities on the element (w-40, py-1, pl-7, text-xs) override these defaults */

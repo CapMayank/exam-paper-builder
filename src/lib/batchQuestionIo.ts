@@ -711,6 +711,19 @@ export function validateQuestionRow(
 
   // 8. Answer
   const answer = normalizeAnswer(raw.answer, optionsList, type);
+  if (type === "MCQ" && answer) {
+    const idx = "ABCDEF".indexOf(answer.toUpperCase());
+    if (answer.length !== 1 || idx < 0 || idx >= optionsList.length) {
+      return {
+        error: {
+          rowNumber,
+          field: "answer",
+          error: `MCQ answer "${answer}" does not match any option. Use the option letter (A-${"ABCDEF"[optionsList.length - 1]}), its number, or the exact option text.`,
+          rawContent: String(raw.answer ?? ""),
+        },
+      };
+    }
+  }
 
   // 9. Space MM and Show Grid
   let spaceMm = 0;
@@ -868,7 +881,8 @@ export function parseQuestionJson(
   let array: unknown[];
   if (typeof jsonInput === "string") {
     try {
-      const parsed = JSON.parse(jsonInput);
+      // Windows Notepad and PowerShell save JSON with a UTF-8 BOM, which JSON.parse rejects (CSV already strips it)
+      const parsed = JSON.parse(jsonInput.replace(/^﻿/, ""));
       if (Array.isArray(parsed)) {
         array = parsed;
       } else if (typeof parsed === "object" && parsed !== null && Array.isArray((parsed as { questions?: unknown[] }).questions)) {

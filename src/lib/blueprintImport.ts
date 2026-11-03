@@ -579,6 +579,8 @@ function parseJsonBlueprint(parsed: any): BlueprintImportResult {
           const type = normalizeQuestionType(qt.type || qt.questionType || "MCQ");
           const count = Math.max(1, Math.floor(Number(qt.count || qt.questions || qt.totalQuestions || 1)));
           const marksEach = Math.max(1, Math.floor(Number(qt.marksEach || qt.marks || qt.markEach || 1)));
+          warnIfAdjusted(warnings, title, "count", qt.count ?? qt.questions ?? qt.totalQuestions, count);
+          warnIfAdjusted(warnings, title, "marks per question", qt.marksEach ?? qt.marks ?? qt.markEach, marksEach);
           const itemInstructions = (qt.instructions || qt.instruction || instructions).toString().trim();
 
           const rawMode = (qt.orChoiceMode || s.orChoiceMode || "").toString().trim().toUpperCase();
@@ -607,6 +609,8 @@ function parseJsonBlueprint(parsed: any): BlueprintImportResult {
         const type = normalizeQuestionType(s.type || s.questionType || "MCQ");
         const count = Math.max(1, Math.floor(Number(s.count || s.questions || s.totalQuestions || 1)));
         const marksEach = Math.max(1, Math.floor(Number(s.marksEach || s.marks || s.markEach || 1)));
+        warnIfAdjusted(warnings, title, "count", s.count ?? s.questions ?? s.totalQuestions, count);
+        warnIfAdjusted(warnings, title, "marks per question", s.marksEach ?? s.marks ?? s.markEach, marksEach);
 
         const rawMode = (s.orChoiceMode || "").toString().trim().toUpperCase();
         const orChoiceMode = (rawMode === "REQUIRED" || rawMode === "NOT_REQUIRED" || rawMode === "BOARD_DEFAULT")
@@ -676,6 +680,14 @@ function parseJsonBlueprint(parsed: any): BlueprintImportResult {
     errors,
     warnings,
   };
+}
+
+/** Tells the user when an imported count or marks value was changed to fit (e.g. -3 or 0 becomes 1), instead of changing it silently. */
+function warnIfAdjusted(warnings: string[], title: string, label: string, raw: unknown, used: number): void {
+  const text = String(raw ?? "").trim();
+  if (text !== "" && Number(text) !== used) {
+    warnings.push(`Section "${title}": ${label} "${text}" is not valid; using ${used}.`);
+  }
 }
 
 function parseCsvBlueprint(csvText: string): BlueprintImportResult {
@@ -755,6 +767,8 @@ function parseCsvBlueprint(csvText: string): BlueprintImportResult {
         const rawType = parts[1] || "";
         const count = Math.max(1, Math.floor(Number(parts[2]) || 1));
         const marksEach = Math.max(1, Math.floor(Number(parts[3]) || 1));
+        warnIfAdjusted(warnings, title, "count", parts[2], count);
+        warnIfAdjusted(warnings, title, "marks per question", parts[3], marksEach);
         const instructions = (parts[4] || "").trim();
 
         // If title is empty, inherit from previous section row
@@ -803,13 +817,21 @@ function parseCsvBlueprint(csvText: string): BlueprintImportResult {
       if (firstCol.startsWith("section") || firstCol === "title" || parts.length >= 4) {
         // Looks like sections table
         currentBlock = "SECTIONS";
-        if (firstCol.includes("title") || firstCol.includes("name")) {
+        // a header row names its columns ("Section,Type,Count,Marks"); its count column is not a number
+        const looksLikeHeader =
+          firstCol.includes("title") ||
+          firstCol.includes("name") ||
+          (/^(question)?\s*type$/i.test((parts[1] || "").trim()) && Number.isNaN(Number(parts[2])));
+        if (looksLikeHeader) {
+          sectionsHeaderSkipped = true;
           continue;
         }
         const title = parts[0] || `Section ${String.fromCharCode(65 + sections.length)}`;
         const type = normalizeQuestionType(parts[1] || "MCQ");
         const count = Math.max(1, Math.floor(Number(parts[2]) || 1));
         const marksEach = Math.max(1, Math.floor(Number(parts[3]) || 1));
+        warnIfAdjusted(warnings, title, "count", parts[2], count);
+        warnIfAdjusted(warnings, title, "marks per question", parts[3], marksEach);
         const instructions = parts[4] || "";
         sections.push({ title, type, count, marksEach, instructions });
       } else if (parts.length === 2 && (parts[0].toLowerCase().includes("name") || parts[0].toLowerCase().includes("exam"))) {

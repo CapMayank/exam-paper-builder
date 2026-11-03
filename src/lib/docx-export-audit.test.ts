@@ -8,7 +8,7 @@ vi.mock("@/lib/session", () => ({
   endSession: () => Promise.resolve(),
 }));
 
-import { buildPaperDocx } from "../app/api/papers/[id]/export-docx/route";
+import { buildPaperDocx } from "./paperDocx";
 import { POST as postQuestion } from "../app/api/papers/[id]/questions/route";
 import { PUT as putQuestionItem } from "../app/api/papers/[id]/questions/[itemId]/route";
 

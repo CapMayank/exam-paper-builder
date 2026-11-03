@@ -1,6 +1,6 @@
 import { HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
-import { isSubpartQuestionType, parseMatchColumnPairs, serializeMatchColumnPair } from "@/lib/constants";
+import { canonicalMcqAnswer, isSubpartQuestionType, parseMatchColumnPairs, serializeMatchColumnPair } from "@/lib/constants";
 import {
   buildAndValidateGenerationContract,
   generateCurriculumGroundedSectionQuestions,
@@ -8,6 +8,7 @@ import {
 import type { GeneratedPaperQuestion } from "@/lib/gemini";
 import { toPlacedItems, whyCannotAdd } from "@/lib/blueprint";
 import { regenerateSlot } from "@/lib/slotRegeneration";
+import { shuffleMcqOptionsIfSafe } from "@/lib/multiset";
 import { parseComponents } from "@/lib/languageComponents";
 import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
@@ -115,6 +116,9 @@ export const POST = route(async (req, { id }, user) => {
 
   const choiceForbidden = contractRes.contract.internalChoiceRequirement.forbidden;
 
+  // At most this many model calls may be spent regenerating failing questions in one commit request.
+  let regenerationBudget = 4;
+
   for (let i = 0; i < questions.length; i++) {
     const q = questions[i];
     if (q.type && q.type !== section.type) {
@@ -191,6 +195,9 @@ export const POST = route(async (req, { id }, user) => {
     // and re-validate each replacement. Offline mode has no model to regenerate with, so it uses the
     // curriculum template (already flagged as TEMPLATE_FALLBACK).
     for (let attempt = 0; attempt < 2 && (!valRes.valid || vRes.status === "FAIL") && !bodyIsMock; attempt++) {
+      // Each regeneration is a model call; a batch that fails wholesale must not burn the key's per-minute and daily quota.
+      if (regenerationBudget <= 0) break;
+      regenerationBudget--;
       const reasons = [...valRes.issues.map((x) => x.message), ...vRes.allIssues.map((x) => x.message)];
       const regenerated = await regenerateSlot({
         paper,
@@ -307,15 +314,21 @@ export const POST = route(async (req, { id }, user) => {
         ? (typeof q.figureScene === "string" ? q.figureScene : JSON.stringify(q.figureScene))
         : (q.figureDoc ? JSON.stringify(q.figureDoc) : null);
 
+      // MCQ: store the answer as a letter, and mix the options so the key is not predictably the first one
+      const mcqFinal =
+        qType === "MCQ"
+          ? shuffleMcqOptionsIfSafe(processedOptions, canonicalMcqAnswer(q.answer, processedOptions))
+          : { options: processedOptions, answer: q.answer || "" };
+
       const createdQuestion = await tx.question.create({
         data: {
           bookId: paper.blueprint.bookId,
           chapterId,
           type: qType,
           text: q.text,
-          optionsJson: JSON.stringify(processedOptions),
+          optionsJson: JSON.stringify(mcqFinal.options),
           subpartsJson: JSON.stringify(subpartsData),
-          answer: q.answer || "",
+          answer: mcqFinal.answer,
           difficulty: q.difficulty || "MEDIUM",
           cognitiveLevel: q.cognitiveLevel || null,
           explanation: q.explanation || null,
@@ -345,15 +358,20 @@ export const POST = route(async (req, { id }, user) => {
         }
         const orSubpartsData = orAttemptCount ? { attemptCount: orAttemptCount, subparts: orSubparts } : orSubparts;
 
+        const orFinal =
+          orType === "MCQ"
+            ? shuffleMcqOptionsIfSafe(orOptions, canonicalMcqAnswer(q.orQuestion.answer, orOptions))
+            : { options: orOptions, answer: q.orQuestion.answer || "" };
+
         const createdOrQuestion = await tx.question.create({
           data: {
             bookId: paper.blueprint.bookId,
             chapterId,
             type: orType,
             text: q.orQuestion.text,
-            optionsJson: JSON.stringify(orOptions),
+            optionsJson: JSON.stringify(orFinal.options),
             subpartsJson: JSON.stringify(orSubpartsData),
-            answer: q.orQuestion.answer || "",
+            answer: orFinal.answer,
             difficulty: q.orQuestion.difficulty || q.difficulty || "MEDIUM",
             cognitiveLevel: q.orQuestion.cognitiveLevel || q.cognitiveLevel || null,
             explanation: q.orQuestion.explanation || null,

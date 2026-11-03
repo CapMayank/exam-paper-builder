@@ -929,7 +929,7 @@ Return a JSON array strictly matching this TypeScript structure:
             ? repairLatex(cleanOptionText(item.orQuestion.answer || ""))
             : repairLatex(String(item.orQuestion.answer || "").trim());
 
-          if (!isParaphraseOrDuplicateChoice(qText, orText) && orAnswer.trim().length > 0) {
+          if (!isParaphraseOrDuplicateChoice(qText, orText).isDuplicateOrParaphrase && orAnswer.trim().length > 0) {
             normalizedOrQuestion = {
               chapterId: slot.chapterId,
               chapterNumber: slot.chapterNumber,
@@ -951,9 +951,9 @@ Return a JSON array strictly matching this TypeScript structure:
 
         if (!normalizedOrQuestion) {
           const fbItem = fallbackPool[itemIdx] || fallbackPool[0];
-          if (fbItem?.orQuestion && !isParaphraseOrDuplicateChoice(qText, fbItem.orQuestion.text)) {
+          if (fbItem?.orQuestion && !isParaphraseOrDuplicateChoice(qText, fbItem.orQuestion.text).isDuplicateOrParaphrase) {
             normalizedOrQuestion = fbItem.orQuestion;
-          } else if (fbItem && !isParaphraseOrDuplicateChoice(qText, fbItem.text)) {
+          } else if (fbItem && !isParaphraseOrDuplicateChoice(qText, fbItem.text).isDuplicateOrParaphrase) {
             normalizedOrQuestion = {
               chapterId: slot.chapterId,
               chapterNumber: slot.chapterNumber,
@@ -1938,10 +1938,10 @@ JSON Array Output Schema:
         );
         if (!q.orQuestion || slotHasOrIssue) {
           const fb = groundedFallbacks[idx];
-          if (fb?.orQuestion && !isParaphraseOrDuplicateChoice(q.text, fb.orQuestion.text)) {
+          if (fb?.orQuestion && !isParaphraseOrDuplicateChoice(q.text, fb.orQuestion.text).isDuplicateOrParaphrase) {
             return { ...q, requiresInternalChoice: true, orQuestion: { ...fb.orQuestion } };
           }
-          if (fb && !isParaphraseOrDuplicateChoice(q.text, fb.text)) {
+          if (fb && !isParaphraseOrDuplicateChoice(q.text, fb.text).isDuplicateOrParaphrase) {
             return {
               ...q,
               requiresInternalChoice: true,

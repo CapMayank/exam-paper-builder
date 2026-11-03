@@ -224,10 +224,14 @@ export async function auditPaperEvidenceBased(
 
       if (qAns && opts.length > 0) {
         const cleanAns = cleanOptionText(qAns).toLowerCase();
-        const found = opts.some((o) => {
-          const c = o.toLowerCase();
-          return c === cleanAns || c.startsWith(cleanAns) || cleanAns.startsWith(c);
-        });
+        // The app stores MCQ answers as a letter (A-F) pointing at an option; judge those by position, not by text.
+        const letterAnswer = qAns.trim().match(/^\(?([A-Fa-f])\)?[.)]?$/);
+        const found = letterAnswer
+          ? "ABCDEF".indexOf(letterAnswer[1].toUpperCase()) < opts.length
+          : opts.some((o) => {
+              const c = o.toLowerCase();
+              return c === cleanAns || c.startsWith(cleanAns) || cleanAns.startsWith(c);
+            });
 
         if (!found) {
           findings.push({

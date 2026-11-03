@@ -3,6 +3,7 @@ import { prisma } from "./prisma";
 import { paperCreateSchema, paperUpdateSchema, snapshotPayloadSchema } from "./schemas";
 import { toPaperDto, toQuestionDto, toSnapshotDto } from "./dto";
 import { Prisma } from "@prisma/client";
+import { DEFAULT_ACADEMIC_SESSION } from "./constants";
 
 describe("Milestone 1 Empirical Stress Test: Prisma & Database Integrity", () => {
   let testUserId: string;
@@ -326,7 +327,7 @@ describe("Milestone 1 Empirical Stress Test: Prisma & Database Integrity", () =>
       // 1. Zod parse should populate all default values
       const parsed = paperCreateSchema.parse(legacyPayload);
 
-      expect(parsed.academicSession).toBe("2025–26");
+      expect(parsed.academicSession).toBe(DEFAULT_ACADEMIC_SESSION);
       expect(parsed.printDensity).toBe("STANDARD");
       expect(parsed.twoColumn).toBe(false);
       expect(parsed.targetPages).toBeNull();
@@ -357,7 +358,7 @@ describe("Milestone 1 Empirical Stress Test: Prisma & Database Integrity", () =>
           where: { id: paper.id },
         });
 
-        expect(retrieved.academicSession).toBe("2025–26");
+        expect(retrieved.academicSession).toBe(DEFAULT_ACADEMIC_SESSION);
         expect(retrieved.printDensity).toBe("STANDARD");
         expect(retrieved.twoColumn).toBe(false);
         expect(retrieved.targetPages).toBeNull();
@@ -372,7 +373,7 @@ describe("Milestone 1 Empirical Stress Test: Prisma & Database Integrity", () =>
 
         // 4. Verify toPaperDto mapping (requires cast because Prisma Paper model has printDensity as string, while toPaperDto parameter requires PrintDensity union)
         const dto = toPaperDto(retrieved as any);
-        expect(dto.academicSession).toBe("2025–26");
+        expect(dto.academicSession).toBe(DEFAULT_ACADEMIC_SESSION);
         expect(dto.printDensity).toBe("STANDARD");
         expect(dto.twoColumn).toBe(false);
         expect(dto.targetPages).toBeNull();

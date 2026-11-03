@@ -1623,7 +1623,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                 {paper.implications.map((imp, idx) => (
                   <div
                     key={idx}
-                    className={`rounded-xl border p-3 text-xs flex items-start gap-2.5 transition ${
+                    className={`min-w-0 rounded-xl border p-3 text-xs flex flex-col items-start gap-1.5 transition ${
                       imp.severity === "error"
                         ? "border-red-200 bg-red-50/90 text-red-950 shadow-2xs"
                         : "border-amber-200 bg-white text-amber-900 shadow-2xs"
@@ -1638,7 +1638,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                     >
                       {imp.code.replace(/_/g, " ")}
                     </span>
-                    <p className="leading-snug font-medium">{imp.message}</p>
+                    <p className="min-w-0 break-words leading-snug font-medium">{imp.message}</p>
                   </div>
                 ))}
               </div>
@@ -2827,7 +2827,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   );
 }
 
-export function MultiSetGeneratorModal({
+function MultiSetGeneratorModal({
   paper,
   onClose,
   onSuccess,

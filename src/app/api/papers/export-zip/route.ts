@@ -1,7 +1,7 @@
 import JSZip from "jszip";
 import { HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
-import { buildPaperDocx } from "../[id]/export-docx/route";
+import { buildPaperDocx } from "@/lib/paperDocx";
 
 export const GET = route(async (req, _params, user) => {
   const url = new URL(req.url);

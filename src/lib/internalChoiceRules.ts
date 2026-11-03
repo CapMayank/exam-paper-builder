@@ -237,6 +237,11 @@ export function isNsqfSubject(
   if (cleanCode && MAIN_SENIOR_COMPUTER_CODES.has(cleanCode)) {
     return false;
   }
+  // Core academic subjects (e.g. Hindi 401, English 411) share numeric codes with NSQF
+  // vocational subjects, so a plain core-subject name outranks the code lookup.
+  if (/^(hindi|english|sanskrit|marathi|urdu|mathematics|maths|science|social science)\b/i.test((subject || "").trim())) {
+    return false;
+  }
   if (cleanCode && NSQF_SUBJECT_CODES.has(cleanCode)) {
     return true;
   }
@@ -346,6 +351,9 @@ function isObjectiveSectionOrQuestion(type: string, marksEach: number): boolean 
     upper === "MATCH_COLUMN" ||
     upper === "ONE_WORD" ||
     upper === "ASSERTION_REASON" ||
+    // An unseen passage is one comprehension unit whose marks come from its subparts; boards
+    // never offer an OR alternative for the whole passage.
+    upper === "UNSEEN_PASSAGE" ||
     upper.startsWith("KDG_")
   );
 }

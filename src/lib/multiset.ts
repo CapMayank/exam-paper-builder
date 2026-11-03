@@ -1,4 +1,5 @@
 import { cleanOptionText, normalizeMcqAnswer } from "./constants";
+import { isParaphraseOrDuplicateChoice } from "./internalChoiceRules";
 import { parseSubparts, subpartsTotalMarks, type SubPart } from "./types";
 
 export const LETTERS = "ABCDEF";
@@ -63,6 +64,28 @@ export function permuteMcqOptions(
   }
 
   return { options: newOptions, answer: currentAnswer };
+}
+
+/** Options whose meaning depends on their position ("All of the above", "Both (a) and (b)", "A and B"), in English or Hindi. */
+const POSITION_DEPENDENT_OPTION =
+  /\b(?:above|both|neither|none of|all of|any of)\b|\((?:[a-d])\)|\b[A-D]\s*(?:and|&|,)\s*[A-D]\b|उपरोक्त|इनमें से|दोनों|कोई नहीं|सभी/i;
+
+/**
+ * Shuffles an MCQ's options and remaps its answer letter so the correct option is not predictably first.
+ * Leaves the question as it is when any option depends on its position or the answer cannot be resolved to a letter.
+ */
+export function shuffleMcqOptionsIfSafe(
+  options: string[],
+  answerLetter: string,
+): { options: string[]; answer: string } {
+  const letterIdx = LETTERS.indexOf((answerLetter || "").trim().toUpperCase());
+  if (options.length < 3 || answerLetter.trim().length !== 1 || letterIdx < 0 || letterIdx >= options.length) {
+    return { options, answer: answerLetter };
+  }
+  if (options.some((o) => POSITION_DEPENDENT_OPTION.test(o))) {
+    return { options, answer: answerLetter };
+  }
+  return permuteMcqOptions(options, answerLetter);
 }
 
 /**
@@ -236,6 +259,7 @@ export type SourceItemDef = {
     chapterId: string;
     type: string;
     difficulty: string;
+    text?: string;
     subpartsJson?: string | null;
     chapter?: { id: string; number: number; title: string };
   };
@@ -316,10 +340,13 @@ export function planMultiSetDistribution(params: {
     difficulty?: string,
     marksEach?: number,
     excludeId?: string,
+    notSimilarToText?: string,
   ): CandidateQuestionDef[] {
     return candidatePool.filter((q) => {
       if (usedQuestionIds.has(q.id)) return false;
       if (excludeId && q.id === excludeId) return false;
+      // an OR alternative that merely rephrases its primary question is not a real choice
+      if (notSimilarToText && q.text && isParaphraseOrDuplicateChoice(notSimilarToText, q.text).isDuplicateOrParaphrase) return false;
       if (q.chapterId !== chapterId || q.type !== type) return false;
       if (difficulty && q.difficulty !== difficulty) return false;
       if (marksEach !== undefined) {
@@ -449,12 +476,14 @@ export function planMultiSetDistribution(params: {
         // Handle OR question for variant slot
         let finalOrId: string | null = null;
         if (item.orQuestionId) {
+          const primaryText = chosenPrimary?.text ?? item.question.text;
           const exactOr = getEligible(
             item.question.chapterId,
             item.question.type,
             item.orQuestion?.difficulty,
             sec.marksEach,
             finalPrimaryId,
+            primaryText,
           );
 
           if (exactOr.length > 0) {
@@ -467,6 +496,7 @@ export function planMultiSetDistribution(params: {
               undefined,
               sec.marksEach,
               finalPrimaryId,
+              primaryText,
             );
             if (anyOr.length > 0) {
               finalOrId = anyOr[0].id;

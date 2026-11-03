@@ -11,6 +11,11 @@ export const PATCH = route(
     const existing = await prisma.examTimetableEntry.findUnique({ where: { id: entryId } });
     if (!existing) throw new HttpError(404, "Timetable entry not found");
 
+    // judge the times as they will be stored, so changing only one of start/end is still checked
+    const start = input.startTime ?? existing.startTime;
+    const end = input.endTime ?? existing.endTime;
+    if (end <= start) throw new HttpError(400, "End time must be after the start time.");
+
     const updated = await prisma.examTimetableEntry.update({
       where: { id: entryId },
       data: input,

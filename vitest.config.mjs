@@ -10,7 +10,9 @@ export default defineConfig({
     environment: "node",
     fileParallelism: false,
     env: {
+      // Both names are read by the key pool; blank them so tests never spend real API quota.
       GEMINI_API_KEY: "",
+      GEMINI_API_KEYS: "",
     },
   },
   resolve: {

@@ -128,7 +128,10 @@ export async function mapCurriculumTemplateToBlueprintInput(
   const sections = rawSections.map((s) => {
     const normType = normalizeQuestionType(s.type);
     let choiceMode: "BOARD_DEFAULT" | "REQUIRED" | "NOT_REQUIRED" = "BOARD_DEFAULT";
-    if (s.orChoiceMode === "NO_CHOICE" || s.choicePolicy?.policyType === "NO_CHOICE" || s.orChoiceMode === "NOT_REQUIRED") {
+    if (normType === "UNSEEN_PASSAGE") {
+      // A passage is a single comprehension unit; it never carries a whole-question OR.
+      choiceMode = "NOT_REQUIRED";
+    } else if (s.orChoiceMode === "NO_CHOICE" || s.choicePolicy?.policyType === "NO_CHOICE" || s.orChoiceMode === "NOT_REQUIRED") {
       choiceMode = "NOT_REQUIRED";
     } else if (s.orChoiceMode === "FULL_OR_ALTERNATIVE" || s.choicePolicy?.policyType === "FULL_OR_ALTERNATIVE" || s.orChoiceMode === "REQUIRED") {
       choiceMode = "REQUIRED";
@@ -290,6 +293,10 @@ export async function adaptCustomSchoolBlueprint(
 
     // Preserve Circular 465 rules on adapted sections
     adaptedSections = adaptedSections.map((sec) => {
+      // A passage is a single comprehension unit; it never carries a whole-question OR.
+      if (sec.type === "UNSEEN_PASSAGE") {
+        return { ...sec, orChoiceMode: "NOT_REQUIRED" as const, orAlternativeCount: 0 };
+      }
       if (sec.marksEach === 2) {
         return { ...sec, orChoiceMode: "NOT_REQUIRED" as const, orAlternativeCount: 0 };
       }

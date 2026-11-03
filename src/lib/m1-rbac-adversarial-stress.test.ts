@@ -335,6 +335,10 @@ describe("Milestone 1 RBAC Adversarial Stress Challenge Suite", () => {
     if (userIds.length > 0) {
       await prisma.user.deleteMany({ where: { id: { in: userIds } } }).catch(() => {});
     }
+    // the "former faculty" user is created locally in beforeAll, so remove it by its stamped address
+    await prisma.user
+      .deleteMany({ where: { email: `former-faculty-${testStamp}@school.internal` } })
+      .catch(() => {});
   });
 
   // =========================================================================

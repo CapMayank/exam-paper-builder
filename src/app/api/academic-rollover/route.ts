@@ -181,9 +181,9 @@ export const POST = route(
         const targetChapters = srcBp.chapters
           .map((c) => {
             const mappedId = chapterIdMap.get(c.chapterId);
-            return mappedId ? { chapterId: mappedId, marks: c.marks } : null;
+            return mappedId ? { chapterId: mappedId, marks: c.marks, unitKey: c.unitKey, unitTitle: c.unitTitle } : null;
           })
-          .filter((c): c is { chapterId: string; marks: number } => c !== null);
+          .filter((c): c is { chapterId: string; marks: number; unitKey: string; unitTitle: string } => c !== null);
 
         await prisma.blueprint.create({
           data: {
@@ -193,6 +193,16 @@ export const POST = route(
             examType: srcBp.examType,
             durationMin: srcBp.durationMin,
             subjectCode: srcBp.subjectCode,
+            // everything else that defines the paper: language, curriculum link, language components
+            language: srcBp.language,
+            curriculumTemplateId: srcBp.curriculumTemplateId,
+            curriculumVariantId: srcBp.curriculumVariantId,
+            curriculumMode: srcBp.curriculumMode,
+            verificationStatus: srcBp.verificationStatus,
+            sourceRef: srcBp.sourceRef,
+            textbookVariant: srcBp.textbookVariant,
+            blueprintVersion: srcBp.blueprintVersion,
+            componentsJson: srcBp.componentsJson,
             chapters: { create: targetChapters },
             sections: {
               create: srcBp.sections.map((s) => ({
@@ -202,6 +212,11 @@ export const POST = route(
                 count: s.count,
                 marksEach: s.marksEach,
                 instructions: s.instructions,
+                orChoiceMode: s.orChoiceMode,
+                orAlternativeCount: s.orAlternativeCount,
+                orSlotsJson: s.orSlotsJson,
+                role: s.role,
+                groupKey: s.groupKey,
               })),
             },
           },

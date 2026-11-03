@@ -1,7 +1,6 @@
 import { body, HttpError, route } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { rolloverBookSchema } from "@/lib/schemas";
-export { rolloverBookSchema };
 
 export const POST = route(
   async (req, _ctx, user) => {

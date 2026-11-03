@@ -47,14 +47,43 @@ export const POST = route(async (_req, params, user) => {
   });
   const existingSet = new Set(existingQuestions.map((q) => q.id));
 
-  // Filter items whose main question still exists
-  const validItems = itemsList.filter((it) => existingSet.has(it.questionId));
+  // Filter items whose main question still exists and whose section is still in the blueprint
+  const sectionIds = new Set(current.blueprint.sections.map((sec) => sec.id));
+  const validItems = itemsList.filter((it) => existingSet.has(it.questionId) && sectionIds.has(it.sectionId));
+  const skippedCount = itemsList.length - validItems.length;
 
   if (itemsList.length > 0 && validItems.length === 0) {
     throw new HttpError(409, "None of the questions in this snapshot exist in the question bank anymore.");
   }
 
   await prisma.$transaction(async (tx) => {
+    // 0. Keep the arrangement being replaced, so a mistaken restore can be undone from the snapshot list
+    await tx.paperSnapshot.create({
+      data: {
+        paperId: id,
+        name: `Before restoring "${snapshot.name}"`.slice(0, 120),
+        snapshotJson: JSON.stringify({
+          paperId: current.id,
+          title: current.title,
+          generalInstructions: current.generalInstructions ?? "",
+          twoColumn: current.twoColumn,
+          printDensity: current.printDensity,
+          numberingStyle: current.numberingStyle,
+          marksStyle: current.marksStyle,
+          showCandidateDetails: current.showCandidateDetails,
+          showSignatures: current.showSignatures,
+          items: current.items.map((it) => ({
+            sectionId: it.sectionId,
+            position: it.position,
+            questionId: it.question.id,
+            orQuestionId: it.orQuestion?.id || null,
+          })),
+          timestamp: new Date().toISOString(),
+        }),
+        createdById: user.id,
+      },
+    });
+
     // 1. Delete all current placements
     await tx.paperQuestion.deleteMany({
       where: { paperId: id },
@@ -100,7 +129,12 @@ export const POST = route(async (_req, params, user) => {
 
   return {
     success: true,
-    message: `Restored ${validItems.length} question placements from snapshot "${snapshot.name}".`,
+    message:
+      `Restored ${validItems.length} question placements from snapshot "${snapshot.name}".` +
+      (skippedCount > 0
+        ? ` ${skippedCount} could not be restored because their question was deleted or their section no longer exists.`
+        : "") +
+      " Your previous arrangement was saved as a snapshot.",
     paper: updatedPaper,
   };
 });

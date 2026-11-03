@@ -2,7 +2,6 @@ import { body, HttpError, route } from "@/lib/api";
 import { blueprintInclude } from "@/lib/blueprints";
 import { prisma } from "@/lib/prisma";
 import { rolloverBlueprintsSchema } from "@/lib/schemas";
-export { rolloverBlueprintsSchema };
 
 export const POST = route(
   async (req) => {
@@ -56,20 +55,30 @@ export const POST = route(
         examType: src.examType,
         durationMin: src.durationMin,
         subjectCode: src.subjectCode,
+        // everything else that defines the paper: language, curriculum link, language components
+        language: src.language,
+        curriculumTemplateId: src.curriculumTemplateId,
+        curriculumVariantId: src.curriculumVariantId,
+        curriculumMode: src.curriculumMode,
+        verificationStatus: src.verificationStatus,
+        sourceRef: src.sourceRef,
+        textbookVariant: src.textbookVariant,
+        blueprintVersion: src.blueprintVersion,
+        componentsJson: src.componentsJson,
         chapters: {
-          create: src.chapters.map((c) => {
-            const mappedId = targetBook
-              ? targetBook.chapters.find(
-                  (tc) =>
-                    tc.number === c.chapter.number ||
-                    tc.title.trim().toLowerCase() === c.chapter.title.trim().toLowerCase(),
-                )?.id ?? c.chapterId
-              : c.chapterId;
-            return {
-              chapterId: mappedId,
-              marks: c.marks,
-            };
-          }),
+          // a chapter with no match in the target book is left out rather than pointed at the old book's chapter
+          create: src.chapters
+            .map((c) => {
+              const mappedId = targetBook
+                ? targetBook.chapters.find(
+                    (tc) =>
+                      tc.number === c.chapter.number ||
+                      tc.title.trim().toLowerCase() === c.chapter.title.trim().toLowerCase(),
+                  )?.id
+                : c.chapterId;
+              return mappedId ? { chapterId: mappedId, marks: c.marks, unitKey: c.unitKey, unitTitle: c.unitTitle } : null;
+            })
+            .filter((c): c is { chapterId: string; marks: number; unitKey: string; unitTitle: string } => c !== null),
         },
         sections: {
           create: src.sections.map((s) => ({
@@ -82,6 +91,8 @@ export const POST = route(
             orChoiceMode: s.orChoiceMode || "BOARD_DEFAULT",
             orAlternativeCount: s.orAlternativeCount ?? 1,
             orSlotsJson: s.orSlotsJson || "[]",
+            role: s.role,
+            groupKey: s.groupKey,
           })),
         },
       },

@@ -199,7 +199,7 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
                       : "A3 2-sided landscape sheets folded to A4 pages"
                   }
                 >
-                  {isA5 ? "Folded Booklet (A4 $\\to$ A5)" : "Folded Booklet (A3 $\\to$ A4)"}
+                  {isA5 ? "Folded Booklet (A4 → A5)" : "Folded Booklet (A3 → A4)"}
                 </button>
               </div>
             )}

@@ -51,6 +51,7 @@ import {
   type TimetableStatus,
 } from "@/lib/constants";
 import { timeAgo } from "@/lib/format";
+import { getSectionsForClass } from "@/lib/print-logistics";
 import type {
   AcademicClassDto,
   AuditLogEntry,
@@ -64,25 +65,6 @@ import type {
 } from "@/lib/types";
 
 type Tab = "readiness" | "calculator" | "timetable" | "audit";
-
-export function getSectionsForClass(cls?: AcademicClassDto | null): ClassSectionInput[] {
-  if (!cls) {
-    return [
-      { name: "Section A", count: 40 },
-    ];
-  }
-  if (cls.sectionDetails && cls.sectionDetails.length > 0) {
-    return cls.sectionDetails.map((sec) => ({
-      name: `${cls.name} - Section ${sec.name}`,
-      count: sec.studentCount > 0 ? sec.studentCount : 40,
-    }));
-  }
-  const secs = cls.sections && cls.sections.length > 0 ? cls.sections : ["A"];
-  return secs.map((s) => ({
-    name: `${cls.name} - Section ${s}`,
-    count: 40,
-  }));
-}
 
 export default function ExamCellPage() {
   const toast = useToast();

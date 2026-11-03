@@ -739,8 +739,10 @@ export function parseChemicalFormula(term: string): Record<string, number> | nul
 }
 
 export function validateReactionEquation(
-  rawEq: string,
+  rawEqInput: string,
 ): { isBalanced: boolean; element?: string; reactantCount?: number; productCount?: number; equation?: string } | null {
+  // A trailing "(1 Mark)" / "[2 marks]" / "(3M)" is not part of the equation; left in, "Mark" is read as elements.
+  const rawEq = rawEqInput.replace(/[(\[]\s*\d+(?:\.\d+)?\s*(?:marks?|m)\s*[)\]]/gi, " ").trim();
   const arrowRegex = /(?:->|-->|=>|==>|\\xrightarrow(?:\{[^{}]*\})?|\\rightarrow|\\longrightarrow|\\to|\\rightleftharpoons|⇌|<=>)/;
   if (!arrowRegex.test(rawEq)) return null;
 
@@ -1167,6 +1169,17 @@ export function validatePhysicsAcademicIntegrity(
 /**
  * Validates a single generated question against the Subject-Specific Generation Contract.
  */
+/** Minimum Devanagari share of the letters in a Hindi/Sanskrit question; a quoted chapter title alone does not make English text Hindi. */
+export const MIN_DEVANAGARI_SHARE = 0.25;
+
+/** Share of Devanagari among Devanagari + Latin letters, ignoring $math$ spans, digits and punctuation. 1 when there are no letters. */
+export function devanagariShare(text: string): number {
+  const plain = (text || "").replace(/\$[^$]*\$/g, " ");
+  const dev = (plain.match(/[ऄ-हऽक़-ॡ]/g) || []).length;
+  const latin = (plain.match(/[A-Za-z]/g) || []).length;
+  return dev + latin === 0 ? 1 : dev / (dev + latin);
+}
+
 export function validateGeneratedQuestion(
   question: ValidatableQuestion,
   contract: GenerationContract,
@@ -1201,7 +1214,7 @@ export function validateGeneratedQuestion(
   // 1b. An unseen passage must be a real passage, not a stub (the generators ask for roughly 100-220 words; the printed booklet has a page limit)
   if (qType === "UNSEEN_PASSAGE" && opts?.strictPassage) {
     // the passage may sit in the stem or be spread over the sub-questions' texts
-    const words = [text, ...subparts.map((sp) => String(sp.text ?? ""))].join(" ").split(/s+/).filter(Boolean).length;
+    const words = [text, ...subparts.map((sp) => String(sp.text ?? ""))].join(" ").split(/\s+/).filter(Boolean).length;
     const min = /[ऀ-ॿ]/.test(text) ? 60 : 100;
     if (words < min) {
       issues.push({
@@ -1401,7 +1414,7 @@ export function validateGeneratedQuestion(
   }
 
   // 5. Language consistency check
-  if ((contract.language === "hi" || contract.language === "sa") && !/[\u0900-\u097F]/.test(text)) {
+  if ((contract.language === "hi" || contract.language === "sa") && !/[ऀ-ॿ]/.test(text)) {
     const langName = contract.language === "sa" ? "Sanskrit (\"sa\")" : "Hindi (\"hi\")";
     issues.push({
       code: "LANGUAGE_MISMATCH",

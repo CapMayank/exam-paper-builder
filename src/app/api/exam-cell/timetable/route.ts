@@ -1,4 +1,4 @@
-import { body, route } from "@/lib/api";
+import { body, HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { timetableEntrySchema } from "@/lib/schemas";
@@ -29,6 +29,9 @@ export const GET = route(async (req) => {
 export const POST = route(
   async (req, _params, user) => {
     const input = await body(req, timetableEntrySchema);
+    if (input.endTime <= input.startTime) {
+      throw new HttpError(400, "End time must be after the start time.");
+    }
 
     const entry = await prisma.examTimetableEntry.create({
       data: {

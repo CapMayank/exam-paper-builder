@@ -13,7 +13,7 @@ import {
 } from "@/lib/internalChoiceRules";
 import { assertCanModifyPaper, loadPaperView, toPlacedItems } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
-import { isQuestionContaminated } from "@/lib/questionValidator";
+import { devanagariShare, isQuestionContaminated, MIN_DEVANAGARI_SHARE } from "@/lib/questionValidator";
 import { parseMatchColumnPairs } from "@/lib/constants";
 import { parseSubparts, subpartsTotalMarks } from "@/lib/types";
 
@@ -275,7 +275,11 @@ export const POST = route(async (req, { id }, user) => {
       const synthSlots = collapsedMatch ? 1 : u.count;
       for (let slotI = 0; slotI < synthSlots; slotI++) {
         // Find best chapter with quota deficit (preferring exact quota matches)
-        const sortedChapters = [...paper.blueprint.chapters].sort((a, b) => {
+        // Syllabus-component entries ("Section A: Reading") are not topics; a template question
+        // built from their title would be meaningless, so leave those slots for the teacher.
+        const sortedChapters = paper.blueprint.chapters
+          .filter((c) => !/^section\s+[a-z]\b/i.test(c.chapter.title.trim()))
+          .sort((a, b) => {
           const remA = (chapterRemainingMarks.get(rep(a.chapterId)) ?? 0);
           const remB = (chapterRemainingMarks.get(rep(b.chapterId)) ?? 0);
 
@@ -293,7 +297,7 @@ export const POST = route(async (req, { id }, user) => {
           return remB - remA;
         });
 
-        const chosenBpChapter = sortedChapters[0] || paper.blueprint.chapters[0];
+        const chosenBpChapter = sortedChapters[0];
         if (!chosenBpChapter) break;
         const needMarks = collapsedMatch ? u.count * sec.marksEach : sec.marksEach;
         // a template question must never push a chapter or unit past its quota
@@ -352,6 +356,10 @@ export const POST = route(async (req, { id }, user) => {
             existingQuestionTexts: Array.from(usedTexts),
           })[0];
 
+          // A Hindi/Sanskrit paper must not receive English filler (the offline templates are English).
+          const needsDevanagari = paper.language === "hi" || paper.language === "sa";
+          if (grounded && needsDevanagari && devanagariShare(grounded.text) < MIN_DEVANAGARI_SHARE) continue;
+
           if (grounded) {
             usedTexts.add(grounded.text);
             if (grounded.orQuestion) usedTexts.add(grounded.orQuestion.text);
@@ -382,6 +390,9 @@ export const POST = route(async (req, { id }, user) => {
     };
   }
 
+  // OR alternatives written from offline templates (not found in the bank); counted for the final notice
+  let synthesizedOrCount = 0;
+
   const pickOrSynthesizeOrQuestionId = async (
     tx: any,
     params: {
@@ -399,7 +410,7 @@ export const POST = route(async (req, { id }, user) => {
         !usedIds.has(q.id) &&
         q.chapterId === params.chapterId &&
         q.type === sec.type &&
-        !isParaphraseOrDuplicateChoice(params.primaryQuestionText, q.text),
+        !isParaphraseOrDuplicateChoice(params.primaryQuestionText, q.text).isDuplicateOrParaphrase,
     );
     if (bankMatch) {
       usedIds.add(bankMatch.id);
@@ -440,12 +451,13 @@ export const POST = route(async (req, { id }, user) => {
       existingQuestionTexts: [...Array.from(usedTexts), params.primaryQuestionText],
     })[0];
     const candidate =
-      grounded?.orQuestion && !isParaphraseOrDuplicateChoice(params.primaryQuestionText, grounded.orQuestion.text)
+      grounded?.orQuestion && !isParaphraseOrDuplicateChoice(params.primaryQuestionText, grounded.orQuestion.text).isDuplicateOrParaphrase
         ? grounded.orQuestion
         : grounded;
     if (!candidate) return null;
 
     usedTexts.add(candidate.text);
+    synthesizedOrCount++;
     const createdOr = await tx.question.create({
       data: {
         bookId: paper.blueprint.bookId,
@@ -513,7 +525,7 @@ export const POST = route(async (req, { id }, user) => {
         (!orQuestionId ||
           (primaryBankQ &&
             bankById.get(orQuestionId) &&
-            isParaphraseOrDuplicateChoice(primaryBankQ.text, bankById.get(orQuestionId)!.text)))
+            isParaphraseOrDuplicateChoice(primaryBankQ.text, bankById.get(orQuestionId)!.text).isDuplicateOrParaphrase))
       ) {
         orQuestionId = await pickOrSynthesizeOrQuestionId(tx, {
           sectionId: item.sectionId,
@@ -594,12 +606,19 @@ export const POST = route(async (req, { id }, user) => {
   });
 
   const totalAdded = result.added.length + synthesizedItems.length;
-  const totalNeededUnfilled = result.unfilled.reduce((sum, u) => {
-    const sec = sectionMap.get(u.sectionId);
-    const collapsed = sec && sec.type === "MATCH_COLUMN" && sec.count > 1 && sec.marksEach === 1;
-    return sum + (collapsed ? 1 : u.count);
-  }, 0);
-  const finalUnfilled = synthesizedItems.length >= totalNeededUnfilled ? [] : result.unfilled;
+  // Report what is still missing per section, not the pre-synthesis list.
+  const synthesizedBySection = new Map<string, number>();
+  for (const s of synthesizedItems) {
+    synthesizedBySection.set(s.sectionId, (synthesizedBySection.get(s.sectionId) ?? 0) + 1);
+  }
+  const finalUnfilled = result.unfilled
+    .map((u) => {
+      const sec = sectionMap.get(u.sectionId);
+      const collapsed = Boolean(sec && sec.type === "MATCH_COLUMN" && sec.count > 1 && sec.marksEach === 1);
+      const filled = synthesizedBySection.get(u.sectionId) ?? 0;
+      return { ...u, count: collapsed ? (filled >= 1 ? 0 : u.count) : Math.max(0, u.count - filled) };
+    })
+    .filter((u) => u.count > 0);
 
   await recordAudit(user, "PAPER_UPDATE", "PAPER", id, {
     action: "PAPER_AUTOFILL",
@@ -619,6 +638,11 @@ export const POST = route(async (req, { id }, user) => {
     : "";
   const repairNote =
     repairedChoicesCount > 0 ? ` Synchronized ${repairedChoicesCount} internal choice (OR / अथवा) slot(s).` : "";
+  const templateCount = synthesizedItems.length + synthesizedOrCount;
+  const templateNote =
+    templateCount > 0
+      ? ` ${templateCount} question${templateCount > 1 ? "s" : ""} (including OR alternatives) ${templateCount > 1 ? "are" : "is a"} generic offline template${templateCount > 1 ? "s" : ""} (not written by AI or from your bank): review or replace ${templateCount > 1 ? "them" : "it"} before printing.`
+      : "";
   const finalUnfilledSummary = finalUnfilled.length > 0
     ? ` Unfilled: ${finalUnfilled.map((u) => `${u.title} (${u.count} needed)`).join(", ")}.`
     : "";
@@ -631,8 +655,8 @@ export const POST = route(async (req, { id }, user) => {
     complete: updatedPaper?.progress.complete ?? (finalUnfilled.length === 0),
     solverMode: result.solverMode,
     message: (updatedPaper?.progress.complete ?? (finalUnfilled.length === 0))
-      ? `Successfully auto-filled ${totalAdded} questions.${repairNote} Paper is now complete!${modeNote}`
-      : `Auto-filled ${totalAdded} questions.${repairNote}${finalUnfilledSummary}${modeNote}`,
+      ? `Successfully auto-filled ${totalAdded} questions.${repairNote} Paper is now complete!${templateNote}${modeNote}`
+      : `Auto-filled ${totalAdded} questions.${repairNote}${templateNote}${finalUnfilledSummary}${modeNote}`,
     paper: updatedPaper,
   };
 });

@@ -5,7 +5,6 @@ import { assertCanModifyQuestion, canModifyQuestion } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { questionPatchSchema, questionSchema } from "@/lib/schemas";
 
-export { assertCanModifyQuestion, canModifyQuestion };
 
 export const GET = route(async (_req, { id }) => {
   const question = await prisma.question.findUnique({

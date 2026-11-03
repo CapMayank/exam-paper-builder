@@ -330,6 +330,17 @@ export const editPaperItemSchema = z.object({
   question: questionSchema,
 });
 
+/** A YYYY-MM-DD that is a real calendar date (rejects 2026-13-45 and 2026-02-30). */
+const realDate = (v: string) => {
+  const d = new Date(`${v}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+};
+/** An HH:MM on a 24-hour clock (rejects 99:99). */
+const realTime = (v: string) => {
+  const [h, m] = v.split(":").map(Number);
+  return h >= 0 && h < 24 && m >= 0 && m < 60;
+};
+
 export const timetableEntrySchema = z.object({
   title: text(120),
   academicSession: z.string().trim().max(40).default(DEFAULT_ACADEMIC_SESSION),
@@ -337,9 +348,9 @@ export const timetableEntrySchema = z.object({
   className: text(40),
   subject: text(80),
   subjectCode: z.string().trim().max(40).default(""),
-  examDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Must be YYYY-MM-DD"),
-  startTime: z.string().regex(/^\d{2}:\d{2}$/, "Must be HH:MM"),
-  endTime: z.string().regex(/^\d{2}:\d{2}$/, "Must be HH:MM"),
+  examDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Must be YYYY-MM-DD").refine(realDate, "Not a real calendar date"),
+  startTime: z.string().regex(/^\d{2}:\d{2}$/, "Must be HH:MM").refine(realTime, "Not a valid time"),
+  endTime: z.string().regex(/^\d{2}:\d{2}$/, "Must be HH:MM").refine(realTime, "Not a valid time"),
   sessionSlot: z.enum(SESSION_SLOTS).default("MORNING"),
   roomLocations: z.string().trim().max(200).default(""),
   paperId: z.string().nullable().optional().default(null),

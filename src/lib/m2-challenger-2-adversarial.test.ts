@@ -74,6 +74,14 @@ describe("Milestone 2 Challenger Adversarial Empirical Test Suite", () => {
   });
 
   afterAll(async () => {
+    // Blueprints created through the API carry the stamp in their name; remove them so
+    // repeated runs don't pile fixtures into the dev database.
+    await prisma.blueprint
+      .deleteMany({ where: { name: { endsWith: String(testStamp) } } })
+      .catch(() => {});
+    await prisma.book
+      .deleteMany({ where: { title: `Challenger Synthetic Book ${testStamp}` } })
+      .catch(() => {});
     if (teacherUser) {
       await prisma.user.delete({ where: { id: teacherUser.id } }).catch(() => {});
     }
