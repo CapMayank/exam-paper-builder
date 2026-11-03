@@ -76,9 +76,18 @@ else
 fi
 
 # 5. Dependency Management (Cached / Incremental)
-if [ ! -d "node_modules" ] || [ -z "$PREV_COMMIT" ] || git diff --name-only "$PREV_COMMIT" "$TARGET_COMMIT" 2>/dev/null | grep -qE 'package(-lock)?\.json'; then
+# The GitHub workflow runs `git reset --hard origin/main` before this script, so PREV_COMMIT already equals
+# TARGET_COMMIT and a commit diff never sees a changed package.json. Compare a fingerprint of the lockfile
+# against the one recorded after the last successful install instead.
+LOCK_STAMP="node_modules/.deploy-lock-hash"
+CURRENT_LOCK_HASH=$(sha256sum package-lock.json package.json 2>/dev/null | sha256sum | cut -d' ' -f1)
+RECORDED_LOCK_HASH=$(cat "$LOCK_STAMP" 2>/dev/null || echo "")
+
+if [ ! -d "node_modules" ] || [ -z "$PREV_COMMIT" ] || [ "$CURRENT_LOCK_HASH" != "$RECORDED_LOCK_HASH" ] \
+   || git diff --name-only "$PREV_COMMIT" "$TARGET_COMMIT" 2>/dev/null | grep -qE 'package(-lock)?\.json'; then
   echo "📦 Dependencies updated or node_modules missing. Running npm ci..."
   npm ci --no-audit --no-fund --loglevel=error
+  echo "$CURRENT_LOCK_HASH" > "$LOCK_STAMP"
 else
   echo "📦 Dependencies unchanged, skipping npm ci (cached)."
 fi
