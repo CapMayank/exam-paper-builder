@@ -212,6 +212,9 @@ export function QuestionForm({
     | { type: "answer" }
     | { type: "subpart-text"; index: number }
     | { type: "subpart-answer"; index: number }
+    | { type: "match-left"; index: number }
+    | { type: "match-right"; index: number }
+    | { type: "secondary" }
   >({ type: "text" });
 
   function handleInsertSnippet(snippet: string) {
@@ -234,6 +237,14 @@ export function QuestionForm({
     } else if (activeField.type === "subpart-answer") {
       const idx = activeField.index;
       setSubparts((subs) => subs.map((sp, j) => (j === idx ? { ...sp, answer: join(sp.answer ?? "") } : sp)));
+    } else if (activeField.type === "match-left") {
+      const idx = activeField.index;
+      setMatchPairs((pairs) => pairs.map((p, j) => (j === idx ? { ...p, left: join(p.left) } : p)));
+    } else if (activeField.type === "match-right") {
+      const idx = activeField.index;
+      setMatchPairs((pairs) => pairs.map((p, j) => (j === idx ? { ...p, right: join(p.right) } : p)));
+    } else if (activeField.type === "secondary") {
+      setSecondaryText(join);
     }
   }
 
@@ -814,26 +825,24 @@ export function QuestionForm({
                   <span className="w-6 text-xs font-bold text-slate-600">
                     ({LETTERS[idx] ?? String.fromCharCode(65 + idx)})
                   </span>
-                  <input
-                    className="input text-xs"
+                  <MathRichEditor
+                    className="flex-1 text-xs"
                     value={pair.left}
                     placeholder={`Column A item ${LETTERS[idx] ?? idx + 1}`}
-                    onChange={(e) =>
-                      setMatchPairs(matchPairs.map((p, j) => (j === idx ? { ...p, left: e.target.value } : p)))
-                    }
+                    onActivate={activate({ type: "match-left", index: idx })}
+                    onChange={(v) => setMatchPairs((pairs) => pairs.map((p, j) => (j === idx ? { ...p, left: v } : p)))}
                   />
                 </div>
                 <div className="col-span-5 flex items-center gap-1.5">
                   <span className="w-6 text-xs font-bold text-slate-600">
                     {ROMAN_LABELS[idx] ?? `(${idx + 1})`}
                   </span>
-                  <input
-                    className="input text-xs"
+                  <MathRichEditor
+                    className="flex-1 text-xs"
                     value={pair.right}
                     placeholder={`Column B item ${ROMAN_LABELS[idx] ?? idx + 1}`}
-                    onChange={(e) =>
-                      setMatchPairs(matchPairs.map((p, j) => (j === idx ? { ...p, right: e.target.value } : p)))
-                    }
+                    onActivate={activate({ type: "match-right", index: idx })}
+                    onChange={(v) => setMatchPairs((pairs) => pairs.map((p, j) => (j === idx ? { ...p, right: v } : p)))}
                   />
                 </div>
                 <div className="col-span-1 flex justify-end">
@@ -1230,12 +1239,13 @@ export function QuestionForm({
                 + Append to question text
               </button>
             </div>
-            <textarea
-              rows={2}
-              className="input text-xs font-sans leading-relaxed"
+            <MathRichEditor
+              multiline
+              className="!min-h-14 text-xs leading-relaxed"
               placeholder="e.g. प्रकाश संश्लेषण को परिभाषित कीजिए और इसका रासायनिक समीकरण लिखिए।"
               value={secondaryText}
-              onChange={(e) => setSecondaryText(e.target.value)}
+              onActivate={activate({ type: "secondary" })}
+              onChange={setSecondaryText}
             />
             <p className="mt-1 text-[11px] text-slate-500">
               For bilingual papers. You can append this secondary language text directly or keep it formatted.
