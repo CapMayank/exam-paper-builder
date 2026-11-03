@@ -76,7 +76,7 @@ else
 fi
 
 # 5. Dependency Management (Cached / Incremental)
-# The GitHub workflow runs `git reset --hard origin/main` before this script, so PREV_COMMIT already equals
+# The GitHub workflow already moves the checkout to origin/main before this script runs, so PREV_COMMIT equals
 # TARGET_COMMIT and a commit diff never sees a changed package.json. Compare a fingerprint of the lockfile
 # against the one recorded after the last successful install instead.
 LOCK_STAMP="node_modules/.deploy-lock-hash"
