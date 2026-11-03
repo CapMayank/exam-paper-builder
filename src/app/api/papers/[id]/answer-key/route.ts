@@ -30,8 +30,8 @@ export const POST = route(async (req, { id }, user) => {
   });
   if (!paper) throw new HttpError(404, "Paper not found");
   // Filling a blank answer never changes what the paper prints, so its owners may do it after finalising too.
-  if (!canModifyPaper(user, { createdById: paper.createdById })) {
-    throw new HttpError(403, "Only the paper creator, Department Head (HOD), or Administrator can generate missing answers.");
+  if (!canModifyPaper(user, { createdById: paper.createdById, blueprint: paper.blueprint })) {
+    throw new HttpError(403, "Only the paper's creator, a teacher assigned to this class and subject, or an Administrator can generate missing answers.");
   }
 
   const marksById = new Map<string, number>();

@@ -6,13 +6,11 @@ import {
   RefreshCw,
   Search,
   Shield,
-  ShieldCheck,
   Trash2,
   AlertTriangle,
-  UserCheck,
+  GraduationCap,
   UserCog,
   UserPlus,
-  Users,
   XCircle,
   KeyRound,
   Copy,
@@ -22,11 +20,38 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { AssignmentChips, ClassAssignmentPicker, type PickerClass } from "@/components/ClassAssignmentPicker";
 import { ErrorBanner, Modal, Skeleton, SuccessBanner } from "@/components/ui";
 import { api } from "@/lib/client";
 import { USER_ROLES, USER_ROLE_LABEL, type UserRole } from "@/lib/constants";
 import { timeAgo } from "@/lib/format";
-import type { UserData } from "@/lib/types";
+import { assignmentLabel, type Assignment } from "@/lib/permissions";
+import type { AcademicClassDto, UserData } from "@/lib/types";
+
+const ROLE_HELP: Record<UserRole, string> = {
+  ADMIN: "Runs the portal: accounts, class assignments, classes, academic rollover and unlocking final papers.",
+  TEACHER: "Works in the classes assigned below. Class In-charge covers every subject of a class and its settings; a subject assignment covers that subject only.",
+  EXAM_CELL: "Date sheet, print runs and the audit log. Can open and print every paper, but does not edit content.",
+};
+
+const ROLE_BADGE: Record<UserRole, string> = {
+  ADMIN: "!bg-purple-100 !text-purple-800",
+  TEACHER: "!bg-emerald-100 !text-emerald-800",
+  EXAM_CELL: "!bg-amber-100 !text-amber-800",
+};
+
+/** One entry per class name across sessions, subjects merged, in school order. */
+function toPickerClasses(rows: AcademicClassDto[]): PickerClass[] {
+  const byName = new Map<string, { order: number; subjects: Set<string> }>();
+  for (const r of rows) {
+    const entry = byName.get(r.name) ?? { order: r.displayOrder, subjects: new Set<string>() };
+    for (const s of r.subjects) entry.subjects.add(s.name);
+    byName.set(r.name, entry);
+  }
+  return [...byName.entries()]
+    .sort((a, b) => a[1].order - b[1].order || a[0].localeCompare(b[0]))
+    .map(([name, e]) => ({ name, subjects: [...e.subjects].sort() }));
+}
 
 export default function UsersAdminPage() {
   const [currentUser, setCurrentUser] = useState<UserData | null>(null);
@@ -47,6 +72,7 @@ export default function UsersAdminPage() {
   const [savingResetPass, setSavingResetPass] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<UserData | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [classes, setClasses] = useState<PickerClass[]>([]);
 
   // Form State
   const [createForm, setCreateForm] = useState({
@@ -54,14 +80,14 @@ export default function UsersAdminPage() {
     email: "",
     password: "",
     role: "TEACHER" as UserRole,
-    department: "Science",
+    assignments: [] as Assignment[],
   });
   const [savingCreate, setSavingCreate] = useState(false);
 
   const [editForm, setEditForm] = useState({
     name: "",
     role: "TEACHER" as UserRole,
-    department: "",
+    assignments: [] as Assignment[],
     active: true,
   });
   const [savingEdit, setSavingEdit] = useState(false);
@@ -70,12 +96,14 @@ export default function UsersAdminPage() {
     setLoading(true);
     setError(null);
     try {
-      const [me, allUsers] = await Promise.all([
+      const [me, allUsers, classRows] = await Promise.all([
         api<UserData>("/api/me"),
         api<UserData[]>("/api/users"),
+        api<AcademicClassDto[]>("/api/classes").catch(() => [] as AcademicClassDto[]),
       ]);
       setCurrentUser(me);
       setUsers(allUsers);
+      setClasses(toPickerClasses(classRows));
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -104,7 +132,7 @@ export default function UsersAdminPage() {
         email: "",
         password: "",
         role: "TEACHER",
-        department: "Science",
+        assignments: [],
       });
     } catch (err) {
       setError((err as Error).message);
@@ -188,13 +216,15 @@ export default function UsersAdminPage() {
 
   const filteredUsers = useMemo(() => {
     return users.filter((u) => {
-      if (roleFilter && u.role !== roleFilter) return false;
+      if (roleFilter === "UNASSIGNED") {
+        if (u.role !== "TEACHER" || (u.assignments ?? []).length > 0) return false;
+      } else if (roleFilter && u.role !== roleFilter) return false;
       if (search) {
         const q = search.toLowerCase();
         const matches =
           u.name.toLowerCase().includes(q) ||
           u.email.toLowerCase().includes(q) ||
-          u.department?.toLowerCase().includes(q);
+          (u.assignments ?? []).some((a) => assignmentLabel(a).toLowerCase().includes(q));
         if (!matches) return false;
       }
       return true;
@@ -202,6 +232,7 @@ export default function UsersAdminPage() {
   }, [users, roleFilter, search]);
 
   const isAdmin = currentUser?.role === "ADMIN";
+  const unassignedCount = users.filter((u) => u.active && u.role === "TEACHER" && (u.assignments ?? []).length === 0).length;
 
   if (loading) {
     return (
@@ -218,12 +249,9 @@ export default function UsersAdminPage() {
       {/* Header */}
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-indigo-700">
-            <ShieldCheck size={16} /> Role-Based Access Control (RBAC)
-          </div>
-          <h1 className="page-title mt-1">Faculty &amp; Team Management</h1>
+          <h1 className="page-title">Faculty &amp; classes</h1>
           <p className="page-lede">
-            Assign teacher roles, department governance, and control permissions across the examination lifecycle.
+            Add staff, choose their role, and assign each teacher the classes and subjects they look after.
           </p>
         </div>
 
@@ -233,7 +261,7 @@ export default function UsersAdminPage() {
             onClick={() => setCreateModal(true)}
             className="btn btn-primary flex items-center gap-1.5 shadow-sm"
           >
-            <UserPlus size={16} /> Add Faculty Member
+            <UserPlus size={16} /> Add staff member
           </button>
         )}
       </header>
@@ -241,41 +269,35 @@ export default function UsersAdminPage() {
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
       {success && <SuccessBanner message={success} onDismiss={() => setSuccess(null)} />}
 
-      {/* Permissions Matrix Ribbon */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-        <div className="card p-3.5 bg-white border border-purple-200">
-          <div className="flex items-center gap-2 font-bold text-xs text-purple-900">
-            <Shield size={14} className="text-purple-600" /> Administrator / Principal
+      {unassignedCount > 0 && (
+        <button
+          type="button"
+          onClick={() => setRoleFilter("UNASSIGNED")}
+          className="flex w-full items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-left text-sm text-amber-950 hover:bg-amber-100"
+        >
+          <AlertTriangle size={18} className="shrink-0 text-amber-600" aria-hidden />
+          <span>
+            <strong>{unassignedCount} teacher{unassignedCount === 1 ? " has" : "s have"} no classes yet.</strong>{" "}
+            They can browse and print, but cannot add or edit anything until you assign classes. Show them
+          </span>
+        </button>
+      )}
+
+      {/* What each role can do */}
+      <section aria-label="What each role can do" className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        {([
+          ["ADMIN", Shield, "text-purple-700"],
+          ["TEACHER", GraduationCap, "text-emerald-700"],
+          ["EXAM_CELL", Lock, "text-amber-700"],
+        ] as const).map(([role, Icon, tone]) => (
+          <div key={role} className="rounded-xl border border-slate-200 bg-white p-3.5">
+            <div className={`flex items-center gap-2 text-sm font-bold ${tone}`}>
+              <Icon size={15} aria-hidden /> {USER_ROLE_LABEL[role]}
+            </div>
+            <p className="mt-1 text-xs leading-relaxed text-slate-600">{ROLE_HELP[role]}</p>
           </div>
-          <p className="mt-1 text-[11px] text-slate-600 leading-snug">
-            Full control over school settings, user roles, final paper approvals, and confidential audit trail.
-          </p>
-        </div>
-        <div className="card p-3.5 bg-white border border-indigo-200">
-          <div className="flex items-center gap-2 font-bold text-xs text-indigo-900">
-            <UserCheck size={14} className="text-indigo-600" /> Head of Department (HOD)
-          </div>
-          <p className="mt-1 text-[11px] text-slate-600 leading-snug">
-            Oversees department syllabus, reviews &amp; moderates question papers, and approves blueprints.
-          </p>
-        </div>
-        <div className="card p-3.5 bg-white border border-emerald-200">
-          <div className="flex items-center gap-2 font-bold text-xs text-emerald-900">
-            <Users size={14} className="text-emerald-600" /> Subject Teacher
-          </div>
-          <p className="mt-1 text-[11px] text-slate-600 leading-snug">
-            Authors questions, builds draft question papers, and generates parallel set variants.
-          </p>
-        </div>
-        <div className="card p-3.5 bg-white border border-amber-200">
-          <div className="flex items-center gap-2 font-bold text-xs text-amber-900">
-            <Lock size={14} className="text-amber-600" /> Exam Cell Officer
-          </div>
-          <p className="mt-1 text-[11px] text-slate-600 leading-snug">
-            Manages print runs, paper ream budgets, hall packaging slips, date-sheet schedules, and OMR sheets.
-          </p>
-        </div>
-      </div>
+        ))}
+      </section>
 
       {/* Filter Bar */}
       <div className="card p-3 bg-white border border-slate-200 shadow-2xs flex flex-wrap items-center gap-3">
@@ -283,7 +305,7 @@ export default function UsersAdminPage() {
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Search by faculty name, email or department…"
+            placeholder="Search by name, email or class…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="input pl-8 py-1.5 text-xs w-full"
@@ -295,12 +317,13 @@ export default function UsersAdminPage() {
           style={{ width: "13rem" }}
           className="input text-xs py-1.5 shrink-0"
         >
-          <option value="">All Roles ({users.length})</option>
+          <option value="">All roles ({users.length})</option>
           {USER_ROLES.map((r) => (
             <option key={r} value={r}>
               {USER_ROLE_LABEL[r]}
             </option>
           ))}
+          <option value="UNASSIGNED">Teachers without classes</option>
         </select>
         <button
           type="button"
@@ -320,7 +343,7 @@ export default function UsersAdminPage() {
               <tr>
                 <th className="px-3 py-3">Faculty Member</th>
                 <th className="px-3 py-3">Role</th>
-                <th className="px-3 py-3">Department</th>
+                <th className="px-3 py-3">Classes</th>
                 <th className="px-3 py-3">Authored Content</th>
                 <th className="px-3 py-3">Status</th>
                 <th className="px-3 py-3">Joined</th>
@@ -351,22 +374,19 @@ export default function UsersAdminPage() {
                         </div>
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap">
-                        <span
-                          className={`badge font-bold text-[11px] ${
-                            u.role === "ADMIN"
-                              ? "!bg-purple-100 !text-purple-800"
-                              : u.role === "HOD"
-                              ? "!bg-indigo-100 !text-indigo-800"
-                              : u.role === "EXAM_CELL"
-                              ? "!bg-amber-100 !text-amber-800"
-                              : "!bg-emerald-100 !text-emerald-800"
-                          }`}
-                        >
+                        <span className={`badge font-bold text-[11px] ${ROLE_BADGE[u.role] ?? ROLE_BADGE.TEACHER}`}>
                           {USER_ROLE_LABEL[u.role] || u.role}
                         </span>
                       </td>
-                      <td className="px-3 py-3 whitespace-nowrap font-medium text-slate-700">
-                        {u.department || "General"}
+                      <td className="px-3 py-3">
+                        {u.role === "TEACHER" ? (
+                          <AssignmentChips
+                            assignments={u.assignments ?? []}
+                            empty={<span className="font-semibold text-amber-700">No classes yet</span>}
+                          />
+                        ) : (
+                          <span className="text-slate-500">Whole school</span>
+                        )}
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap text-slate-600">
                         <span className="font-semibold text-slate-900">{u._count?.questions ?? 0}</span> questions ·{" "}
@@ -404,13 +424,13 @@ export default function UsersAdminPage() {
                                 setEditForm({
                                   name: u.name,
                                   role: u.role,
-                                  department: u.department || "",
+                                  assignments: u.assignments ?? [],
                                   active: u.active,
                                 });
                               }}
                               className="btn btn-sm btn-ghost text-indigo-700 hover:bg-indigo-50"
                             >
-                              <UserCog size={13} /> Manage Role
+                              <UserCog size={13} /> Role &amp; classes
                             </button>
                             {u.id !== currentUser?.id && (
                               <button
@@ -438,7 +458,7 @@ export default function UsersAdminPage() {
       {/* MODAL: ADD FACULTY MEMBER                                      */}
       {/* ============================================================== */}
       {createModal && (
-        <Modal title="Add Faculty Member" onClose={() => setCreateModal(false)}>
+        <Modal title="Add staff member" onClose={() => setCreateModal(false)}>
           <form onSubmit={handleCreate} className="space-y-4">
             <div>
               <label className="label">Full Name</label>
@@ -474,32 +494,14 @@ export default function UsersAdminPage() {
                 minLength={6}
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="label">Assigned Role</label>
-                <select
-                  value={createForm.role}
-                  onChange={(e) => setCreateForm({ ...createForm, role: e.target.value as UserRole })}
-                  className="input w-full font-semibold"
-                >
-                  {USER_ROLES.map((r) => (
-                    <option key={r} value={r}>
-                      {USER_ROLE_LABEL[r]}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="label">Department</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Mathematics, Science"
-                  value={createForm.department}
-                  onChange={(e) => setCreateForm({ ...createForm, department: e.target.value })}
-                  className="input w-full"
-                />
-              </div>
-            </div>
+            <RoleField value={createForm.role} onChange={(role) => setCreateForm({ ...createForm, role })} />
+            {createForm.role === "TEACHER" && (
+              <AssignmentField
+                classes={classes}
+                value={createForm.assignments}
+                onChange={(assignments) => setCreateForm({ ...createForm, assignments })}
+              />
+            )}
 
             <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
               <button
@@ -514,7 +516,7 @@ export default function UsersAdminPage() {
                 disabled={savingCreate}
                 className="btn btn-primary"
               >
-                {savingCreate ? "Creating Member…" : "Create & Grant Access"}
+                {savingCreate ? "Creating account…" : "Create account"}
               </button>
             </div>
           </form>
@@ -526,7 +528,7 @@ export default function UsersAdminPage() {
       {/* ============================================================== */}
       {editUser && (
         <Modal
-          title={`Manage Role & Access: ${editUser.name}`}
+          title={`Role & classes: ${editUser.name}`}
           onClose={() => setEditUser(null)}
         >
           <form onSubmit={handleEdit} className="space-y-4">
@@ -546,31 +548,14 @@ export default function UsersAdminPage() {
               />
             </div>
 
-            <div>
-              <label className="label">Assigned Role (RBAC)</label>
-              <select
-                value={editForm.role}
-                onChange={(e) => setEditForm({ ...editForm, role: e.target.value as UserRole })}
-                className="input w-full font-bold text-sm"
-              >
-                {USER_ROLES.map((r) => (
-                  <option key={r} value={r}>
-                    {USER_ROLE_LABEL[r]}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="label">Department</label>
-              <input
-                type="text"
-                placeholder="e.g. Science, Mathematics"
-                value={editForm.department}
-                onChange={(e) => setEditForm({ ...editForm, department: e.target.value })}
-                className="input w-full"
+            <RoleField value={editForm.role} onChange={(role) => setEditForm({ ...editForm, role })} />
+            {editForm.role === "TEACHER" && (
+              <AssignmentField
+                classes={classes}
+                value={editForm.assignments}
+                onChange={(assignments) => setEditForm({ ...editForm, assignments })}
               />
-            </div>
+            )}
 
             <div className="pt-2">
               <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-800">
@@ -597,7 +582,7 @@ export default function UsersAdminPage() {
                 disabled={savingEdit}
                 className="btn btn-primary"
               >
-                {savingEdit ? "Updating Role…" : "Save Changes"}
+                {savingEdit ? "Saving…" : "Save changes"}
               </button>
             </div>
           </form>
@@ -760,3 +745,46 @@ export default function UsersAdminPage() {
     </div>
   );
 }
+
+function RoleField({ value, onChange }: { value: UserRole; onChange: (role: UserRole) => void }) {
+  return (
+    <fieldset>
+      <legend className="label">Role</legend>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        {USER_ROLES.map((r) => (
+          <label
+            key={r}
+            className={`cursor-pointer rounded-xl border p-2.5 text-xs transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-indigo-600 ${
+              value === r ? "border-indigo-600 bg-indigo-50 text-indigo-950" : "border-slate-200 hover:border-slate-400"
+            }`}
+          >
+            <input type="radio" name="role" value={r} checked={value === r} onChange={() => onChange(r)} className="sr-only" />
+            <span className="block text-sm font-bold">{USER_ROLE_LABEL[r]}</span>
+          </label>
+        ))}
+      </div>
+      <p className="mt-1.5 text-xs leading-relaxed text-slate-500">{ROLE_HELP[value]}</p>
+    </fieldset>
+  );
+}
+
+function AssignmentField({
+  classes,
+  value,
+  onChange,
+}: {
+  classes: PickerClass[];
+  value: Assignment[];
+  onChange: (next: Assignment[]) => void;
+}) {
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="label mb-1">Classes and subjects</span>
+        <span className="text-xs text-slate-500">{value.length === 0 ? "None yet" : `${value.length} selected`}</span>
+      </div>
+      <ClassAssignmentPicker classes={classes} value={value} onChange={onChange} />
+    </div>
+  );
+}
+

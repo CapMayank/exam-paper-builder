@@ -3,39 +3,17 @@ import { body, HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { userCreateSchema } from "@/lib/schemas";
+import { cleanAssignments, toUserDto, userDirectorySelect } from "@/lib/userDirectory";
 
 export const GET = route(
-  async (_req, _params, user) => {
-    // Only Admin and HOD can inspect user list
-    if (user.role !== "ADMIN" && user.role !== "HOD") {
-      throw new HttpError(403, "Only Administrators and Department Heads can view user directory");
-    }
-
+  async () => {
     const users = await prisma.user.findMany({
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        department: true,
-        active: true,
-        createdAt: true,
-        _count: {
-          select: {
-            questions: true,
-            papers: true,
-          },
-        },
-      },
+      select: userDirectorySelect,
       orderBy: [{ role: "asc" }, { name: "asc" }],
     });
-
-    return users.map((u) => ({
-      ...u,
-      createdAt: u.createdAt.toISOString(),
-    }));
+    return users.map(toUserDto);
   },
-  { roles: ["ADMIN", "HOD"] },
+  { roles: ["ADMIN"] },
 );
 
 export const POST = route(
@@ -48,37 +26,28 @@ export const POST = route(
     }
 
     const passwordHash = await hash(input.password, 10);
+    // Only teachers hold class assignments; Admin and Exam Cell work school-wide.
+    const assignments = input.role === "TEACHER" ? cleanAssignments(input.assignments) : [];
     const created = await prisma.user.create({
       data: {
         name: input.name,
         email: input.email,
         passwordHash,
         role: input.role,
-        department: input.department,
         active: true,
+        assignments: { create: assignments },
       },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        department: true,
-        active: true,
-        createdAt: true,
-      },
+      select: userDirectorySelect,
     });
 
     await recordAudit(adminUser, "USER_CREATE", "USER", created.id, {
       name: created.name,
       email: created.email,
       role: created.role,
-      department: created.department,
+      assignments,
     });
 
-    return {
-      ...created,
-      createdAt: created.createdAt.toISOString(),
-    };
+    return toUserDto(created);
   },
   { roles: ["ADMIN"] },
 );

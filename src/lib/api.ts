@@ -1,5 +1,6 @@
 import "server-only";
 import { unstable_rethrow } from "next/navigation";
+import type { Prisma } from "@prisma/client";
 import { ZodError } from "zod";
 import { prisma } from "./prisma";
 import { sessionUserId } from "./session";
@@ -14,15 +15,25 @@ export class HttpError extends Error {
 }
 
 import type { UserRole } from "./constants";
+import { normalizeRole, type Assignment } from "./permissions";
 
 export type SessionUser = {
   id: string;
   name: string;
   email: string;
   role: UserRole;
-  department: string;
   active: boolean;
+  assignments: Assignment[];
 };
+
+export const sessionUserSelect = {
+  id: true,
+  name: true,
+  email: true,
+  role: true,
+  active: true,
+  assignments: { select: { className: true, subject: true } },
+} satisfies Prisma.UserSelect;
 
 type Ctx = { params: Promise<Record<string, string>> };
 
@@ -39,12 +50,8 @@ export function route(
       let user = null as SessionUser | null;
       if (opts.auth !== false) {
         const id = await sessionUserId(req);
-        user = id
-          ? ((await prisma.user.findUnique({
-              where: { id },
-              select: { id: true, name: true, email: true, role: true, department: true, active: true },
-            })) as SessionUser | null)
-          : null;
+        const row = id ? await prisma.user.findUnique({ where: { id }, select: sessionUserSelect }) : null;
+        user = row ? { ...row, role: normalizeRole(row.role) } : null;
         if (!user) throw new HttpError(401, "Not signed in");
         if (!user.active) throw new HttpError(403, "Account is deactivated");
         if (opts.roles && !opts.roles.includes(user.role)) {

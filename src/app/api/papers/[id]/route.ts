@@ -49,7 +49,7 @@ export const PATCH = route(async (req, { id }, user) => {
 export const DELETE = route(async (_req, { id }, user) => {
   const paper = await prisma.paper.findUnique({
     where: { id },
-    select: { status: true, title: true, createdById: true },
+    select: { status: true, title: true, createdById: true, blueprint: { select: { book: { select: { className: true, subject: true } } } } },
   });
   if (!paper) throw new HttpError(404, "Paper not found");
   assertCanModifyPaper(user, paper);

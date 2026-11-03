@@ -6,7 +6,7 @@ import {
   permuteMcqOptions,
   planMultiSetDistribution,
 } from "@/lib/multiset";
-import { loadPaperView } from "@/lib/papers";
+import { assertCanCopyPaper, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { isQuestionContaminated } from "@/lib/questionValidator";
 import { parseSubparts } from "@/lib/types";
@@ -47,6 +47,7 @@ export const POST = route(async (req, params, user) => {
   });
 
   if (!source) throw new HttpError(404, "Paper not found");
+  assertCanCopyPaper(user, source);
   if (source.items.length === 0) {
     throw new HttpError(400, "Source paper has no questions placed. Place questions before generating parallel sets.");
   }

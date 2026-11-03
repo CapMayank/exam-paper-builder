@@ -2,6 +2,7 @@ import { body, HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { diagnosePaperImplications } from "@/lib/blueprint";
 import { assertBlueprintValid, loadBlueprint } from "@/lib/blueprints";
+import { assertCanManageBook } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { blueprintSchema } from "@/lib/schemas";
 
@@ -30,6 +31,8 @@ export const PUT = route(async (req, { id }, user) => {
     },
   });
   if (!existing) throw new HttpError(404, "Blueprint not found");
+  await assertCanManageBook(user, existing.bookId);
+  if (input.bookId !== existing.bookId) await assertCanManageBook(user, input.bookId);
 
   if (existing.papers.some((p) => p.status === "FINAL") && user.role !== "ADMIN") {
     throw new HttpError(
@@ -242,14 +245,17 @@ export const PUT = route(async (req, { id }, user) => {
 
   return updatedBp;
   },
-  { roles: ["ADMIN", "HOD"] },
+  { roles: ["ADMIN", "TEACHER"] },
 );
 
 export const DELETE = route(
-  async (_req, { id }) => {
+  async (_req, { id }, user) => {
+    const bp = await prisma.blueprint.findUnique({ where: { id }, select: { bookId: true } });
+    if (!bp) throw new HttpError(404, "Blueprint not found");
+    await assertCanManageBook(user, bp.bookId);
     const papers = await prisma.paper.count({ where: { blueprintId: id } });
     if (papers > 0) throw new HttpError(409, `${papers} paper(s) use this blueprint. Delete them first.`);
     await prisma.blueprint.delete({ where: { id } });
   },
-  { roles: ["ADMIN", "HOD"] },
+  { roles: ["ADMIN", "TEACHER"] },
 );

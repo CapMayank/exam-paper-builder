@@ -4,6 +4,7 @@ import { Copy, KeyRound, Printer, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { EXAM_TYPE_LABEL, WORKSHEET_MODE, resolvePaperExamType, type ExamType } from "@/lib/constants";
 import { plural, timeAgo } from "@/lib/format";
+import { canModifyPaper, type Actor } from "@/lib/permissions";
 import type { PaperListItem } from "@/lib/types";
 
 export function Progress({
@@ -74,7 +75,7 @@ export function PaperRow({
   p: PaperListItem;
   onDelete?: (p: PaperListItem) => void;
   onDuplicate?: (p: PaperListItem) => void;
-  currentUser?: { id: string; role?: string } | null;
+  currentUser?: Actor | null;
   selected?: boolean;
   onToggleSelect?: (p: PaperListItem) => void;
 }) {
@@ -90,10 +91,7 @@ export function PaperRow({
   const examType = resolvePaperExamType(p);
   const isWs = p.blueprint.curriculumMode === WORKSHEET_MODE;
   const openHref = isWs ? `/worksheets/${p.id}` : `/papers/${p.id}`;
-  const isOwner = currentUser?.id && p.createdById ? p.createdById === currentUser.id : false;
-  const isAdmin = currentUser?.role === "ADMIN";
-  const isHod = currentUser?.role === "HOD";
-  const canDelete = currentUser ? (isAdmin || ((isHod || isOwner) && p.status !== "FINAL")) : (p.status !== "FINAL");
+  const canDelete = currentUser ? canModifyPaper(currentUser, p) : p.status !== "FINAL";
   return (
     <li className={`group grid gap-x-4 gap-y-2 px-4 py-3.5 transition-colors hover:bg-slate-50 sm:items-center ${
       onToggleSelect ? "sm:grid-cols-[auto_minmax(0,1fr)_11rem_auto]" : "sm:grid-cols-[minmax(0,1fr)_11rem_auto]"

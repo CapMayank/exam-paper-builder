@@ -867,13 +867,12 @@ export type AcademicSession = (typeof ACADEMIC_SESSIONS)[number];
 export const MAX_OPTIONS = 6;
 export const MIN_OPTIONS = 2;
 
-export const USER_ROLES = ["ADMIN", "HOD", "TEACHER", "EXAM_CELL"] as const;
+export const USER_ROLES = ["ADMIN", "TEACHER", "EXAM_CELL"] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 export const USER_ROLE_LABEL: Record<UserRole, string> = {
-  ADMIN: "Administrator / Principal",
-  HOD: "Head of Department",
-  TEACHER: "Subject Teacher",
-  EXAM_CELL: "Exam Cell & Logistics Officer",
+  ADMIN: "Administrator",
+  TEACHER: "Teacher",
+  EXAM_CELL: "Exam Cell",
 };
 
 export const TIMETABLE_STATUSES = ["SCHEDULED", "DRAFTED", "MODERATED", "PRINTED", "COMPLETED"] as const;

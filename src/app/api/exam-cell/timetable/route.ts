@@ -67,5 +67,5 @@ export const POST = route(
       updatedAt: entry.updatedAt.toISOString(),
     };
   },
-  { roles: ["ADMIN", "HOD", "EXAM_CELL"] },
+  { roles: ["ADMIN", "EXAM_CELL"] },
 );

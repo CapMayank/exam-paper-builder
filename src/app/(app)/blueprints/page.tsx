@@ -40,6 +40,7 @@ import {
 } from "@/components/ui";
 import { normalizeSession, useAcademicSession } from "@/lib/academicSession";
 import { blueprintTotalMarks } from "@/lib/blueprint";
+import { canManageScope, hasAnyWriteScope, type Actor } from "@/lib/permissions";
 import { api } from "@/lib/client";
 import {
   ACADEMIC_SESSIONS,
@@ -74,7 +75,7 @@ export default function BlueprintsPage() {
 
   const [items, setItems] = useState<Blueprint[]>([]);
   const [classes, setClasses] = useState<AcademicClassDto[]>([]);
-  const [currentUser, setCurrentUser] = useState<{ id: string; role?: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<Actor | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -120,7 +121,7 @@ export default function BlueprintsPage() {
       const [bpData, clsData, me] = await Promise.all([
         api<Blueprint[]>("/api/blueprints"),
         api<AcademicClassDto[]>(`/api/classes?session=${encodeURIComponent(activeSession)}`),
-        api<{ id: string; role?: string }>("/api/me").catch(() => null),
+        api<Actor>("/api/me").catch(() => null),
       ]);
       setItems(bpData);
       setClasses(clsData);
@@ -201,7 +202,8 @@ export default function BlueprintsPage() {
   const selectedTotalQuestions = selected ? selected.sections.reduce((sum, s) => sum + s.count, 0) : 0;
 
   const isAdmin = currentUser?.role === "ADMIN";
-  const canManageBlueprint = currentUser?.role === "ADMIN" || currentUser?.role === "HOD";
+  const canManageBlueprint = (bp: { book?: { className: string; subject: string } | null }) => canManageScope(currentUser, bp.book);
+  const canCreate = hasAnyWriteScope(currentUser);
 
   async function remove(b: Blueprint) {
     const ok = await confirm({
@@ -310,6 +312,7 @@ export default function BlueprintsPage() {
         description={`Exam blueprints define marks, section formats, and chapter allocations for each subject in Session ${activeSession}.`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            {canCreate && (
             <Link
               href="/blueprints/new?import=true&tab=ai"
               className="btn btn-ghost border border-indigo-200 bg-indigo-50/80 text-indigo-900 hover:bg-indigo-100 text-xs py-1.5 font-bold flex items-center gap-1.5"
@@ -317,6 +320,7 @@ export default function BlueprintsPage() {
             >
               <Sparkles size={15} className="text-indigo-600" /> AI Blueprint Creator
             </Link>
+            )}
             {isAdmin && (
               <button
                 type="button"
@@ -327,6 +331,7 @@ export default function BlueprintsPage() {
                 <RotateCcw size={15} className="text-slate-600" /> Rollover Session
               </button>
             )}
+            {canCreate && (<>
             <button
               type="button"
               onClick={() => setTemplateModalOpen(true)}
@@ -348,6 +353,7 @@ export default function BlueprintsPage() {
             >
               <Plus size={15} /> New Blueprint
             </Link>
+            </>)}
           </div>
         }
       />
@@ -520,9 +526,11 @@ export default function BlueprintsPage() {
                 <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
                   <Ruler size={14} className="text-indigo-600" /> Blueprints ({displayedBlueprints.length})
                 </span>
+                {canCreate && (
                 <Link href="/blueprints/new" className="btn btn-primary text-[11px] py-1 px-2.5 gap-1">
                   <Plus size={13} /> New
                 </Link>
+                )}
               </div>
               <ul className="overflow-y-auto overscroll-contain flex-1 p-2 space-y-1.5 focus:outline-none" aria-label="Blueprints">
                 {displayedBlueprints.map((bp) => {
@@ -603,7 +611,7 @@ export default function BlueprintsPage() {
                         >
                           <Pencil size={12} />
                         </Link>
-                        {canManageBlueprint && (
+                        {canManageBlueprint(bp) && (
                           <button
                             type="button"
                             className="btn btn-ghost btn-icon btn-xs p-1 hover:bg-red-50 hover:text-red-700"
@@ -690,9 +698,9 @@ export default function BlueprintsPage() {
                     <Link
                       href={`/blueprints/${selected.id}`}
                       className="btn btn-ghost border border-slate-200 text-xs py-1.5 px-2.5 inline-flex items-center gap-1"
-                      title={canManageBlueprint ? "Edit blueprint configuration" : "View blueprint specification"}
+                      title={canManageBlueprint(selected) ? "Edit blueprint configuration" : "View blueprint specification"}
                     >
-                      <Pencil size={13} /> {canManageBlueprint ? "Edit" : "View"}
+                      <Pencil size={13} /> {canManageBlueprint(selected) ? "Edit" : "View"}
                     </Link>
                     <button
                       type="button"
@@ -710,7 +718,7 @@ export default function BlueprintsPage() {
                     >
                       <Copy size={13} /> Duplicate
                     </button>
-                    {canManageBlueprint && (
+                    {canManageBlueprint(selected) && (
                       <button
                         type="button"
                         onClick={() => remove(selected)}

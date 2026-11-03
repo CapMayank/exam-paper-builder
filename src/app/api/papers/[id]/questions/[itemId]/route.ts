@@ -12,8 +12,8 @@ async function editableItem(paperId: string, itemId: string, user: SessionUser) 
   const item = await prisma.paperQuestion.findUnique({
     where: { id: itemId },
     include: {
-      paper: { select: { status: true, createdById: true } },
-      question: { include: { chapter: true } },
+      paper: { select: { status: true, createdById: true, blueprint: { select: { book: { select: { className: true, subject: true } } } } } },
+      question: { include: { chapter: true, book: { select: { className: true, subject: true } } } },
       section: true,
       orQuestion: { include: { chapter: true } },
     },

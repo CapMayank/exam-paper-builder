@@ -8,6 +8,7 @@ import { SyllabusImportModal } from "@/components/SyllabusImportModal";
 import { CombineBooksModal } from "@/components/CombineBooksModal";
 import { AcademicRolloverModal } from "@/components/AcademicRolloverModal";
 import { normalizeSession, useAcademicSession } from "@/lib/academicSession";
+import { canManageScope, hasAnyWriteScope, type Actor } from "@/lib/permissions";
 import { api } from "@/lib/client";
 import { sortClassNames } from "@/lib/constants";
 import { plural } from "@/lib/format";
@@ -22,7 +23,7 @@ export default function BooksPage() {
   const { currentSession, setSession, availableSessions: hookSessions } = useAcademicSession();
   const [books, setBooks] = useState<Book[]>([]);
   const [classes, setClasses] = useState<AcademicClassDto[]>([]);
-  const [currentUser, setCurrentUser] = useState<{ id: string; role?: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<Actor | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedSubjectKey, setSelectedSubjectKey] = useState<string | null>(null);
@@ -78,7 +79,7 @@ export default function BooksPage() {
       Promise.all([
         api<Book[]>("/api/books"),
         api<AcademicClassDto[]>("/api/classes"),
-        api<{ id: string; role?: string }>("/api/me").catch(() => null),
+        api<Actor>("/api/me").catch(() => null),
       ]).then(
         ([data, clsData, me]) => {
           setBooks(data);
@@ -306,7 +307,8 @@ export default function BooksPage() {
   }, [classes, selected]);
 
   const isAdmin = currentUser?.role === "ADMIN";
-  const canManageBooks = currentUser?.role === "ADMIN" || currentUser?.role === "HOD";
+  const canManageBooks = (scope: { className: string; subject: string } | null | undefined) => canManageScope(currentUser, scope);
+  const canCreate = hasAnyWriteScope(currentUser);
 
   async function run(fn: () => Promise<unknown>, success?: string) {
     setError(null);
@@ -426,6 +428,7 @@ export default function BooksPage() {
                 <RotateCcw size={16} /> Rollover Session
               </button>
             )}
+            {canCreate && (<>
             <button
               type="button"
               className="btn btn-ghost border border-purple-200 bg-purple-50/50 text-purple-800 hover:bg-purple-100 hover:border-purple-300"
@@ -450,6 +453,7 @@ export default function BooksPage() {
             <button type="button" className="btn btn-primary" onClick={() => openBookDialog()}>
               <Plus size={16} /> Add textbook
             </button>
+            </>)}
           </div>
         }
       />
@@ -656,6 +660,7 @@ export default function BooksPage() {
                                       {plural(b.chapters.length, "chapter")} · {plural(b._count.questions, "question")}
                                     </span>
                                   </button>
+                                  {canManageBooks(b) && (
                                   <div className="absolute right-2 top-2 z-10 flex gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity bg-white/95 rounded-lg p-0.5 shadow-2xs border border-slate-200/60">
                                     <button
                                       type="button"
@@ -666,18 +671,17 @@ export default function BooksPage() {
                                     >
                                       <Pencil size={11} />
                                     </button>
-                                    {canManageBooks && (
-                                      <button
-                                        type="button"
-                                        className="btn btn-ghost btn-icon btn-xs p-1 hover:bg-red-50 hover:text-red-700"
-                                        title="Delete textbook"
-                                        aria-label={`Delete ${b.title}`}
-                                        onClick={() => removeBook(b)}
-                                      >
-                                        <Trash2 size={11} />
-                                      </button>
-                                    )}
+                                    <button
+                                      type="button"
+                                      className="btn btn-ghost btn-icon btn-xs p-1 hover:bg-red-50 hover:text-red-700"
+                                      title="Delete textbook"
+                                      aria-label={`Delete ${b.title}`}
+                                      onClick={() => removeBook(b)}
+                                    >
+                                      <Trash2 size={11} />
+                                    </button>
                                   </div>
+                                  )}
                                 </div>
                               );
                             })}
@@ -704,6 +708,7 @@ export default function BooksPage() {
                                 No textbook added yet
                               </p>
                             </button>
+                            {canManageBooks({ className: group.className, subject: group.subjectName }) && (
                             <div className="mt-2 flex items-center gap-1.5">
                               <button
                                 type="button"
@@ -726,6 +731,7 @@ export default function BooksPage() {
                                 <Sparkles size={11} className="text-indigo-600" /> Import
                               </button>
                             </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -805,6 +811,7 @@ export default function BooksPage() {
                     </div>
                   </div>
 
+                  {canManageBooks(selected) ? (
                   <form onSubmit={saveChapter} className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3.5">
                     <Field label="Number" className="w-24">
                       <input
@@ -845,6 +852,11 @@ export default function BooksPage() {
                       )}
                     </div>
                   </form>
+                  ) : (
+                    <p className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-xs text-slate-600">
+                      You can read this book. Chapters are managed by the teachers assigned to {selected.className} · {selected.subject}.
+                    </p>
+                  )}
 
                   {selected.chapters.length === 0 ? (
                     <EmptyState compact icon={BookOpen} title="No chapters yet" description="Add the first chapter above. The number moves on by itself, so you can type titles one after another." />
@@ -868,10 +880,12 @@ export default function BooksPage() {
                                 <td className="font-semibold tabular-nums text-slate-500">{c.number}</td>
                                 <td className="font-medium text-slate-800">{c.title}</td>
                                 <td className="text-right whitespace-nowrap">
+                                  {canManageBooks(selected) && (
                                   <button type="button" className="btn btn-ghost btn-icon btn-sm" title="Edit chapter" aria-label={`Edit chapter ${c.number}`} onClick={() => editChapter(c)}>
                                     <Pencil size={14} />
                                   </button>
-                                  {canManageBooks && (
+                                  )}
+                                  {canManageBooks(selected) && (
                                     <button
                                       type="button"
                                       className="btn btn-ghost btn-icon btn-sm hover:bg-red-50 hover:text-red-700"

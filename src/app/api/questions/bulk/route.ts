@@ -4,7 +4,7 @@ import { recordAudit } from "@/lib/audit";
 import { parseAndValidateBatch } from "@/lib/batchQuestionIo";
 import { DIFFICULTIES, QUESTION_TYPES } from "@/lib/constants";
 import { toQuestionDto } from "@/lib/dto";
-import { assertCanModifyQuestion } from "@/lib/papers";
+import { assertCanManageScope, assertCanModifyQuestion } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 
 // Legacy schema for backward compatibility
@@ -53,6 +53,7 @@ export const POST = route(async (req, _params, user) => {
     });
 
     if (!book) throw new HttpError(404, "Target book not found");
+    assertCanManageScope(user, book);
 
     // Fetch existing questions to populate duplicate detection index
     const existingQuestions = await prisma.question.findMany({
@@ -129,8 +130,10 @@ export const POST = route(async (req, _params, user) => {
   // Legacy Bulk Flow
   const chapter = await prisma.chapter.findFirst({
     where: { id: input.chapterId, bookId: input.bookId },
+    include: { book: { select: { className: true, subject: true } } },
   });
   if (!chapter) throw new HttpError(400, "Selected chapter does not belong to the book.");
+  assertCanManageScope(user, chapter.book);
 
   const createdQuestions = await prisma.$transaction(
     input.questions.map((q) =>
@@ -177,7 +180,7 @@ export const DELETE = route(async (req, _params, user) => {
 
   const questions = await prisma.question.findMany({
     where: { id: { in: ids } },
-    select: { id: true, text: true, type: true, createdById: true },
+    select: { id: true, text: true, type: true, createdById: true, book: { select: { className: true, subject: true } } },
   });
 
   if (questions.length === 0) {

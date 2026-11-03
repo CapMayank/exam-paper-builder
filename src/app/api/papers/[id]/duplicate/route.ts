@@ -1,6 +1,6 @@
 import { HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
-import { loadPaperView } from "@/lib/papers";
+import { assertCanCopyPaper, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -15,6 +15,7 @@ export const POST = route(async (req, params, user) => {
   const source = await prisma.paper.findUnique({
     where: { id },
     include: {
+      blueprint: { select: { book: { select: { className: true, subject: true } } } },
       items: {
         include: {
           question: true,
@@ -25,6 +26,7 @@ export const POST = route(async (req, params, user) => {
   });
 
   if (!source) throw new HttpError(404, "Paper not found");
+  assertCanCopyPaper(user, source);
 
   const targetSession = typeof raw.academicSession === "string" && raw.academicSession.trim()
     ? raw.academicSession.trim()

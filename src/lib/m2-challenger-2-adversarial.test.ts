@@ -39,8 +39,9 @@ describe("Milestone 2 Challenger Adversarial Empirical Test Suite", () => {
         email: `m2_chal_teacher_${testStamp}@test.internal`,
         passwordHash: "dummy_hash",
         role: "TEACHER",
-        department: "Science",
         active: true,
+        // Builds content for these classes, so it needs to be assigned to them.
+        assignments: { create: [{ className: "Class 10", subject: "" }, { className: "Class 12", subject: "" }] },
       },
     });
     mockSessionUserId = teacherUser.id;

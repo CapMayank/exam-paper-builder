@@ -1,5 +1,6 @@
 import { body, route } from "@/lib/api";
 import { assertBlueprintValid, blueprintInclude, loadBlueprint } from "@/lib/blueprints";
+import { assertCanManageBook } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { blueprintSchema } from "@/lib/schemas";
 import { DEFAULT_ACADEMIC_SESSION, WORKSHEET_MODE } from "@/lib/constants";
@@ -22,8 +23,9 @@ export const GET = route(async (req) => {
   return keepActive(list, (b) => b.book, scopeFromRequest(req));
 });
 
-export const POST = route(async (req) => {
+export const POST = route(async (req, _params, user) => {
   const input = await body(req, blueprintSchema);
+  await assertCanManageBook(user, input.bookId);
   input.chapters = input.chapters.filter((c) => c.marks > 0);
   await assertBlueprintValid(input);
 

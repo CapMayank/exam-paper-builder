@@ -4,7 +4,7 @@ import { auditPaperEvidenceBased, type EvidenceAuditFinding } from "@/lib/eviden
 import { evaluateMPBoardStandardCompliance } from "@/lib/mpbseStandardEngine";
 import { validatePaperCompleteness } from "@/lib/paperCompletenessEngine";
 import { questionSlotMarks } from "@/lib/blueprint";
-import { loadPaperView } from "@/lib/papers";
+import { canModifyPaper, loadPaperView } from "@/lib/papers";
 import { subpartsTotalMarks } from "@/lib/types";
 import { z } from "zod";
 
@@ -44,8 +44,8 @@ export const POST = route(async (req, _ctx, user) => {
       throw new HttpError(404, "Paper not found");
     }
     // Read-only audit: a teacher may audit only their own papers (finalised papers stay auditable).
-    if (user.role === "TEACHER" && paper.createdById !== user.id) {
-      throw new HttpError(403, "You can only audit your own papers.");
+    if (user.role === "TEACHER" && !canModifyPaper(user, { ...paper, status: undefined })) {
+      throw new HttpError(403, "You can audit your own papers, or papers of the classes and subjects assigned to you.");
     }
 
     const totalMarks = paper.progress.totalMarks;

@@ -14,14 +14,30 @@ model User {
   name           String
   email          String          @unique
   passwordHash   String
-  role           String          @default("TEACHER") // ADMIN | HOD | TEACHER | EXAM_CELL
-  department     String          @default("")
+  role           String          @default("TEACHER") // ADMIN | TEACHER | EXAM_CELL (legacy HOD reads as TEACHER)
+  department     String          @default("") // legacy, unused: access is scoped by ClassAssignment
   active         Boolean         @default(true)
   createdAt      DateTime        @default(now())
   questions      Question[]
   papers         Paper[]
   paperSnapshots PaperSnapshot[]
   auditLogs      AuditLog[]
+  assignments    ClassAssignment[]
+}
+
+// What a teacher looks after. subject "" = Class In-charge (every subject of the class + class settings);
+// otherwise Subject Teacher of that subject. Matched by name against Book.className / Book.subject, so
+// assignments carry over academic rollover.
+model ClassAssignment {
+  id        String   @id @default(cuid())
+  userId    String
+  className String
+  subject   String   @default("")
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, className, subject])
+  @@index([className])
 }
 
 model AcademicClass {

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { body, HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { DIFFICULTIES } from "@/lib/constants";
+import { canModifyQuestion } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 
 const bulkDifficultySchema = z.object({
@@ -13,18 +14,17 @@ export const POST = route(async (req, _params, user) => {
   const input = await body(req, bulkDifficultySchema);
   const { questionIds, difficulty } = input;
 
-  const isElevated = user.role === "ADMIN" || user.role === "HOD";
   const existingQuestions = await prisma.question.findMany({
     where: { id: { in: questionIds } },
-    select: { id: true, bookId: true, createdById: true },
+    select: { id: true, bookId: true, createdById: true, book: { select: { className: true, subject: true } } },
   });
 
   if (existingQuestions.length === 0) {
     throw new HttpError(404, "No matching questions found.");
   }
 
-  if (!isElevated && existingQuestions.some((q) => q.createdById !== user.id)) {
-    throw new HttpError(403, "You do not have permission to modify questions authored by other users.");
+  if (existingQuestions.some((q) => !canModifyQuestion(user, q))) {
+    throw new HttpError(403, "You can only change your own questions, or questions of the classes and subjects assigned to you.");
   }
 
   const lockedUse = await prisma.paperQuestion.findFirst({

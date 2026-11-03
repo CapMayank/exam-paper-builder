@@ -36,6 +36,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ErrorBanner, Modal, Skeleton, useToast } from "@/components/ui";
 import { useAcademicSession } from "@/lib/academicSession";
+import { canManageTimetable as canManageTimetableFor, canViewAudit as canViewAuditFor } from "@/lib/permissions";
 import { api } from "@/lib/client";
 import { isSubjectMatching } from "@/lib/schoolCurriculum";
 import {
@@ -199,8 +200,7 @@ export default function ExamCellPage() {
       setClasses(clsList);
       setBlueprints(bpList);
 
-      // Audit logs are restricted to ADMIN, HOD, and EXAM_CELL
-      if (["ADMIN", "HOD", "EXAM_CELL"].includes(u.role || "")) {
+      if (canViewAuditFor(u)) {
         try {
           const a = await api<{ logs: AuditLogEntry[]; total: number }>("/api/audit?limit=50");
           setAuditLogs(a.logs);
@@ -512,12 +512,8 @@ export default function ExamCellPage() {
     });
   }, [timetable, sessionFilter, timetableClassFilter, timetableExamTypeFilter, timetableStatusFilter, timetableSearch]);
 
-  const canManageTimetable = Boolean(
-    currentUser && (currentUser.role === "ADMIN" || currentUser.role === "HOD" || currentUser.role === "EXAM_CELL")
-  );
-  const canViewAudit = Boolean(
-    currentUser && (currentUser.role === "ADMIN" || currentUser.role === "HOD" || currentUser.role === "EXAM_CELL")
-  );
+  const canManageTimetable = canManageTimetableFor(currentUser);
+  const canViewAudit = canViewAuditFor(currentUser);
 
   // Readiness Matrix Calculations
   const sortedClasses = useMemo(() => {
@@ -1456,7 +1452,8 @@ export default function ExamCellPage() {
                 <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
                   <button
                     type="submit"
-                    disabled={savingCalc}
+                    disabled={savingCalc || !canManageTimetable}
+                    title={canManageTimetable ? undefined : "Print runs are saved by the Exam Cell or an Administrator"}
                     className="btn btn-primary shadow-sm"
                   >
                     {savingCalc ? "Calculating…" : "Calculate & Generate Logistics Order"}

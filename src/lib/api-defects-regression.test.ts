@@ -57,12 +57,12 @@ describe("Phase 2 Defect Fixes Regression Suite (API & Route Integration)", () =
     });
     hodUser = await prisma.user.create({
       data: {
-        name: `HOD ${testStamp}`,
+        name: `Class 12 In-charge ${testStamp}`,
         email: `h-${testStamp}@test.internal`,
         passwordHash: "hash",
-        role: "HOD",
-        department: "Science",
+        role: "TEACHER",
         active: true,
+        assignments: { create: [{ className: "Class 12", subject: "" }] },
       },
     });
     adminUser = await prisma.user.create({
@@ -306,12 +306,12 @@ describe("Phase 2 Defect Fixes Regression Suite (API & Route Integration)", () =
       const data = await res.json();
 
       expect(res.status).toBe(403);
-      expect(data.error).toContain("You do not have permission to modify questions authored by other users");
+      expect(data.error).toContain("You can only change your own questions, or questions of the classes and subjects assigned to you");
 
       await prisma.question.delete({ where: { id: qOther.id } });
     });
 
-    it("allows elevated users (HOD / Admin) to update difficulty for questions authored by others", async () => {
+    it("allows the Class In-charge (and Admin) to update difficulty for questions authored by others", async () => {
       mockSessionUserId = hodUser.id;
       const qOther = await prisma.question.create({
         data: { bookId, chapterId: ch1Id, type: "SHORT", text: "Other-Author-Q", difficulty: "EASY", createdById: otherTeacherUser.id },

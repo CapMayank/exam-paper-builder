@@ -1,10 +1,11 @@
 import { route } from "@/lib/api";
+import { canManageAiSettings } from "@/lib/permissions";
 import { getGeminiApiKey } from "@/lib/gemini";
 import { configuredKeys, poolStatus } from "@/lib/geminiPool";
 
 export const GET = route(async (_req, _ctx, user) => {
   const keys = configuredKeys().length;
-  const privileged = user.role === "ADMIN" || user.role === "HOD";
+  const privileged = canManageAiSettings(user);
   return {
     hasEnvApiKey: Boolean(getGeminiApiKey()),
     model: process.env.GEMINI_MODEL || "gemini-flash-lite-latest",

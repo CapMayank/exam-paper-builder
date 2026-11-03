@@ -30,6 +30,7 @@ import {
   detectBoardRuleConflict,
   getBoardDefaultChoiceRequirement,
 } from "@/lib/internalChoiceRules";
+import { canManageScope, hasAnyWriteScope, type Actor } from "@/lib/permissions";
 import { api } from "@/lib/client";
 import { DEFAULT_SCHOOL_NAME, EXAM_TYPES, EXAM_TYPE_LABEL, KINDERGARTEN_QUESTION_TYPES, QUESTION_TYPES, QUESTION_TYPE_LABEL, STANDARD_QUESTION_TYPES, defaultLayoutForClass, sortClassNames } from "@/lib/constants";
 import { BlueprintStartPicker } from "@/components/blueprints/BlueprintStartPicker";
@@ -70,7 +71,9 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
   const [classes, setClasses] = useState<AcademicClassDto[]>([]);
   // every class the school has, in any session: a class does not stop existing when the session changes
   const [allClasses, setAllClasses] = useState<AcademicClassDto[]>([]);
-  const [currentUser, setCurrentUser] = useState<{ id: string; role?: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<Actor | null>(null);
+  // the book the saved blueprint belongs to; edit rights follow its class/subject, not the picker's current value
+  const [savedBook, setSavedBook] = useState<{ className: string; subject: string } | null>(null);
   const [name, setName] = useState("");
   const [academicSession, setAcademicSession] = useState(currentSession);
   const [bookId, setBookId] = useState("");
@@ -119,7 +122,7 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
           api<Book[]>("/api/books"),
           api<AcademicClassDto[]>(`/api/classes?session=${encodeURIComponent(currentSession)}`).catch(() => []),
           id !== "new" ? api<Blueprint>(`/api/blueprints/${id}`) : from ? api<Blueprint>(`/api/blueprints/${from}`) : Promise.resolve(null),
-          api<{ id: string; role?: string }>("/api/me").catch(() => null),
+          api<Actor>("/api/me").catch(() => null),
         ]);
         setBooks(bs);
         setClasses(clsList);
@@ -128,6 +131,7 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
         if (source) {
           setName(id === "new" ? `${source.name} (copy)` : source.name);
           setBookId(source.bookId);
+          if (id !== "new") setSavedBook(source.book);
           const matchedBook = bs.find((b) => b.id === source.bookId);
           if (matchedBook) {
             setSelectedClassFilter(matchedBook.className);
@@ -268,7 +272,8 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
     return { totalLogicalQuestions: logical, totalAlternativeQuestions: alt };
   }, [sectionGroups, book, subjectCode, academicSession, examType]);
 
-  const canManageBlueprint = currentUser?.role === "ADMIN" || currentUser?.role === "HOD";
+  const canManageBlueprint =
+    id === "new" ? hasAnyWriteScope(currentUser) : Boolean(currentUser) && canManageScope(currentUser, savedBook);
   const isReadOnly = id !== "new" && !canManageBlueprint;
 
   const currentBlueprintData = useMemo<BlueprintWithExportRelations>(() => {
@@ -912,8 +917,9 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
             <span>View-Only Blueprint Mode</span>
           </div>
           <p className="leading-relaxed">
-            You are viewing an institutional blueprint. Only Administrators and Heads of Department (HODs) can modify blueprints directly.
-            You can use this blueprint to generate an exam paper or duplicate it as a new blueprint to customize it for your class.
+            {id === "new"
+              ? "You are not assigned to any class yet, so you cannot create blueprints. Ask your Administrator to assign your classes."
+              : "This blueprint belongs to a class or subject you are not assigned to. You can still build a paper from it, or duplicate it into one of your own classes."}
           </p>
         </div>
       )}

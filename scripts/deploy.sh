@@ -105,6 +105,7 @@ fi
 echo "🗄️ Generating Prisma client and syncing database schema..."
 npx prisma generate
 npx prisma db push --skip-generate
+node scripts/migrate-rbac.mjs
 
 # 7. Next.js Production Build
 echo "⚙️ Building Next.js production bundle..."

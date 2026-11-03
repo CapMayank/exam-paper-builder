@@ -2,7 +2,7 @@ import { z } from "zod";
 import { body, HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { permuteMcqOptions, shuffle } from "@/lib/multiset";
-import { loadPaperView } from "@/lib/papers";
+import { assertCanCopyPaper, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 
 const duplicateSetSchema = z.object({
@@ -18,6 +18,7 @@ export const POST = route(async (req, params, user) => {
   const source = await prisma.paper.findUnique({
     where: { id },
     include: {
+      blueprint: { select: { book: { select: { className: true, subject: true } } } },
       items: {
         include: {
           question: true,
@@ -28,6 +29,7 @@ export const POST = route(async (req, params, user) => {
   });
 
   if (!source) throw new HttpError(404, "Paper not found");
+  assertCanCopyPaper(user, source);
 
   const formattedSet = input.targetSet.toUpperCase().startsWith("SET")
     ? input.targetSet.toUpperCase()

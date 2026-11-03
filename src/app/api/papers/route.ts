@@ -5,7 +5,7 @@ import { paperStatus } from "@/lib/blueprint";
 import { resolvePaperExamType } from "@/lib/constants";
 import { resolveBoardAndSubjectCode } from "@/lib/curriculumContract";
 import { detectPaperLanguage, type PaperLanguage } from "@/lib/localization";
-import { loadPaperView, toPlacedItems } from "@/lib/papers";
+import { assertCanManageScope, loadPaperView, toPlacedItems } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { paperCreateSchema } from "@/lib/schemas";
 
@@ -86,6 +86,7 @@ export const POST = route(async (req, _params, user) => {
   if (!bp) {
     throw new HttpError(400, "Blueprint not found");
   }
+  assertCanManageScope(user, bp.book);
   const resolvedExamType = resolvePaperExamType({
     examType: input.examType,
     title: input.title,

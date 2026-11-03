@@ -1,14 +1,27 @@
-import { body, HttpError, route } from "@/lib/api";
+import { body, HttpError, route, type SessionUser } from "@/lib/api";
 import { inferClassOrder, normalizeSectionDetails, toAcademicClassDto } from "@/lib/classes";
+import { canManageClassSettings, isAdmin } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { patchClassSchema } from "@/lib/schemas";
 
+async function assertCanEditClass(user: SessionUser, classId: string) {
+  const existing = await prisma.academicClass.findUnique({ where: { id: classId } });
+  if (!existing) throw new HttpError(404, "Class not found");
+  if (!canManageClassSettings(user, existing.name)) {
+    throw new HttpError(403, `Only an Administrator or the Class In-charge of ${existing.name} can change its settings.`);
+  }
+  return existing;
+}
+
 export const PATCH = route(
-  async (req, { id }) => {
+  async (req, { id }, user) => {
   const data = await body(req, patchClassSchema);
 
-  const existing = await prisma.academicClass.findUnique({ where: { id } });
-  if (!existing) throw new HttpError(404, "Class not found");
+  const existing = await assertCanEditClass(user, id);
+  // Renaming a class re-keys its books and teacher assignments, so it stays with the Admin.
+  if (data.name !== undefined && data.name !== existing.name && !isAdmin(user)) {
+    throw new HttpError(403, "Only an Administrator can rename a class.");
+  }
 
   if (data.addSubject) {
     await prisma.classSubject.upsert({
@@ -67,7 +80,7 @@ export const PATCH = route(
 
   return toAcademicClassDto(updated);
   },
-  { roles: ["ADMIN"] },
+  { roles: ["ADMIN", "TEACHER"] },
 );
 
 export const DELETE = route(

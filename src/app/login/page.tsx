@@ -145,7 +145,7 @@ export default function LoginPage() {
               <form onSubmit={submit} className="space-y-4">
                 <ErrorBanner message={error} />
 
-                <Field label="Administrator / Principal Name">
+                <Field label="Administrator name">
                   <input
                     className="input"
                     required
@@ -164,7 +164,7 @@ export default function LoginPage() {
                     value={form.email}
                     onChange={set("email")}
                     autoComplete="email"
-                    placeholder="principal@school.edu"
+                    placeholder="admin@school.edu"
                   />
                 </Field>
 
@@ -329,7 +329,7 @@ export default function LoginPage() {
               <div className="font-bold text-slate-900 text-sm">How to recover access:</div>
               <ol className="list-decimal list-inside space-y-1.5 text-slate-600">
                 <li>
-                  <strong>Contact in person:</strong> Visit the Principal&apos;s Office or Examination Cell coordinator during school hours.
+                  <strong>Contact in person:</strong> Ask the school Administrator or the Exam Cell during school hours.
                 </li>
                 <li>
                   <strong>Direct Request:</strong> Your administrator will generate a secure temporary password for your account in the Faculty &amp; RBAC console.

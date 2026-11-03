@@ -1,11 +1,13 @@
 import { body, HttpError, route } from "@/lib/api";
+import { assertCanManageBook } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { chapterSchema } from "@/lib/schemas";
 
-export const PATCH = route(async (req, { id }) => {
+export const PATCH = route(async (req, { id }, user) => {
   const data = await body(req, chapterSchema);
   const chapter = await prisma.chapter.findUnique({ where: { id } });
   if (!chapter) throw new HttpError(404, "Chapter not found");
+  await assertCanManageBook(user, chapter.bookId);
   const clash = await prisma.chapter.findUnique({
     where: { bookId_number: { bookId: chapter.bookId, number: data.number } },
   });
@@ -14,7 +16,10 @@ export const PATCH = route(async (req, { id }) => {
 });
 
 export const DELETE = route(
-  async (_req, { id }) => {
+  async (_req, { id }, user) => {
+    const chapter = await prisma.chapter.findUnique({ where: { id }, select: { bookId: true } });
+    if (!chapter) throw new HttpError(404, "Chapter not found");
+    await assertCanManageBook(user, chapter.bookId);
     const inBlueprints = await prisma.blueprintChapter.count({ where: { chapterId: id } });
     if (inBlueprints > 0) throw new HttpError(409, "This chapter is used in a blueprint.");
     const [primaryUses, orUses] = await Promise.all([
@@ -25,5 +30,5 @@ export const DELETE = route(
     if (inPapers > 0) throw new HttpError(409, "Questions from this chapter are used in papers.");
     await prisma.chapter.delete({ where: { id } }); // also removes its bank questions (cascade)
   },
-  { roles: ["ADMIN", "HOD"] },
+  { roles: ["ADMIN", "TEACHER"] },
 );

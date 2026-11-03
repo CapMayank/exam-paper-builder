@@ -28,6 +28,7 @@ import {
   useToast,
 } from "@/components/ui";
 import { normalizeSession, useAcademicSession } from "@/lib/academicSession";
+import { canManageClassSettings, type Actor } from "@/lib/permissions";
 import { api } from "@/lib/client";
 import { sortClassNames } from "@/lib/constants";
 import { plural } from "@/lib/format";
@@ -135,7 +136,7 @@ export default function ClassesHierarchyPage() {
 
   const [classes, setClasses] = useState<AcademicClassDto[]>([]);
   const [books, setBooks] = useState<Book[]>([]);
-  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; email: string; role: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<Actor & { name: string; email: string } | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -164,7 +165,7 @@ export default function ClassesHierarchyPage() {
       const [cls, bks, me] = await Promise.all([
         api<AcademicClassDto[]>(`/api/classes?session=${encodeURIComponent(activeSession)}`),
         api<Book[]>("/api/books"),
-        api<{ id: string; name: string; email: string; role: string }>("/api/me").catch(() => null),
+        api<Actor & { name: string; email: string }>("/api/me").catch(() => null),
       ]);
       setClasses(cls);
       setBooks(bks);
@@ -289,10 +290,12 @@ export default function ClassesHierarchyPage() {
   }, [selectedClass, sessionBooks, classSubjects]);
 
   const isAdmin = currentUser?.role === "ADMIN";
+  // Class In-charge may manage sections and subjects of their own class; creating, renaming and deleting classes stays with the Admin.
+  const canEditSelected = Boolean(selectedClass) && canManageClassSettings(currentUser, selectedClass!.name);
 
   // Direct Section Actions
   async function addSectionToClass(cls: AcademicClassDto) {
-    if (!isAdmin) return;
+    if (!canManageClassSettings(currentUser, cls.name)) return;
     const existing = cls.sectionDetails && cls.sectionDetails.length > 0
       ? cls.sectionDetails
       : (cls.sections || ["A"]).map((s) => ({ name: s, studentCount: 40 }));
@@ -323,7 +326,7 @@ export default function ClassesHierarchyPage() {
   }
 
   async function removeSectionFromClass(cls: AcademicClassDto, secToRemove: string) {
-    if (!isAdmin) return;
+    if (!canManageClassSettings(currentUser, cls.name)) return;
     const current = cls.sectionDetails && cls.sectionDetails.length > 0
       ? cls.sectionDetails
       : (cls.sections || ["A"]).map((s) => ({ name: s, studentCount: 40 }));
@@ -357,7 +360,7 @@ export default function ClassesHierarchyPage() {
   }
 
   async function updateSectionStudentCount(cls: AcademicClassDto, secName: string, newCount: number) {
-    if (!isAdmin) return;
+    if (!canManageClassSettings(currentUser, cls.name)) return;
     const count = Math.max(1, Math.min(500, Math.floor(newCount) || 40));
     const current = cls.sectionDetails && cls.sectionDetails.length > 0
       ? cls.sectionDetails
@@ -382,7 +385,7 @@ export default function ClassesHierarchyPage() {
   }
 
   async function addMissingStandardSubjects() {
-    if (!isAdmin || !selectedClass || missingStandardSubjects.length === 0) return;
+    if (!canEditSelected || !selectedClass || missingStandardSubjects.length === 0) return;
     setBusy(true);
     setError(null);
     try {
@@ -504,7 +507,7 @@ export default function ClassesHierarchyPage() {
 
   async function saveSubject(e: React.FormEvent) {
     e.preventDefault();
-    if (!isAdmin) return;
+    if (!canEditSelected) return;
     if (!selectedClass || !subjectForm.name.trim()) return;
     setBusy(true);
     setError(null);
@@ -534,7 +537,7 @@ export default function ClassesHierarchyPage() {
   }
 
   async function deleteSubject(subjectId?: string, subjectName?: string) {
-    if (!isAdmin) return;
+    if (!canEditSelected) return;
     if (!selectedClass) return;
     if (!subjectId) {
       toast.error("This subject was imported from existing textbooks and cannot be deleted here.");
@@ -816,7 +819,8 @@ export default function ClassesHierarchyPage() {
                           </div>
                         </button>
 
-                        {/* Hover Quick Edit / Delete */}
+                        {/* Hover Quick Edit / Delete (Admin only: renaming and deleting re-key books and assignments) */}
+                        {isAdmin && (
                         <div className="absolute right-2 top-2 z-10 flex gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity bg-white/95 rounded-lg p-0.5 shadow-2xs border border-slate-200/60">
                           <button
                             type="button"
@@ -853,6 +857,7 @@ export default function ClassesHierarchyPage() {
                             <Trash2 size={12} />
                           </button>
                         </div>
+                        )}
                       </div>
                     </li>
                   );
@@ -908,7 +913,7 @@ export default function ClassesHierarchyPage() {
                   </div>
 
                   {/* Primary Class Actions */}
-                  {isAdmin && (
+                  {canEditSelected && (
                     <div className="flex flex-wrap items-center gap-1.5 shrink-0">
                       <button
                         type="button"
@@ -921,6 +926,7 @@ export default function ClassesHierarchyPage() {
                       >
                         <Plus size={14} /> Add Subject
                       </button>
+                      {isAdmin && (<>
                       <button
                         type="button"
                         onClick={() => {
@@ -950,6 +956,7 @@ export default function ClassesHierarchyPage() {
                       >
                         <Trash2 size={14} />
                       </button>
+                      </>)}
                     </div>
                   )}
                 </div>
@@ -970,7 +977,7 @@ export default function ClassesHierarchyPage() {
                       </span>
                     </div>
 
-                    {isAdmin && (
+                    {canEditSelected && (
                       <button
                         type="button"
                         disabled={busy}
@@ -988,7 +995,7 @@ export default function ClassesHierarchyPage() {
                       <SectionRosterItem
                         key={sec.name}
                         sec={sec}
-                        isAdmin={isAdmin}
+                        isAdmin={canEditSelected}
                         disabled={busy}
                         canRemove={selectedClassSections.length > 1}
                         onSaveCount={(newCount) => updateSectionStudentCount(selectedClass, sec.name, newCount)}
@@ -1019,7 +1026,7 @@ export default function ClassesHierarchyPage() {
 
                   <div className="flex flex-wrap items-center gap-2 min-w-0">
                     {/* Auto-add missing standard subjects prompt */}
-                    {isAdmin && missingStandardSubjects.length > 0 && (
+                    {canEditSelected && missingStandardSubjects.length > 0 && (
                       <button
                         type="button"
                         disabled={busy}
@@ -1032,7 +1039,7 @@ export default function ClassesHierarchyPage() {
                       </button>
                     )}
 
-                    {isAdmin && (
+                    {canEditSelected && (
                       <button
                         type="button"
                         onClick={() => {
@@ -1085,7 +1092,7 @@ export default function ClassesHierarchyPage() {
                       </p>
                     </div>
 
-                    {isAdmin && (
+                    {canEditSelected && (
                       <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
                         {missingStandardSubjects.length > 0 && (
                           <button
@@ -1124,7 +1131,7 @@ export default function ClassesHierarchyPage() {
                           <th className="py-2.5 px-4">Subject</th>
                           <th className="py-2.5 px-3 w-36">Board Code</th>
                           <th className="py-2.5 px-3 w-48">Textbooks</th>
-                          {isAdmin && <th className="py-2.5 px-4 text-right w-24">Actions</th>}
+                          {canEditSelected && <th className="py-2.5 px-4 text-right w-24">Actions</th>}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 bg-white">
@@ -1168,7 +1175,7 @@ export default function ClassesHierarchyPage() {
                               </td>
 
                               {/* Actions */}
-                              {isAdmin && (
+                              {canEditSelected && (
                                 <td className="py-3 px-4 text-right align-middle whitespace-nowrap">
                                   <div className="inline-flex items-center gap-1">
                                     {sub.id && (

@@ -33,7 +33,7 @@ export const PATCH = route(
       updatedAt: updated.updatedAt.toISOString(),
     };
   },
-  { roles: ["ADMIN", "HOD", "EXAM_CELL"] },
+  { roles: ["ADMIN", "EXAM_CELL"] },
 );
 
 export const DELETE = route(
@@ -51,5 +51,5 @@ export const DELETE = route(
 
     return { ok: true, deletedId: entryId };
   },
-  { roles: ["ADMIN", "HOD", "EXAM_CELL"] },
+  { roles: ["ADMIN", "EXAM_CELL"] },
 );

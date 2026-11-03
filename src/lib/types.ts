@@ -384,9 +384,10 @@ export type UserData = {
   name: string;
   email: string;
   role: UserRole;
-  department: string;
   active: boolean;
   createdAt: string;
+  /** Classes a teacher looks after; subject "" = Class In-charge. Empty for Admin and Exam Cell. */
+  assignments: { className: string; subject: string }[];
   _count?: { questions: number; papers: number };
 };
 

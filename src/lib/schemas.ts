@@ -32,18 +32,26 @@ export const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+/** One class a teacher looks after; subject "" = Class In-charge. */
+export const classAssignmentSchema = z.object({
+  className: z.string().trim().min(1).max(60),
+  subject: z.string().trim().max(80).default(""),
+});
+const assignmentList = z.array(classAssignmentSchema).max(60);
+
 export const userCreateSchema = z.object({
   name: text(80),
   email: z.string().trim().toLowerCase().email(),
   password: z.string().min(6, "at least 6 characters").max(100),
   role: z.enum(USER_ROLES).default("TEACHER"),
-  department: z.string().trim().max(100).default(""),
+  assignments: assignmentList.default([]),
 });
 
 export const userUpdateSchema = z.object({
   name: text(80).optional(),
   role: z.enum(USER_ROLES).optional(),
-  department: z.string().trim().max(100).optional(),
+  /** Replaces the whole set when present. */
+  assignments: assignmentList.optional(),
   active: z.boolean().optional(),
   password: z.string().min(6).max(100).optional(),
 });
@@ -61,7 +69,6 @@ export const changePasswordSchema = z
 
 export const userProfileUpdateSchema = z.object({
   name: text(80).optional(),
-  department: z.string().trim().max(100).optional(),
 });
 
 

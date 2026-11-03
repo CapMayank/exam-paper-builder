@@ -10,6 +10,7 @@ import { NewWorksheetModal } from "@/components/NewWorksheetModal";
 import { PaperRow } from "@/components/PaperRow";
 import { EmptyState, ErrorBanner, Field, ListSkeleton, Modal, PageHeader, Spinner, useConfirm, useToast } from "@/components/ui";
 import { normalizeSession, useAcademicSession } from "@/lib/academicSession";
+import { canManageScope, canModifyPaper, hasAnyWriteScope, type Actor } from "@/lib/permissions";
 import { api } from "@/lib/client";
 import { ACADEMIC_SESSIONS, DEFAULT_ACADEMIC_SESSION, DEFAULT_SCHOOL_NAME, EXAM_TYPES, EXAM_TYPE_LABEL, LAYOUTS, LAYOUT_LABEL, defaultLayoutForClass, isPrePrimaryClass, resolvePaperExamType, sortClassNames, type ExamType } from "@/lib/constants";
 import { resolveBoardAndSubjectCode } from "@/lib/curriculumContract";
@@ -26,7 +27,7 @@ export default function PapersPage() {
   const [papers, setPapers] = useState<PaperListItem[]>([]);
   const [blueprints, setBlueprints] = useState<Blueprint[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; email: string; role: string; department?: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<Actor & { name: string; email: string } | null>(null);
   const [creating, setCreating] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [worksheetOpen, setWorksheetOpen] = useState(false);
@@ -74,11 +75,12 @@ export default function PapersPage() {
       Promise.all([
         api<PaperListItem[]>("/api/papers"),
         api<Blueprint[]>("/api/blueprints"),
-        api<{ id: string; name: string; email: string; role: string; department?: string }>("/api/me").catch(() => null),
+        api<Actor & { name: string; email: string }>("/api/me").catch(() => null),
       ]).then(
         ([p, b, me]) => {
           setPapers(p);
-          setBlueprints(b);
+          // New papers can only be built from blueprints of the user's own classes and subjects.
+          setBlueprints(me ? b.filter((bp) => canManageScope(me, bp.book)) : b);
           if (me) setCurrentUser(me);
           setLoaded(true);
         },
@@ -145,17 +147,17 @@ export default function PapersPage() {
     }
   }
 
+  const canCreate = hasAnyWriteScope(currentUser);
+
   async function remove(p: PaperListItem) {
     const isAdmin = currentUser?.role === "ADMIN";
-    const isHod = currentUser?.role === "HOD";
-    const isOwner = currentUser?.id && p.createdById ? p.createdById === currentUser.id : false;
 
     if (!isAdmin && p.status === "FINAL") {
       setError("Cannot delete a finalized paper. Only an Administrator can unlock or delete it.");
       return;
     }
-    if (!isAdmin && !isHod && !isOwner) {
-      setError("You can only delete your own draft papers, or department papers if you are an HOD.");
+    if (!canModifyPaper(currentUser, p)) {
+      setError("You can delete your own draft papers, or drafts of the classes and subjects assigned to you.");
       return;
     }
     const ok = await confirm({
@@ -353,7 +355,7 @@ export default function PapersPage() {
         title="Exam papers"
         description="Draft, auto-fill, and print your papers. Open a paper to place questions against its blueprint."
         actions={
-          <div className="flex flex-wrap items-center gap-2">
+          canCreate && <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               className="btn btn-ghost border border-slate-200"
@@ -385,7 +387,16 @@ export default function PapersPage() {
       />
       {worksheetOpen && <NewWorksheetModal session={currentSession} onClose={() => setWorksheetOpen(false)} />}
 
-      {loaded && blueprints.length === 0 && (
+      {loaded && currentUser && !canCreate && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <p className="font-semibold">You can open and print papers</p>
+          <p className="mt-0.5 leading-relaxed">
+            Building papers needs a class assignment. Ask your Administrator to assign the classes and subjects you teach.
+          </p>
+        </div>
+      )}
+
+      {loaded && canCreate && blueprints.length === 0 && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           <p className="font-semibold">Create a blueprint first</p>
           <p className="mt-0.5 leading-relaxed">
@@ -506,7 +517,7 @@ export default function PapersPage() {
             title="No exam papers yet"
             description="Create your first paper from a blueprint, then add questions chapter by chapter."
             action={
-              blueprints.length > 0 ? (
+              canCreate && blueprints.length > 0 ? (
                 <div className="flex flex-wrap items-center justify-center gap-2">
                   <button type="button" className="btn btn-primary" onClick={openCreate}>
                     <Plus size={16} /> New exam paper
@@ -562,10 +573,8 @@ export default function PapersPage() {
           </div>
           <ul className="divide-y divide-slate-100 overflow-hidden rounded-b-2xl border border-t-0 border-slate-200 bg-white" style={{ boxShadow: "var(--shadow-card)" }}>
             {filteredPapers.map((p) => {
-              const isOwner = currentUser?.id && p.createdById ? p.createdById === currentUser.id : false;
-              const isAdmin = currentUser?.role === "ADMIN";
-              const isHod = currentUser?.role === "HOD";
-              const canDelete = currentUser ? (isAdmin || isHod || (isOwner && p.status !== "FINAL")) : false;
+              const canDelete = canModifyPaper(currentUser, p);
+              const canCopy = Boolean(currentUser) && (p.createdById === currentUser!.id || canManageScope(currentUser, p.blueprint.book));
               return (
                 <PaperRow
                   key={p.id}
@@ -573,7 +582,7 @@ export default function PapersPage() {
                   currentUser={currentUser}
                   selected={selectedPaperIds.has(p.id)}
                   onToggleSelect={toggleSelectPaper}
-                  onDuplicate={duplicate}
+                  onDuplicate={canCopy ? duplicate : undefined}
                   onDelete={canDelete ? remove : undefined}
                 />
               );

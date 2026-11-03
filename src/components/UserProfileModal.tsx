@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ErrorBanner, Field, Modal, Spinner, SuccessBanner } from "@/components/ui";
+import { AssignmentChips } from "@/components/ClassAssignmentPicker";
 import { api } from "@/lib/client";
 import { USER_ROLE_LABEL } from "@/lib/constants";
 import { timeAgo } from "@/lib/format";
@@ -41,7 +42,6 @@ export function UserProfileModal({
 
   // Profile Form
   const [name, setName] = useState("");
-  const [department, setDepartment] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
 
   // Password Form
@@ -58,7 +58,6 @@ export function UserProfileModal({
       .then((data) => {
         setProfile(data);
         setName(data.name || "");
-        setDepartment(data.department || "");
       })
       .catch((err) => setError((err as Error).message))
       .finally(() => setLoading(false));
@@ -72,7 +71,7 @@ export function UserProfileModal({
     try {
       const updated = await api<DetailedProfile>("/api/me", {
         method: "PATCH",
-        json: { name: name.trim(), department: department.trim() },
+        json: { name: name.trim() },
       });
       setProfile(updated);
       onUserUpdated?.(updated);
@@ -142,8 +141,6 @@ export function UserProfileModal({
                   className={`badge font-bold text-[10px] ${
                     profile.role === "ADMIN"
                       ? "!bg-purple-100 !text-purple-800"
-                      : profile.role === "HOD"
-                      ? "!bg-indigo-100 !text-indigo-800"
                       : profile.role === "EXAM_CELL"
                       ? "!bg-amber-100 !text-amber-800"
                       : "!bg-emerald-100 !text-emerald-800"
@@ -248,15 +245,14 @@ export function UserProfileModal({
                 />
               </Field>
 
-              <Field label="Department">
-                <input
-                  type="text"
-                  value={department}
-                  onChange={(e) => setDepartment(e.target.value)}
-                  className="input w-full"
-                  placeholder="e.g. Science, Mathematics, English"
-                />
-              </Field>
+              {profile?.role === "TEACHER" && (
+                <Field label="My classes" helper="Your Administrator assigns the classes and subjects you look after.">
+                  <AssignmentChips
+                    assignments={profile.assignments ?? []}
+                    empty={<span className="text-xs text-amber-700">No classes assigned yet. You can browse and print until your Administrator assigns classes.</span>}
+                  />
+                </Field>
+              )}
 
               <Field
                 label="Registered School Email"

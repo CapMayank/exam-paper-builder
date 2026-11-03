@@ -1,11 +1,11 @@
 import { route, HttpError } from "@/lib/api";
+import { canViewAudit } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 
 export const GET = route(
   async (req, _params, user) => {
-    // Only Admin, HOD, and Exam Cell can view audit trail
-    if (user.role !== "ADMIN" && user.role !== "HOD" && user.role !== "EXAM_CELL") {
-      throw new HttpError(403, "Access restricted to Administrators, Department Heads, and Exam Cell officers");
+    if (!canViewAudit(user)) {
+      throw new HttpError(403, "Access restricted to Administrators and the Exam Cell");
     }
 
     const { searchParams } = new URL(req.url);
@@ -50,5 +50,5 @@ export const GET = route(
       })),
     };
   },
-  { roles: ["ADMIN", "HOD", "EXAM_CELL"] },
+  { roles: ["ADMIN", "EXAM_CELL"] },
 );

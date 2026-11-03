@@ -376,7 +376,7 @@ describe("Milestone 1 RBAC Adversarial Stress Challenge Suite", () => {
       });
       expect(res.status).toBe(403);
       const json = await res.json();
-      expect(json.error).toContain("Only the paper creator, Department Head (HOD), or Administrator");
+      expect(json.error).toContain("Only the paper's creator, a teacher assigned to this class and subject, or an Administrator");
     });
 
     it("Probe 1.3: Cross-paper question replacement on Teacher B's paper returns HTTP 403", async () => {
@@ -472,7 +472,7 @@ describe("Milestone 1 RBAC Adversarial Stress Challenge Suite", () => {
       });
       expect(patchRes.status).toBe(403);
       const patchJson = await patchRes.json();
-      expect(patchJson.error).toContain("Forbidden: You can only edit or delete your own questions.");
+      expect(patchJson.error).toContain("Forbidden: you can edit your own questions");
 
       // PUT orphan question
       const putReq = new Request(`http://localhost/api/questions/${orphanQuestionId}`, {
@@ -606,7 +606,7 @@ describe("Milestone 1 RBAC Adversarial Stress Challenge Suite", () => {
       });
       expect(res.status).toBe(403);
       const json = await res.json();
-      expect(json.error).toBe("Insufficient permissions for this action");
+      expect(json.error).toContain("Only an Administrator or the Class In-charge");
     });
 
     it("Probe 2.5: Teacher A calling DELETE /api/classes/[id] receives HTTP 403", async () => {
@@ -978,17 +978,18 @@ describe("Milestone 1 RBAC Adversarial Stress Challenge Suite", () => {
       name: "Teacher One",
       email: "t1@school.internal",
       role: "TEACHER" as const,
-      department: "Science",
       active: true,
+      assignments: [],
     };
 
+    // Class In-charge of Class 10 (replaces the old HOD role).
     const hodUser = {
       id: "u-hod-1",
-      name: "HOD Science",
+      name: "Class 10 In-charge",
       email: "hod@school.internal",
-      role: "HOD" as const,
-      department: "Science",
+      role: "TEACHER" as const,
       active: true,
+      assignments: [{ className: "Class 10", subject: "" }],
     };
 
     const adminSessionUser = {
@@ -996,8 +997,8 @@ describe("Milestone 1 RBAC Adversarial Stress Challenge Suite", () => {
       name: "Admin Carol",
       email: "admin@school.internal",
       role: "ADMIN" as const,
-      department: "Administration",
       active: true,
+      assignments: [],
     };
 
     it("Probe 4.1: canModifyPaper returns false for non-owner teacher on draft paper", async () => {
@@ -1024,12 +1025,13 @@ describe("Milestone 1 RBAC Adversarial Stress Challenge Suite", () => {
       }).toThrowError(/Cannot modify or delete a finalized paper. Only an Administrator can unlock it./);
     });
 
-    it("Probe 4.5: canModifyQuestion returns true for HOD and ADMIN on any question, false for non-owner teacher", async () => {
+    it("Probe 4.5: canModifyQuestion is true for the Class In-charge inside their class and ADMIN anywhere, false for non-owner teacher", async () => {
       const { canModifyQuestion } = await import("./papers");
       expect(canModifyQuestion(teacherUser, { createdById: "u-teacher-2" })).toBe(false);
       expect(canModifyQuestion(teacherUser, { createdById: "" })).toBe(false);
       expect(canModifyQuestion(teacherUser, { createdById: teacherUser.id })).toBe(true);
-      expect(canModifyQuestion(hodUser, { createdById: "u-teacher-2" })).toBe(true);
+      expect(canModifyQuestion(hodUser, { createdById: "u-teacher-2", book: { className: "Class 10", subject: "Science" } })).toBe(true);
+      expect(canModifyQuestion(hodUser, { createdById: "u-teacher-2", book: { className: "Class 9", subject: "Science" } })).toBe(false);
       expect(canModifyQuestion(adminSessionUser, { createdById: "u-teacher-2" })).toBe(true);
     });
   });

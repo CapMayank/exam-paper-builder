@@ -39,8 +39,9 @@ describe("Milestone 1 Challenger 2: Empirical Backward Compatibility & FK Integr
         email: `m1c2-teacher-${stamp}@internal.test`,
         passwordHash: "hash",
         role: "TEACHER",
-        department: "Science",
         active: true,
+        // Builds content for these classes, so it needs to be assigned to them.
+        assignments: { create: [{ className: "Class 10", subject: "" }] },
       },
     });
 

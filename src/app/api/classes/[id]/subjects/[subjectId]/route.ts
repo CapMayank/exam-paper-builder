@@ -1,6 +1,16 @@
 import { z } from "zod";
-import { body, HttpError, route } from "@/lib/api";
+import { body, HttpError, route, type SessionUser } from "@/lib/api";
+import { canManageClassSettings } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+
+async function assertCanEditClass(user: SessionUser, classId: string) {
+  const existing = await prisma.academicClass.findUnique({ where: { id: classId } });
+  if (!existing) throw new HttpError(404, "Class not found");
+  if (!canManageClassSettings(user, existing.name)) {
+    throw new HttpError(403, `Only an Administrator or the Class In-charge of ${existing.name} can change its settings.`);
+  }
+  return existing;
+}
 
 const updateSubjectSchema = z.object({
   name: z.string().trim().min(1).max(80),
@@ -8,9 +18,10 @@ const updateSubjectSchema = z.object({
 });
 
 export const PATCH = route(
-  async (req, params) => {
+  async (req, params, user) => {
     const { id: classId, subjectId } = params;
     const data = await body(req, updateSubjectSchema);
+    await assertCanEditClass(user, classId);
 
     const existing = await prisma.classSubject.findFirst({
       where: { id: subjectId, classId },
@@ -27,12 +38,13 @@ export const PATCH = route(
 
     return updated;
   },
-  { roles: ["ADMIN"] },
+  { roles: ["ADMIN", "TEACHER"] },
 );
 
 export const DELETE = route(
-  async (_req, params) => {
+  async (_req, params, user) => {
     const { id: classId, subjectId } = params;
+    await assertCanEditClass(user, classId);
 
     const existing = await prisma.classSubject.findFirst({
       where: { id: subjectId, classId },
@@ -45,5 +57,5 @@ export const DELETE = route(
 
     return { ok: true, deletedId: subjectId };
   },
-  { roles: ["ADMIN"] },
+  { roles: ["ADMIN", "TEACHER"] },
 );

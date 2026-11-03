@@ -29,6 +29,7 @@ import { ErrorBanner, Field, Modal, useConfirm, useToast } from "@/components/ui
 import type { BatchImportReport } from "@/lib/batchQuestionIo";
 import { parseBulkQuestions } from "@/lib/bulkImport";
 import { api } from "@/lib/client";
+import { canModifyQuestion, hasAnyWriteScope, type Actor } from "@/lib/permissions";
 import { DIFFICULTIES, isKindergartenType, isMcqLikeType, QUESTION_TYPES, QUESTION_TYPE_LABEL, sortClassNames, type QuestionType } from "@/lib/constants";
 import { subpartsTotalMarks, type Book, type QuestionDto } from "@/lib/types";
 
@@ -99,7 +100,7 @@ export default function QuestionsPage() {
   const toast = useToast();
   const [books, setBooks] = useState<Book[]>([]);
   const [questions, setQuestions] = useState<QuestionDto[]>([]);
-  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; email: string; role: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<Actor & { name: string; email: string } | null>(null);
   const [classFilter, setClassFilter] = useState<string>("");
   const [subjectFilter, setSubjectFilter] = useState<string>("");
   const [filters, setFilters] = useState({ bookId: "", chapterId: "", type: "", difficulty: "", marks: "", q: "", freshness: "ALL" });
@@ -127,7 +128,7 @@ export default function QuestionsPage() {
   const [bulkUpdatingDiff, setBulkUpdatingDiff] = useState(false);
 
   useEffect(() => {
-    api<{ id: string; name: string; email: string; role: string }>("/api/me").then(setCurrentUser, () => undefined);
+    api<Actor & { name: string; email: string }>("/api/me").then(setCurrentUser, () => undefined);
 
     const sp = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
     const urlClass = sp?.get("className") || "";
@@ -223,12 +224,13 @@ export default function QuestionsPage() {
   const set = (k: keyof typeof filters, v: string) =>
     setFilters((f) => ({ ...f, [k]: v, ...(k === "bookId" ? { chapterId: "" } : {}) }));
 
+  const canEditQuestion = (q: QuestionDto) =>
+    canModifyQuestion(currentUser, { createdById: q.createdById, book: books.find((b) => b.id === q.bookId) });
+  const canCreate = hasAnyWriteScope(currentUser);
+
   async function remove(q: QuestionDto) {
-    const isOwner = Boolean(currentUser?.id && q.createdById && q.createdById === currentUser.id);
-    const isAdmin = currentUser?.role === "ADMIN";
-    const isHod = currentUser?.role === "HOD";
-    if (!isAdmin && !isHod && !isOwner) {
-      setError("You do not have permission to delete questions authored by other faculty members (Administrator or HOD access required).");
+    if (!canEditQuestion(q)) {
+      setError("You can delete your own questions, or questions of the classes and subjects assigned to you.");
       return;
     }
     const ok = await confirm({
@@ -346,7 +348,7 @@ export default function QuestionsPage() {
           {/* Import Questions Button */}
           <button
             className="btn border-indigo-200 bg-indigo-50/70 text-indigo-700 hover:bg-indigo-100 shadow-2xs"
-            disabled={books.length === 0}
+            disabled={books.length === 0 || !canCreate}
             onClick={() => setImportModalOpen(true)}
             title="Import curriculum questions in bulk from CSV or JSON files"
           >
@@ -379,7 +381,7 @@ export default function QuestionsPage() {
           {/* AI Question Co-Pilot */}
           <button
             className="btn border-purple-200 bg-purple-50 text-purple-800 hover:bg-purple-100 shadow-2xs font-medium"
-            disabled={books.length === 0}
+            disabled={books.length === 0 || !canCreate}
             onClick={() => setAiGenModalOpen(true)}
             title="AI Question Authoring: Generate CBSE questions, case studies, or assertion-reason with Gemini"
           >
@@ -390,7 +392,7 @@ export default function QuestionsPage() {
           {/* New Question Button */}
           <button
             className="btn btn-primary"
-            disabled={books.length === 0}
+            disabled={books.length === 0 || !canCreate}
             onClick={() => setEditing("new")}
           >
             <Plus size={15} /> New Question
@@ -766,11 +768,7 @@ export default function QuestionsPage() {
                   </button>
 
                   {(() => {
-                    const isOwner = Boolean(currentUser?.id && q.createdById && q.createdById === currentUser.id);
-                    const isAdmin = currentUser?.role === "ADMIN";
-                    const isHod = currentUser?.role === "HOD";
-                    const canEditOrDelete = isAdmin || isHod || isOwner;
-                    if (!canEditOrDelete) return null;
+                    if (!canEditQuestion(q)) return null;
                     return (
                       <>
                         <button
@@ -803,10 +801,10 @@ export default function QuestionsPage() {
               No questions matched your search criteria or the question bank is empty for this section.
             </p>
             <div className="flex justify-center gap-2 pt-2">
-              <button className="btn btn-primary btn-sm" onClick={() => setEditing("new")}>
+              <button className="btn btn-primary btn-sm" disabled={!canCreate} onClick={() => setEditing("new")}>
                 <Plus size={13} /> Add New Question
               </button>
-              <button className="btn btn-sm" onClick={() => setBulkModal(true)}>
+              <button className="btn btn-sm" disabled={!canCreate} onClick={() => setBulkModal(true)}>
                 <UploadCloud size={13} /> Bulk Import
               </button>
             </div>

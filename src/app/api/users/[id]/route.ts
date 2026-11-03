@@ -2,7 +2,9 @@ import { hash } from "bcryptjs";
 import { body, HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
+import { normalizeRole } from "@/lib/permissions";
 import { userUpdateSchema } from "@/lib/schemas";
+import { cleanAssignments, toUserDto, userDirectorySelect } from "@/lib/userDirectory";
 
 export const PATCH = route(
   async (req, params, adminUser) => {
@@ -11,7 +13,7 @@ export const PATCH = route(
 
     const existing = await prisma.user.findUnique({
       where: { id: targetUserId },
-      select: { id: true, name: true, email: true, role: true, department: true, active: true },
+      select: { id: true, name: true, email: true, role: true, active: true, assignments: { select: { className: true, subject: true } } },
     });
 
     if (!existing) {
@@ -34,25 +36,32 @@ export const PATCH = route(
     const dataToUpdate: Record<string, unknown> = {};
     if (input.name !== undefined) dataToUpdate.name = input.name;
     if (input.role !== undefined) dataToUpdate.role = input.role;
-    if (input.department !== undefined) dataToUpdate.department = input.department;
     if (input.active !== undefined) dataToUpdate.active = input.active;
     if (input.password !== undefined) {
       dataToUpdate.passwordHash = await hash(input.password, 10);
     }
 
+    // Only teachers hold class assignments; Admin and Exam Cell work school-wide.
+    const finalRole = normalizeRole(input.role ?? existing.role);
+    const nextAssignments =
+      finalRole !== "TEACHER" ? [] : input.assignments !== undefined ? cleanAssignments(input.assignments) : null;
+    if (nextAssignments) {
+      dataToUpdate.assignments = { deleteMany: {}, create: nextAssignments };
+    }
+
     const updated = await prisma.user.update({
       where: { id: targetUserId },
       data: dataToUpdate,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        department: true,
-        active: true,
-        createdAt: true,
-      },
+      select: userDirectorySelect,
     });
+
+    if (nextAssignments && JSON.stringify(cleanAssignments(existing.assignments)) !== JSON.stringify(nextAssignments)) {
+      await recordAudit(adminUser, "USER_ASSIGNMENT_CHANGE", "USER", targetUserId, {
+        previous: existing.assignments,
+        next: nextAssignments,
+        targetEmail: existing.email,
+      });
+    }
 
     if (input.role !== undefined && input.role !== existing.role) {
       await recordAudit(adminUser, "USER_ROLE_CHANGE", "USER", targetUserId, {
@@ -77,10 +86,7 @@ export const PATCH = route(
       });
     }
 
-    return {
-      ...updated,
-      createdAt: updated.createdAt.toISOString(),
-    };
+    return toUserDto(updated);
   },
   { roles: ["ADMIN"] },
 );

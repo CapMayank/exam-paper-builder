@@ -5,7 +5,7 @@ import {
   DEFAULT_SCHOOL_NAME,
   resolvePaperExamType,
 } from "@/lib/constants";
-import { loadPaperView } from "@/lib/papers";
+import { assertCanManageScope, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import {
   matchQuestionToBlueprintSection,
@@ -40,6 +40,7 @@ export const POST = route(async (req, _params, user) => {
   if (!blueprint) {
     throw new HttpError(404, "Target blueprint not found.");
   }
+  assertCanManageScope(user, blueprint.book);
 
   const bookChapters = blueprint.book.chapters;
   if (bookChapters.length === 0) {

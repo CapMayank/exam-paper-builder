@@ -1,7 +1,7 @@
 import { body, HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { toQuestionDto } from "@/lib/dto";
-import { assertCanModifyQuestion, canModifyQuestion } from "@/lib/papers";
+import { assertCanManageScope, assertCanModifyQuestion } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { questionPatchSchema, questionSchema } from "@/lib/schemas";
 
@@ -20,6 +20,7 @@ export const PATCH = route(async (req, { id }, user) => {
   const existing = await prisma.question.findUnique({
     where: { id },
     include: {
+      book: { select: { className: true, subject: true } },
       paperQuestions: { select: { paper: { select: { status: true } } } },
       orPaperQuestions: { select: { paper: { select: { status: true } } } },
     },
@@ -61,6 +62,7 @@ export const PUT = route(async (req, { id }, user) => {
   const existing = await prisma.question.findUnique({
     where: { id },
     include: {
+      book: { select: { className: true, subject: true } },
       paperQuestions: { select: { paper: { select: { status: true } }, section: { select: { type: true } } } },
       orPaperQuestions: { select: { paper: { select: { status: true } }, section: { select: { type: true } } } },
     },
@@ -80,8 +82,9 @@ export const PUT = route(async (req, { id }, user) => {
   ) {
     throw new HttpError(409, "This question is used in a paper section that needs its current type.");
   }
-  const chapter = await prisma.chapter.findUnique({ where: { id: input.chapterId } });
+  const chapter = await prisma.chapter.findUnique({ where: { id: input.chapterId }, include: { book: { select: { className: true, subject: true } } } });
   if (!chapter || chapter.bookId !== input.bookId) throw new HttpError(400, "Chapter does not belong to that book");
+  if (input.bookId !== existing.bookId) assertCanManageScope(user, chapter.book);
   const totalPaperUses = existing.paperQuestions.length + existing.orPaperQuestions.length;
   if (totalPaperUses > 0 && (input.chapterId !== existing.chapterId || input.bookId !== existing.bookId)) {
     throw new HttpError(409, "This question is used in a paper, so its chapter can't change.");
@@ -110,7 +113,7 @@ export const PUT = route(async (req, { id }, user) => {
 export const DELETE = route(async (_req, { id }, user) => {
   const existing = await prisma.question.findUnique({
     where: { id },
-    select: { id: true, text: true, type: true, createdById: true },
+    select: { id: true, text: true, type: true, createdById: true, book: { select: { className: true, subject: true } } },
   });
   if (!existing) throw new HttpError(404, "Question not found");
   assertCanModifyQuestion(user, existing);

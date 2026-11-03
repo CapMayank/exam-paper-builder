@@ -6,30 +6,24 @@ import { diagnosePaperImplications, paperStatus, questionSlotMarks, toPlacedItem
 import { componentImplications, parseComponents } from "./languageComponents";
 import { blueprintInclude } from "./blueprints";
 import { evaluatePaperInternalChoiceCompliance } from "./internalChoiceRules";
+import {
+  bookScope,
+  canManageScope,
+  canModifyPaper,
+  canModifyQuestion,
+  isAdmin,
+  type PaperRef,
+  type QuestionRef,
+} from "./permissions";
 import { prisma } from "./prisma";
 import { parseSubparts, parseSubpartsPayload, subpartsTotalMarks } from "./types";
 
 export { toPlacedItems };
 
-export function canModifyPaper(
-  user: SessionUser,
-  paper: { createdById: string; status?: string },
-): boolean {
-  if (paper.status === "FINAL") {
-    return user.role === "ADMIN";
-  }
-  return (
-    Boolean(paper.createdById && paper.createdById === user.id) ||
-    user.role === "ADMIN" ||
-    user.role === "HOD"
-  );
-}
+export { canModifyPaper, canModifyQuestion };
 
-export function assertCanModifyPaper(
-  user: SessionUser,
-  paper: { createdById: string; status?: string },
-): void {
-  if (paper.status === "FINAL" && user.role !== "ADMIN") {
+export function assertCanModifyPaper(user: SessionUser, paper: PaperRef): void {
+  if (paper.status === "FINAL" && !isAdmin(user)) {
     throw new HttpError(
       403,
       "Cannot modify or delete a finalized paper. Only an Administrator can unlock it.",
@@ -38,32 +32,51 @@ export function assertCanModifyPaper(
   if (!canModifyPaper(user, paper)) {
     throw new HttpError(
       403,
-      "Only the paper creator, Department Head (HOD), or Administrator can modify or delete this paper.",
+      "Only the paper's creator, a teacher assigned to this class and subject, or an Administrator can modify this paper.",
     );
   }
 }
 
-export function canModifyQuestion(
-  user: SessionUser,
-  question: { createdById: string },
-): boolean {
-  return (
-    Boolean(question.createdById && question.createdById === user.id) ||
-    user.role === "ADMIN" ||
-    user.role === "HOD"
-  );
-}
-
-export function assertCanModifyQuestion(
-  user: SessionUser,
-  question: { createdById: string },
-): void {
+export function assertCanModifyQuestion(user: SessionUser, question: QuestionRef): void {
   if (!canModifyQuestion(user, question)) {
     throw new HttpError(
       403,
-      "Forbidden: You can only edit or delete your own questions.",
+      "Forbidden: you can edit your own questions, or questions of the classes and subjects assigned to you.",
     );
   }
+}
+
+/** Throws 403 unless the user may add or change content (books, blueprints, questions, papers) for this class/subject. */
+export function assertCanManageScope(user: SessionUser, book: { className: string; subject: string } | null | undefined): void {
+  if (!canManageScope(user, bookScope(book))) {
+    const where = book ? `${book.className} · ${book.subject}` : "this class";
+    throw new HttpError(403, `You are not assigned to ${where}. Ask an Administrator to assign you to this class or subject.`);
+  }
+}
+
+/** Making a copy (duplicate, new set) needs rights on the paper's class/subject, or being its creator. */
+export function assertCanCopyPaper(user: SessionUser, paper: PaperRef): void {
+  if (paper.createdById === user.id) return;
+  assertCanManageScope(user, paper.blueprint?.book);
+}
+
+/** Loads a book and checks the user may manage its class/subject. */
+export async function assertCanManageBook(user: SessionUser, bookId: string) {
+  const book = await prisma.book.findUnique({ where: { id: bookId }, select: { id: true, title: true, className: true, subject: true } });
+  if (!book) throw new HttpError(404, "Book not found");
+  assertCanManageScope(user, book);
+  return book;
+}
+
+/** Loads the paper's class/subject and checks edit rights. For routes that have only the id at hand. */
+export async function assertCanModifyPaperById(user: SessionUser, paperId: string) {
+  const paper = await prisma.paper.findUnique({
+    where: { id: paperId },
+    select: { id: true, createdById: true, status: true, blueprint: { select: { book: { select: { className: true, subject: true } } } } },
+  });
+  if (!paper) throw new HttpError(404, "Paper not found");
+  assertCanModifyPaper(user, paper);
+  return paper;
 }
 
 const questionUsageInclude = {

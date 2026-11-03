@@ -3,6 +3,7 @@ import { keepActive, scopeFromRequest } from "@/lib/viewScope";
 import { body, HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { toQuestionDto } from "@/lib/dto";
+import { assertCanManageScope } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { questionSchema } from "@/lib/schemas";
 import { subpartsTotalMarks } from "@/lib/types";
@@ -153,8 +154,9 @@ export const GET = route(async (req) => {
 
 export const POST = route(async (req, _params, user) => {
   const input = await body(req, questionSchema);
-  const chapter = await prisma.chapter.findUnique({ where: { id: input.chapterId } });
+  const chapter = await prisma.chapter.findUnique({ where: { id: input.chapterId }, include: { book: { select: { className: true, subject: true } } } });
   if (!chapter || chapter.bookId !== input.bookId) throw new HttpError(400, "Chapter does not belong to that book");
+  assertCanManageScope(user, chapter.book);
   const { options, subparts, ...rest } = input;
   const created = await prisma.question.create({
     data: {

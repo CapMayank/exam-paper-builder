@@ -159,4 +159,4 @@ export const POST = route(async (req, _params, user) => {
     notes: created.notes,
     createdAt: created.createdAt.toISOString(),
   };
-});
+}, { roles: ["ADMIN", "EXAM_CELL"] });

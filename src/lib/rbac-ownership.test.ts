@@ -208,7 +208,7 @@ describe("Milestone 1 RBAC & Ownership Enforcement Test Suite (Requirement R1)",
       const res = await patchPaper(req, { params: Promise.resolve({ id: paperB_draftId }) });
       expect(res.status).toBe(403);
       const json = await res.json();
-      expect(json.error).toContain("Only the paper creator, Department Head (HOD), or Administrator");
+      expect(json.error).toContain("Only the paper's creator, a teacher assigned to this class and subject, or an Administrator");
     });
 
     it("returns HTTP 403 Forbidden when Teacher A attempts to DELETE Teacher B's paper", async () => {
@@ -330,7 +330,7 @@ describe("Milestone 1 RBAC & Ownership Enforcement Test Suite (Requirement R1)",
       const res = await patchQuestion(req, { params: Promise.resolve({ id: questionBId }) });
       expect(res.status).toBe(403);
       const json = await res.json();
-      expect(json.error).toContain("Forbidden: You can only edit or delete your own questions.");
+      expect(json.error).toContain("Forbidden: you can edit your own questions");
     });
 
     it("returns HTTP 403 Forbidden when Teacher A attempts to PUT Teacher B's question", async () => {

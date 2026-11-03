@@ -1,4 +1,5 @@
 import { body, HttpError, route } from "@/lib/api";
+import { assertCanManageBook, assertCanManageScope } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { syllabusImportSchema } from "@/lib/schemas";
@@ -32,6 +33,11 @@ export const POST = route(async (req, _params, user) => {
 
   if (parsed.errors.length > 0 && parsed.books.length === 0) {
     throw new HttpError(400, parsed.errors.map((e) => e.message).join("; "));
+  }
+
+  if (!dryRun) {
+    if (targetBookId) await assertCanManageBook(user, targetBookId);
+    else for (const book of parsed.books) assertCanManageScope(user, book);
   }
 
   if (dryRun) {

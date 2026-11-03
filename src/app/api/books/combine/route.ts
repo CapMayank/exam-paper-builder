@@ -1,5 +1,6 @@
 import { body, HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
+import { assertCanManageScope } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { combineBooksSchema } from "@/lib/schemas";
 
@@ -19,6 +20,9 @@ export const POST = route(async (req, _params, user) => {
   if (sourceBooks.length < 2) {
     throw new HttpError(400, "Could not find all specified textbooks to combine");
   }
+  assertCanManageScope(user, { className, subject });
+  // Without keepOriginals the source books are removed, which needs rights on each of them.
+  if (!keepOriginals) for (const b of sourceBooks) assertCanManageScope(user, b);
 
   // Preserve order of bookIds requested
   const orderedBooks = bookIds
@@ -130,5 +134,5 @@ export const POST = route(async (req, _params, user) => {
     message: `Combined ${orderedBooks.length} textbooks into "${compositeTitle}" with ${result.totalChapters} chapters and ${result.copiedQuestions} questions!`,
   };
   },
-  { roles: ["ADMIN", "HOD"] },
+  { roles: ["ADMIN", "TEACHER"] },
 );

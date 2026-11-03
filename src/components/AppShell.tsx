@@ -20,6 +20,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { api } from "@/lib/client";
+import { USER_ROLE_LABEL } from "@/lib/constants";
+import { normalizeRole } from "@/lib/permissions";
 import { AcademicSessionProvider } from "@/lib/academicSession";
 import { AcademicSessionSelector } from "./AcademicSessionSelector";
 import { ViewScopeBar } from "./ViewScopeBar";
@@ -35,13 +37,13 @@ const NAV: { href: string; label: string; icon: LucideIcon; hint: string }[] = [
   { href: "/blueprints", label: "Blueprints", icon: Ruler, hint: "Marks and chapter quotas per subject" },
   { href: "/papers", label: "Exam papers", icon: FileText, hint: "Build, print and share papers from blueprints" },
   { href: "/exam-cell", label: "Exam cell & Logistics", icon: PackageCheck, hint: "Paper budget calculator, timetable and audit trail" },
-  { href: "/admin/users", label: "Faculty & RBAC", icon: ShieldCheck, hint: "Teacher roles and department access" },
+  { href: "/admin/users", label: "Faculty & classes", icon: ShieldCheck, hint: "Staff roles and the classes each teacher looks after" },
 ];
 
 const isActive = (pathname: string, href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
 const COLLAPSE_KEY = "exam-builder:sidebar-collapsed";
 
-type User = { name: string; email: string; role?: string; department?: string };
+type User = { name: string; email: string; role?: string };
 
 function NavList({
   pathname,
@@ -145,7 +147,7 @@ function UserCard({
           </div>
           <div className="flex items-center gap-1.5 mt-0.5">
             <span className="inline-block rounded px-1.5 py-0.5 bg-amber-300/20 text-amber-300 border border-amber-300/30 text-[9px] font-bold uppercase tracking-wider">
-              {user.role || "Teacher"}
+              {USER_ROLE_LABEL[normalizeRole(user.role)]}
             </span>
             <span className="truncate text-[11px] leading-tight text-indigo-200/70">{user.email}</span>
           </div>
