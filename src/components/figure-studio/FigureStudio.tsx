@@ -1,57 +1,23 @@
 "use client";
 
 import {
-  Activity,
-  ArrowDownRight,
-  ArrowLeftRight,
-  ArrowRight,
-  Box,
-  BringToFront,
   Check,
   ChevronDown,
-  Circle,
-  Compass,
-  Copy,
-  CornerDownRight,
-  Crop,
-  Download,
   Eraser,
-  FlipHorizontal,
-  FlipVertical,
   Grid,
   Hand,
-  Hash,
   HelpCircle,
-  Hexagon,
-  Image as ImageIcon,
-  Layers,
-  Maximize2,
-  Minus,
+  Highlighter,
+  Magnet,
   MousePointer,
-  Move,
-  Pen,
   Pencil,
-  Percent,
-  PieChart,
   Plus,
   Redo2,
-  RotateCcw,
   Ruler,
-  Scissors,
-  SendToBack,
-  Shapes,
-  Sliders,
   SlidersHorizontal,
   Sparkles,
-  Spline,
-  Square,
-  Star,
-  Tag,
-  Trash2,
-  TrendingUp,
   Type,
   Undo2,
-  Upload,
   X,
   ZoomIn,
   ZoomOut,
@@ -118,9 +84,24 @@ import {
   CanvasSizeControls,
   FractionInspector,
   NumberLineInspector,
+  Section,
+  Seg,
   TableInspector,
+  Toggle,
   type AlignMode,
 } from "./FigureInspectors";
+import { InsertPanel, type InsertTab } from "./InsertPanel";
+import {
+  AngleInspector,
+  LineInspector,
+  MATH_SYMBOLS,
+  objectName,
+  PointInspector,
+  SelectionHeader,
+  ShapeInspector,
+  StyleSection,
+  TextInspector,
+} from "./ObjectInspectors";
 
 export type Tool =
   | "select"
@@ -158,33 +139,6 @@ export type Tool =
   | "text"
   | "stamp";
 
-const COLOR_SWATCHES = [
-  { label: "Ink Black", val: "#000000" },
-  { label: "Graphite", val: "#4f5951" },
-  { label: "Teal Primary", val: "#1e6075" },
-  { label: "Navy Blue", val: "#1d4ed8" },
-  { label: "Emerald Green", val: "#047857" },
-  { label: "Crimson Red", val: "#b91c1c" },
-  { label: "Amber Accent", val: "#d97706" },
-  { label: "Purple", val: "#7c3aed" },
-];
-
-const FILL_SWATCHES = [
-  { label: "No Fill", val: null },
-  { label: "White", val: "#ffffff" },
-  { label: "Light Teal", val: "rgba(30, 96, 117, 0.15)" },
-  { label: "Light Blue", val: "rgba(29, 78, 216, 0.15)" },
-  { label: "Light Green", val: "rgba(4, 120, 87, 0.15)" },
-  { label: "Light Red", val: "rgba(185, 28, 28, 0.15)" },
-  { label: "Light Amber", val: "rgba(217, 119, 6, 0.15)" },
-  { label: "Light Purple", val: "rgba(124, 58, 237, 0.15)" },
-];
-
-const MATH_SYMBOLS = [
-  "θ", "α", "β", "γ", "δ", "λ", "μ", "π", "σ", "ω", "Δ", "Ω",
-  "°", "∠", "△", "⊥", "∥", "≅", "∼", "≈", "≠", "≤", "≥", "±", "×", "÷", "√", "∞", "∴", "∵",
-  "²", "³", "₁", "₂", "cm", "mm", "m",
-];
 
 type ActiveHandle =
   | { kind: "obj"; id: string; objId: string }
@@ -300,9 +254,7 @@ export function FigureStudio({
   const [anglePending, setAnglePending] = useState<{ v?: Pt; a?: Pt } | null>(null);
 
   // Modals & Popovers
-  const [showTemplates, setShowTemplates] = useState(false);
-  const [showStamps, setShowStamps] = useState(false);
-  const [showAiPrompt, setShowAiPrompt] = useState(false);
+  const [insertTab, setInsertTab] = useState<InsertTab | null>(null);
   const [aiPromptText, setAiPromptText] = useState("");
   const [aiPromptBusy, setAiPromptBusy] = useState(false);
   const [aiPromptError, setAiPromptError] = useState<string | null>(null);
@@ -1298,6 +1250,8 @@ export function FigureStudio({
           setSelectedIds([]);
         }
       } else if (e.key === "Escape") {
+        setActiveTool("select");
+        setInsertTab(null);
         setAnglePending(null);
         setSelectedIds([]);
         setActiveFlyout(null);
@@ -1516,7 +1470,7 @@ export function FigureStudio({
       if (objects.length > 0) {
         pushHistory({ ...doc, objects: [...doc.objects, ...objects] });
         setSelectedIds(objects.map((o) => o.id));
-        setShowAiPrompt(false);
+        setInsertTab(null);
         setAiPromptText("");
       } else {
         throw new Error("No diagram objects generated. Try refining your prompt description.");
@@ -1528,763 +1482,276 @@ export function FigureStudio({
     }
   };
 
+  const commitInlineText = () => {
+    if (!inlineText) return;
+    if (inlineText.id) {
+      updateSelected((o) => ({ ...(o as TextObj), text: inlineText.text }));
+    } else {
+      const newText: TextObj = {
+        id: uid(),
+        type: "text",
+        x: inlineText.x,
+        y: inlineText.y,
+        w: 120,
+        h: 36,
+        rot: 0,
+        text: inlineText.text || "Label",
+        font: "sans",
+        size: 16,
+        bold: false,
+        italic: false,
+        underline: false,
+        align: "left",
+        bg: "none",
+        border: false,
+        style: { ...style },
+      };
+      pushHistory({ ...doc, objects: [...doc.objects, newText] });
+      setSelectedIds([newText.id]);
+      setActiveTool("select");
+    }
+    setInlineText(null);
+  };
+
+  const insertObjects = (objs: Obj[]) => {
+    pushHistory({ ...doc, objects: [...doc.objects, ...objs] });
+    setSelectedIds(objs.map((o) => o.id));
+    setActiveTool("select");
+    setInsertTab(null);
+  };
+
+  /** Writes only the changed style property, to every selected object and to the style for new drawings. */
+  const updateSelectedStyle = (patch: Partial<Style>) => {
+    setStyle((s) => ({ ...s, ...patch }));
+    if (selectedIds.length === 0) return;
+    pushHistory({
+      ...doc,
+      objects: doc.objects.map((o) => (selectedIds.includes(o.id) ? { ...o, style: { ...o.style, ...patch } } : o)),
+    });
+  };
+
+  const deleteSelected = () => {
+    if (selectedIds.length === 0) return;
+    pushHistory({ ...doc, objects: doc.objects.filter((o) => !selectedIds.includes(o.id)) });
+    setSelectedIds([]);
+  };
+
+  const pickTool = (t: Tool) => {
+    setActiveTool(t);
+    setAnglePending(null);
+    setActiveFlyout(null);
+    setInsertTab(null);
+  };
+
   if (!mounted) return null;
 
-  const currentDeg =
-    selectedObj?.type === "angle"
-      ? angleGeom(
-          (selectedObj as AngleObj).v,
-          (selectedObj as AngleObj).a,
-          (selectedObj as AngleObj).b,
-          (selectedObj as AngleObj).reflex,
-        ).deg
-      : 0;
+  const selectedCount = selectedIds.length;
+  const single = selectedCount === 1 ? selectedObj : undefined;
+  const toolLabel = TOOL_LABELS[activeTool] ?? activeTool;
+  const canvasHint =
+    activeTool === "angle"
+      ? !anglePending
+        ? "Angle · click the corner point (vertex)"
+        : !anglePending.a
+          ? "Angle · click the end of the first arm"
+          : "Angle · click the end of the second arm"
+      : TOOL_HINTS[activeTool];
 
   return createPortal(
     <div className="fixed inset-0 z-[70] flex flex-col bg-slate-100 font-sans text-slate-900 select-none animate-in fade-in duration-150">
-      {/* Hidden File Input for Image Upload */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={handleImageUpload}
-      />
+      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
 
-      {/* ---------------- Top Navbar ---------------- */}
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 shadow-2xs">
-        <div className="flex items-center gap-2 sm:gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white font-bold">
-            <Ruler size={18} />
+      {/* ---------------- Header ---------------- */}
+      <header className="flex h-14 shrink-0 items-center gap-1.5 border-b border-slate-200 bg-white px-3 sm:px-4">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white">
+            <Ruler size={17} />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-bold tracking-tight text-slate-900">
-                Figure Studio
-              </span>
-              <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 border border-indigo-100">
-                Vector Pro
-              </span>
-            </div>
-            <p className="hidden md:block text-[11px] text-slate-500">
-              Interactive geometry, angles, science symbols &amp; diagrams
-            </p>
-          </div>
+          <h1 className="hidden text-sm font-semibold tracking-tight text-slate-900 sm:block">Figure Studio</h1>
+        </div>
 
-          <div className="hidden md:block mx-1.5 h-5 w-px bg-slate-200" />
+        <div className="mx-1 hidden h-6 w-px bg-slate-200 sm:block" />
 
-          {/* Undo / Redo */}
-          <div className="hidden md:flex items-center gap-1">
-            <button
-              type="button"
-              className="btn btn-sm btn-ghost p-1.5"
-              disabled={historyIndex <= 0}
-              onClick={undo}
-              title="Undo (Ctrl+Z)"
-            >
-              <Undo2 size={16} />
-            </button>
-            <button
-              type="button"
-              className="btn btn-sm btn-ghost p-1.5"
-              disabled={historyIndex >= history.length - 1}
-              onClick={redo}
-              title="Redo (Ctrl+Y)"
-            >
-              <Redo2 size={16} />
-            </button>
-          </div>
-
-          <div className="hidden md:block mx-1.5 h-5 w-px bg-slate-200" />
-
-          {/* AI Draw from Prompt */}
-          <div className="hidden sm:block relative">
-            <button
-              type="button"
-              className="btn btn-sm border-purple-200 bg-purple-50 text-purple-800 hover:bg-purple-100 font-medium"
-              onClick={() => {
-                setShowAiPrompt(!showAiPrompt);
-                setShowTemplates(false);
-                setShowStamps(false);
-              }}
-              title="Draw diagram automatically from natural language prompt (e.g. Right triangle ABC with base 8cm)"
-            >
-              <Sparkles size={14} className="text-purple-600" />
-              <span>AI Draw</span>
-            </button>
-            {showAiPrompt && (
-              <div className="absolute left-0 top-full mt-1.5 w-96 rounded-xl border border-purple-200 bg-white p-3.5 shadow-2xl z-50">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-purple-950">
-                    <Sparkles size={14} className="text-purple-600" />
-                    <span>AI Diagram Auto-Layout</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowAiPrompt(false)}
-                    className="text-slate-400 hover:text-slate-600 text-xs font-bold p-1"
-                  >
-                    ✕
-                  </button>
-                </div>
-                <p className="text-[11px] text-slate-500 mb-2 leading-relaxed">
-                  Describe what you want to draw. Gemini generates geometric shapes, angles, labels, coordinates, or circuit diagrams.
-                </p>
-                <div className="space-y-2">
-                  <textarea
-                    rows={3}
-                    className="w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-800 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 placeholder:text-slate-400"
-                    placeholder="e.g. Right-angled triangle ABC right angled at B, base BC = 8 cm, altitude AB = 6 cm, with an angle mark θ at vertex A"
-                    value={aiPromptText}
-                    onChange={(e) => setAiPromptText(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-                        e.preventDefault();
-                        handleAiDraw();
-                      }
-                    }}
-                  />
-                  {/* Quick example prompt chips */}
-                  <div className="flex flex-wrap gap-1 text-[10px]">
-                    <button
-                      type="button"
-                      className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600 hover:bg-purple-100 hover:text-purple-800 transition cursor-pointer"
-                      onClick={() =>
-                        setAiPromptText(
-                          "Right-angled triangle ABC right angled at B, base BC = 8 cm, altitude AB = 6 cm, with an angle mark θ at vertex A"
-                        )
-                      }
-                    >
-                      📐 Right △ with angle θ
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600 hover:bg-purple-100 hover:text-purple-800 transition cursor-pointer"
-                      onClick={() =>
-                        setAiPromptText(
-                          "Circle with center O, diameter AB, radius 5 cm, and tangent line touching at point T"
-                        )
-                      }
-                    >
-                      ⭕ Circle with tangent
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600 hover:bg-purple-100 hover:text-purple-800 transition cursor-pointer"
-                      onClick={() =>
-                        setAiPromptText(
-                          "Circuit diagram for verification of Ohm's Law with resistor R, voltmeter in parallel, ammeter in series, rheostat, plug key, and battery"
-                        )
-                      }
-                    >
-                      ⚡ Ohm&apos;s Law Circuit
-                    </button>
-                  </div>
-
-                  {aiPromptError && (
-                    <div className="rounded border border-red-200 bg-red-50 p-2 text-[11px] text-red-700">
-                      {aiPromptError}
-                    </div>
-                  )}
-
-                  <div className="flex items-center justify-between pt-1">
-                    <span className="text-[10px] text-slate-400">Ctrl+Enter to generate</span>
-                    <button
-                      type="button"
-                      disabled={aiPromptBusy || !aiPromptText.trim()}
-                      onClick={handleAiDraw}
-                      className="btn btn-sm bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 text-xs font-semibold px-3 py-1.5 shadow-xs"
-                    >
-                      {aiPromptBusy ? "Generating Diagram…" : "Generate on Canvas"}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Insert Templates */}
-          <div className="hidden sm:block relative">
-            <button
-              type="button"
-              className="btn btn-sm text-slate-700"
-              onClick={() => {
-                setShowTemplates(!showTemplates);
-                setShowStamps(false);
-                setShowAiPrompt(false);
-              }}
-            >
-              <Sparkles size={14} className="text-indigo-600" />
-              Templates <ChevronDown size={12} />
-            </button>
-            {showTemplates && (
-              <div className="absolute left-0 top-full mt-1.5 w-80 rounded-xl border border-slate-200 bg-white p-2 shadow-xl z-50 max-h-96 overflow-y-auto">
-                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 px-2 py-1">
-                  Preset Board &amp; CBSE Geometry
-                </div>
-                <div className="space-y-1">
-                  {TEMPLATES.map((t) => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      className="w-full text-left rounded-lg p-2 hover:bg-indigo-50/70 transition flex flex-col"
-                      onClick={() => {
-                        const newObjs = t.create({ x: doc.w / 2, y: doc.h / 2 });
-                        pushHistory({ ...doc, objects: [...doc.objects, ...newObjs] });
-                        setSelectedIds(newObjs.map((o) => o.id));
-                        setShowTemplates(false);
-                      }}
-                    >
-                      <span className="text-xs font-semibold text-slate-900">{t.name}</span>
-                      <span className="text-[10px] text-slate-500 leading-tight">
-                        {t.description}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Symbols & Science Stamps */}
-          <div className="hidden sm:block relative">
-            <button
-              type="button"
-              className="btn btn-sm text-slate-700"
-              onClick={() => {
-                setShowStamps(!showStamps);
-                setShowTemplates(false);
-                setShowAiPrompt(false);
-              }}
-            >
-              <Shapes size={14} className="text-purple-600" />
-              Science &amp; Symbols <ChevronDown size={12} />
-            </button>
-            {showStamps && (
-              <div className="absolute left-0 top-full mt-1.5 w-88 rounded-xl border border-slate-200 bg-white p-3 shadow-xl z-50 max-h-96 overflow-y-auto">
-                {STAMP_CATEGORIES.map((cat) => (
-                  <div key={cat.id} className="mb-3">
-                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5 flex items-center justify-between">
-                      <span>{cat.label}</span>
-                      <span className="text-[9px] font-semibold text-slate-400">
-                        {Object.values(STAMP_REGISTRY).filter((s) => s.category === cat.id).length}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {Object.values(STAMP_REGISTRY)
-                        .filter((s) => s.category === cat.id)
-                        .map((s) => (
-                          <button
-                            key={s.id}
-                            type="button"
-                            className="flex items-center gap-1.5 rounded-lg border border-slate-200/80 p-2 text-xs font-medium text-slate-800 hover:bg-purple-50 hover:border-purple-200 transition"
-                            onClick={() => {
-                              const newStamp: Obj = {
-                                id: uid(),
-                                type: "stamp",
-                                stamp: s.id,
-                                x: doc.w / 2 - 45,
-                                y: doc.h / 2 - 35,
-                                w: 90,
-                                h: 70,
-                                rot: 0,
-                                style: { ...style },
-                              };
-                              pushHistory({ ...doc, objects: [...doc.objects, newStamp] });
-                              setSelectedIds([newStamp.id]);
-                              setShowStamps(false);
-                            }}
-                          >
-                            <span className="truncate">{s.name}</span>
-                          </button>
-                        ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Insert Image */}
+        <div className="flex items-center">
+          <button type="button" className="btn btn-sm btn-ghost !px-2" disabled={historyIndex <= 0} onClick={undo} title="Undo (Ctrl+Z)" aria-label="Undo">
+            <Undo2 size={16} />
+          </button>
           <button
             type="button"
-            className="hidden md:flex btn btn-sm btn-ghost text-slate-700"
-            onClick={() => fileInputRef.current?.click()}
-            title="Upload image or paste from clipboard (Ctrl+V)"
+            className="btn btn-sm btn-ghost !px-2"
+            disabled={historyIndex >= history.length - 1}
+            onClick={redo}
+            title="Redo (Ctrl+Y)"
+            aria-label="Redo"
           >
-            <Upload size={14} className="text-slate-600" />
-            Image
+            <Redo2 size={16} />
           </button>
         </div>
 
-        {/* Right action controls */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          {/* Zoom controls */}
-          <div className="hidden lg:flex items-center rounded-lg border border-slate-200 bg-slate-50 p-0.5">
-            <button
-              type="button"
-              className="rounded p-1 text-slate-600 hover:bg-white"
-              onClick={() => setZoom((z) => Math.max(0.2, z - 0.15))}
-              title="Zoom out"
-            >
-              <ZoomOut size={14} />
+        <div className="relative flex items-center gap-1.5">
+          <button
+            type="button"
+            className={`btn btn-sm ${insertTab && insertTab !== "ai" ? "border-indigo-300 bg-indigo-50 text-indigo-800" : ""}`}
+            aria-expanded={!!insertTab && insertTab !== "ai"}
+            onClick={() => {
+              setInsertTab(insertTab && insertTab !== "ai" ? null : "templates");
+              setActiveFlyout(null);
+            }}
+            title="Ready-made figures, science symbols and pictures"
+          >
+            <Plus size={15} />
+            <span className="hidden sm:inline">Insert</span>
+            <ChevronDown size={13} className="hidden opacity-60 sm:block" />
+          </button>
+          <button
+            type="button"
+            className={`btn btn-sm ${insertTab === "ai" ? "border-indigo-300 bg-indigo-50 text-indigo-800" : ""}`}
+            aria-expanded={insertTab === "ai"}
+            onClick={() => {
+              setInsertTab(insertTab === "ai" ? null : "ai");
+              setActiveFlyout(null);
+            }}
+            title="Describe a figure in words and have it drawn"
+          >
+            <Sparkles size={14} className="text-indigo-600" />
+            <span className="hidden md:inline">Draw from text</span>
+          </button>
+          {insertTab && (
+            <InsertPanel
+              tab={insertTab}
+              onTab={setInsertTab}
+              onClose={() => setInsertTab(null)}
+              onTemplate={(t) => insertObjects(t.create({ x: doc.w / 2, y: doc.h / 2 }))}
+              onStamp={(id) =>
+                insertObjects([
+                  { id: uid(), type: "stamp", stamp: id, x: doc.w / 2 - 45, y: doc.h / 2 - 35, w: 90, h: 70, rot: 0, style: { ...style } },
+                ])
+              }
+              onImage={() => {
+                setInsertTab(null);
+                fileInputRef.current?.click();
+              }}
+              ai={{ text: aiPromptText, setText: setAiPromptText, busy: aiPromptBusy, error: aiPromptError, generate: handleAiDraw }}
+            />
+          )}
+        </div>
+
+        <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+          <div className="hidden items-center rounded-lg border border-slate-200 bg-slate-50 p-0.5 lg:flex">
+            <button type="button" className="rounded-md p-1.5 text-slate-600 hover:bg-white" onClick={() => setZoom((z) => Math.max(0.2, z - 0.15))} aria-label="Zoom out" title="Zoom out">
+              <ZoomOut size={15} />
             </button>
-            <span className="px-2 text-xs font-semibold tabular-nums text-slate-700">
-              {Math.round(zoom * 100)}%
-            </span>
-            <button
-              type="button"
-              className="rounded p-1 text-slate-600 hover:bg-white"
-              onClick={() => setZoom((z) => Math.min(4, z + 0.15))}
-              title="Zoom in"
-            >
-              <ZoomIn size={14} />
+            <span className="w-12 text-center text-xs font-semibold tabular-nums text-slate-700">{Math.round(zoom * 100)}%</span>
+            <button type="button" className="rounded-md p-1.5 text-slate-600 hover:bg-white" onClick={() => setZoom((z) => Math.min(4, z + 0.15))} aria-label="Zoom in" title="Zoom in">
+              <ZoomIn size={15} />
             </button>
-            <button
-              type="button"
-              className="rounded px-1.5 py-0.5 text-[11px] font-medium text-slate-600 hover:bg-white"
-              onClick={() => fitView()}
-              title="Fit to screen & center (0)"
-            >
+            <button type="button" className="rounded-md px-2 py-1 text-xs font-medium text-slate-600 hover:bg-white" onClick={() => fitView()} title="Fit the page on screen (0)">
               Fit
             </button>
           </div>
 
           <button
             type="button"
-            className="lg:hidden btn btn-sm btn-ghost p-1.5 text-slate-600"
+            className="btn btn-sm btn-ghost !px-2 lg:hidden"
             onClick={() => setShowMobileInspector((v) => !v)}
-            title="Toggle Properties"
-            aria-label="Toggle Properties"
+            aria-label="Show properties"
+            aria-expanded={showMobileInspector}
           >
             <SlidersHorizontal size={16} />
           </button>
-
-          <button
-            type="button"
-            className="hidden sm:flex btn btn-sm btn-ghost p-1.5 text-slate-500"
-            onClick={() => setShowShortcuts(true)}
-            title="Shortcuts (?)"
-          >
+          <button type="button" className="btn btn-sm btn-ghost hidden !px-2 sm:flex" onClick={() => setShowShortcuts(true)} aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)">
             <HelpCircle size={16} />
           </button>
-
-          <button type="button" className="btn btn-sm" onClick={onCancel}>
-            Cancel
+          <button type="button" className="btn btn-sm !px-2 sm:!px-3" onClick={onCancel} aria-label="Cancel">
+            <X size={15} className="sm:hidden" />
+            <span className="hidden sm:inline">Cancel</span>
           </button>
-          <button type="button" className="btn btn-sm btn-primary" onClick={handleExport}>
-            <Check size={14} /> Use Figure
+          <button type="button" className="btn btn-sm btn-primary !px-2.5 sm:!px-3" onClick={handleExport}>
+            <Check size={14} /> Use<span className="hidden sm:inline"> figure</span>
           </button>
         </div>
       </header>
 
-      {/* ---------------- Main Body ---------------- */}
-      <div className="flex flex-1 overflow-hidden relative">
-        {/* Left Toolbar */}
-        <aside className="w-[76px] shrink-0 border-r border-slate-200 bg-white flex flex-col items-center py-2 gap-1 shadow-2xs z-20">
-          {/* Select & Move */}
-          <button
-            type="button"
-            className={`btn rounded-lg !p-1 w-[62px] min-h-[52px] flex-col gap-0.5 !border-transparent !shadow-none transition ${
-              activeTool === "select"
-                ? "bg-indigo-600 text-white shadow-xs"
-                : "text-slate-600 hover:bg-slate-100"
-            }`}
-            onClick={() => {
-              setActiveTool("select");
-              setAnglePending(null);
-              setActiveFlyout(null);
-            }}
-            title="Select & Move (V)"
-          >
-            <MousePointer size={18} />
-            <span className="text-[10px] font-medium leading-none">Select</span>
-          </button>
+      {/* ---------------- Body ---------------- */}
+      <div className="relative flex flex-1 overflow-hidden">
+        {/* Tool rail */}
+        <aside className="z-20 flex w-[68px] shrink-0 flex-col items-center gap-0.5 border-r border-slate-200 bg-white py-2" aria-label="Tools">
+          {RAIL.map((entry, i) => {
+            if (entry === "divider") return <div key={`d${i}`} className="my-1 h-px w-9 shrink-0 bg-slate-200" />;
+            const group = entry.group ? TOOL_GROUPS[entry.group] : null;
+            const groupTools = group ? group.sections.flatMap((s) => s.items.map((it) => it.id)) : [];
+            const active = group ? groupTools.includes(activeTool) : activeTool === entry.tool;
+            const activeItem = group?.sections.flatMap((s) => s.items).find((it) => it.id === activeTool);
+            const tone = entry.tone ?? "indigo";
+            const activeCls = tone === "red" ? "bg-red-600 text-white" : tone === "amber" ? "bg-amber-500 text-white" : "bg-indigo-600 text-white";
+            return (
+              <div key={entry.label} className="relative">
+                <button
+                  type="button"
+                  aria-pressed={active}
+                  aria-haspopup={group ? "menu" : undefined}
+                  aria-expanded={group ? activeFlyout === entry.group : undefined}
+                  title={entry.title}
+                  className={`relative flex h-[50px] w-[56px] flex-col items-center justify-center gap-1 rounded-lg transition-colors ${
+                    active ? activeCls : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                  } ${group && activeFlyout === entry.group && !active ? "bg-slate-100" : ""}`}
+                  onClick={() => {
+                    if (group) {
+                      setActiveFlyout(activeFlyout === entry.group ? null : entry.group!);
+                      setInsertTab(null);
+                    } else pickTool(entry.tool!);
+                  }}
+                >
+                  {activeItem ? <Glyph name={activeItem.id} /> : entry.icon}
+                  <span className="max-w-full truncate px-0.5 text-[10px] font-medium leading-none">{entry.label}</span>
+                  {group && <span className="absolute bottom-1 right-1 h-0 w-0 border-l-[4px] border-t-[4px] border-l-transparent border-t-current opacity-50" />}
+                </button>
 
-          {/* Hand / Pan */}
-          <button
-            type="button"
-            className={`btn rounded-lg !p-1 w-[62px] min-h-[52px] flex-col gap-0.5 !border-transparent !shadow-none transition ${
-              activeTool === "hand"
-                ? "bg-indigo-600 text-white shadow-xs"
-                : "text-slate-600 hover:bg-slate-100"
-            }`}
-            onClick={() => {
-              setActiveTool("hand");
-              setActiveFlyout(null);
-            }}
-            title="Hand / Pan (H)"
-          >
-            <Hand size={18} />
-            <span className="text-[10px] font-medium leading-none">Pan</span>
-          </button>
-
-          <div className="w-8 h-px bg-slate-200 my-0.5" />
-
-          {/* Angle tool - Primary headline feature */}
-          <button
-            type="button"
-            className={`btn rounded-lg !p-1 w-[62px] min-h-[52px] flex-col gap-0.5 !border-transparent !shadow-none transition relative ${
-              activeTool === "angle"
-                ? "bg-indigo-600 text-white shadow-xs"
-                : "text-slate-600 hover:bg-slate-100"
-            }`}
-            onClick={() => {
-              setActiveTool("angle");
-              setAnglePending(null);
-              setActiveFlyout(null);
-            }}
-            title="Angle Tool (A) - Click vertex, arm 1, arm 2 with live degree preview"
-          >
-            <CornerDownRight size={18} />
-            
-            <span className="text-[10px] font-medium leading-none">Angle</span>
-          </button>
-
-          {/* Lines & Dimension Flyout */}
-          <div className="relative">
-            <button
-              type="button"
-              className={`btn rounded-lg !p-1 w-[62px] min-h-[52px] flex-col gap-0.5 !border-transparent !shadow-none transition relative ${
-                ["line", "ray", "double_arrow", "dimension", "arc_line"].includes(activeTool)
-                  ? "bg-indigo-600 text-white shadow-xs"
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
-              onClick={() =>
-                setActiveFlyout(activeFlyout === "lines" ? null : "lines")
-              }
-              title="Lines, Rays, Dimension & Arcs"
-            >
-              <Minus size={18} />
-              <span className="absolute top-1 right-1.5 text-[8px] opacity-70">▾</span>
-              <span className="text-[10px] font-medium leading-none">Lines</span>
-          </button>
-            {activeFlyout === "lines" && (
-              <div className="absolute left-full top-0 ml-2 w-48 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl z-50 space-y-1">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2 py-0.5">
-                  Line Tools
-                </div>
-                {[
-                  { id: "line", label: "Straight Line", desc: "Segment" },
-                  { id: "ray", label: "Single Ray →", desc: "Arrow head" },
-                  { id: "double_arrow", label: "Double Arrow ↔", desc: "Both ends" },
-                  { id: "dimension", label: "Dimension Line", desc: "With '5 cm' label" },
-                  { id: "arc_line", label: "3-Pt Curve / Arc", desc: "Curved path" },
-                ].map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={`w-full text-left rounded-lg px-2.5 py-1.5 text-xs font-medium transition flex items-center justify-between ${
-                      activeTool === item.id
-                        ? "bg-indigo-50 text-indigo-700 font-semibold"
-                        : "hover:bg-slate-50 text-slate-800"
-                    }`}
-                    onClick={() => {
-                      setActiveTool(item.id as Tool);
-                      setActiveFlyout(null);
-                    }}
-                  >
-                    <span>{item.label}</span>
-                    <span className="text-[10px] text-slate-400">{item.desc}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Rich Shapes Flyout */}
-          <div className="relative">
-            <button
-              type="button"
-              className={`btn rounded-lg !p-1 w-[62px] min-h-[52px] flex-col gap-0.5 !border-transparent !shadow-none transition relative ${
-                [
-                  "rect",
-                  "roundrect",
-                  "circle",
-                  "triangle",
-                  "rtriangle",
-                  "parallelogram",
-                  "rhombus",
-                  "trapezium",
-                  "polygon",
-                  "star",
-                  "cross",
-                  "semicircle",
-                  "sector",
-                  "ring",
-                ].includes(activeTool)
-                  ? "bg-indigo-600 text-white shadow-xs"
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
-              onClick={() =>
-                setActiveFlyout(activeFlyout === "shapes" ? null : "shapes")
-              }
-              title="Geometry Shapes (Triangles, Polygons, Sectors)"
-            >
-              <Square size={17} />
-              <span className="absolute top-1 right-1.5 text-[8px] opacity-70">▾</span>
-              <span className="text-[10px] font-medium leading-none">Shapes</span>
-          </button>
-            {activeFlyout === "shapes" && (
-              <div className="absolute left-full top-0 ml-2 w-60 rounded-xl border border-slate-200 bg-white p-2 shadow-xl z-50 max-h-96 overflow-y-auto space-y-2">
-                <div>
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 mb-1">
-                    Triangles &amp; Boxes
-                  </div>
-                  <div className="grid grid-cols-2 gap-1">
-                    {[
-                      { id: "rect", label: "Rectangle" },
-                      { id: "roundrect", label: "Rounded Box" },
-                      { id: "circle", label: "Circle / Ellipse" },
-                      { id: "triangle", label: "Isosceles Δ" },
-                      { id: "rtriangle", label: "Right Δ (90°)" },
-                    ].map((s) => (
-                      <button
-                        key={s.id}
-                        type="button"
-                        className={`text-left rounded-lg p-1.5 text-xs transition truncate ${
-                          activeTool === s.id
-                            ? "bg-indigo-50 text-indigo-700 font-semibold border border-indigo-200"
-                            : "hover:bg-slate-50 text-slate-800"
-                        }`}
-                        onClick={() => {
-                          setActiveTool(s.id as Tool);
-                          setActiveFlyout(null);
-                        }}
-                      >
-                        {s.label}
-                      </button>
+                {group && activeFlyout === entry.group && (
+                  <div role="menu" className="absolute left-full top-0 z-50 ml-2 w-64 rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
+                    {group.sections.map((sec) => (
+                      <div key={sec.title} className="mb-1 last:mb-0">
+                        <div className="px-2 pb-1 pt-0.5 text-xs font-semibold text-slate-500">{sec.title}</div>
+                        <div className={sec.items.length > 3 ? "grid grid-cols-2 gap-0.5" : "space-y-0.5"}>
+                          {sec.items.map((it) => (
+                            <button
+                              key={it.id}
+                              type="button"
+                              role="menuitem"
+                              className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] transition-colors ${
+                                activeTool === it.id ? "bg-indigo-50 font-semibold text-indigo-800" : "text-slate-800 hover:bg-slate-100"
+                              }`}
+                              onClick={() => pickTool(it.id)}
+                            >
+                              <Glyph name={it.id} className="shrink-0 text-slate-500" />
+                              <span className="min-w-0 flex-1 truncate">{it.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     ))}
                   </div>
-                </div>
-
-                <div>
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 mb-1">
-                    Quadrilaterals &amp; Polygons
-                  </div>
-                  <div className="grid grid-cols-2 gap-1">
-                    {[
-                      { id: "parallelogram", label: "Parallelogram" },
-                      { id: "rhombus", label: "Rhombus" },
-                      { id: "trapezium", label: "Trapezium" },
-                      { id: "polygon", label: "Polygon (N-side)" },
-                      { id: "star", label: "Star" },
-                      { id: "cross", label: "Cross +" },
-                    ].map((s) => (
-                      <button
-                        key={s.id}
-                        type="button"
-                        className={`text-left rounded-lg p-1.5 text-xs transition truncate ${
-                          activeTool === s.id
-                            ? "bg-indigo-50 text-indigo-700 font-semibold border border-indigo-200"
-                            : "hover:bg-slate-50 text-slate-800"
-                        }`}
-                        onClick={() => {
-                          setActiveTool(s.id as Tool);
-                          setActiveFlyout(null);
-                        }}
-                      >
-                        {s.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 mb-1">
-                    Curved Regions (Mensuration)
-                  </div>
-                  <div className="grid grid-cols-2 gap-1">
-                    {[
-                      { id: "semicircle", label: "Semicircle" },
-                      { id: "sector", label: "Sector / Pie" },
-                      { id: "ring", label: "Ring / Annulus" },
-                    ].map((s) => (
-                      <button
-                        key={s.id}
-                        type="button"
-                        className={`text-left rounded-lg p-1.5 text-xs transition truncate ${
-                          activeTool === s.id
-                            ? "bg-indigo-50 text-indigo-700 font-semibold border border-indigo-200"
-                            : "hover:bg-slate-50 text-slate-800"
-                        }`}
-                        onClick={() => {
-                          setActiveTool(s.id as Tool);
-                          setActiveFlyout(null);
-                        }}
-                      >
-                        {s.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                )}
               </div>
-            )}
-          </div>
-
-          {/* Graphs & Axes Flyout */}
-          <div className="relative">
-            <button
-              type="button"
-              className={`btn rounded-lg !p-1 w-[62px] min-h-[52px] flex-col gap-0.5 !border-transparent !shadow-none transition relative ${
-                ["axes", "numberline", "fraction_circle", "fraction_bar", "fraction_grid", "table"].includes(activeTool)
-                  ? "bg-indigo-600 text-white shadow-xs"
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
-              onClick={() =>
-                setActiveFlyout(activeFlyout === "graphs" ? null : "graphs")
-              }
-              title="Graphs, Number Line &amp; Fraction models"
-            >
-              <TrendingUp size={18} />
-              <span className="absolute top-1 right-1.5 text-[8px] opacity-70">▾</span>
-              <span className="text-[10px] font-medium leading-none">Maths</span>
-          </button>
-            {activeFlyout === "graphs" && (
-              <div className="absolute left-full top-0 ml-2 w-60 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl z-50 space-y-1">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2 py-0.5">
-                  Graphs, Scales &amp; Fractions
-                </div>
-                {[
-                  { id: "axes", label: "X-Y Coordinate Plane", desc: "4 Quadrants" },
-                  { id: "numberline", label: "Number Line", desc: "Scales, jumps, marks" },
-                  { id: "fraction_circle", label: "Fraction Circle", desc: "Shade parts" },
-                  { id: "fraction_bar", label: "Fraction Bar", desc: "Shade parts" },
-                  { id: "fraction_grid", label: "Fraction Grid", desc: "Rows × columns" },
-                  { id: "table", label: "Table", desc: "Frequency / data" },
-                ].map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={`w-full text-left rounded-lg px-2.5 py-1.5 text-xs font-medium transition flex items-center justify-between ${
-                      activeTool === item.id
-                        ? "bg-indigo-50 text-indigo-700 font-semibold"
-                        : "hover:bg-slate-50 text-slate-800"
-                    }`}
-                    onClick={() => {
-                      setActiveTool(item.id as Tool);
-                      setActiveFlyout(null);
-                    }}
-                  >
-                    <span>{item.label}</span>
-                    <span className="text-[10px] text-slate-400">{item.desc}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Point & Auto-Lettering Tool */}
-          <button
-            type="button"
-            className={`btn rounded-lg !p-1 w-[62px] min-h-[52px] flex-col gap-0.5 !border-transparent !shadow-none transition ${
-              activeTool === "point"
-                ? "bg-indigo-600 text-white shadow-xs"
-                : "text-slate-600 hover:bg-slate-100"
-            }`}
-            onClick={() => {
-              setActiveTool("point");
-              setActiveFlyout(null);
-            }}
-            title="Point Tool (P) - Auto-labelled A, B, C..."
-          >
-            <div className="flex items-center justify-center font-bold text-xs">P•</div>
-            <span className="text-[10px] font-medium leading-none">Point</span>
-          </button>
-
-          {/* Text & Formula Tool */}
-          <button
-            type="button"
-            className={`btn rounded-lg !p-1 w-[62px] min-h-[52px] flex-col gap-0.5 !border-transparent !shadow-none transition ${
-              activeTool === "text"
-                ? "bg-indigo-600 text-white shadow-xs"
-                : "text-slate-600 hover:bg-slate-100"
-            }`}
-            onClick={() => {
-              setActiveTool("text");
-              setActiveFlyout(null);
-            }}
-            title="Text & Formula Tool (T) - Click canvas to type"
-          >
-            <Type size={18} />
-            <span className="text-[10px] font-medium leading-none">Text</span>
-          </button>
-
-          {/* Pen Freehand */}
-          <button
-            type="button"
-            className={`btn rounded-lg !p-1 w-[62px] min-h-[52px] flex-col gap-0.5 !border-transparent !shadow-none transition ${
-              activeTool === "pen"
-                ? "bg-indigo-600 text-white shadow-xs"
-                : "text-slate-600 hover:bg-slate-100"
-            }`}
-            onClick={() => {
-              setActiveTool("pen");
-              setActiveFlyout(null);
-            }}
-            title="Freehand Pen (P)"
-          >
-            <Pencil size={17} />
-            <span className="text-[10px] font-medium leading-none">Pen</span>
-          </button>
-
-          {/* Highlighter */}
-          <button
-            type="button"
-            className={`btn rounded-lg !p-1 w-[62px] min-h-[52px] flex-col gap-0.5 !border-transparent !shadow-none transition ${
-              activeTool === "highlighter"
-                ? "bg-amber-500 text-white shadow-xs"
-                : "text-slate-600 hover:bg-amber-50"
-            }`}
-            onClick={() => {
-              setActiveTool("highlighter");
-              setActiveFlyout(null);
-            }}
-            title="Highlighter"
-          >
-            <Sparkles size={17} />
-            <span className="text-[10px] font-medium leading-none">Marker</span>
-          </button>
-
-          {/* Eraser */}
-          <button
-            type="button"
-            className={`btn rounded-lg !p-1 w-[62px] min-h-[52px] flex-col gap-0.5 !border-transparent !shadow-none transition ${
-              activeTool === "eraser"
-                ? "bg-red-600 text-white shadow-xs"
-                : "text-slate-600 hover:bg-red-50 hover:text-red-700"
-            }`}
-            onClick={() => {
-              setActiveTool("eraser");
-              setActiveFlyout(null);
-            }}
-            title="Object Eraser (E)"
-          >
-            <Eraser size={17} />
-            <span className="text-[10px] font-medium leading-none">Eraser</span>
-          </button>
+            );
+          })}
         </aside>
 
-        {/* Center Canvas Area */}
+        {/* Canvas */}
         <main
-          className="flex-1 bg-slate-100 overflow-hidden relative flex items-center justify-center select-none"
+          className="relative flex flex-1 items-center justify-center overflow-hidden bg-slate-100 select-none"
           style={{
             cursor:
-              activeTool === "hand"
-                ? "grab"
-                : activeTool === "select"
-                  ? "default"
-                  : activeTool === "text"
-                    ? CURSOR_TEXT
-                    : activeTool === "eraser"
-                      ? CURSOR_ERASER
-                      : CURSOR_CROSS,
+              activeTool === "hand" ? "grab" : activeTool === "select" ? "default" : activeTool === "text" ? CURSOR_TEXT : activeTool === "eraser" ? CURSOR_ERASER : CURSOR_CROSS,
           }}
-          onClick={() => setActiveFlyout(null)}
+          onClick={() => {
+            setActiveFlyout(null);
+            setInsertTab(null);
+          }}
         >
           <canvas
             ref={canvasRef}
-            className="w-full h-full touch-none block"
+            className="block h-full w-full touch-none"
             style={{ cursor: "inherit" }}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
@@ -2292,1249 +1759,224 @@ export function FigureStudio({
             onDoubleClick={handleDoubleClick}
           />
 
-          {doc.objects.length === 0 && !inlineText && (
-            <div className="pointer-events-none absolute inset-x-0 bottom-5 flex justify-center px-4">
-              <div className="rounded-full border border-slate-200 bg-white/95 px-4 py-2 text-xs text-slate-600 shadow-sm">
-                Pick a tool on the left, or start from <b>Templates</b> / <b>AI Draw</b> above. Scroll to pan,
-                Ctrl + scroll to zoom.
+          {canvasHint && activeTool !== "select" && !inlineText && (
+            <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center px-4">
+              <div className="flex items-center gap-2 rounded-full bg-slate-900/85 py-1.5 pl-3 pr-1.5 text-xs text-white shadow-lg">
+                <span>{canvasHint}</span>
+                <span className="rounded-full bg-white/15 px-2 py-0.5 text-[11px] text-white/80">Esc to stop</span>
               </div>
             </div>
           )}
 
-          {/* On-Canvas Inline Text Editor Overlay */}
+          {doc.objects.length === 0 && !inlineText && activeTool === "select" && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-5 flex justify-center px-4">
+              <div className="rounded-full border border-slate-200 bg-white/95 px-4 py-2 text-xs text-slate-600 shadow-sm">
+                Choose a tool on the left, or <b>Insert</b> a ready figure. Scroll to move around, Ctrl + scroll to zoom.
+              </div>
+            </div>
+          )}
+
+          {/* On-canvas text editor */}
           {inlineText && (
             <div
-              className="absolute z-40 bg-white rounded-xl shadow-2xl border border-indigo-200 p-2 min-w-64 animate-in zoom-in-95 duration-100"
+              className="absolute z-40 w-72 rounded-xl border border-slate-200 bg-white p-2.5 shadow-2xl animate-in zoom-in-95 duration-100"
               style={{
-                left: Math.max(
-                  16,
-                  Math.min(
-                    window.innerWidth - 300,
-                    sceneToScreen(inlineText.x, inlineText.y).x,
-                  ),
-                ),
-                top: Math.max(
-                  60,
-                  Math.min(
-                    window.innerHeight - 200,
-                    sceneToScreen(inlineText.x, inlineText.y).y,
-                  ),
-                ),
+                left: Math.max(16, Math.min(window.innerWidth - 300, sceneToScreen(inlineText.x, inlineText.y).x)),
+                top: Math.max(60, Math.min(window.innerHeight - 220, sceneToScreen(inlineText.x, inlineText.y).y)),
               }}
             >
-              <div className="flex items-center justify-between pb-1 mb-1 border-b border-slate-100">
-                <span className="text-[11px] font-bold text-indigo-950 flex items-center gap-1">
-                  <Type size={12} className="text-indigo-600" /> Type Label or Formula
-                </span>
-                <button
-                  type="button"
-                  className="p-0.5 text-slate-400 hover:text-slate-700"
-                  onClick={() => setInlineText(null)}
-                >
-                  <X size={13} />
-                </button>
-              </div>
-
               <textarea
                 autoFocus
-                className="input text-sm w-full font-sans"
+                className="input w-full font-sans text-sm"
                 rows={2}
+                aria-label="Text"
+                placeholder="Type a label or formula"
                 value={inlineText.text}
-                onChange={(e) =>
-                  setInlineText({ ...inlineText, text: e.target.value })
-                }
+                onChange={(e) => setInlineText({ ...inlineText, text: e.target.value })}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && (e.ctrlKey || e.metaKey || !e.shiftKey)) {
+                  if (e.key === "Escape") {
                     e.preventDefault();
-                    if (inlineText.id) {
-                      updateSelected((o) => ({
-                        ...(o as TextObj),
-                        text: inlineText.text,
-                      }));
-                    } else {
-                      const newText: TextObj = {
-                        id: uid(),
-                        type: "text",
-                        x: inlineText.x,
-                        y: inlineText.y,
-                        w: 120,
-                        h: 36,
-                        rot: 0,
-                        text: inlineText.text || "Label",
-                        font: "sans",
-                        size: 16,
-                        bold: false,
-                        italic: false,
-                        underline: false,
-                        align: "left",
-                        bg: "none",
-                        border: false,
-                        style: { ...style },
-                      };
-                      pushHistory({ ...doc, objects: [...doc.objects, newText] });
-                      setSelectedIds([newText.id]);
-                      setActiveTool("select");
-                    }
                     setInlineText(null);
+                  } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey || !e.shiftKey)) {
+                    e.preventDefault();
+                    commitInlineText();
                   }
                 }}
               />
-
-              {/* Quick Math Symbols Bar */}
               <div className="flex flex-wrap gap-1 pt-1.5">
                 {MATH_SYMBOLS.slice(0, 16).map((sym) => (
                   <button
                     key={sym}
                     type="button"
-                    className="rounded bg-slate-100 hover:bg-indigo-50 border border-slate-200 px-1.5 py-0.5 text-xs font-medium text-slate-800 transition"
-                    onClick={() =>
-                      setInlineText({
-                        ...inlineText,
-                        text: inlineText.text + sym,
-                      })
-                    }
+                    className="rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-xs font-medium text-slate-800 hover:border-indigo-300 hover:bg-indigo-50"
+                    onClick={() => setInlineText({ ...inlineText, text: inlineText.text + sym })}
                   >
                     {sym}
                   </button>
                 ))}
               </div>
-
-              <div className="flex justify-end gap-1.5 pt-2">
-                <button
-                  type="button"
-                  className="btn btn-sm btn-ghost text-xs"
-                  onClick={() => setInlineText(null)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-sm btn-primary text-xs"
-                  onClick={() => {
-                    if (inlineText.id) {
-                      updateSelected((o) => ({
-                        ...(o as TextObj),
-                        text: inlineText.text,
-                      }));
-                    } else {
-                      const newText: TextObj = {
-                        id: uid(),
-                        type: "text",
-                        x: inlineText.x,
-                        y: inlineText.y,
-                        w: 120,
-                        h: 36,
-                        rot: 0,
-                        text: inlineText.text || "Label",
-                        font: "sans",
-                        size: 16,
-                        bold: false,
-                        italic: false,
-                        underline: false,
-                        align: "left",
-                        bg: "none",
-                        border: false,
-                        style: { ...style },
-                      };
-                      pushHistory({ ...doc, objects: [...doc.objects, newText] });
-                      setSelectedIds([newText.id]);
-                      setActiveTool("select");
-                    }
-                    setInlineText(null);
-                  }}
-                >
-                  Apply
-                </button>
+              <div className="flex items-center justify-between gap-1.5 pt-2">
+                <span className="text-[11px] text-slate-400">Enter to place · Shift+Enter new line</span>
+                <div className="flex gap-1.5">
+                  <button type="button" className="btn btn-sm btn-ghost text-xs" onClick={() => setInlineText(null)}>
+                    Cancel
+                  </button>
+                  <button type="button" className="btn btn-sm btn-primary text-xs" onClick={commitInlineText}>
+                    {inlineText.id ? "Update" : "Place text"}
+                  </button>
+                </div>
               </div>
             </div>
           )}
         </main>
 
-        {/* Right Inspector & Style Panel */}
+        {/* Inspector */}
         <aside
-          className={`fixed lg:static top-14 bottom-0 right-0 z-30 w-[22rem] shrink-0 border-l border-slate-200 bg-white flex flex-col overflow-y-auto p-4 space-y-4 shadow-xl lg:shadow-2xs text-xs transition-transform duration-200 ${
-            showMobileInspector
-              ? "translate-x-0"
-              : "translate-x-full lg:translate-x-0"
+          aria-label="Properties"
+          className={`fixed bottom-0 right-0 top-14 z-30 flex w-[20.5rem] max-w-[100vw] shrink-0 flex-col overflow-y-auto border-l border-slate-200 bg-white shadow-xl transition-transform duration-200 lg:static lg:shadow-none ${
+            showMobileInspector ? "translate-x-0" : "translate-x-full lg:translate-x-0"
           }`}
         >
-          {/* Header of Inspector */}
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-            <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
-              <Sliders size={14} className="text-indigo-600" />
-              {selectedObj
-                ? `Selected: ${selectedObj.type.toUpperCase()}`
-                : "Drawing Properties"}
-            </span>
-            {selectedObj && (
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  className="p-1 rounded text-slate-400 hover:text-indigo-600 hover:bg-slate-100"
-                  onClick={duplicateSelected}
-                  title="Duplicate (Ctrl+D)"
-                >
-                  <Copy size={13} />
-                </button>
-                <button
-                  type="button"
-                  className="p-1 rounded text-slate-400 hover:text-red-600 hover:bg-red-50"
-                  onClick={() => {
-                    pushHistory({
-                      ...doc,
-                      objects: doc.objects.filter((o) => o.id !== selectedObj.id),
-                    });
-                    setSelectedIds([]);
-                  }}
-                  title="Delete"
-                >
-                  <Trash2 size={13} />
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* ---------------- Angle Specific Inspector ---------------- */}
-          {selectedObj?.type === "angle" && (
-            <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-3.5 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-indigo-950 flex items-center gap-1">
-                  <CornerDownRight size={14} className="text-indigo-600" /> Angle Properties
-                </span>
-                <span className="badge badge-indigo text-[10px]">
-                  {Math.round(currentDeg)}°
-                </span>
-              </div>
-
-              {/* Exact Numeric Degree Input + Slider */}
-              <div className="space-y-1.5 bg-white rounded-lg p-2.5 border border-indigo-100 shadow-2xs">
-                <div className="flex justify-between items-center text-[11px] font-semibold text-slate-700">
-                  <span>Exact Angle Value:</span>
-                  <div className="flex items-center gap-1">
-                    <input
-                      type="number"
-                      min={1}
-                      max={359}
-                      value={Math.round(currentDeg)}
-                      onChange={(e) => {
-                        const val = Number(e.target.value);
-                        if (!isNaN(val) && val >= 1 && val <= 359) {
-                          updateSelected((o) => {
-                            const ang = o as AngleObj;
-                            const { b, reflex } = withAngleDegrees(ang, val);
-                            return { ...ang, b, reflex };
-                          });
-                        }
-                      }}
-                      className="w-16 px-1.5 py-0.5 text-right font-mono font-bold rounded border border-slate-300 text-xs text-indigo-900"
-                    />
-                    <span className="text-xs font-bold text-slate-600">°</span>
-                  </div>
-                </div>
-                <input
-                  type="range"
-                  min={1}
-                  max={359}
-                  value={Math.round(currentDeg)}
-                  onChange={(e) => {
-                    const val = Number(e.target.value);
-                    updateSelected((o) => {
-                      const ang = o as AngleObj;
-                      const { b, reflex } = withAngleDegrees(ang, val);
-                      return { ...ang, b, reflex };
-                    });
-                  }}
-                  className="w-full accent-indigo-600"
-                />
-                <div className="flex gap-1 pt-1">
-                  {[30, 45, 60, 90, 120, 180].map((d) => (
-                    <button
-                      key={d}
-                      type="button"
-                      className="rounded bg-slate-50 border border-slate-200 px-1 py-0.5 text-[10px] font-semibold hover:bg-indigo-50 flex-1 text-slate-700"
-                      onClick={() => {
-                        updateSelected((o) => {
-                          const ang = o as AngleObj;
-                          const { b, reflex } = withAngleDegrees(ang, d);
-                          return { ...ang, b, reflex };
-                        });
-                      }}
-                    >
-                      {d}°
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Angle Label Mode */}
-              <div>
-                <label className="text-[11px] font-semibold text-slate-700 block mb-1">
-                  Angle Label Format:
-                </label>
-                <div className="segmented w-full [&>button]:flex-1">
-                  {(["auto", "custom", "none"] as const).map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      aria-pressed={(selectedObj as AngleObj).labelMode === mode}
-                      onClick={() =>
-                        updateSelected((o) => ({ ...(o as AngleObj), labelMode: mode }))
-                      }
-                    >
-                      {mode === "auto" ? "Value (°)" : mode === "custom" ? "Custom" : "None"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Custom Text and Greek symbol shortcuts */}
-              {(selectedObj as AngleObj).labelMode === "custom" && (
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-semibold text-slate-700 block">
-                    Angle Name / Text:
-                  </label>
-                  <input
-                    className="input text-xs"
-                    placeholder="e.g. θ, 2x, ∠ABC"
-                    value={(selectedObj as AngleObj).label || ""}
-                    onChange={(e) =>
-                      updateSelected((o) => ({ ...(o as AngleObj), label: e.target.value }))
-                    }
-                  />
-                  <div className="flex flex-wrap gap-1 pt-1">
-                    {["θ", "α", "β", "x", "2x", "∠A", "∠1", "∠2"].map((sym) => (
-                      <button
-                        key={sym}
-                        type="button"
-                        className="rounded bg-white border border-slate-200 px-1.5 py-0.5 text-xs font-medium hover:bg-indigo-50"
-                        onClick={() =>
-                          updateSelected((o) => ({ ...(o as AngleObj), label: sym }))
-                        }
-                      >
-                        {sym}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Arcs count (Equal Angles notation) */}
-              <div>
-                <label className="text-[11px] font-semibold text-slate-700 block mb-1">
-                  Arcs (Equal Angles Notation):
-                </label>
-                <div className="segmented w-full [&>button]:flex-1">
-                  {[1, 2, 3].map((num) => (
-                    <button
-                      key={num}
-                      type="button"
-                      aria-pressed={((selectedObj as AngleObj).arcs || 1) === num}
-                      onClick={() =>
-                        updateSelected((o) => ({ ...(o as AngleObj), arcs: num }))
-                      }
-                    >
-                      {num} {num === 1 ? "Arc" : "Arcs"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Shading & Arm options */}
-              <div className="space-y-2 pt-1 border-t border-indigo-100">
-                <div className="flex items-center justify-between">
-                  <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-800">
-                    <input
-                      type="checkbox"
-                      checked={(selectedObj as AngleObj).fillSector || false}
-                      onChange={(e) =>
-                        updateSelected((o) => ({
-                          ...(o as AngleObj),
-                          fillSector: e.target.checked,
-                          style: {
-                            ...o.style,
-                            fill: e.target.checked
-                              ? o.style.fill || "rgba(30, 96, 117, 0.2)"
-                              : null,
-                          },
-                        }))
-                      }
-                    />
-                    Shade Angle Sector
-                  </label>
-                  {(selectedObj as AngleObj).fillSector && (
-                    <input
-                      type="color"
-                      value={(selectedObj as AngleObj).style.fill || "#1e6075"}
-                      onChange={(e) =>
-                        updateSelected((o) => ({
-                          ...o,
-                          style: { ...o.style, fill: e.target.value },
-                        }))
-                      }
-                      className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
-                    />
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[11px] text-slate-600 block mb-1">
-                      Arm Arrowheads:
-                    </label>
-                    <select
-                      className="input text-xs"
-                      value={(selectedObj as AngleObj).armArrow || "none"}
-                      onChange={(e) =>
-                        updateSelected((o) => ({
-                          ...(o as AngleObj),
-                          armArrow: e.target.value as ArrowKind,
-                        }))
-                      }
-                    >
-                      <option value="none">None</option>
-                      <option value="filled">Filled Arrow</option>
-                      <option value="open">Open Arrow</option>
-                      <option value="dot">Dot</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-slate-600 block mb-1">
-                      Arm Ticks:
-                    </label>
-                    <button
-                      type="button"
-                      className="btn btn-sm w-full"
-                      onClick={() =>
-                        updateSelected((o) => ({
-                          ...(o as AngleObj),
-                          armTicks: (((o as AngleObj).armTicks || 0) + 1) % 4,
-                        }))
-                      }
-                    >
-                      {((selectedObj as AngleObj).armTicks || 0) > 0
-                        ? `${(selectedObj as AngleObj).armTicks} Ticks`
-                        : "No Ticks"}
-                    </button>
-                  </div>
-                </div>
-
-                <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-800">
-                  <input
-                    type="checkbox"
-                    checked={(selectedObj as AngleObj).rightMark}
-                    onChange={(e) =>
-                      updateSelected((o) => ({
-                        ...(o as AngleObj),
-                        rightMark: e.target.checked,
-                      }))
-                    }
-                  />
-                  Square 90° Right-Angle Symbol
-                </label>
-
-                <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-800">
-                  <input
-                    type="checkbox"
-                    checked={(selectedObj as AngleObj).reflex}
-                    onChange={(e) =>
-                      updateSelected((o) => ({
-                        ...(o as AngleObj),
-                        reflex: e.target.checked,
-                      }))
-                    }
-                  />
-                  Reflex Angle (&gt;180°)
-                </label>
-
-                <div>
-                  <div className="flex justify-between text-[11px] text-slate-600 mb-1">
-                    <span>Arc Radius:</span>
-                    <span>{(selectedObj as AngleObj).arcR}px</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={12}
-                    max={80}
-                    value={(selectedObj as AngleObj).arcR}
-                    onChange={(e) =>
-                      updateSelected((o) => ({
-                        ...(o as AngleObj),
-                        arcR: Number(e.target.value),
-                      }))
-                    }
-                    className="w-full accent-indigo-600"
-                  />
-                </div>
-
-                {/* 1-Click Auto-Label Vertices */}
-                <button
-                  type="button"
-                  className="btn btn-sm w-full bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 font-medium mt-1"
-                  onClick={() => {
-                    const ang = selectedObj as AngleObj;
-                    const ptV: Obj = {
-                      id: uid(),
-                      type: "point",
-                      x: ang.v.x,
-                      y: ang.v.y,
-                      label: "B",
-                      lx: -14,
-                      ly: 14,
-                      size: 3,
-                      mode: "dot",
-                      fontSize: 15,
-                      style: DEFAULT_STYLE,
-                    };
-                    const ptA: Obj = {
-                      id: uid(),
-                      type: "point",
-                      x: ang.a.x,
-                      y: ang.a.y,
-                      label: "C",
-                      lx: 14,
-                      ly: 14,
-                      size: 3,
-                      mode: "dot",
-                      fontSize: 15,
-                      style: DEFAULT_STYLE,
-                    };
-                    const ptB: Obj = {
-                      id: uid(),
-                      type: "point",
-                      x: ang.b.x,
-                      y: ang.b.y,
-                      label: "A",
-                      lx: 0,
-                      ly: -14,
-                      size: 3,
-                      mode: "dot",
-                      fontSize: 15,
-                      style: DEFAULT_STYLE,
-                    };
-                    pushHistory({
-                      ...doc,
-                      objects: [...doc.objects, ptV, ptA, ptB],
-                    });
-                  }}
-                >
-                  <Tag size={13} className="text-indigo-600" />
-                  Auto-Label Vertices (A, B, C)
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* ---------------- Shape Specific Inspector ---------------- */}
-          {selectedObj?.type === "shape" && (
-            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-slate-900 block capitalize">
-                  Shape: {(selectedObj as ShapeObj).kind}
-                </span>
-                <span className="badge badge-slate text-[10px]">
-                  {Math.round((selectedObj as ShapeObj).w)} × {Math.round((selectedObj as ShapeObj).h)}
-                </span>
-              </div>
-
-              {/* Polygon sides slider */}
-              {(selectedObj as ShapeObj).kind === "polygon" && (
-                <div>
-                  <div className="flex justify-between text-[11px] text-slate-600 mb-1">
-                    <span>Number of Sides:</span>
-                    <span className="font-bold">{(selectedObj as ShapeObj).sides}</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={3}
-                    max={12}
-                    value={(selectedObj as ShapeObj).sides}
-                    onChange={(e) =>
-                      updateSelected((o) => ({
-                        ...(o as ShapeObj),
-                        sides: Number(e.target.value),
-                      }))
-                    }
-                    className="w-full accent-indigo-600"
-                  />
-                </div>
-              )}
-
-              {/* Star points slider */}
-              {(selectedObj as ShapeObj).kind === "star" && (
-                <div>
-                  <div className="flex justify-between text-[11px] text-slate-600 mb-1">
-                    <span>Star Points:</span>
-                    <span className="font-bold">{(selectedObj as ShapeObj).sides}</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={4}
-                    max={10}
-                    value={(selectedObj as ShapeObj).sides}
-                    onChange={(e) =>
-                      updateSelected((o) => ({
-                        ...(o as ShapeObj),
-                        sides: Number(e.target.value),
-                      }))
-                    }
-                    className="w-full accent-indigo-600"
-                  />
-                </div>
-              )}
-
-              {/* Rounded rect corner radius */}
-              {(selectedObj as ShapeObj).kind === "roundrect" && (
-                <div>
-                  <div className="flex justify-between text-[11px] text-slate-600 mb-1">
-                    <span>Corner Radius:</span>
-                    <span className="font-bold">{(selectedObj as ShapeObj).radius}px</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={2}
-                    max={40}
-                    value={(selectedObj as ShapeObj).radius}
-                    onChange={(e) =>
-                      updateSelected((o) => ({
-                        ...(o as ShapeObj),
-                        radius: Number(e.target.value),
-                      }))
-                    }
-                    className="w-full accent-indigo-600"
-                  />
-                </div>
-              )}
-
-              {/* Ring inner radius ratio */}
-              {(selectedObj as ShapeObj).kind === "ring" && (
-                <div>
-                  <div className="flex justify-between text-[11px] text-slate-600 mb-1">
-                    <span>Inner Hole Ratio:</span>
-                    <span className="font-bold">
-                      {Math.round(((selectedObj as ShapeObj).inner || 0.5) * 100)}%
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min={15}
-                    max={85}
-                    value={Math.round(((selectedObj as ShapeObj).inner || 0.5) * 100)}
-                    onChange={(e) =>
-                      updateSelected((o) => ({
-                        ...(o as ShapeObj),
-                        inner: Number(e.target.value) / 100,
-                      }))
-                    }
-                    className="w-full accent-indigo-600"
-                  />
-                </div>
-              )}
-
-              {/* Sector angles */}
-              {(selectedObj as ShapeObj).kind === "sector" && (
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[11px] text-slate-600 block mb-1">Start Angle:</label>
-                    <input
-                      type="number"
-                      value={(selectedObj as ShapeObj).a0}
-                      onChange={(e) =>
-                        updateSelected((o) => ({
-                          ...(o as ShapeObj),
-                          a0: Number(e.target.value),
-                        }))
-                      }
-                      className="input text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-slate-600 block mb-1">End Angle:</label>
-                    <input
-                      type="number"
-                      value={(selectedObj as ShapeObj).a1}
-                      onChange={(e) =>
-                        updateSelected((o) => ({
-                          ...(o as ShapeObj),
-                          a1: Number(e.target.value),
-                        }))
-                      }
-                      className="input text-xs"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Fill Color Swatches for Shapes */}
-              <div>
-                <label className="text-[11px] font-semibold text-slate-700 block mb-1.5">
-                  Region Fill Color:
-                </label>
-                <div className="grid grid-cols-4 gap-1.5">
-                  {FILL_SWATCHES.map((sw) => (
-                    <button
-                      key={sw.label}
-                      type="button"
-                      className={`h-6 rounded border flex items-center justify-center text-[10px] font-medium transition ${
-                        selectedObj.style.fill === sw.val
-                          ? "ring-2 ring-indigo-500 scale-105 border-indigo-400 font-bold"
-                          : "border-slate-200 hover:border-slate-300"
-                      }`}
-                      style={{
-                        backgroundColor: sw.val || "transparent",
-                      }}
-                      onClick={() =>
-                        updateSelected((o) => ({
-                          ...o,
-                          style: { ...o.style, fill: sw.val },
-                        }))
-                      }
-                    >
-                      {!sw.val ? "None" : ""}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Hatch Pattern (CBSE Shaded Region Problems) */}
-              <div>
-                <label className="text-[11px] font-semibold text-slate-700 block mb-1">
-                  Shading / Hatch Pattern:
-                </label>
-                <div className="segmented w-full [&>button]:flex-1">
-                  {(["none", "diagonal", "cross", "dots", "horizontal"] as const).map(
-                    (h) => (
-                      <button
-                        key={h}
-                        type="button"
-                        aria-pressed={selectedObj.style.hatch === h}
-                        onClick={() =>
-                          updateSelected((o) => ({
-                            ...o,
-                            style: { ...o.style, hatch: h },
-                          }))
-                        }
-                        title={h}
-                      >
-                        {h === "none"
-                          ? "None"
-                          : h === "diagonal"
-                            ? "///"
-                            : h === "cross"
-                              ? "XXX"
-                              : h === "dots"
-                                ? ":::"
-                                : "≡"}
-                      </button>
-                    ),
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ---------------- Line Properties Inspector ---------------- */}
-          {selectedObj?.type === "line" && (
-            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-3">
-              <span className="font-bold text-slate-900 block">Line &amp; Arrow Options</span>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-[11px] text-slate-600 block mb-1">Start Head:</label>
-                  <select
-                    className="input text-xs"
-                    value={(selectedObj as LineObj).start}
-                    onChange={(e) =>
-                      updateSelected((o) => ({
-                        ...(o as LineObj),
-                        start: e.target.value as ArrowKind,
-                      }))
-                    }
-                  >
-                    <option value="none">None</option>
-                    <option value="filled">Filled Arrow</option>
-                    <option value="open">Open Arrow</option>
-                    <option value="dot">Dot</option>
-                    <option value="bar">Bar |</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[11px] text-slate-600 block mb-1">End Head:</label>
-                  <select
-                    className="input text-xs"
-                    value={(selectedObj as LineObj).end}
-                    onChange={(e) =>
-                      updateSelected((o) => ({
-                        ...(o as LineObj),
-                        end: e.target.value as ArrowKind,
-                      }))
-                    }
-                  >
-                    <option value="none">None</option>
-                    <option value="filled">Filled Arrow</option>
-                    <option value="open">Open Arrow</option>
-                    <option value="dot">Dot</option>
-                    <option value="bar">Bar |</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[11px] text-slate-600 block mb-1">Length Label:</label>
-                <input
-                  className="input text-xs"
-                  placeholder="e.g. 5 cm, AB, r"
-                  value={(selectedObj as LineObj).label || ""}
-                  onChange={(e) =>
-                    updateSelected((o) => ({ ...(o as LineObj), label: e.target.value }))
-                  }
-                />
-              </div>
-
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  className="btn btn-sm flex-1"
-                  onClick={() =>
-                    updateSelected((o) => ({
-                      ...(o as LineObj),
-                      ticks: ((o as LineObj).ticks + 1) % 4,
-                    }))
-                  }
-                >
-                  Ticks ({(selectedObj as LineObj).ticks})
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-sm flex-1"
-                  onClick={() =>
-                    updateSelected((o) => ({
-                      ...(o as LineObj),
-                      parallels: ((o as LineObj).parallels + 1) % 4,
-                    }))
-                  }
-                >
-                  Parallel ({(selectedObj as LineObj).parallels})
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* ---------------- Point Properties Inspector ---------------- */}
-          {selectedObj?.type === "point" && (
-            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-3">
-              <span className="font-bold text-slate-900 block">Point &amp; Vertex Marker</span>
-              <div>
-                <label className="text-[11px] text-slate-600 block mb-1">Vertex Label:</label>
-                <input
-                  className="input text-xs font-serif font-bold text-base"
-                  value={(selectedObj as PointObj).label || ""}
-                  onChange={(e) =>
-                    updateSelected((o) => ({ ...(o as PointObj), label: e.target.value }))
-                  }
-                />
-              </div>
-
-              <div>
-                <label className="text-[11px] text-slate-600 block mb-1">Dot Style:</label>
-                <div className="segmented w-full [&>button]:flex-1">
-                  {(["dot", "hollow", "cross"] as const).map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      aria-pressed={(selectedObj as PointObj).mode === m}
-                      onClick={() =>
-                        updateSelected((o) => ({ ...(o as PointObj), mode: m }))
-                      }
-                    >
-                      {m === "dot" ? "Solid •" : m === "hollow" ? "Ring ○" : "Cross ×"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between text-[11px] text-slate-600 mb-1">
-                  <span>Dot Size:</span>
-                  <span>{(selectedObj as PointObj).size}px</span>
-                </div>
-                <input
-                  type="range"
-                  min={2}
-                  max={8}
-                  step={0.5}
-                  value={(selectedObj as PointObj).size}
-                  onChange={(e) =>
-                    updateSelected((o) => ({
-                      ...(o as PointObj),
-                      size: Number(e.target.value),
-                    }))
-                  }
-                  className="w-full accent-indigo-600"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* ---------------- Text & Formula Inspector ---------------- */}
-          {selectedObj?.type === "text" && (
-            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-3">
-              <span className="font-bold text-slate-900 block">Text &amp; Formula</span>
-              <textarea
-                className="input text-xs font-sans"
-                rows={2}
-                value={(selectedObj as TextObj).text}
-                onChange={(e) =>
-                  updateSelected((o) => ({ ...(o as TextObj), text: e.target.value }))
-                }
+          {selectedObj ? (
+            <>
+              <SelectionHeader
+                title={selectedCount > 1 ? `${selectedCount} objects` : objectName(selectedObj)}
+                detail={single && hasBoxFields(single) ? `${Math.round(single.w)} × ${Math.round(single.h)}` : undefined}
+                onFront={bringToFront}
+                onForward={bringForward}
+                onBackward={sendBackward}
+                onBack={sendToBack}
+                onFlipH={flipH}
+                onFlipV={flipV}
+                onDuplicate={duplicateSelected}
+                onDelete={deleteSelected}
               />
-              <div className="flex flex-wrap gap-1">
-                {MATH_SYMBOLS.slice(0, 16).map((sym) => (
-                  <button
-                    key={sym}
-                    type="button"
-                    className="rounded bg-white border border-slate-200 px-1.5 py-0.5 text-xs font-medium hover:bg-indigo-50"
-                    onClick={() =>
-                      updateSelected((o) => ({
-                        ...(o as TextObj),
-                        text: (o as TextObj).text + sym,
-                      }))
-                    }
-                  >
-                    {sym}
-                  </button>
-                ))}
+              {single?.type === "angle" && (
+                <AngleInspector
+                  key={single.id}
+                  obj={single}
+                  update={updateSelected}
+                  onAddPoints={(pts) => pushHistory({ ...doc, objects: [...doc.objects, ...pts] })}
+                />
+              )}
+              {single?.type === "shape" && <ShapeInspector key={single.id} obj={single} update={updateSelected} />}
+              {single?.type === "line" && <LineInspector key={single.id} obj={single} update={updateSelected} />}
+              {single?.type === "point" && <PointInspector key={single.id} obj={single} update={updateSelected} />}
+              {single?.type === "text" && <TextInspector key={single.id} obj={single} update={updateSelected} />}
+              {single?.type === "numberline" && <NumberLineInspector key={single.id} obj={single} update={updateSelected} />}
+              {single?.type === "axes" && <AxesInspector key={single.id} obj={single} update={updateSelected} />}
+              {single?.type === "table" && <TableInspector key={single.id} obj={single} update={updateSelected} />}
+              {single?.type === "fraction" && <FractionInspector key={single.id} obj={single} update={updateSelected} />}
+              {selectedCount >= 2 && <AlignTools count={selectedCount} onAlign={alignSelected} />}
+              <StyleSection
+                key={`style-${selectedObj.id}`}
+                title={single?.type === "text" ? "Colour" : "Colour and line"}
+                value={selectedObj.style}
+                onChange={updateSelectedStyle}
+                defaultOpen={!single || !RICH_INSPECTORS.includes(single.type)}
+              />
+            </>
+          ) : (
+            <>
+              <div className="border-b border-slate-200 px-4 pb-3 pt-3">
+                <h2 className="text-[15px] font-semibold text-slate-900">Page</h2>
+                <p className="mt-0.5 text-xs text-slate-500">Click something on the page to edit it.</p>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-[11px] text-slate-600 block mb-1">Font Size:</label>
-                  <input
-                    type="number"
-                    min={10}
-                    max={48}
-                    className="input text-xs"
-                    value={(selectedObj as TextObj).size}
-                    onChange={(e) =>
-                      updateSelected((o) => ({
-                        ...(o as TextObj),
-                        size: Number(e.target.value),
-                      }))
-                    }
-                  />
+              <StyleSection title="Style for new drawings" value={style} onChange={updateSelectedStyle} />
+              <Section title="Grid" summary={grid.style === "none" ? "off" : `${grid.size}px${snap ? ", snapping" : ""}`}>
+                <div className="grid grid-cols-2">
+                  <Toggle label="Show grid" checked={grid.style !== "none"} onChange={(v) => setGrid((g) => ({ ...g, style: v ? "squares" : "none" }))} />
+                  <Toggle label="Snap to grid" checked={snap} onChange={setSnap} />
+                  <Toggle label="Print the grid" checked={grid.include} onChange={(v) => setGrid((g) => ({ ...g, include: v }))} />
                 </div>
-                <div className="flex items-end gap-1">
-                  <button
-                    type="button"
-                    className={`btn btn-sm flex-1 ${
-                      (selectedObj as TextObj).bold ? "btn-primary" : ""
-                    }`}
-                    onClick={() =>
-                      updateSelected((o) => ({
-                        ...(o as TextObj),
-                        bold: !(o as TextObj).bold,
-                      }))
-                    }
-                  >
-                    B
-                  </button>
-                  <button
-                    type="button"
-                    className={`btn btn-sm flex-1 ${
-                      (selectedObj as TextObj).italic ? "btn-primary" : ""
-                    }`}
-                    onClick={() =>
-                      updateSelected((o) => ({
-                        ...(o as TextObj),
-                        italic: !(o as TextObj).italic,
-                      }))
-                    }
-                  >
-                    I
-                  </button>
-                </div>
-              </div>
-            </div>
+                <Seg
+                  label="Grid spacing"
+                  value={grid.size}
+                  options={[10, 20, 40].map((n) => ({ id: n, label: `${n}px` }))}
+                  onChange={(n) => setGrid((g) => ({ ...g, size: n, style: g.style === "none" ? "squares" : g.style }))}
+                />
+                <p className="text-xs text-slate-500">Hold Alt while drawing to place freely without snapping.</p>
+              </Section>
+              <Section title="Page size" summary={`${doc.w} × ${doc.h}`}>
+                <CanvasSizeControls w={doc.w} h={doc.h} onResize={(w, h) => pushHistory({ ...doc, w, h })} />
+                <Toggle label="Trim empty space when saving" checked={cropToFigure} onChange={setCropToFigure} />
+              </Section>
+            </>
           )}
-
-          {selectedObj?.type === "numberline" && (
-            <NumberLineInspector key={selectedObj.id} obj={selectedObj as NumLineObj} update={updateSelected} />
-          )}
-          {selectedObj?.type === "axes" && <AxesInspector obj={selectedObj as AxesObj} update={updateSelected} />}
-          {selectedObj?.type === "table" && (
-            <TableInspector key={selectedObj.id} obj={selectedObj as TableObj} update={updateSelected} />
-          )}
-          {selectedObj?.type === "fraction" && (
-            <FractionInspector obj={selectedObj as FractionObj} update={updateSelected} />
-          )}
-
-          {selectedIds.length >= 2 && <AlignTools count={selectedIds.length} onAlign={alignSelected} />}
-
-          {/* ---------------- Arrange & Layering Section ---------------- */}
-          {selectedObj && (
-            <div className="space-y-2 pt-2 border-t border-slate-200">
-              <span className="font-bold text-slate-900 block text-xs">
-                Arrange &amp; Transform
-              </span>
-              <div className="grid grid-cols-4 gap-1">
-                <button
-                  type="button"
-                  className="btn btn-sm text-[11px] p-1 flex items-center justify-center gap-1"
-                  onClick={bringToFront}
-                  title="Bring to Front"
-                >
-                  <BringToFront size={13} /> Front
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-sm text-[11px] p-1 flex items-center justify-center gap-1"
-                  onClick={bringForward}
-                  title="Bring Forward"
-                >
-                  +1 Up
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-sm text-[11px] p-1 flex items-center justify-center gap-1"
-                  onClick={sendBackward}
-                  title="Send Backward"
-                >
-                  -1 Down
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-sm text-[11px] p-1 flex items-center justify-center gap-1"
-                  onClick={sendToBack}
-                  title="Send to Back"
-                >
-                  <SendToBack size={13} /> Back
-                </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-1.5 pt-1">
-                <button
-                  type="button"
-                  className="btn btn-sm text-xs flex items-center justify-center gap-1"
-                  onClick={flipH}
-                >
-                  <FlipHorizontal size={13} /> Flip H
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-sm text-xs flex items-center justify-center gap-1"
-                  onClick={flipV}
-                >
-                  <FlipVertical size={13} /> Flip V
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* ---------------- Stroke & Style Section ---------------- */}
-          <div className="space-y-3 pt-2 border-t border-slate-200">
-            <span className="font-bold text-slate-900 block text-xs">Stroke &amp; Colors</span>
-
-            {/* Color Swatches */}
-            <div className="grid grid-cols-4 gap-1.5">
-              {COLOR_SWATCHES.map((sw) => (
-                <button
-                  key={sw.val}
-                  type="button"
-                  className={`h-7 rounded-lg border flex items-center justify-center transition ${
-                    style.stroke === sw.val
-                      ? "ring-2 ring-indigo-500 scale-105"
-                      : "border-slate-300"
-                  }`}
-                  style={{ backgroundColor: sw.val }}
-                  title={sw.label}
-                  onClick={() => {
-                    const newStyle = { ...style, stroke: sw.val };
-                    setStyle(newStyle);
-                    if (selectedObj) updateSelected((o) => ({ ...o, style: newStyle }));
-                  }}
-                >
-                  {style.stroke === sw.val && (
-                    <Check size={12} className="text-white drop-shadow" />
-                  )}
-                </button>
-              ))}
-            </div>
-
-            {/* Thickness */}
-            <div>
-              <div className="flex justify-between text-[11px] text-slate-600 mb-1">
-                <span>Stroke Width:</span>
-                <span className="font-semibold">{style.width}px</span>
-              </div>
-              <div className="flex gap-1.5">
-                {[1, 2, 3, 4, 6].map((w) => (
-                  <button
-                    key={w}
-                    type="button"
-                    className={`btn btn-sm flex-1 ${
-                      style.width === w ? "btn-primary" : ""
-                    }`}
-                    onClick={() => {
-                      const newStyle = { ...style, width: w };
-                      setStyle(newStyle);
-                      if (selectedObj) updateSelected((o) => ({ ...o, style: newStyle }));
-                    }}
-                  >
-                    {w}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Dash Style */}
-            <div>
-              <label className="text-[11px] text-slate-600 block mb-1">Dash Style:</label>
-              <div className="segmented w-full [&>button]:flex-1">
-                {(["solid", "dashed", "dotted"] as const).map((d) => (
-                  <button
-                    key={d}
-                    type="button"
-                    aria-pressed={style.dash === d}
-                    onClick={() => {
-                      const newStyle = { ...style, dash: d };
-                      setStyle(newStyle);
-                      if (selectedObj) updateSelected((o) => ({ ...o, style: newStyle }));
-                    }}
-                  >
-                    {d}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* ---------------- Grid & Canvas Settings ---------------- */}
-          <div className="space-y-2 pt-3 border-t border-slate-200">
-            <span className="font-bold text-slate-900 block text-xs">Canvas &amp; Grid</span>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                className={`btn btn-sm flex-1 ${
-                  grid.style === "squares" ? "btn-primary" : ""
-                }`}
-                onClick={() =>
-                  setGrid((g) => ({
-                    ...g,
-                    style: g.style === "squares" ? "none" : "squares",
-                  }))
-                }
-              >
-                <Grid size={13} /> Graph Grid
-              </button>
-              <button
-                type="button"
-                className={`btn btn-sm flex-1 ${grid.include ? "btn-primary" : ""}`}
-                onClick={() => setGrid((g) => ({ ...g, include: !g.include }))}
-                title="Include graph grid lines in printed figure"
-              >
-                Print Grid
-              </button>
-            </div>
-            <label
-              className="flex cursor-pointer items-center gap-2 text-xs text-slate-700"
-              title="Saves only the drawing (plus a small margin) instead of the whole page"
-            >
-              <input type="checkbox" checked={cropToFigure} onChange={(e) => setCropToFigure(e.target.checked)} />
-              Crop to the figure when saving
-            </label>
-            <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-700">
-              <input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} />
-              Snap to grid <span className="text-slate-400">(hold Alt to bypass)</span>
-            </label>
-            <div className="flex items-center gap-1 text-xs text-slate-600">
-              <span className="mr-1">Grid size</span>
-              {[10, 20, 40].map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  className={`btn btn-sm !min-h-7 !px-2.5 ${grid.size === n ? "btn-primary" : ""}`}
-                  onClick={() => setGrid((g) => ({ ...g, size: n, style: g.style === "none" ? "squares" : g.style }))}
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
-            <CanvasSizeControls
-              w={doc.w}
-              h={doc.h}
-              onResize={(w, h) => pushHistory({ ...doc, w, h })}
-            />
-          </div>
         </aside>
       </div>
 
-      {/* ---------------- Bottom Status Bar ---------------- */}
-      <footer className="h-7 shrink-0 border-t border-slate-200 bg-white px-4 flex items-center justify-between text-[11px] text-slate-500">
-        <div className="flex items-center gap-3">
-          <span className="font-medium text-slate-700">
-            {activeTool === "angle"
-              ? !anglePending
-                ? "Angle: Step 1 - Click vertex point"
-                : !anglePending.a
-                  ? "Angle: Step 2 - Click end of first arm"
-                  : "Angle: Step 3 - Click end of second arm (live degree displayed)"
-              : activeTool === "select"
-                ? "Select: Click object to edit handles & properties, or drag to reposition"
-                : activeTool === "pen"
-                  ? "Pen: Freehand drawing"
-                  : activeTool === "highlighter"
-                    ? "Highlighter: Semi-transparent marker"
-                    : `Tool: ${activeTool.toUpperCase()}`}
+      {/* ---------------- Status bar ---------------- */}
+      <footer className="flex h-8 shrink-0 items-center justify-between gap-3 border-t border-slate-200 bg-white px-3 text-xs text-slate-500">
+        <span className="truncate font-medium text-slate-700">{toolLabel}</span>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            aria-pressed={grid.style !== "none"}
+            className={`flex items-center gap-1 rounded-md px-2 py-0.5 ${grid.style !== "none" ? "text-indigo-700" : "text-slate-500"} hover:bg-slate-100`}
+            onClick={() => setGrid((g) => ({ ...g, style: g.style === "none" ? "squares" : "none" }))}
+            title="Show or hide the grid"
+          >
+            <Grid size={13} /> Grid
+          </button>
+          <button
+            type="button"
+            aria-pressed={snap}
+            className={`flex items-center gap-1 rounded-md px-2 py-0.5 ${snap ? "text-indigo-700" : "text-slate-500"} hover:bg-slate-100`}
+            onClick={() => setSnap((s) => !s)}
+            title="Snap to grid (hold Alt to bypass)"
+          >
+            <Magnet size={13} /> Snap
+          </button>
+          <span className="mx-1 hidden h-4 w-px bg-slate-200 sm:block" />
+          <span className="hidden tabular-nums sm:inline">
+            {doc.w} × {doc.h}
           </span>
-        </div>
-        <div className="flex items-center gap-4">
-          <span>
-            Canvas: {doc.w} × {doc.h} px
-          </span>
-          <span ref={coordRef} className="w-24 tabular-nums text-slate-400">
+          <span ref={coordRef} className="hidden w-24 text-right tabular-nums text-slate-400 sm:inline">
             x –  y –
           </span>
-          {snap && grid.style !== "none" && <span className="text-indigo-600">Snap on</span>}
-          <span>Zoom: {Math.round(zoom * 100)}%</span>
+          <span className="w-12 text-right tabular-nums">{Math.round(zoom * 100)}%</span>
         </div>
       </footer>
 
-      {/* ---------------- Shortcuts Modal ---------------- */}
+      {/* ---------------- Shortcuts ---------------- */}
       {showShortcuts && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl border border-slate-200">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
-              <h3 className="font-bold text-sm text-slate-900">Figure Studio Shortcuts</h3>
-              <button
-                type="button"
-                onClick={() => setShowShortcuts(false)}
-                className="p-1 text-slate-400 hover:text-slate-700"
-              >
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" onClick={() => setShowShortcuts(false)}>
+          <div
+            role="dialog"
+            aria-label="Keyboard shortcuts"
+            className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-semibold text-slate-900">Keyboard shortcuts</h3>
+              <button type="button" aria-label="Close" onClick={() => setShowShortcuts(false)} className="p-1 text-slate-400 hover:text-slate-700">
                 <X size={16} />
               </button>
             </div>
             <div className="grid grid-cols-2 gap-y-2 text-xs text-slate-600">
-              <div><kbd className="kbd">A</kbd> Angle tool</div>
-              <div><kbd className="kbd">V</kbd> Select &amp; handles</div>
-              <div><kbd className="kbd">L</kbd> Line tool</div>
+              <div><kbd className="kbd">V</kbd> Select</div>
+              <div><kbd className="kbd">H</kbd> Pan</div>
+              <div><kbd className="kbd">A</kbd> Angle</div>
+              <div><kbd className="kbd">L</kbd> Line</div>
               <div><kbd className="kbd">R</kbd> Rectangle</div>
               <div><kbd className="kbd">C</kbd> Circle</div>
-              <div><kbd className="kbd">T</kbd> Text tool</div>
-              <div><kbd className="kbd">P</kbd> Freehand pen</div>
+              <div><kbd className="kbd">T</kbd> Text</div>
+              <div><kbd className="kbd">P</kbd> Pen</div>
               <div><kbd className="kbd">E</kbd> Eraser</div>
-              <div><kbd className="kbd">H</kbd> Hand / Pan</div>
+              <div><kbd className="kbd">Esc</kbd> Stop / deselect</div>
               <div><kbd className="kbd">Ctrl+D</kbd> Duplicate</div>
-              <div><kbd className="kbd">Del</kbd> Delete object</div>
-              <div><kbd className="kbd">Ctrl+Z</kbd> Undo / Redo</div>
-              <div><kbd className="kbd">Ctrl+C / V</kbd> Copy / Paste</div>
+              <div><kbd className="kbd">Del</kbd> Delete</div>
+              <div><kbd className="kbd">Ctrl+Z</kbd> Undo</div>
+              <div><kbd className="kbd">Ctrl+Y</kbd> Redo</div>
+              <div><kbd className="kbd">Ctrl+C / V</kbd> Copy / paste</div>
               <div><kbd className="kbd">Ctrl+A</kbd> Select all</div>
               <div><kbd className="kbd">Arrows</kbd> Nudge (Shift = 10px)</div>
               <div><kbd className="kbd">Alt</kbd> Draw without snapping</div>
               <div><kbd className="kbd">Ctrl+Scroll</kbd> Zoom at pointer</div>
-              <div><kbd className="kbd">0</kbd> Fit to screen</div>
+              <div><kbd className="kbd">0</kbd> Fit page on screen</div>
             </div>
-            <button
-              type="button"
-              className="btn btn-primary btn-sm w-full mt-4"
-              onClick={() => setShowShortcuts(false)}
-            >
+            <button type="button" className="btn btn-primary btn-sm mt-4 w-full" onClick={() => setShowShortcuts(false)}>
               Got it
             </button>
           </div>
@@ -3542,5 +1984,212 @@ export function FigureStudio({
       )}
     </div>,
     document.body,
+  );
+}
+
+/* ------------------------------------------------------------------ Tool rail data */
+
+type GroupId = "lines" | "shapes" | "graphs";
+type ToolItem = { id: Tool; label: string };
+
+const TOOL_GROUPS: Record<GroupId, { sections: { title: string; items: ToolItem[] }[] }> = {
+  lines: {
+    sections: [
+      {
+        title: "Lines",
+        items: [
+          { id: "line", label: "Line segment" },
+          { id: "ray", label: "Ray (one arrow)" },
+          { id: "double_arrow", label: "Double arrow" },
+          { id: "dimension", label: "Dimension (5 cm)" },
+          { id: "arc_line", label: "Curve through 3 points" },
+        ],
+      },
+    ],
+  },
+  shapes: {
+    sections: [
+      {
+        title: "Basic",
+        items: [
+          { id: "rect", label: "Rectangle" },
+          { id: "roundrect", label: "Rounded box" },
+          { id: "circle", label: "Circle" },
+          { id: "triangle", label: "Triangle" },
+          { id: "rtriangle", label: "Right triangle" },
+          { id: "polygon", label: "Polygon" },
+        ],
+      },
+      {
+        title: "Quadrilaterals",
+        items: [
+          { id: "parallelogram", label: "Parallelogram" },
+          { id: "rhombus", label: "Rhombus" },
+          { id: "trapezium", label: "Trapezium" },
+          { id: "cross", label: "Cross" },
+        ],
+      },
+      {
+        title: "Curved regions",
+        items: [
+          { id: "semicircle", label: "Semicircle" },
+          { id: "sector", label: "Sector" },
+          { id: "ring", label: "Ring" },
+          { id: "star", label: "Star" },
+        ],
+      },
+    ],
+  },
+  graphs: {
+    sections: [
+      {
+        title: "Graphs and scales",
+        items: [
+          { id: "numberline", label: "Number line" },
+          { id: "axes", label: "x–y graph" },
+          { id: "table", label: "Table" },
+        ],
+      },
+      {
+        title: "Fraction models",
+        items: [
+          { id: "fraction_circle", label: "Fraction circle" },
+          { id: "fraction_bar", label: "Fraction bar" },
+          { id: "fraction_grid", label: "Fraction grid" },
+        ],
+      },
+    ],
+  },
+};
+
+type RailEntry =
+  | "divider"
+  | { label: string; title: string; icon: React.ReactNode; tool?: Tool; group?: GroupId; tone?: "indigo" | "amber" | "red" };
+
+const RAIL: RailEntry[] = [
+  { label: "Select", title: "Select and move (V)", icon: <MousePointer size={18} />, tool: "select" },
+  { label: "Pan", title: "Move around the page (H)", icon: <Hand size={18} />, tool: "hand" },
+  "divider",
+  { label: "Point", title: "Point with a letter (A, B, C…)", icon: <Glyph name="point" />, tool: "point" },
+  { label: "Lines", title: "Lines, rays, arrows, dimensions and curves", icon: <Glyph name="line" />, group: "lines" },
+  { label: "Angle", title: "Angle (A): click the corner, then each arm", icon: <Glyph name="angle" />, tool: "angle" },
+  { label: "Shapes", title: "Triangles, quadrilaterals, circles and more", icon: <Glyph name="shapes" />, group: "shapes" },
+  { label: "Maths", title: "Number line, graph, table and fraction models", icon: <Glyph name="numberline" />, group: "graphs" },
+  "divider",
+  { label: "Text", title: "Text and formulas (T)", icon: <Type size={18} />, tool: "text" },
+  { label: "Pen", title: "Freehand pen (P)", icon: <Pencil size={17} />, tool: "pen" },
+  { label: "Marker", title: "Highlighter", icon: <Highlighter size={17} />, tool: "highlighter", tone: "amber" },
+  { label: "Eraser", title: "Eraser: click an object to remove it (E)", icon: <Eraser size={17} />, tool: "eraser", tone: "red" },
+];
+
+/** Inspectors with enough of their own controls that the colour section starts collapsed. */
+const RICH_INSPECTORS: Obj["type"][] = ["numberline", "axes", "table", "fraction", "angle"];
+
+const TOOL_LABELS: Partial<Record<Tool, string>> = {
+  select: "Select: click an object to edit it, drag to move it",
+  hand: "Pan: drag to move around the page",
+  ...Object.fromEntries(
+    Object.values(TOOL_GROUPS).flatMap((g) => g.sections.flatMap((s) => s.items.map((it) => [it.id, it.label]))),
+  ),
+  angle: "Angle",
+  point: "Point",
+  text: "Text",
+  pen: "Pen",
+  highlighter: "Highlighter",
+  eraser: "Eraser",
+  stamp: "Symbol",
+};
+
+const TOOL_HINTS: Partial<Record<Tool, string>> = {
+  hand: "Drag to move around the page",
+  point: "Click to place a point. Letters go A, B, C…",
+  line: "Drag to draw a line",
+  ray: "Drag to draw a ray",
+  double_arrow: "Drag to draw a double arrow",
+  dimension: "Drag to draw a dimension line",
+  arc_line: "Click three points: start, a point on the curve, end",
+  text: "Click where the text should go",
+  pen: "Draw freehand",
+  highlighter: "Drag to highlight",
+  eraser: "Click an object to erase it",
+  numberline: "Click to place a number line",
+  axes: "Click to place an x–y graph",
+  table: "Click to place a table",
+  fraction_circle: "Click to place a fraction circle",
+  fraction_bar: "Click to place a fraction bar",
+  fraction_grid: "Click to place a fraction grid",
+  ...Object.fromEntries(TOOL_GROUPS.shapes.sections.flatMap((s) => s.items.map((it) => [it.id, `Drag to draw a ${it.label.toLowerCase()}. Hold Shift for equal sides`]))),
+};
+
+/* ------------------------------------------------------------------ Geometry glyphs */
+
+/** Small line drawings of each figure tool, so the menus show the shape rather than only its name. */
+function Glyph({ name, className = "" }: { name: string; className?: string }) {
+  const p = { fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  const body: Record<string, React.ReactNode> = {
+    point: (
+      <>
+        <circle cx="8" cy="12" r="2.4" fill="currentColor" stroke="none" />
+        <path d="M12.5 8.5 14.5 3l2 5.5M13.2 6.7h2.6" {...p} strokeWidth={1.3} />
+      </>
+    ),
+    line: <path d="M3 16 17 4" {...p} />,
+    ray: <path d="M3 16 17 4m0 0h-5m5 0v5" {...p} />,
+    double_arrow: <path d="M3 16 17 4m0 0h-5m5 0v5M3 16h5m-5 0v-5" {...p} />,
+    dimension: <path d="M3 10h14M3 6v8M17 6v8M6 10l-2 0" {...p} />,
+    arc_line: <path d="M3 15Q10 0 17 15" {...p} />,
+    angle: <path d="M3 16h14M3 16 13 5M9 16a6 6 0 0 0-2-4.5" {...p} />,
+    shapes: (
+      <>
+        <rect x="2.5" y="8.5" width="8" height="8" rx="0.5" {...p} />
+        <circle cx="13.5" cy="7" r="4.5" {...p} />
+      </>
+    ),
+    rect: <rect x="3" y="5" width="14" height="10" {...p} />,
+    roundrect: <rect x="3" y="5" width="14" height="10" rx="3" {...p} />,
+    circle: <circle cx="10" cy="10" r="7" {...p} />,
+    triangle: <path d="M10 3 17 16H3Z" {...p} />,
+    rtriangle: <path d="M4 3v13h13ZM4 13h3v3" {...p} />,
+    polygon: <path d="M10 2.5 16.5 6.25v7.5L10 17.5l-6.5-3.75v-7.5Z" {...p} />,
+    parallelogram: <path d="M6.5 5H18l-4.5 10H2Z" {...p} />,
+    rhombus: <path d="M10 2.5 17 10l-7 7.5L3 10Z" {...p} />,
+    trapezium: <path d="M6.5 5h7L18 15H2Z" {...p} />,
+    cross: <path d="M8 3h4v5h5v4h-5v5H8v-5H3V8h5Z" {...p} />,
+    semicircle: <path d="M3 13a7 7 0 0 1 14 0Z" {...p} />,
+    sector: <path d="M10 15V4a7 7 0 0 1 7 7Z" {...p} transform="translate(-2 0)" />,
+    ring: (
+      <>
+        <circle cx="10" cy="10" r="7" {...p} />
+        <circle cx="10" cy="10" r="3.2" {...p} />
+      </>
+    ),
+    star: <path d="m10 2.5 2.2 4.6 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5L2.8 7.8l5-.7Z" {...p} />,
+    numberline: <path d="M2 11h16M2 11l2-2m-2 2 2 2m14-2-2-2m2 2-2 2M6 9v4M10 9v4M14 9v4" {...p} strokeWidth={1.4} />,
+    axes: <path d="M10 2v16M2 10h16M10 2 8.5 4M10 2l1.5 2M18 10l-2-1.5M18 10l-2 1.5M12.5 8a3 3 0 0 0 3-4" {...p} strokeWidth={1.4} />,
+    table: <path d="M3 4h14v12H3ZM3 8h14M3 12h14M8 4v12M12.5 4v12" {...p} strokeWidth={1.3} />,
+    fraction_circle: (
+      <>
+        <path d="M10 10V3a7 7 0 0 1 7 7Z" fill="currentColor" opacity={0.35} stroke="none" />
+        <circle cx="10" cy="10" r="7" {...p} />
+        <path d="M10 3v14M3 10h14" {...p} strokeWidth={1.2} />
+      </>
+    ),
+    fraction_bar: (
+      <>
+        <rect x="2.5" y="7" width="7.5" height="6" fill="currentColor" opacity={0.35} />
+        <path d="M2.5 7h15v6h-15ZM6.25 7v6M10 7v6M13.75 7v6" {...p} strokeWidth={1.3} />
+      </>
+    ),
+    fraction_grid: (
+      <>
+        <rect x="3" y="4" width="7" height="6" fill="currentColor" opacity={0.35} />
+        <path d="M3 4h14v12H3ZM3 10h14M10 4v12" {...p} strokeWidth={1.3} />
+      </>
+    ),
+  };
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden className={className}>
+      {body[name] ?? body.shapes}
+    </svg>
   );
 }

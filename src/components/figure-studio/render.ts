@@ -663,6 +663,18 @@ function drawTickLabel(ctx: CanvasRenderingContext2D, val: number, x: number, y:
   drawStacked(ctx, String(Math.abs(frac.n)), String(frac.d), frac.n < 0, x, y, size);
 }
 
+/** Tick values: equal steps, or the teacher's own points (start and end are always present). */
+export function numberLineTicks(obj: NumLineObj): number[] {
+  if (obj.tickMode === "manual") {
+    const set = new Set<number>([obj.min, obj.max]);
+    for (const t of obj.ticks ?? []) if (t >= obj.min - 1e-9 && t <= obj.max + 1e-9) set.add(Number(t.toFixed(9)));
+    return [...set].sort((p, q) => p - q);
+  }
+  const span = obj.max - obj.min || 1;
+  const count = Math.max(1, Math.min(200, Math.round(span / (obj.step || 1))));
+  return Array.from({ length: count + 1 }, (_, i) => obj.min + i * (obj.step || 1));
+}
+
 function renderNumberLine(ctx: CanvasRenderingContext2D, obj: NumLineObj) {
   const c = boxCenter(obj);
   ctx.save();
@@ -685,20 +697,10 @@ function renderNumberLine(ctx: CanvasRenderingContext2D, obj: NumLineObj) {
   }
 
   const span = obj.max - obj.min || 1;
-  const step = obj.step || 1;
   const xOf = (v: number) => -lineHalf + ((v - obj.min) / span) * (2 * lineHalf);
   const asFraction = obj.labels === "fraction";
 
-  // Tick values: equal steps, or the teacher's own points (start and end are always present).
-  let tickVals: number[];
-  if (obj.tickMode === "manual") {
-    const set = new Set<number>([obj.min, obj.max]);
-    for (const t of obj.ticks ?? []) if (t >= obj.min - 1e-9 && t <= obj.max + 1e-9) set.add(Number(t.toFixed(9)));
-    tickVals = [...set].sort((p, q) => p - q);
-  } else {
-    const count = Math.max(1, Math.min(200, Math.round(span / step)));
-    tickVals = Array.from({ length: count + 1 }, (_, i) => obj.min + i * step);
-  }
+  const tickVals = numberLineTicks(obj);
 
   ctx.fillStyle = obj.style.stroke;
   const minGap = asFraction ? 26 : 22;
