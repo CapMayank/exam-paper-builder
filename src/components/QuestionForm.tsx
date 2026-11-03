@@ -567,8 +567,9 @@ export function QuestionForm({
         </div>
       ) : (
         <>
-          {/* Visual Math & Science Equation Editor Toolbar */}
-          <div>
+          {/* Visual Math & Science Equation Editor Toolbar: stays in view while the form scrolls (tall windows only),
+              so the teacher can reach it from the match rows, options and subparts without scrolling back up. */}
+          <div className="z-20 -mx-5 bg-white/95 px-5 py-1.5 backdrop-blur-xs [@media(min-height:720px)]:sticky [@media(min-height:720px)]:top-0">
             <MathToolbar onInsert={handleInsertSnippet} onNewFormula={handleNewFormula} />
           </div>
 
@@ -774,6 +775,7 @@ export function QuestionForm({
               </span>
               <p className="text-[11px] text-slate-500">
                 Enter items for Column A and Column B. Tip: Enter matching pairs in order, then click &ldquo;Shuffle Column B &amp; Generate Key&rdquo;!
+                For maths, click a box and pick a symbol or formula from the Math Assistant above; no code is needed.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
