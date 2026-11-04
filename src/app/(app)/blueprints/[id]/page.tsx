@@ -35,6 +35,7 @@ import { api } from "@/lib/client";
 import { DEFAULT_SCHOOL_NAME, EXAM_TYPES, EXAM_TYPE_LABEL, KINDERGARTEN_QUESTION_TYPES, QUESTION_TYPES, QUESTION_TYPE_LABEL, STANDARD_QUESTION_TYPES, defaultLayoutForClass, sortClassNames } from "@/lib/constants";
 import { BlueprintStartPicker } from "@/components/blueprints/BlueprintStartPicker";
 import { isSubjectMatching } from "@/lib/schoolCurriculum";
+import { distributeSlotMarks, slotMarksOf } from "@/lib/schoolPatterns";
 import type { AcademicClassDto, Blueprint, Book, PaperData } from "@/lib/types";
 
 let qtSeq = 0;
@@ -336,15 +337,16 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
     return isSa && isC10;
   }, [book, selectedSubjectFilter, selectedClassFilter, name, subjectCode]);
 
+  /**
+   * Spreads the paper's marks over the chapters in the exam (those that already have marks, else all chapters),
+   * one whole question at a time, so every chapter quota can really be filled by questions.
+   */
   function autoDistributeMarks() {
     if (!book || book.chapters.length === 0 || total === 0) return;
-    const n = book.chapters.length;
-    const base = Math.floor(total / n);
-    const remainder = total % n;
-    const nextMarks: Record<string, number> = {};
-    book.chapters.forEach((c, idx) => {
-      nextMarks[c.id] = base + (idx < remainder ? 1 : 0);
-    });
+    const inExam = book.chapters.filter((c) => (marks[c.id] ?? 0) > 0);
+    const chapterIds = (inExam.length > 0 ? inExam : book.chapters).map((c) => c.id);
+    const nextMarks = distributeSlotMarks(slotMarksOf(sections), chapterIds);
+    for (const c of book.chapters) nextMarks[c.id] ??= 0;
     setMarks(nextMarks);
   }
 
@@ -584,6 +586,18 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
     toast.success(
       `Imported blueprint: ${imported.sections.length} section item(s) totaling ${totalMarks} marks!`
     );
+  }
+
+  /** Classes 1–8: the school's 50 / 60-mark pattern on the class + subject book, chapter marks spread over its chapters. */
+  function applySchoolPattern(template: BlueprintTemplate, pick: { className: string; subject: string }) {
+    startBlank(pick);
+    applyStarterTemplate(template);
+    setName(`${pick.className} ${pick.subject} – ${template.title}`);
+    const target = books.find((b) => b.className === pick.className && isSubjectMatching(b.subject, pick.subject));
+    if (target && target.chapters.length > 0) {
+      const slots = template.sections.flatMap((g) => g.questionTypes.flatMap((qt) => Array<number>(qt.count).fill(qt.marksEach)));
+      setMarks(distributeSlotMarks(slots, target.chapters.map((c) => c.id)));
+    }
   }
 
   function applyStarterTemplate(template: BlueprintTemplate) {
@@ -1562,7 +1576,7 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
                 type="button"
                 className="btn btn-sm text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200"
                 onClick={autoDistributeMarks}
-                title="Equally distribute section total marks across all chapters"
+                title="Spread the marks over the chapters that have marks (or all chapters), one whole question at a time"
               >
                 ⚡ Auto-distribute {total}m
               </button>
@@ -1704,6 +1718,7 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
             setStarted(true);
             void handleLoadOfficialTemplate(t).then(() => setCurriculumMode("CUSTOM_SCHOOL"));
           }}
+          onUseSchoolPattern={applySchoolPattern}
           onBlank={startBlank}
           onImport={() => {
             setImportModalTab("import");
@@ -1788,7 +1803,7 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
                 type="button"
                 className="btn btn-xs text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 shadow-2xs"
                 onClick={autoDistributeMarks}
-                title="Equally distribute section total marks across all chapters"
+                title="Spread the marks over the chapters that have marks (or all chapters), one whole question at a time"
               >
                 ⚡ Auto-Distribute {total}m
               </button>

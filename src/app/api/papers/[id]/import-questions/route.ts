@@ -1,3 +1,4 @@
+import { suggestChapter } from "@/lib/questionTagging";
 import { HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
@@ -104,7 +105,8 @@ export const POST = route(async (req, { id }, user) => {
       sectionPositions.set(bpSec.id, pos + 1);
 
       const resolvedChapter = resolveQuestionChapter(q, impSec.title, bookChapters);
-      const chapterId = resolvedChapter?.id || fallbackChapterId;
+      // no stated chapter: the chapter whose title matches the question, before falling back to the first one
+      const chapterId = resolvedChapter?.id || suggestChapter(q.text ?? "", bookChapters)?.chapterId || fallbackChapterId;
 
       let orQuestionId: string | null = null;
       if (q.orQuestion && q.orQuestion.text?.trim()) {

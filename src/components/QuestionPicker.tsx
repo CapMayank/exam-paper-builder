@@ -3,6 +3,7 @@
 import { AlertTriangle, CheckCircle2, Pencil, Plus, RefreshCw, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { QuestionForm } from "@/components/QuestionForm";
+import { PasteQuestionsPanel } from "@/components/PasteQuestionsPanel";
 import { isExhaustedUsage, QuestionFreshnessAlert, QuestionUsagePills } from "@/components/QuestionUsageHistory";
 import { QuestionView } from "@/components/QuestionView";
 import { ErrorBanner, Modal, Spinner } from "@/components/ui";
@@ -53,7 +54,7 @@ export function QuestionPicker({
   const activeItemId = replacingItemId ?? alternateTargetItemId;
   const activeItem = activeItemId ? paper.items.find((i) => i.id === activeItemId) : null;
 
-  const [tab, setTab] = useState<"bank" | "new" | "ai">("bank");
+  const [tab, setTab] = useState<"bank" | "new" | "paste" | "ai">("bank");
   const [bank, setBank] = useState<QuestionDto[]>([]);
   const [filters, setFilters] = useState({
     chapterId: isAlternate && activeItem ? activeItem.question.chapterId : "",
@@ -534,6 +535,17 @@ export function QuestionPicker({
           >
             + Compose New Question
           </button>
+          {!isReplacing && !isAlternate && (
+            <button
+              type="button"
+              onClick={() => setTab("paste")}
+              className={`flex-1 rounded-lg py-2 transition ${
+                tab === "paste" ? "bg-white text-indigo-700 shadow-xs" : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              Paste several
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setTab("ai")}
@@ -750,6 +762,21 @@ export function QuestionPicker({
               </button>
             </div>
           </>
+        ) : tab === "paste" ? (
+          <PasteQuestionsPanel
+            paper={paper}
+            section={section}
+            chapters={paper.blueprint.chapters.map((c) => c.chapter)}
+            openMarks={Object.fromEntries(
+              paper.blueprint.chapters.map((c) => {
+                const prog = paper.progress.chapters.find((p) => p.chapterId === c.chapterId);
+                return [c.chapterId, (prog?.target ?? c.marks) - (prog?.used ?? 0)];
+              }),
+            )}
+            slotsLeft={Math.max(0, sectionStatus.needed - sectionStatus.filled)}
+            onPaper={onPaper}
+            onClose={onClose}
+          />
         ) : tab === "new" ? (
           full ? (
             <div className="space-y-3">
@@ -786,6 +813,12 @@ export function QuestionPicker({
               fixedType={section.type}
               targetMarks={section.marksEach}
               allowedChapterIds={openChapters.map((c) => c.chapterId)}
+              openMarks={Object.fromEntries(
+                openChapters.map((c) => {
+                  const prog = paper.progress.chapters.find((p) => p.chapterId === c.chapterId);
+                  return [c.chapterId, (prog?.target ?? c.marks) - (prog?.used ?? 0)];
+                }),
+              )}
               submitLabel={
                 isAlternate
                   ? "Save to Bank & Set as Alternate"

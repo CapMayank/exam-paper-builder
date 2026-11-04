@@ -26,6 +26,7 @@ import {
   serializeKindergartenConfig,
 } from "@/lib/kindergarten/registry";
 import { type Book, type QuestionDto, type SubPart, subpartsTotalMarks } from "@/lib/types";
+import { DIFFICULTY_LABEL, SKILLS, skillOf, suggestChapter, suggestDifficulty, suggestSkill } from "@/lib/questionTagging";
 import { MathRichEditor, type MathRichEditorHandle } from "./MathRichEditor";
 import { MathToolbar } from "./MathToolbar";
 import { DiagramSearchModal } from "./DiagramSearchModal";
@@ -119,6 +120,7 @@ export function QuestionForm({
   fixedType,
   targetMarks,
   allowedChapterIds,
+  openMarks,
   submitLabel = "Save question",
   showPaperEditModes,
   customSaveHandler,
@@ -131,6 +133,8 @@ export function QuestionForm({
   fixedType?: string;
   targetMarks?: number;
   allowedChapterIds?: string[];
+  /** Marks still open per chapter in the paper's blueprint; a new question's chapter is suggested from these. */
+  openMarks?: Record<string, number>;
   submitLabel?: string;
   showPaperEditModes?: boolean;
   customSaveHandler?: (payload: unknown, mode: "UPDATE_MASTER" | "FORK_COPY") => Promise<void>;
@@ -193,6 +197,10 @@ export function QuestionForm({
   });
   const [answer, setAnswer] = useState(initial?.answer ?? "");
   const [difficulty, setDifficulty] = useState(initial?.difficulty ?? "MEDIUM");
+  const [skill, setSkill] = useState<string>(skillOf(initial?.cognitiveLevel) ?? "");
+  // A new question gets its chapter, difficulty and skill filled in from its text until the teacher picks them.
+  const autoTag = !initial;
+  const [touched, setTouched] = useState({ chapter: false, difficulty: false, skill: false });
   const [imagePath, setImagePath] = useState<string | null>(initial?.imagePath ?? null);
   const [spaceMm, setSpaceMm] = useState(initial?.spaceMm ?? DEFAULT_SPACE[resolvedInitialType] ?? 0);
   const [showGrid, setShowGrid] = useState(initial?.showGrid ?? false);
@@ -270,6 +278,15 @@ export function QuestionForm({
     }
   }
 
+  const tagMarks = targetMarks ?? (subparts.length > 0 ? subpartsTotalMarks(subparts) : undefined);
+  const hasText = text.replace(/<[^>]+>/g, "").trim().length > 0;
+  const chapterSuggestion = autoTag && !touched.chapter ? suggestChapter(text, chapters, openMarks) : null;
+  const effChapterId = chapterSuggestion?.chapterId ?? chapterId;
+  const difficultySuggested = autoTag && !touched.difficulty && hasText;
+  const effDifficulty = difficultySuggested ? suggestDifficulty(text, type, tagMarks) : difficulty;
+  const skillSuggested = autoTag && !touched.skill && hasText;
+  const effSkill = skillSuggested ? suggestSkill(text, type) : skill;
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -326,12 +343,13 @@ export function QuestionForm({
 
       const payload = {
         bookId,
-        chapterId,
+        chapterId: effChapterId,
         type,
         text,
         options: serializedOptions,
         answer: isMcq ? (answer || "") : answer,
-        difficulty,
+        difficulty: effDifficulty,
+        cognitiveLevel: effSkill || null,
         imagePath,
         spaceMm,
         showGrid: (type === "DRAW" || type === "MAP_WORK") && showGrid,
@@ -413,13 +431,26 @@ export function QuestionForm({
           </select>
         </Field>
         <Field label="Chapter">
-          <select className="input" value={chapterId} required onChange={(e) => setChapterId(e.target.value)}>
+          <select
+            className="input"
+            value={effChapterId}
+            required
+            onChange={(e) => {
+              setChapterId(e.target.value);
+              setTouched((t) => ({ ...t, chapter: true }));
+            }}
+          >
             {chapters.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.number}. {c.title}
               </option>
             ))}
           </select>
+          {chapterSuggestion && (
+            <SuggestedNote>
+              {chapterSuggestion.reason === "title" ? "Suggested: matches the chapter title" : "Suggested: chapter with the most marks left"}
+            </SuggestedNote>
+          )}
         </Field>
         <Field label="Type">
           <select
@@ -487,11 +518,39 @@ export function QuestionForm({
           </select>
         </Field>
         <Field label="Difficulty">
-          <select className="input" value={difficulty} onChange={(e) => setDifficulty(e.target.value)}>
+          <select
+            className="input"
+            value={effDifficulty}
+            onChange={(e) => {
+              setDifficulty(e.target.value);
+              setTouched((t) => ({ ...t, difficulty: true }));
+            }}
+          >
             {DIFFICULTIES.map((d) => (
-              <option key={d}>{d}</option>
+              <option key={d} value={d}>
+                {DIFFICULTY_LABEL[d]}
+              </option>
             ))}
           </select>
+          {difficultySuggested && <SuggestedNote>Suggested from the marks and the question</SuggestedNote>}
+        </Field>
+        <Field label="Skill">
+          <select
+            className="input"
+            value={effSkill}
+            onChange={(e) => {
+              setSkill(e.target.value);
+              setTouched((t) => ({ ...t, skill: true }));
+            }}
+          >
+            <option value="">Not set</option>
+            {SKILLS.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+          {skillSuggested && <SuggestedNote>Suggested from the asking word (define, explain, solve, justify…)</SuggestedNote>}
         </Field>
       </div>
 
@@ -1312,7 +1371,7 @@ export function QuestionForm({
         <button type="button" className="btn" onClick={onCancel}>
           Cancel
         </button>
-        <button className="btn btn-primary" disabled={busy || !chapterId}>
+        <button className="btn btn-primary" disabled={busy || !effChapterId}>
           {busy ? "Saving…" : submitLabel}
         </button>
       </div>
@@ -1332,7 +1391,7 @@ export function QuestionForm({
         <DiagramSearchModal
           isOpen={true}
           subject={book?.subject || ""}
-          chapterTitle={chapters.find((c) => c.id === chapterId)?.title || ""}
+          chapterTitle={chapters.find((c) => c.id === effChapterId)?.title || ""}
           questionText={text}
           onClose={() => setDiagramSearchOpen(false)}
           onSelectDiagram={({ imagePath }) => {
@@ -1365,4 +1424,8 @@ export function QuestionForm({
       )}
     </form>
   );
+}
+
+function SuggestedNote({ children }: { children: React.ReactNode }) {
+  return <span className="mt-1 block text-[11px] text-indigo-700">{children}</span>;
 }

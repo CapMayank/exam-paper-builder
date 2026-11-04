@@ -4,6 +4,7 @@ import { FilePlus2, FileUp, ShieldCheck } from "lucide-react";
 import { useMemo, useState } from "react";
 import { sortClassNames } from "@/lib/constants";
 import { MPBSE_BLUEPRINT_TEMPLATES, type BlueprintTemplate } from "@/lib/curriculumTemplates";
+import { schoolPatternsForLevel } from "@/lib/schoolPatterns";
 import { isSubjectMatching } from "@/lib/schoolCurriculum";
 import type { AcademicClassDto, Book } from "@/lib/types";
 
@@ -26,8 +27,8 @@ function questionCount(t: BlueprintTemplate): number {
 
 /**
  * First step of a new blueprint: which class and subject it is for, and how to start. The classes and subjects
- * are the school's own (set up under Classes & subjects). MPBSE publishes ready patterns for Classes 9-12; every
- * other class starts from a blank blueprint for its own books.
+ * are the school's own (set up under Classes & subjects). MPBSE publishes ready patterns for Classes 9-12; Classes
+ * 1-8 use the school's own 50 / 60-mark pattern; any class can still start from a blank blueprint.
  */
 export function BlueprintStartPicker({
   classes,
@@ -36,6 +37,7 @@ export function BlueprintStartPicker({
   initialSubject,
   onUsePattern,
   onAdaptPattern,
+  onUseSchoolPattern,
   onBlank,
   onImport,
 }: {
@@ -45,6 +47,7 @@ export function BlueprintStartPicker({
   initialSubject?: string;
   onUsePattern: (t: BlueprintTemplate) => void;
   onAdaptPattern: (t: BlueprintTemplate) => void;
+  onUseSchoolPattern: (t: BlueprintTemplate, pick: { className: string; subject: string }) => void;
   onBlank: (pick: { className: string; subject: string }) => void;
   onImport: () => void;
 }) {
@@ -75,6 +78,7 @@ export function BlueprintStartPicker({
         : MPBSE_BLUEPRINT_TEMPLATES.filter((t) => t.classLevel === level && isSubjectMatching(t.subjectName, activeSubject)),
     [level, activeSubject],
   );
+  const schoolPatterns = useMemo(() => (activeSubject ? schoolPatternsForLevel(level) : []), [level, activeSubject]);
   const hasBook = books.some((b) => b.className === className && isSubjectMatching(b.subject, activeSubject));
 
   return (
@@ -84,7 +88,8 @@ export function BlueprintStartPicker({
           Which paper is this blueprint for?
         </h2>
         <p className="mt-0.5 text-sm text-slate-500">
-          Pick the class and subject. For Classes 9–12 the MPBSE 2026–27 pattern fills in the sections, marks and chapter weightage for you.
+          Pick the class and subject. The pattern fills in the sections, marks and chapter weightage for you: MPBSE 2026–27
+          for Classes 9–12, the school pattern for Classes 1–8.
         </p>
       </div>
 
@@ -150,7 +155,32 @@ export function BlueprintStartPicker({
       {activeSubject && (
         <div className="space-y-2">
           <span className="label">Pattern</span>
-          {patterns.length === 0 ? (
+          {patterns.length === 0 && schoolPatterns.length > 0 ? (
+            <ul className="grid gap-3 md:grid-cols-2">
+              {schoolPatterns.map((t) => (
+                <li key={t.id} className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-slate-900">
+                      {className} {activeSubject}
+                    </p>
+                    <p className="mt-0.5 text-sm text-slate-600">
+                      {t.totalMarks} marks · {questionCount(t)} questions · MCQ, fill in the blanks, very short, short and long answers
+                    </p>
+                    <p className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-500">
+                      <ShieldCheck size={13} className="text-slate-400" />
+                      School pattern for {t.targetClasses}
+                      {hasBook ? "; chapter marks are spread over the book's chapters" : "; add the textbook under Books & syllabus first"}
+                    </p>
+                  </div>
+                  <div className="mt-auto flex flex-wrap gap-2">
+                    <button type="button" className="btn btn-primary" onClick={() => onUseSchoolPattern(t, { className, subject: activeSubject })}>
+                      Use school pattern
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : patterns.length === 0 ? (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4">
               <div className="min-w-0">
                 <p className="font-semibold text-slate-900">

@@ -39,6 +39,7 @@ export const PATCH = route(async (req, { id }, user) => {
   if (input.subparts !== undefined) data.subpartsJson = JSON.stringify(input.subparts);
   if (input.answer !== undefined) data.answer = input.answer;
   if (input.difficulty !== undefined) data.difficulty = input.difficulty;
+  if (input.cognitiveLevel !== undefined) data.cognitiveLevel = input.cognitiveLevel;
   if (input.spaceMm !== undefined) data.spaceMm = input.spaceMm;
   if (input.showGrid !== undefined) data.showGrid = input.showGrid;
 

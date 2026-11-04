@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { BookOpen, Check, FileText, Library } from "lucide-react";
+import { BookOpen, Check, FileText, Library, Sparkles } from "lucide-react";
 import { ErrorBanner, Modal, Spinner, useToast } from "@/components/ui";
 import { api } from "@/lib/client";
 import { normalizeSession, useAcademicSession } from "@/lib/academicSession";
@@ -76,6 +76,36 @@ export function SyllabusImportModal({ onClose, onSuccess, targetBook, targetClas
   const [skipped, setSkipped] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tidyBusy, setTidyBusy] = useState(false);
+
+  /** A contents page copied from a private publisher's book or PDF, cleaned into a chapter list by the AI. */
+  async function tidyWithAi() {
+    setTidyBusy(true);
+    setError(null);
+    try {
+      const headers: Record<string, string> = {};
+      const customKey = typeof window !== "undefined" ? localStorage.getItem("exam_gemini_api_key") : null;
+      if (customKey) headers["x-gemini-api-key"] = customKey;
+      const res = await api<{ success: boolean; isMock?: boolean; error?: string; data?: { books?: Array<{ title: string; chapters: Array<{ title: string }> }> } }>(
+        "/api/ai/parse-syllabus",
+        { method: "POST", headers, json: { rawText: pasted, className, subject } },
+      );
+      const books = (res.data?.books ?? []).filter((b) => b.chapters.length > 0);
+      if (res.isMock || !res.success || books.length === 0) {
+        setError(res.error || "The AI could not read this text. The list is kept as you typed it; tidy it by hand.");
+        return;
+      }
+      setPasted(
+        books
+          .map((b) => [...(books.length > 1 ? [`# ${b.title}`] : []), ...b.chapters.map((c) => c.title)].join("\n"))
+          .join("\n"),
+      );
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setTidyBusy(false);
+    }
+  }
 
   const locked = Boolean(targetBook);
 
@@ -310,18 +340,31 @@ export function SyllabusImportModal({ onClose, onSuccess, targetBook, targetClas
                   {sources.length === 0 && <p className="text-xs text-slate-500">No official syllabus is stored for {className} {subject}.</p>}
                 </div>
               ) : (
-                <label className="block">
-                  <span className="label">One chapter per line</span>
-                  <textarea
-                    className="input min-h-48 font-normal"
-                    value={pasted}
-                    placeholder={PASTE_HINT}
-                    onChange={(e) => setPasted(e.target.value)}
-                  />
-                  <span className="mt-1 block text-xs text-slate-500">
-                    Numbers like “3.” are removed. Start a line with # to name the textbook the next chapters belong to.
-                  </span>
-                </label>
+                <div className="space-y-2">
+                  <label className="block">
+                    <span className="label">One chapter per line</span>
+                    <textarea
+                      className="input min-h-48 font-normal"
+                      value={pasted}
+                      placeholder={PASTE_HINT}
+                      onChange={(e) => setPasted(e.target.value)}
+                    />
+                    <span className="mt-1 block text-xs text-slate-500">
+                      Numbers like “3.” are removed. Start a line with # to name the textbook the next chapters belong to.
+                    </span>
+                  </label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-ghost border border-slate-200"
+                      onClick={tidyWithAi}
+                      disabled={tidyBusy || pasted.trim().length < 5}
+                    >
+                      {tidyBusy ? <Spinner /> : <Sparkles size={14} className="text-indigo-600" />} Tidy up a copied contents page
+                    </button>
+                    <span className="text-xs text-slate-500">Removes page numbers, authors and stray text, one chapter per line.</span>
+                  </div>
+                </div>
               )}
             </fieldset>
           )}

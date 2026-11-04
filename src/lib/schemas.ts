@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { COGNITIVE_LEVELS } from "./questionTagging";
 import {
   DEFAULT_ACADEMIC_SESSION,
   DEFAULT_MARKS_STYLE,
@@ -159,6 +160,8 @@ export const questionSchema = z
     attemptCount: z.number().int().min(1).max(100).optional(),
     answer: z.string().max(5000).default(""),
     difficulty: z.enum(DIFFICULTIES).default("MEDIUM"),
+    /** Skill of the school grid (Knowledge / Understanding / Applying / HOTS), stored as a Bloom level. */
+    cognitiveLevel: z.enum(COGNITIVE_LEVELS).nullable().optional(),
     imagePath: z
       .string()
       .regex(/^[a-f0-9-]{36}\.(png|jpg|jpeg|webp|gif|svg)$/)
@@ -194,6 +197,7 @@ export const questionPatchSchema = z.object({
   attemptCount: z.number().int().min(1).max(100).optional(),
   answer: z.string().max(5000).optional(),
   difficulty: z.enum(DIFFICULTIES).optional(),
+  cognitiveLevel: z.enum(COGNITIVE_LEVELS).nullable().optional(),
   spaceMm: z.number().int().min(0).max(250).optional(),
   showGrid: z.boolean().optional(),
   passageGroupId: z.string().trim().min(1).max(64).nullable().optional(),

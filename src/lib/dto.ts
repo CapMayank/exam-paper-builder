@@ -22,6 +22,7 @@ export type QuestionDto = {
   optionsJson?: string;
   answer: string;
   difficulty: string;
+  cognitiveLevel?: string | null;
   marks?: number;
   imagePath: string | null;
   spaceMm: number;
@@ -218,6 +219,7 @@ export function toQuestionDto(
     options,
     answer: q.answer,
     difficulty: q.difficulty,
+    cognitiveLevel: q.cognitiveLevel ?? null,
     imagePath: q.imagePath,
     spaceMm: q.spaceMm,
     showGrid: q.showGrid,

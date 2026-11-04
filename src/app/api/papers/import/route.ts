@@ -1,3 +1,4 @@
+import { suggestChapter } from "@/lib/questionTagging";
 import { HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import {
@@ -114,7 +115,8 @@ export const POST = route(async (req, _params, user) => {
 
       // Determine chapter
       const resolvedChapter = resolveQuestionChapter(q, impSec.title, bookChapters);
-      const chapterId = resolvedChapter?.id || fallbackChapterId;
+      // no stated chapter: the chapter whose title matches the question, before falling back to the first one
+      const chapterId = resolvedChapter?.id || suggestChapter(q.text ?? "", bookChapters)?.chapterId || fallbackChapterId;
 
       // Handle optional OR question
       let orQuestionId: string | null = null;
