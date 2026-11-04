@@ -29,7 +29,7 @@ Nelson Mandela: Long Walk to Freedom
 # Footprints without Feet
 A Triumph of Surgery`;
 
-/** Official syllabi for a class + subject: the MPBSE scheme (what blueprints and quotas use), else NCERT presets. */
+/** Official syllabi for a class + subject: the MPBSE scheme (Classes 9-12, what blueprints and quotas use), else the presets (MP Board for Classes 5-8). */
 function sourcesFor(className: string, subject: string): Source[] {
   if (!className || !subject) return [];
   const out: Source[] = [];

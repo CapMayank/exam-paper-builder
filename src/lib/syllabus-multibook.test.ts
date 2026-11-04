@@ -44,20 +44,20 @@ describe("Multi-Book & Granular Syllabus System", () => {
     expect(class3Evs).toBeDefined();
     expect(class3Evs?.className).toBe("Class 3");
 
-    const class5Math = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "cbse-5-maths");
+    const class5Math = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "mp-5-maths");
     expect(class5Math).toBeDefined();
     expect(class5Math?.className).toBe("Class 5");
 
     // Classes 6-8
-    const class6Sci = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "cbse-6-science");
+    const class6Sci = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "mp-6-science");
     expect(class6Sci).toBeDefined();
     expect(class6Sci?.className).toBe("Class 6");
 
-    const class7Sci = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "cbse-7-science");
+    const class7Sci = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "mp-7-science");
     expect(class7Sci).toBeDefined();
     expect(class7Sci?.className).toBe("Class 7");
 
-    const class8Sci = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "cbse-8-science");
+    const class8Sci = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "mp-8-science");
     expect(class8Sci).toBeDefined();
     expect(class8Sci?.className).toBe("Class 8");
 

@@ -4,7 +4,7 @@
  * 1. CSV (tabular books & chapters)
  * 2. JSON (hierarchical or flat)
  * 3. Text / Freeform syllabus paste (with auto chapter numbering)
- * 4. Standard Curricula Presets (CBSE/NCERT)
+ * 4. Standard Curricula Presets (MP Board for Classes 5-8, CBSE/NCERT elsewhere)
  */
 
 export interface ParsedChapterItem {
