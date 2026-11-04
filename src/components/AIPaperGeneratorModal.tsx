@@ -29,7 +29,7 @@ import { ErrorBanner, Modal, Spinner, useToast } from "@/components/ui";
 import { renderDocToBlob } from "@/components/figure-studio/render";
 import { embedSceneInPng } from "@/components/figure-studio/pngMeta";
 import type { Doc, GridSettings, SceneFile } from "@/components/figure-studio/types";
-import { api, imageUrl, uploadImage } from "@/lib/client";
+import { api, imageUrl, retryTransient, uploadImage } from "@/lib/client";
 import {
   cleanMatchItem,
   cleanOptionText,
@@ -282,7 +282,8 @@ export function AIPaperGeneratorModal({
         const headers: Record<string, string> = {};
         if (customKey) headers["x-gemini-api-key"] = customKey;
 
-        const genRes = await api<{
+        const genRes = await retryTransient(
+          () => api<{
           success: boolean;
           isMock: boolean;
           questions: GeneratedPaperQuestion[];
@@ -304,7 +305,12 @@ export function AIPaperGeneratorModal({
             slots: sec.slots,
             customKey: customKey || undefined,
           },
-        });
+        }),
+          {
+            signal,
+            onRetry: (n, waitMs) => setCurrentActivity(`The AI was busy; trying "${sec.sectionTitle}" again in ${Math.round(waitMs / 1000)}s (retry ${n})...`),
+          },
+        );
 
         // Ensure displayed subpart mark allocations in the preview feed match the calculated values before commit
         const rawQuestions = genRes.questions || [];

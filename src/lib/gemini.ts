@@ -255,7 +255,7 @@ export async function callGeminiApi<T>(
       isMock: true,
       modelUsed: "curriculum-grounded-fallback",
       data: opts.mockFallback(),
-      error: quotaErrorText(candidateModels[0]) ?? `Gemini API returned status ${lastStatus || 503}; served from curriculum-grounded engine.`,
+      error: quotaErrorText(candidateModels[0]) ?? describeGeminiFailure(lastStatus, lastErrorText),
     };
   }
 
@@ -265,6 +265,29 @@ export async function callGeminiApi<T>(
     error: quotaErrorText(candidateModels[0]) ?? `Gemini API Error (${lastStatus || "PARSE_OR_NETWORK"}): ${lastErrorText || "All model endpoints unavailable"}`,
     data: null as unknown as T,
   };
+}
+
+/**
+ * Says what actually went wrong with the last Gemini call, in words a teacher can act on. Without this every
+ * failure (spent quota, an overloaded model, a slow reply, a bad reply) was reported as "busy or over quota".
+ */
+export function describeGeminiFailure(status: number, errorText: string): string {
+  const t = errorText || "";
+  if (status === 429) {
+    const free = /free\s*tier|FreeTier/i.test(t);
+    const daily = /PerDay|per day/i.test(t);
+    return `Google refused the request: the ${free ? "free-tier " : ""}${daily ? "daily " : ""}quota for this model is used up (HTTP 429). Switch to the Flash model, wait, or use a billed API key.`;
+  }
+  if (status === 503) return "Google reports the model is overloaded right now (HTTP 503). This is usually temporary; try again in a minute.";
+  if (status === 401 || status === 403 || (status === 400 && /API key/i.test(t))) {
+    return `Google rejected the API key (HTTP ${status}). Check GEMINI_API_KEY(S) on the server.`;
+  }
+  if (status === 404) return "The configured Gemini model name was not found (HTTP 404). Check GEMINI_MODEL on the server.";
+  if (status === 400) return `Google rejected the request (HTTP 400): ${t.replace(/\s+/g, " ").slice(0, 160)}`;
+  if (status >= 500) return `Google's server failed (HTTP ${status}). Try again shortly.`;
+  if (/timeout|timed out|aborted/i.test(t)) return "The model took too long to reply (over 2 minutes). Try again, or choose the Flash model.";
+  if (/JSON|Unexpected token|parse/i.test(t)) return "The model's reply was not valid JSON. Try again.";
+  return t ? `The AI call failed: ${t.replace(/\s+/g, " ").slice(0, 160)}` : "The AI call failed for an unknown reason.";
 }
 
 /** A plain-language reason when the failure is the free-tier quota, else null. */
@@ -2069,6 +2092,11 @@ JSON Array Output Schema:
           trace,
           contract,
           validationIssues: [],
+          // the model did answer: say that its questions were the problem, not the API
+          error: `The model's questions failed the quality checks ${retryCount + 1} time(s): ${lastValidationIssues
+            .slice(0, 3)
+            .map((i) => i.message)
+            .join("; ")}`,
         };
       }
     }

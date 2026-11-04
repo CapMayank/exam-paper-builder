@@ -135,9 +135,10 @@ export const POST = route(async (req, { id }, user) => {
   if (res.isMock && getGeminiApiKey(customKey || req.headers.get("x-gemini-api-key"))) {
     const quota = quotaErrorText();
     if (quota) throw new HttpError(429, quota);
+    console.warn(`ai-generate-section "${sectionTitle ?? matchedSection?.title}" fell back to templates: ${res.error ?? "no reason recorded"}`);
     throw new HttpError(
       502,
-      "The AI model did not return valid questions for this section after retrying (it may be busy or over quota). Nothing was added; please try again.",
+      `The AI did not return usable questions for this section. Reason: ${res.error ?? "unknown"} Nothing was added; please try again.`,
     );
   }
 

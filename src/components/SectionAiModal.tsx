@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { MathText } from "@/components/MathText";
 import { QuestionContent } from "@/components/QuestionContent";
-import { api } from "@/lib/client";
+import { api, retryTransient } from "@/lib/client";
 import {
   cleanMatchItem,
   cleanOptionText,
@@ -197,7 +197,7 @@ export function SectionAiModal({
       const headers: Record<string, string> = {};
       if (customKey) headers["x-gemini-api-key"] = customKey;
 
-      const res = await api<{
+      const res = await retryTransient(() => api<{
         success: boolean;
         isMock?: boolean;
         questions: GeneratedPaperQuestion[];
@@ -223,7 +223,7 @@ export function SectionAiModal({
           })),
           customKey: customKey || undefined,
         }),
-      });
+      }));
 
       if (!res.success || !res.questions || res.questions.length === 0) {
         throw new Error("No questions were returned. Please try again.");
