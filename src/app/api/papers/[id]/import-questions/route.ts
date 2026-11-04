@@ -131,7 +131,7 @@ export const POST = route(async (req, { id }, user) => {
             type: orType,
             text: q.orQuestion.text.trim(),
             optionsJson: JSON.stringify(q.orQuestion.options ?? []),
-            subpartsJson: "[]",
+            subpartsJson: JSON.stringify(q.orQuestion.subparts ?? []),
             answer: q.orQuestion.answer?.trim() || "",
             difficulty: q.orQuestion.difficulty || "MEDIUM",
             createdById: user.id,

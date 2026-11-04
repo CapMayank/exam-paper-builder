@@ -16,6 +16,7 @@ import {
   Sparkles,
   Upload,
 } from "lucide-react";
+import { DifficultySelect, useDifficultyProfile } from "@/components/DifficultySelect";
 import { MathText } from "@/components/MathText";
 import { Modal, Spinner, useToast } from "@/components/ui";
 import {
@@ -58,6 +59,15 @@ export function PaperImportModal({
   const [copied, setCopied] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [importMode, setImportMode] = useState<"replace" | "append">("replace");
+
+  // Questions written by another chat AI from a prompt the app builds; the app then writes the answer key.
+  const [difficulty, setDifficulty] = useDifficultyProfile();
+  const [promptFocus, setPromptFocus] = useState("");
+  const [promptBusy, setPromptBusy] = useState(false);
+  const [promptInfo, setPromptInfo] = useState<{ key: string; prompt: string; questionCount: number; totalMarks: number } | null>(null);
+  const [showPrompt, setShowPrompt] = useState(false);
+  const [writeAnswers, setWriteAnswers] = useState(true);
+  const [submitStage, setSubmitStage] = useState<"import" | "answers">("import");
 
   // Selected target blueprint
   const [selectedBlueprintId, setSelectedBlueprintId] = useState<string>(
@@ -111,6 +121,10 @@ export function PaperImportModal({
   }, [inputText, blueprints, currentPaper]);
 
   if (!isOpen) return null;
+
+  // a prompt built for another blueprint, scope or difficulty is no longer the one to paste
+  const promptKey = `${activeBlueprint?.id}|${currentPaper ? importMode : ""}|${difficulty}|${promptFocus.trim()}`;
+  const currentPrompt = promptInfo?.key === promptKey ? promptInfo : null;
 
   // 1. Live Parse
   const parseResult: PaperImportResult | null = inputText.trim()
@@ -187,6 +201,62 @@ export function PaperImportModal({
     toast.success("Loaded template into editor!");
   }
 
+  // Builds the prompt for another chat AI from this paper's (or blueprint's) slot plan and copies it.
+  async function copyAiPrompt() {
+    if (!activeBlueprint) {
+      toast.error("Please select a target blueprint.");
+      return;
+    }
+    setPromptBusy(true);
+    try {
+      const qs = new URLSearchParams({ difficulty });
+      if (promptFocus.trim()) qs.set("focus", promptFocus.trim());
+      if (currentPaper && importMode === "replace") qs.set("scope", "all");
+      const url = currentPaper
+        ? `/api/papers/${currentPaper.id}/external-prompt?${qs}`
+        : `/api/blueprints/${activeBlueprint.id}/external-prompt?${qs}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not build the prompt");
+      setPromptInfo({ ...data, key: promptKey });
+      setShowPrompt(false);
+      try {
+        await navigator.clipboard.writeText(data.prompt);
+        toast.success(`Prompt copied: ${data.questionCount} question(s), ${data.totalMarks} marks. Paste it into your chat AI.`);
+      } catch {
+        // clipboard blocked (e.g. not a secure origin): show the prompt to copy by hand
+        setShowPrompt(true);
+        toast.info("Could not copy automatically. Select the prompt below and copy it.");
+      }
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setPromptBusy(false);
+    }
+  }
+
+  /** Answers for every question still without one, by the app's AI. The import itself stands either way. */
+  async function writeAnswerKey(paperId: string) {
+    setSubmitStage("answers");
+    try {
+      const customKey = localStorage.getItem("exam_gemini_api_key") || "";
+      const res = await fetch(`/api/papers/${paperId}/answer-key`, {
+        method: "POST",
+        headers: customKey ? { "x-gemini-api-key": customKey } : undefined,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Answer key generation failed");
+      const failed = Array.isArray(data.failed) ? data.failed.length : 0;
+      if (failed > 0) {
+        toast.info(`Answer key: ${data.saved?.length ?? 0} written, ${failed} still missing. Open Solutions to retry them.`);
+      } else if ((data.saved?.length ?? 0) > 0) {
+        toast.success(`Answer key written for ${data.saved.length} question(s).`);
+      }
+    } catch (err) {
+      toast.info(`Questions are imported, but the answer key was not written: ${(err as Error).message} Open Solutions to retry.`);
+    }
+  }
+
   // Submit & Import Execution
   async function handleImport() {
     if (!parseResult || !parseResult.success) {
@@ -199,6 +269,7 @@ export function PaperImportModal({
     }
 
     setIsSubmitting(true);
+    setSubmitStage("import");
     try {
       if (currentPaper) {
         // Direct Editor Import
@@ -213,6 +284,7 @@ export function PaperImportModal({
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed to import questions into paper");
         toast.success(`Imported ${data.importedCount} question(s) into ${currentPaper.title}`);
+        if (writeAnswers) await writeAnswerKey(currentPaper.id);
         onPaperUpdated?.();
         onClose();
       } else {
@@ -228,6 +300,7 @@ export function PaperImportModal({
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed to create paper from import");
         toast.success(`Created "${data.paper?.title || "Exam Paper"}" matching blueprint!`);
+        if (writeAnswers && data.paperId) await writeAnswerKey(data.paperId);
         onSuccess?.(data.paperId);
         onClose();
       }
@@ -338,6 +411,69 @@ export function PaperImportModal({
               )}
             </div>
 
+            {/* Questions from another chat AI: the app writes the prompt, the teacher pastes the reply below */}
+            <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-3.5 space-y-2.5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-xs font-bold text-violet-900 flex items-center gap-1.5">
+                    <Sparkles size={14} className="text-violet-600" /> Write the questions with another AI
+                  </div>
+                  <p className="text-[11px] text-violet-800 mt-0.5 leading-relaxed">
+                    1. Copy the prompt (it carries this blueprint&rsquo;s sections, chapter quotas, difficulty and quality rules).
+                    2. Paste it into ChatGPT, Claude, Gemini or any chat AI. 3. Paste its whole reply into the box below.
+                    The AI is asked for questions only; this app writes the answer key afterwards.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={copyAiPrompt}
+                  disabled={promptBusy || !activeBlueprint}
+                  className="btn btn-primary btn-sm shrink-0"
+                >
+                  {promptBusy ? <Spinner /> : <Copy size={13} />} Copy prompt
+                </button>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div>
+                  <label className="block text-[11px] font-semibold text-violet-900 mb-0.5">Difficulty</label>
+                  <DifficultySelect value={difficulty} onChange={setDifficulty} />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-violet-900 mb-0.5">Extra instructions (optional)</label>
+                  <input
+                    value={promptFocus}
+                    onChange={(e) => setPromptFocus(e.target.value)}
+                    placeholder="e.g. more numericals, avoid chapter 3 diagrams"
+                    className="input text-xs w-full"
+                  />
+                </div>
+              </div>
+              {currentPaper && (
+                <p className="text-[10px] text-violet-700">
+                  {importMode === "replace"
+                    ? "The prompt covers the whole paper (existing questions will be replaced)."
+                    : "The prompt covers only the slots still empty on this paper."}
+                </p>
+              )}
+              {currentPrompt && (
+                <div className="text-[11px] text-violet-900">
+                  <button type="button" onClick={() => setShowPrompt((v) => !v)} className="underline hover:text-violet-700">
+                    {showPrompt ? "Hide prompt" : "Show prompt"}
+                  </button>{" "}
+                  · {currentPrompt.questionCount} question(s), {currentPrompt.totalMarks} marks
+                  {showPrompt && (
+                    <textarea
+                      readOnly
+                      value={currentPrompt.prompt}
+                      rows={8}
+                      onFocus={(e) => e.currentTarget.select()}
+                      className="input font-mono text-[11px] w-full leading-relaxed mt-1.5"
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* Upload Area / Dropzone */}
             <div
               onDragOver={(e) => e.preventDefault()}
@@ -389,7 +525,7 @@ export function PaperImportModal({
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 rows={6}
-                placeholder="Paste JSON, CSV table, or numbered markdown text here..."
+                placeholder="Paste JSON, CSV table, numbered markdown text, or a chat AI's whole reply here..."
                 className="input font-mono text-xs w-full leading-relaxed"
               />
             </div>
@@ -656,6 +792,18 @@ export function PaperImportModal({
             )}
           </div>
           <div className="flex items-center gap-2">
+            <label
+              className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer mr-2"
+              title="After importing, this app's AI writes answers for every question that has none. Answers already in the import are kept."
+            >
+              <input
+                type="checkbox"
+                checked={writeAnswers}
+                onChange={(e) => setWriteAnswers(e.target.checked)}
+                disabled={isSubmitting}
+              />
+              <span>Write answer key with AI</span>
+            </label>
             <button type="button" onClick={onClose} className="btn btn-ghost" disabled={isSubmitting}>
               Cancel
             </button>
@@ -667,7 +815,9 @@ export function PaperImportModal({
             >
               {isSubmitting && <Spinner />}
               {isSubmitting
-                ? "Importing…"
+                ? submitStage === "answers"
+                  ? "Writing answer key…"
+                  : "Importing…"
                 : currentPaper
                 ? "Import Questions"
                 : "Import Paper & Open"}

@@ -8,6 +8,8 @@ import {
   resolveInternalChoiceRequirement,
   type InternalChoiceRequirement,
 } from "./internalChoiceRules";
+import { componentTitle, slotComponentKey, suggestSlotComponents } from "./componentSuggestion";
+import { parseComponents } from "./languageComponents";
 import { detectPaperLanguage, type PaperLanguage } from "./localization";
 import type { PaperData, Section } from "./types";
 
@@ -623,4 +625,28 @@ export function planPaperSlotAssignments(paper: PaperAutogenInput): PaperAutogen
       plannedMarks: c.plannedMarks,
     })),
   };
+}
+
+/**
+ * The slot plan with each slot's suggested syllabus component filled in (language papers), as the AI
+ * generator (ai-plan) and the external-AI prompt both use it.
+ */
+export function planPaperWithComponents(paper: PaperAutogenInput & { blueprint: { componentsJson?: string | null } }): PaperAutogenPlan {
+  const plan = planPaperSlotAssignments(paper);
+  const sections = paper.blueprint.sections;
+  const componentsJson = paper.blueprint.componentsJson ?? undefined;
+  const suggestion = suggestSlotComponents(sections, componentsJson);
+  const comps = parseComponents(componentsJson);
+  for (const sec of plan.sections) {
+    const def = sections.find((x) => x.id === sec.sectionId);
+    if (!def) continue;
+    for (const slot of sec.slots) {
+      const key = slotComponentKey(suggestion, def, slot.slotIndex);
+      if (key) {
+        slot.componentKey = key;
+        slot.componentTitle = componentTitle(comps, key);
+      }
+    }
+  }
+  return plan;
 }

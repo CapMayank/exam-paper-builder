@@ -364,6 +364,12 @@ Class: Class 10 | Subject: Science | Term: HALF_YEARLY | Session: 2026–27 | Se
 // -----------------------------------------------------------------------------
 
 /** Parse JSON Question Paper format */
+/** "easy" / "Hard" / "MEDIUM" as written by people or chat AIs; anything else is MEDIUM. */
+function importedDifficulty(raw: unknown): "EASY" | "MEDIUM" | "HARD" {
+  const v = typeof raw === "string" ? raw.trim().toUpperCase() : "";
+  return v === "EASY" || v === "HARD" ? v : "MEDIUM";
+}
+
 export function parsePaperJson(jsonStr: string): PaperImportResult {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -459,8 +465,7 @@ export function parsePaperJson(jsonStr: string): PaperImportResult {
           ? Number(q.chapterNumber)
           : undefined;
       const chapterTitle = typeof q.chapterTitle === "string" ? q.chapterTitle.trim() : undefined;
-      const difficulty =
-        q.difficulty === "EASY" || q.difficulty === "HARD" ? q.difficulty : "MEDIUM";
+      const difficulty = importedDifficulty(q.difficulty);
       const options = Array.isArray(q.options) ? q.options.map((opt) => String(opt).trim()) : undefined;
       const answer = typeof q.answer === "string" ? q.answer.trim() : undefined;
 
@@ -471,14 +476,14 @@ export function parsePaperJson(jsonStr: string): PaperImportResult {
         if (typeof orObj.text === "string" && orObj.text.trim()) {
           orQuestion = {
             text: orObj.text.trim(),
+            type: typeof orObj.type === "string" && orObj.type.trim() ? normalizeQuestionType(orObj.type.trim()) : undefined,
             marks: Number(orObj.marks) || qMarks,
             chapterNumber:
               orObj.chapterNumber !== undefined && !isNaN(Number(orObj.chapterNumber))
                 ? Number(orObj.chapterNumber)
                 : chapterNumber,
             chapterTitle: typeof orObj.chapterTitle === "string" ? orObj.chapterTitle.trim() : chapterTitle,
-            difficulty:
-              orObj.difficulty === "EASY" || orObj.difficulty === "HARD" ? orObj.difficulty : "MEDIUM",
+            difficulty: orObj.difficulty === undefined ? difficulty : importedDifficulty(orObj.difficulty),
             options: Array.isArray(orObj.options) ? orObj.options.map((opt) => String(opt).trim()) : undefined,
             answer: typeof orObj.answer === "string" ? orObj.answer.trim() : undefined,
             subparts: Array.isArray(orObj.subparts)
@@ -871,6 +876,23 @@ export function parsePaperText(text: string): PaperImportResult {
 }
 
 /** Unified Parser with automatic format detection */
+/**
+ * The paper JSON out of a chat AI's reply: the first ```json (or bare ```) block holding an object with
+ * "sections", else the outermost {...} around a "sections" key. Null when the reply has no such JSON.
+ */
+export function extractPaperJsonFromReply(reply: string): string | null {
+  const fence = /```[a-zA-Z]*[ \t]*\r?\n([\s\S]*?)```/g;
+  for (let m = fence.exec(reply); m; m = fence.exec(reply)) {
+    const body = m[1].trim();
+    if (body.startsWith("{") && /"sections"\s*:/.test(body)) return body;
+  }
+  const key = reply.search(/"sections"\s*:/);
+  if (key < 0) return null;
+  const start = reply.lastIndexOf("{", key);
+  const end = reply.lastIndexOf("}");
+  return start >= 0 && end > key ? reply.slice(start, end + 1) : null;
+}
+
 export function parsePaperImport(
   content: string,
   format: "auto" | "json" | "csv" | "text" = "auto"
@@ -891,6 +913,10 @@ export function parsePaperImport(
   if (format === "json" || (format === "auto" && trimmed.startsWith("{"))) {
     return parsePaperJson(trimmed);
   }
+
+  // a chat AI's reply: the paper JSON inside a ```json block or between some prose
+  const fromChat = format === "auto" ? extractPaperJsonFromReply(trimmed) : null;
+  if (fromChat) return parsePaperJson(fromChat);
 
   if (format === "csv" || (format === "auto" && isLikelyCsv(trimmed))) {
     return parsePaperCsv(trimmed);
