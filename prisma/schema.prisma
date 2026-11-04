@@ -502,3 +502,21 @@ model CurriculumBlueprintTemplate {
   @@map("curriculum_blueprint_templates")
 }
 
+
+/// A school's change to a built-in syllabus or blueprint preset, or a preset the school added itself.
+/// Built-in presets live in code (curriculumPresets.ts, curriculumTemplates.ts, schoolPatterns.ts); a row here
+/// replaces one (data set), hides one (hidden), or adds a new one (presetId starting "custom-").
+model PresetOverride {
+  id            String   @id @default(cuid())
+  kind          String   // "SYLLABUS" | "BLUEPRINT"
+  presetId      String
+  data          Json?    // the whole edited preset; null = built-in content unchanged
+  hidden        Boolean  @default(false)
+  updatedById   String?
+  updatedByName String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([kind, presetId])
+  @@map("preset_overrides")
+}

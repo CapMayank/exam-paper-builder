@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  SlidersHorizontal,
   BookOpen,
   FileText,
   GraduationCap,
@@ -38,6 +39,7 @@ const NAV: { href: string; label: string; icon: LucideIcon; hint: string }[] = [
   { href: "/blueprints", label: "Blueprints", icon: Ruler, hint: "Marks and chapter quotas per subject" },
   { href: "/papers", label: "Exam papers", icon: FileText, hint: "Build, print and share papers from blueprints" },
   { href: "/exam-cell", label: "Exam cell & Logistics", icon: PackageCheck, hint: "Paper budget calculator, timetable and audit trail" },
+  { href: "/admin/presets", label: "Presets", icon: SlidersHorizontal, hint: "Edit the syllabus presets and blueprint patterns teachers start from" },
   { href: "/admin/users", label: "Faculty & classes", icon: ShieldCheck, hint: "Staff roles and the classes each teacher looks after" },
   { href: "/admin/activity", label: "Activity log", icon: History, hint: "Who signed in and what they changed" },
 ];
@@ -60,6 +62,7 @@ function NavList({
 }) {
   const visibleNav = NAV.filter(({ href }) => {
     if (href === "/admin/users" || href === "/admin/activity") return role === "SUPER_ADMIN";
+    if (href === "/admin/presets") return role === "SUPER_ADMIN" || role === "ADMIN";
     return true;
   });
 

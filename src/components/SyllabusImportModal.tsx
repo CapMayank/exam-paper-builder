@@ -9,7 +9,8 @@ import { sortClassNames } from "@/lib/constants";
 import { SUBJECTS_SEED } from "@/lib/curriculumData";
 import { isSameSubjectGroup, isSubjectMatching, subjectGroupName } from "@/lib/schoolCurriculum";
 import { parsePastedChapters, splitChapterTitle, type ImportPart, type SubjectImportPlan } from "@/lib/subjectBooks";
-import { STANDARD_CURRICULUM_PRESETS } from "@/lib/syllabusImport";
+import type { StandardCurriculumPreset } from "@/lib/syllabusImport";
+import { usePresets } from "@/lib/usePresets";
 import type { AcademicClassDto } from "@/lib/types";
 
 interface SyllabusImportModalProps {
@@ -30,7 +31,7 @@ Nelson Mandela: Long Walk to Freedom
 A Triumph of Surgery`;
 
 /** Official syllabi for a class + subject: the MPBSE scheme (Classes 9-12, what blueprints and quotas use), else the presets (MP Board for Classes 5-8). */
-function sourcesFor(className: string, subject: string): Source[] {
+function sourcesFor(className: string, subject: string, presets: StandardCurriculumPreset[]): Source[] {
   if (!className || !subject) return [];
   const out: Source[] = [];
   for (const s of SUBJECTS_SEED) {
@@ -47,7 +48,7 @@ function sourcesFor(className: string, subject: string): Source[] {
   }
   // The school follows MPBSE: where its scheme exists, NCERT presets would only add the same lessons under other titles.
   if (out.length > 0) return out;
-  for (const p of STANDARD_CURRICULUM_PRESETS) {
+  for (const p of presets) {
     if (p.className !== className || !isSubjectMatching(p.subject, subject)) continue;
     out.push({
       id: p.id,
@@ -129,7 +130,8 @@ export function SyllabusImportModal({ onClose, onSuccess, targetBook, targetClas
     return unique.filter((n) => n !== "Mathematics" || !unique.some((o) => o.startsWith("Mathematics ")) || n === subject);
   }, [sessionClasses, className, subject]);
 
-  const sources = useMemo(() => sourcesFor(className, subject), [className, subject]);
+  const presets = usePresets("SYLLABUS");
+  const sources = useMemo(() => sourcesFor(className, subject, presets), [className, subject, presets]);
 
   // Default to the first official syllabus; fall back to pasting when there is none.
   const mode = sources.length === 0 ? "paste" : chosenMode;

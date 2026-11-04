@@ -3,8 +3,10 @@
 import { FilePlus2, FileUp, ShieldCheck } from "lucide-react";
 import { useMemo, useState } from "react";
 import { sortClassNames } from "@/lib/constants";
-import { MPBSE_BLUEPRINT_TEMPLATES, type BlueprintTemplate } from "@/lib/curriculumTemplates";
-import { schoolPatternsForLevel } from "@/lib/schoolPatterns";
+import { QUESTION_TYPE_LABEL } from "@/lib/constants";
+import type { BlueprintTemplate } from "@/lib/curriculumTemplates";
+import { isSchoolPattern, type BlueprintPreset } from "@/lib/presets";
+import { usePresets } from "@/lib/usePresets";
 import { isSubjectMatching } from "@/lib/schoolCurriculum";
 import type { AcademicClassDto, Book } from "@/lib/types";
 
@@ -24,6 +26,18 @@ function levelOf(className: string): number | null {
 function questionCount(t: BlueprintTemplate): number {
   return t.sections.reduce((acc, g) => acc + g.questionTypes.reduce((a, q) => a + (q.type === "MATCH_COLUMN" ? 1 : q.count), 0), 0);
 }
+
+/** "MCQ, fill in the blanks, short answer": the kinds of question a pattern asks, in order. */
+function questionKinds(t: BlueprintTemplate): string {
+  const seen: string[] = [];
+  for (const g of t.sections) for (const q of g.questionTypes) {
+    const label = QUESTION_TYPE_LABEL[q.type] ?? q.type;
+    if (!seen.includes(label)) seen.push(label);
+  }
+  return seen.join(", ");
+}
+
+const inRange = (p: BlueprintPreset, level: number | null) => level !== null && level >= p.classFrom && level <= p.classTo;
 
 /**
  * First step of a new blueprint: which class and subject it is for, and how to start. The classes and subjects
@@ -71,14 +85,22 @@ export function BlueprintStartPicker({
   const [subject, setSubject] = useState<string>(initialSubject ?? "");
   const activeSubject = subjects.find((s) => isSubjectMatching(s, subject)) ?? "";
 
+  const presets = usePresets("BLUEPRINT");
   const patterns = useMemo(
     () =>
-      level === null || !activeSubject
+      !activeSubject
         ? []
-        : MPBSE_BLUEPRINT_TEMPLATES.filter((t) => t.classLevel === level && isSubjectMatching(t.subjectName, activeSubject)),
-    [level, activeSubject],
+        : presets.filter((t) => !isSchoolPattern(t) && inRange(t, level) && isSubjectMatching(t.subjectName, activeSubject)),
+    [presets, level, activeSubject],
   );
-  const schoolPatterns = useMemo(() => (activeSubject ? schoolPatternsForLevel(level) : []), [level, activeSubject]);
+  // the school's own patterns: for every subject of these classes, or for the one subject they name
+  const schoolPatterns = useMemo(
+    () =>
+      !activeSubject
+        ? []
+        : presets.filter((t) => isSchoolPattern(t) && inRange(t, level) && (!t.subjectName || isSubjectMatching(t.subjectName, activeSubject))),
+    [presets, level, activeSubject],
+  );
   const hasBook = books.some((b) => b.className === className && isSubjectMatching(b.subject, activeSubject));
 
   return (
@@ -155,32 +177,7 @@ export function BlueprintStartPicker({
       {activeSubject && (
         <div className="space-y-2">
           <span className="label">Pattern</span>
-          {patterns.length === 0 && schoolPatterns.length > 0 ? (
-            <ul className="grid gap-3 md:grid-cols-2">
-              {schoolPatterns.map((t) => (
-                <li key={t.id} className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4">
-                  <div className="min-w-0">
-                    <p className="font-semibold text-slate-900">
-                      {className} {activeSubject}
-                    </p>
-                    <p className="mt-0.5 text-sm text-slate-600">
-                      {t.totalMarks} marks · {questionCount(t)} questions · MCQ, fill in the blanks, very short, short and long answers
-                    </p>
-                    <p className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-500">
-                      <ShieldCheck size={13} className="text-slate-400" />
-                      School pattern for {t.targetClasses}
-                      {hasBook ? "; chapter marks are spread over the book's chapters" : "; add the textbook under Books & syllabus first"}
-                    </p>
-                  </div>
-                  <div className="mt-auto flex flex-wrap gap-2">
-                    <button type="button" className="btn btn-primary" onClick={() => onUseSchoolPattern(t, { className, subject: activeSubject })}>
-                      Use school pattern
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : patterns.length === 0 ? (
+          {patterns.length === 0 && schoolPatterns.length === 0 ? (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4">
               <div className="min-w-0">
                 <p className="font-semibold text-slate-900">
@@ -196,38 +193,70 @@ export function BlueprintStartPicker({
               </button>
             </div>
           ) : (
-            <ul className="grid gap-3 md:grid-cols-2">
-              {patterns.map((t) => (
-                <li key={t.id} className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4">
-                  <div className="min-w-0">
-                    <p className="font-semibold text-slate-900">
-                      {className} {activeSubject}
-                      {t.variant ? ` – ${t.variant}` : ""}
-                    </p>
-                    <p className="mt-0.5 text-sm text-slate-600">
-                      {t.totalMarks} marks · {questionCount(t)} questions · {Math.round(t.durationMin / 60 * 10) / 10} hours
-                    </p>
-                    <p className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-500">
-                      <ShieldCheck size={13} className={t.source ? "text-emerald-600" : "text-slate-400"} />
-                      {t.source ? `MPBSE 2026–27 marks scheme, page ${t.source.pdfPage}` : "School-defined pattern (not an MPBSE paper)"}
-                    </p>
-                  </div>
-                  <div className="mt-auto flex flex-wrap gap-2">
-                    <button type="button" className="btn btn-primary" onClick={() => onUsePattern(t)}>
-                      Use board pattern
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-ghost border border-slate-200"
-                      onClick={() => onAdaptPattern(t)}
-                      title="Quarterly, half-yearly or pre-board: choose the chapters taught and the total marks"
-                    >
-                      Adapt for a school exam
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <div className="space-y-3">
+              {patterns.length > 0 && (
+              <ul className="grid gap-3 md:grid-cols-2">
+                {patterns.map((t) => (
+                  <li key={t.id} className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-slate-900">
+                        {className} {activeSubject}
+                        {t.variant ? ` – ${t.variant}` : ""}
+                      </p>
+                      <p className="mt-0.5 text-sm text-slate-600">
+                        {t.totalMarks} marks · {questionCount(t)} questions · {Math.round(t.durationMin / 60 * 10) / 10} hours
+                      </p>
+                      <p className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-500">
+                        <ShieldCheck size={13} className={t.source ? "text-emerald-600" : "text-slate-400"} />
+                        {t.source ? `MPBSE 2026–27 marks scheme, page ${t.source.pdfPage}` : "School-defined pattern (not an MPBSE paper)"}
+                      </p>
+                    </div>
+                    <div className="mt-auto flex flex-wrap gap-2">
+                      <button type="button" className="btn btn-primary" onClick={() => onUsePattern(t)}>
+                        Use board pattern
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost border border-slate-200"
+                        onClick={() => onAdaptPattern(t)}
+                        title="Quarterly, half-yearly or pre-board: choose the chapters taught and the total marks"
+                      >
+                        Adapt for a school exam
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              )}
+              {schoolPatterns.length > 0 && (
+              <ul className="grid gap-3 md:grid-cols-2">
+                {schoolPatterns.map((t) => (
+                  <li key={t.id} className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-slate-900">
+                        {className} {activeSubject}
+                      </p>
+                      <p className="mt-0.5 text-sm text-slate-600">
+                        {t.title}
+                      {t.title.includes(`${t.totalMarks} marks`) ? "" : ` · ${t.totalMarks} marks`} · {questionCount(t)} questions
+                      </p>
+                      <p className="mt-0.5 text-xs text-slate-500">{questionKinds(t)}</p>
+                      <p className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-500">
+                        <ShieldCheck size={13} className="text-slate-400" />
+                        {t.subjectName ? `School pattern for ${t.targetClasses} ${t.subjectName}` : `School pattern for ${t.targetClasses}`}
+                        {hasBook ? "; chapter marks are spread over the book's chapters" : "; add the textbook under Books & syllabus first"}
+                      </p>
+                    </div>
+                    <div className="mt-auto flex flex-wrap gap-2">
+                      <button type="button" className="btn btn-primary" onClick={() => onUseSchoolPattern(t, { className, subject: activeSubject })}>
+                        Use school pattern
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              )}
+            </div>
           )}
         </div>
       )}

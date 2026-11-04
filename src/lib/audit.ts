@@ -40,6 +40,12 @@ export type AuditAction =
   | "PAPER_SNAPSHOT_DELETE"
   | "QUESTION_BULK_UPDATE"
   | "PAPERS_EXPORT_ZIP"
+  | "PRESET_CREATE"
+  | "PRESET_UPDATE"
+  | "PRESET_HIDE"
+  | "PRESET_SHOW"
+  | "PRESET_RESTORE"
+  | "PRESET_DELETE"
   /** A change made through any other route; details hold the method and path. */
   | "API_CHANGE";
 
@@ -58,6 +64,7 @@ export type AuditEntityType =
   | "AI"
   | "UPLOAD"
   | "CURRICULUM"
+  | "PRESET"
   | "SYSTEM";
 
 export async function recordAudit(
