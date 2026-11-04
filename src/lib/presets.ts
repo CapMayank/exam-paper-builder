@@ -5,7 +5,8 @@
  */
 import { z } from "zod";
 import { QUESTION_TYPES } from "./constants";
-import { STANDARD_CURRICULUM_PRESETS as RAW_SYLLABUS_PRESETS } from "./curriculumPresets";
+import { STANDARD_CURRICULUM_PRESETS as SHIPPED_SYLLABUS_PRESETS } from "./curriculumPresets";
+import { englishPresets } from "./englishTitles";
 import { MPBSE_BLUEPRINT_TEMPLATES, type BlueprintTemplate } from "./curriculumTemplates";
 import { SCHOOL_PATTERNS } from "./schoolPatterns";
 import { ensureLanguageNonChapterUnits, type StandardCurriculumPreset } from "./syllabusImport";
@@ -45,6 +46,8 @@ export const isCustomId = (id: string) => id.startsWith(CUSTOM_PREFIX);
 
 /** "School" and school-made patterns follow the school's own exam rules, not an MPBSE marks scheme. */
 export const isSchoolPattern = (t: Pick<BlueprintTemplate, "archetype">) => t.archetype === "SCHOOL" || t.archetype === "CUSTOM";
+
+const RAW_SYLLABUS_PRESETS = englishPresets(SHIPPED_SYLLABUS_PRESETS);
 
 export function builtInSyllabusPresets(): StandardCurriculumPreset[] {
   return RAW_SYLLABUS_PRESETS;

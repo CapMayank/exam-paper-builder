@@ -1,5 +1,6 @@
 import { PrismaClient, Prisma } from "@prisma/client";
 import { prisma as defaultPrisma } from "@/lib/prisma";
+import { englishTitle, isLanguageSubjectName } from "@/lib/englishTitles";
 import {
   consolidateCurriculumBooks,
   normalizeBookSessions,
@@ -929,6 +930,57 @@ export async function seedCurriculumData(client?: PrismaClient): Promise<{
   };
 }
 
+/**
+ * Books and chapters of every subject except Hindi and Sanskrit are named in English. Renames the ones already
+ * stored in the old bilingual / Hindi form; a title with nothing to change is left alone, so running it again
+ * (or on a school's own chapter titles) does nothing.
+ */
+export async function anglicizeStoredTitles(prisma: PrismaClient): Promise<number> {
+  let changed = 0;
+  const hasDevanagari = (t: string) => /[ऀ-ॿ]/.test(t);
+
+  const books = await prisma.book.findMany({ select: { id: true, title: true, subject: true, chapters: { select: { id: true, title: true } } } });
+  for (const b of books) {
+    if (isLanguageSubjectName(b.subject)) continue;
+    if (hasDevanagari(b.title)) {
+      const next = englishTitle(b.title);
+      if (next !== b.title) {
+        await prisma.book.update({ where: { id: b.id }, data: { title: next } });
+        changed++;
+      }
+    }
+    for (const c of b.chapters) {
+      if (!hasDevanagari(c.title)) continue;
+      const next = englishTitle(c.title);
+      if (next !== c.title) {
+        await prisma.chapter.update({ where: { id: c.id }, data: { title: next } });
+        changed++;
+      }
+    }
+  }
+
+  const textbooks = await prisma.curriculumTextbook.findMany({
+    select: { id: true, title: true, subject: { select: { name: true } }, chapters: { select: { id: true, title: true } } },
+  });
+  for (const t of textbooks) {
+    if (isLanguageSubjectName(t.subject.name)) continue;
+    const nextBook = hasDevanagari(t.title) ? englishTitle(t.title) : t.title;
+    if (nextBook !== t.title) {
+      await prisma.curriculumTextbook.update({ where: { id: t.id }, data: { title: nextBook } });
+      changed++;
+    }
+    for (const c of t.chapters) {
+      if (!hasDevanagari(c.title)) continue;
+      const next = englishTitle(c.title);
+      if (next !== c.title) {
+        await prisma.curriculumChapter.update({ where: { id: c.id }, data: { title: next } });
+        changed++;
+      }
+    }
+  }
+  return changed;
+}
+
 /** Changes whenever the seeded subjects, chapters or marks change, so stored curriculum is refreshed. */
 export function curriculumSeedSignature(): string {
   const text = JSON.stringify(SUBJECTS_SEED) + JSON.stringify(MPBSE_BLUEPRINT_TEMPLATES.map((t) => [t.templateCode, t.totalMarks]));
@@ -962,6 +1014,10 @@ export async function ensureCurriculumSeeded(
     const prisma = client || defaultPrisma;
     try {
       const templateCount = await prisma.curriculumBlueprintTemplate.count();
+
+      // English names first, so the seed below finds the textbooks and chapters it expects
+      const renamed = await anglicizeStoredTitles(prisma);
+      if (renamed > 0) console.log(`🔤 [CurriculumInit] Renamed ${renamed} book / chapter titles to English.`);
 
       // keep stored system templates in step with the verified static templates (idempotent, cheap)
       await syncBlueprintTemplates(prisma);

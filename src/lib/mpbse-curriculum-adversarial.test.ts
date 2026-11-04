@@ -96,19 +96,19 @@ describe("Adversarial Empirical Challenge: Milestone 1 Schema & Seed Integrity",
     // Class 10 deleted chapters
     const c10Deleted = deletedChapters.filter((c) => c.textbook.subject.curriculumClass.classLevel === 10);
     const c10Titles = c10Deleted.map((c) => c.title);
-    expect(c10Titles.some((t) => t.includes("रचनाएँ"))).toBe(true);
-    expect(c10Titles.some((t) => t.includes("तत्वों का आवर्त वर्गीकरण"))).toBe(true);
-    expect(c10Titles.some((t) => t.includes("ऊर्जा के स्रोत"))).toBe(true);
-    expect(c10Titles.some((t) => t.includes("प्राकृतिक संसाधनों का संपोषित प्रबंधन"))).toBe(true);
+    expect(c10Titles.some((t) => t.includes("Constructions"))).toBe(true);
+    expect(c10Titles.some((t) => t.includes("Periodic Classification of Elements"))).toBe(true);
+    expect(c10Titles.some((t) => t.includes("Sources of Energy"))).toBe(true);
+    expect(c10Titles.some((t) => t.includes("Sustainable Management of Natural Resources"))).toBe(true);
 
     // Class 12 Chemistry deleted chapters
     const c12Chem = deletedChapters.filter(
       (c) => c.textbook.subject.curriculumClass.classLevel === 12 && c.textbook.subject.code === "220"
     );
     const c12ChemTitles = c12Chem.map((c) => c.title);
-    expect(c12ChemTitles.some((t) => t.includes("ठोस अवस्था"))).toBe(true);
-    expect(c12ChemTitles.some((t) => t.includes("पृष्ठ रसायन"))).toBe(true);
-    expect(c12ChemTitles.some((t) => t.includes("बहुलक"))).toBe(true);
+    expect(c12ChemTitles.some((t) => t.includes("Solid State"))).toBe(true);
+    expect(c12ChemTitles.some((t) => t.includes("Surface Chemistry"))).toBe(true);
+    expect(c12ChemTitles.some((t) => t.includes("Polymers"))).toBe(true);
   });
 
   // ---------------------------------------------------------------------------

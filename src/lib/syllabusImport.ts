@@ -294,7 +294,10 @@ export function ensureLanguageNonChapterUnits(
   };
 }
 
-import { STANDARD_CURRICULUM_PRESETS as RAW_CURRICULUM_PRESETS } from "./curriculumPresets";
+import { STANDARD_CURRICULUM_PRESETS as SHIPPED_CURRICULUM_PRESETS } from "./curriculumPresets";
+import { englishPresets } from "./englishTitles";
+
+const RAW_CURRICULUM_PRESETS = englishPresets(SHIPPED_CURRICULUM_PRESETS);
 
 /**
  * Standard curriculum presets enriched with non-chapter exam components (Reading, Writing, Grammar)

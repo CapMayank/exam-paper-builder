@@ -220,14 +220,14 @@ describe("MPBSE Curriculum Schema & Seed Data Integrity Suite (Milestone 1)", ()
 
     const deletedTitles = deletedChapters.map((c) => c.title);
     // Class 10 deleted chapters
-    expect(deletedTitles.some((t) => t.includes("रचनाएँ"))).toBe(true);
-    expect(deletedTitles.some((t) => t.includes("तत्वों का आवर्त वर्गीकरण"))).toBe(true);
-    expect(deletedTitles.some((t) => t.includes("ऊर्जा के स्रोत"))).toBe(true);
+    expect(deletedTitles.some((t) => t.includes("Constructions"))).toBe(true);
+    expect(deletedTitles.some((t) => t.includes("Periodic Classification of Elements"))).toBe(true);
+    expect(deletedTitles.some((t) => t.includes("Sources of Energy"))).toBe(true);
 
     // Class 11 & 12 deleted chapters
-    expect(deletedTitles.some((t) => t.includes("भौतिक जगत"))).toBe(true);
-    expect(deletedTitles.some((t) => t.includes("ठोस अवस्था"))).toBe(true);
-    expect(deletedTitles.some((t) => t.includes("पृष्ठ रसायन"))).toBe(true);
+    expect(deletedTitles.some((t) => t.includes("Physical World"))).toBe(true);
+    expect(deletedTitles.some((t) => t.includes("Solid State"))).toBe(true);
+    expect(deletedTitles.some((t) => t.includes("Surface Chemistry"))).toBe(true);
   });
 
   it("8. Textbooks and Chapters are properly linked to legacy Book and Chapter records", async () => {
@@ -416,7 +416,7 @@ describe("MPBSE Curriculum Schema & Seed Data Integrity Suite (Milestone 1)", ()
 
     // Chapters (71) plus the map row (4) now account for all 75 marks
     expect(activeChaptersSum).toBe(75);
-    const mapChapter = activeChapters.find((ch) => ch.title.includes("मानचित्र"));
+    const mapChapter = activeChapters.find((ch) => ch.title.includes("Map Work"));
     expect(mapChapter?.officialMarks).toBe(4);
     const reservedMapMarks = 0;
 
@@ -424,9 +424,9 @@ describe("MPBSE Curriculum Schema & Seed Data Integrity Suite (Milestone 1)", ()
     expect(activeChaptersSum + reservedMapMarks).toBe(c9Soc!.theoryMarks);
 
     // Verify textbook-wise disciplinary breakdown
-    const geography = c9Soc!.textbooks.find((tb) => tb.title.includes("समकालीन भारत") || tb.title.includes("Geography"));
-    const history = c9Soc!.textbooks.find((tb) => tb.title.includes("भारत और समकालीन विश्व") || tb.title.includes("History"));
-    const polSci = c9Soc!.textbooks.find((tb) => tb.title.includes("लोकतांत्रिक राजनीति") || tb.title.includes("Political"));
+    const geography = c9Soc!.textbooks.find((tb) => tb.title.includes("Geography"));
+    const history = c9Soc!.textbooks.find((tb) => tb.title.includes("History"));
+    const polSci = c9Soc!.textbooks.find((tb) => tb.title.includes("Political"));
     const economics = c9Soc!.textbooks.find((tb) => tb.title.includes("अर्थशास्त्र") || tb.title.includes("Economics"));
 
     expect(geography).toBeDefined();

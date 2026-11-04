@@ -25,7 +25,7 @@ describe("STANDARD_CURRICULUM_PRESETS", () => {
     expect(cbse10Science).toBeDefined();
     expect(cbse10Science?.chapters.length).toBe(13);
     expect(cbse10Science?.chapters[0].title).toContain("Chemical Reactions and Equations");
-    expect(cbse10Science?.chapters[0].title).toContain("रासायनिक अभिक्रियाएँ");
+    expect(cbse10Science?.chapters[0].title).toBe("Chemical Reactions and Equations");
 
     const cbse10Maths = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "cbse-10-maths");
     expect(cbse10Maths).toBeDefined();

@@ -53,7 +53,7 @@ describe("seeded curriculum for the school's subjects matches the 2026-27 scheme
     for (const s of seeds.filter((x) => canon(x.name) === "Social Science")) {
       const seedSum = active(s).reduce((a, c) => a + (c.officialMarks ?? 0), 0);
       expect(seedSum).toBe(75);
-      expect(active(s).some((c) => c.title.includes("मानचित्र")), `${s.classLevel} map`).toBe(true);
+      expect(active(s).some((c) => c.title.includes("Map Work")), `${s.classLevel} map`).toBe(true);
     }
   });
 
