@@ -892,6 +892,11 @@ export const SESSION_SLOT_LABEL: Record<SessionSlot, string> = {
   AFTERNOON: "Afternoon (14:00 – 17:00)",
 };
 
+/** School exam time: 3 hours for Classes 9–12, 2½ hours for Nursery to Class 8. */
+export function defaultExamDurationMin(className?: string | null): number {
+  return className && inferClassOrder(className) >= 9 ? 180 : 150;
+}
+
 export function inferClassOrder(name: string): number {
   const lower = name.trim().toLowerCase();
   if (lower.includes("playgroup") || lower.includes("pre-nursery") || lower.includes("prenursery")) return -3;

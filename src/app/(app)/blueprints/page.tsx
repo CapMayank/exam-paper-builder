@@ -13,6 +13,7 @@ import {
   Layers,
   Pencil,
   Plus,
+  Printer,
   RotateCcw,
   Ruler,
   Search,
@@ -26,6 +27,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AcademicRolloverModal } from "@/components/AcademicRolloverModal";
 import { AIBlueprintModal } from "@/components/AIBlueprintModal";
 import { BlueprintJsonModal } from "@/components/BlueprintJsonModal";
+import { BlueprintExportModal } from "@/components/BlueprintExportModal";
 import { BlueprintTemplateModal } from "@/components/BlueprintTemplateModal";
 import {
   EmptyState,
@@ -88,6 +90,7 @@ export default function BlueprintsPage() {
   const [aiBlueprintOpen, setAiBlueprintOpen] = useState(false);
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [jsonModalBlueprint, setJsonModalBlueprint] = useState<Blueprint | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState<"directory" | "details">("directory");
 
   // Quick Paper Build Modal
@@ -312,6 +315,14 @@ export default function BlueprintsPage() {
         description={`Exam blueprints define marks, section formats, and chapter allocations for each subject in Session ${activeSession}.`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setExportOpen(true)}
+              className="btn btn-ghost border border-slate-200 bg-white text-slate-800 hover:bg-slate-50 text-xs py-1.5"
+              title="Print or save the blueprints of an exam for students, class by class"
+            >
+              <Printer size={15} className="text-slate-600" /> Export blueprints
+            </button>
             {canCreate && (
             <Link
               href="/blueprints/new?import=true&tab=ai"
@@ -867,6 +878,8 @@ export default function BlueprintsPage() {
       )}
 
       {/* Unified Academic Rollover Modal */}
+      {exportOpen && <BlueprintExportModal blueprints={sessionItems} session={activeSession} onClose={() => setExportOpen(false)} />}
+
       {rolloverOpen && (
         <AcademicRolloverModal
           currentSession={currentSession}

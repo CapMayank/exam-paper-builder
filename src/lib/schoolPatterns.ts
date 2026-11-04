@@ -32,7 +32,7 @@ function schoolPattern(range: [number, number], totalMarks: number, longCount: n
 }
 
 export const SCHOOL_PATTERNS: Array<{ levels: [number, number]; template: BlueprintTemplate }> = [
-  { levels: [1, 4], template: schoolPattern([1, 4], 50, 2, 120) },
+  { levels: [1, 4], template: schoolPattern([1, 4], 50, 2, 150) },
   { levels: [5, 8], template: schoolPattern([5, 8], 60, 4, 150) },
 ];
 

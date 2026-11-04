@@ -1,6 +1,6 @@
 import "server-only";
 import { HttpError, type SessionUser } from "./api";
-import { WORKSHEET_MODE, type ExamType } from "./constants";
+import { defaultExamDurationMin, WORKSHEET_MODE, type ExamType } from "./constants";
 import { assertCanModifyPaper, loadPaperView } from "./papers";
 import { prisma } from "./prisma";
 
@@ -50,7 +50,7 @@ export async function createWorksheet(user: SessionUser, input: WorksheetInput) 
       bookId: book.id,
       academicSession: input.academicSession,
       examType: input.examType,
-      durationMin: 45,
+      durationMin: defaultExamDurationMin(input.className),
       language: input.language,
       curriculumMode: WORKSHEET_MODE,
     },

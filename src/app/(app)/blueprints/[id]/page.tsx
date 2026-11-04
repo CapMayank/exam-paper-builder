@@ -32,7 +32,7 @@ import {
 } from "@/lib/internalChoiceRules";
 import { canManageScope, hasAnyWriteScope, type Actor } from "@/lib/permissions";
 import { api } from "@/lib/client";
-import { DEFAULT_SCHOOL_NAME, EXAM_TYPES, EXAM_TYPE_LABEL, KINDERGARTEN_QUESTION_TYPES, QUESTION_TYPES, QUESTION_TYPE_LABEL, STANDARD_QUESTION_TYPES, defaultLayoutForClass, sortClassNames } from "@/lib/constants";
+import { DEFAULT_SCHOOL_NAME, EXAM_TYPES, EXAM_TYPE_LABEL, KINDERGARTEN_QUESTION_TYPES, QUESTION_TYPES, QUESTION_TYPE_LABEL, STANDARD_QUESTION_TYPES, defaultExamDurationMin, defaultLayoutForClass, sortClassNames } from "@/lib/constants";
 import { BlueprintStartPicker } from "@/components/blueprints/BlueprintStartPicker";
 import { isSubjectMatching } from "@/lib/schoolCurriculum";
 import { distributeSlotMarks, slotMarksOf } from "@/lib/schoolPatterns";
@@ -524,6 +524,7 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
       setSelectedSubjectFilter(wanted);
       setBookId(first?.id ?? "");
       setName(`${pick.className} ${wanted} – Blueprint`.trim());
+      setDurationMin(defaultExamDurationMin(pick.className));
       const cls = classes.find((c) => c.name === pick.className);
       const sub = cls?.subjects.find((s) => isSubjectMatching(s.name, wanted));
       if (sub?.code) setSubjectCode(sub.code);
