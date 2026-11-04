@@ -7,6 +7,7 @@ import {
   matchQuestionToBlueprintSection,
   normalizeQuestionType,
   resolveQuestionChapter,
+  subpartsColumn,
   type PaperImportData,
 } from "@/lib/paperImport";
 
@@ -131,7 +132,7 @@ export const POST = route(async (req, { id }, user) => {
             type: orType,
             text: q.orQuestion.text.trim(),
             optionsJson: JSON.stringify(q.orQuestion.options ?? []),
-            subpartsJson: JSON.stringify(q.orQuestion.subparts ?? []),
+            subpartsJson: subpartsColumn(q.orQuestion.subparts, q.orQuestion.attemptCount),
             answer: q.orQuestion.answer?.trim() || "",
             difficulty: q.orQuestion.difficulty || "MEDIUM",
             createdById: user.id,
@@ -154,7 +155,7 @@ export const POST = route(async (req, { id }, user) => {
           type: finalType,
           text: q.text.trim(),
           optionsJson: JSON.stringify(q.options ?? []),
-          subpartsJson: JSON.stringify(q.subparts ?? []),
+          subpartsJson: subpartsColumn(q.subparts, q.attemptCount),
           answer: q.answer?.trim() || "",
           difficulty: q.difficulty || "MEDIUM",
           createdById: user.id,

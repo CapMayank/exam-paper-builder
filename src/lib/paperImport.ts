@@ -24,6 +24,8 @@ export interface ImportedPaperQuestion {
   difficulty?: "EASY" | "MEDIUM" | "HARD";
   options?: string[]; // For MCQs
   answer?: string; // Model answer / solution key
+  /** "Answer any N of the subparts": only N of them are attempted. */
+  attemptCount?: number;
   orQuestion?: {
     text: string;
     type?: string;
@@ -33,9 +35,21 @@ export interface ImportedPaperQuestion {
     difficulty?: "EASY" | "MEDIUM" | "HARD";
     options?: string[];
     answer?: string;
+    attemptCount?: number;
     subparts?: ImportedPaperSubpart[];
   };
   subparts?: ImportedPaperSubpart[];
+}
+
+/** What a question's `subpartsJson` column holds: the plain list, or { attemptCount, subparts } for "any N of". */
+export function subpartsColumn(subparts: ImportedPaperSubpart[] | undefined, attemptCount: number | undefined): string {
+  const list = subparts ?? [];
+  return JSON.stringify(attemptCount && attemptCount > 0 && attemptCount <= list.length && list.length > 1 ? { attemptCount, subparts: list } : list);
+}
+
+function importedAttemptCount(raw: unknown): number | undefined {
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : undefined;
 }
 
 export interface ImportedPaperSection {
@@ -486,6 +500,7 @@ export function parsePaperJson(jsonStr: string): PaperImportResult {
             difficulty: orObj.difficulty === undefined ? difficulty : importedDifficulty(orObj.difficulty),
             options: Array.isArray(orObj.options) ? orObj.options.map((opt) => String(opt).trim()) : undefined,
             answer: typeof orObj.answer === "string" ? orObj.answer.trim() : undefined,
+            attemptCount: importedAttemptCount(orObj.attemptCount),
             subparts: Array.isArray(orObj.subparts)
               ? orObj.subparts.map((sp: Record<string, unknown>, spIdx: number) => ({
                   label: typeof sp.label === "string" && sp.label.trim() ? sp.label.trim() : `(${spIdx + 1})`,
@@ -525,6 +540,7 @@ export function parsePaperJson(jsonStr: string): PaperImportResult {
         difficulty,
         options,
         answer,
+        attemptCount: importedAttemptCount(q.attemptCount),
         orQuestion,
         subparts,
       });

@@ -9,6 +9,9 @@ const DEVANAGARI_CONSONANTS = [
 
 const DEVANAGARI_DIGITS = ["१", "२", "३", "४", "५", "६", "७", "८", "९", "१०"];
 
+/** (1), (2), (3)... as written for lists of features, items or tasks (e.g. map work: "locate any four of the following"). */
+const LATIN_DIGITS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
+
 const LATIN_LOWER = [
   "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t"
 ];
@@ -239,6 +242,11 @@ export function decomposeStemSubparts(
     matches = findSequenceMatches(text, DEVANAGARI_DIGITS, (item) => new RegExp(`(?:^|\\s|[\\n।.:\\-])(\\(${item}\\)|${item}\\.)(?=\\s|$)`, "g"));
   }
 
+  // 5. Try Latin digits in brackets: (1), (2), (3)... Only the bracketed form: a bare "1." is a decimal or a sentence number.
+  if (!matches) {
+    matches = findSequenceMatches(text, LATIN_DIGITS, (item) => new RegExp(`(?:^|\\s|[\\n।.:\\-])(\\(${item}\\))(?=\\s|$)`, "g"));
+  }
+
   if (!matches || matches.length < 2) {
     return null;
   }
@@ -255,7 +263,11 @@ export function decomposeStemSubparts(
     const curr = matches[i];
     const startPos = curr.index + curr.length;
     const endPos = i + 1 < matches.length ? matches[i + 1].index : text.length;
-    const itemText = text.slice(startPos, endPos).trim();
+    let itemText = text.slice(startPos, endPos).trim();
+    // items run together in a sentence ("(1) a river, (2) a plateau, and (3) a state"): drop the joining punctuation
+    if (i + 1 < matches.length) {
+      itemText = itemText.replace(/[,;]?\s+(?:and|or)\s*$/i, "").replace(/[,;]\s*$/, "").trim();
+    }
 
     if (!itemText) {
       // Empty subpart content indicates false match

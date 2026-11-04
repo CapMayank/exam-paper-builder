@@ -65,7 +65,7 @@ function typeFormat(type: string): string {
     case "REFERENCE_CONTEXT":
       return 'REFERENCE_CONTEXT: "text" holds the exact extract from the prescribed lesson/poem and the instruction; "subparts" (if the marks are split) hold the sub-questions.';
     default:
-      return `${type}: "options" is []. Phrase the question so the expected length matches the marks; when points are wanted, say how many (e.g. "Give any three reasons").`;
+      return `${type}: "options" is []. Phrase the question so the expected length matches the marks; when points are wanted, say how many (e.g. "Give any three reasons"). When the question lists several items to do (features to locate on a map, parts to label, tasks (i), (ii), (iii)), keep only the instruction in "text" and give each item as its own entry in "subparts" ({"label": "(i)", "text": "...", "marks": 1}); never run them together in one paragraph or number them "(1)", "(2)" inside "text". If only some are to be attempted ("any four of the following"), list one more than needed and set "attemptCount" on the question.`;
   }
 }
 

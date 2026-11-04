@@ -182,7 +182,7 @@ export function slotTaskDirective(role: ChapterRole, rowTitle: string, type: str
     case "WRITING":
       return `Writing task on "${rowTitle}": set one realistic task in the paper's language (for a letter/application: who writes to whom and why; for an essay/paragraph: the topic with 3-4 guiding points). Do not ask about a textbook lesson. The answer is a complete model response in the correct format, followed by the marking scheme (format, content, expression) adding up to ${marks} marks.`;
     case "MAP":
-      return `Map work: ask the student to locate and mark ${marks} specific places/features from "${rowTitle}" on an outline map of India; the answer lists each item and where it lies.`;
+      return `Map work: ask the student to locate and mark specific places/features from "${rowTitle}" on an outline map of India. Keep only the instruction in "text" (e.g. "On the outline political map of India provided, locate and label any four of the following:") and put each feature in "subparts" as its own item, labelled (i), (ii), (iii)... with a short noun phrase as the text (e.g. "The river that forms the Sunderbans delta"). Offer one more feature than must be attempted and set "attemptCount" to the number required, so the marks (${marks}) are 1 per attempted feature. Never run the features together in one paragraph. The answer says where each feature lies.`;
     default:
       return `Textbook-based: the question must come from the lesson "${rowTitle}" (its content, characters, ideas or language), not from grammar drills or unseen passages.`;
   }

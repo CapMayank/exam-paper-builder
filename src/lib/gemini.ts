@@ -1468,7 +1468,7 @@ SUBPARTS RULE:
 ${
   isSubpartQuestionType(normalizedType)
     ? `- Every ${normalizedType} item MUST include graded "subparts" whose marks sum to ${marksEach}.`
-    : `- If a question comprises multiple distinct sentences, tasks, or sub-questions (e.g. 'Correct the following sentences', 'Solve (a) and (b)', grammar drills, translation items), you MUST output them in the "subparts" array with label, text, and marks. NEVER inline labels like (क), (ख) or (a), (b) into the main question text.
+    : `- If a question comprises multiple distinct sentences, tasks, or sub-questions (e.g. 'Correct the following sentences', 'Solve (a) and (b)', grammar drills, translation items), you MUST output them in the "subparts" array with label, text, and marks. NEVER inline labels like (क), (ख), (a), (b) or (1), (2) into the main question text; a list of features, places or items to locate, label or name (e.g. map work: "locate and label any four of the following") is one subpart per item, the stem holding only the instruction.
 - If there is an internal choice across subparts (e.g. 'Answer any 4 of 5'), include all 5 in "subparts" (1 mark each) and specify "attemptCount": 4.
 - If the question is a unified single narrative/essay without sub-items, set "subparts": [].`
 }

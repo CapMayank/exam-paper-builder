@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildExternalPaperPrompt } from "./externalPaperPrompt";
 import { planPaperWithComponents, type PaperAutogenInput } from "./paperAutogen";
-import { extractPaperJsonFromReply, parsePaperImport } from "./paperImport";
+import { extractPaperJsonFromReply, parsePaperImport, subpartsColumn } from "./paperImport";
 
 const paper: PaperAutogenInput = {
   id: "p1",
@@ -103,5 +103,30 @@ describe("pasting a chat AI's reply", () => {
 
   it("leaves plain text papers to the text parser", () => {
     expect(extractPaperJsonFromReply("Section A\n1. What is matter?")).toBeNull();
+  });
+});
+
+describe("map work and 'any N of' lists", () => {
+  it("tells the other AI to give each feature as its own subpart", () => {
+    const plan = planPaperWithComponents({
+      ...paper,
+      blueprint: { ...paper.blueprint, sections: [{ id: "sL", title: "Section L", type: "LONG", count: 1, marksEach: 4 }] },
+    });
+    const { prompt } = buildExternalPaperPrompt({ plan });
+    expect(prompt).toMatch(/give each item as its own entry in "subparts"/);
+    expect(prompt).toMatch(/set "attemptCount"/);
+  });
+
+  it("keeps attemptCount from a pasted reply and stores it with the subparts", () => {
+    const reply = JSON.stringify({
+      title: "T",
+      sections: [{ title: "S", questions: [{ text: "Locate any two:", type: "LONG", marks: 2, attemptCount: 2, subparts: [
+        { label: "(i)", text: "A", marks: 1 }, { label: "(ii)", text: "B", marks: 1 }, { label: "(iii)", text: "C", marks: 1 },
+      ] }] }],
+    });
+    const q = parsePaperImport(reply).paper.sections[0].questions[0];
+    expect(q.attemptCount).toBe(2);
+    expect(JSON.parse(subpartsColumn(q.subparts, q.attemptCount))).toMatchObject({ attemptCount: 2 });
+    expect(JSON.parse(subpartsColumn(q.subparts, undefined))).toHaveLength(3);
   });
 });

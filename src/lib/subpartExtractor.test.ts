@@ -109,3 +109,32 @@ describe("subpartExtractor", () => {
     });
   });
 });
+
+describe("subpartExtractor: features listed as (1), (2), (3)", () => {
+  // map work as the AI wrote it: every feature run together in one paragraph
+  const mapText =
+    "On the outline political map of India provided, locate and label any four of the following geographical features with appropriate symbols: (1) The standard meridian of India, (2) The mountain range forming the watershed between the Narmada and Tapti rivers, (3) The state having the highest population density according to the 2011 Census, (4) The river that forms the Sunderbans delta, (5) The southernmost tip of the Indian mainland.";
+
+  it("splits a map-work question into the instruction and one subpart per feature", () => {
+    const res = decomposeStemSubparts(mapText);
+    expect(res).not.toBeNull();
+    expect(res!.stem).toBe("On the outline political map of India provided, locate and label any four of the following geographical features with appropriate symbols:");
+    expect(res!.attemptCount).toBe(4);
+    expect(res!.subparts.map((s) => s.label)).toEqual(["(1)", "(2)", "(3)", "(4)", "(5)"]);
+    expect(res!.subparts[0].text).toBe("The standard meridian of India");
+    expect(res!.subparts[3].text).toBe("The river that forms the Sunderbans delta");
+    // the joining commas are not part of the items
+    expect(res!.subparts.every((s) => !/[,;]$/.test(s.text))).toBe(true);
+  });
+
+  it("handles items joined with 'and' before the last one", () => {
+    const res = decomposeStemSubparts("Locate on the map: (1) the Western Ghats, (2) the river Godavari, and (3) Chilika Lake.");
+    expect(res!.subparts.map((s) => s.text)).toEqual(["the Western Ghats", "the river Godavari", "Chilika Lake."]);
+  });
+
+  it("does not split a single (1), a skipped sequence, or numbers inside sentences", () => {
+    expect(decomposeStemSubparts("Explain the process in step (1) only.")).toBeNull();
+    expect(decomposeStemSubparts("State the law (1) and the exception (3).")).toBeNull();
+    expect(decomposeStemSubparts("Solve $f(1) + f(2)$ given $f(x) = 2x$.")).toBeNull();
+  });
+});
