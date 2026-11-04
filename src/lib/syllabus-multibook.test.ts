@@ -36,11 +36,11 @@ describe("Multi-Book & Granular Syllabus System", () => {
 
   it("covers primary, middle, and senior classes (Classes 1 to 12)", () => {
     // Classes 1-5
-    const class1Math = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "cbse-1-maths");
+    const class1Math = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "mp-1-maths");
     expect(class1Math).toBeDefined();
     expect(class1Math?.className).toBe("Class 1");
 
-    const class3Evs = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "cbse-3-evs");
+    const class3Evs = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === "mp-3-evs");
     expect(class3Evs).toBeDefined();
     expect(class3Evs?.className).toBe("Class 3");
 
