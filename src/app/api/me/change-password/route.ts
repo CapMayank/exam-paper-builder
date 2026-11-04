@@ -3,6 +3,7 @@ import { body, HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { changePasswordSchema } from "@/lib/schemas";
+import { startSession } from "@/lib/session";
 
 export const POST = route(async (req, _params, sessionUser) => {
   const input = await body(req, changePasswordSchema);
@@ -26,10 +27,13 @@ export const POST = route(async (req, _params, sessionUser) => {
   }
 
   const passwordHash = await hash(input.newPassword, 10);
-  await prisma.user.update({
+  const updated = await prisma.user.update({
     where: { id: sessionUser.id },
-    data: { passwordHash },
+    data: { passwordHash, sessionVersion: { increment: 1 } },
+    select: { sessionVersion: true },
   });
+  // every other device is signed out; this browser gets a fresh session
+  await startSession(sessionUser.id, updated.sessionVersion);
 
   await recordAudit(sessionUser, "USER_PASSWORD_CHANGE", "USER", sessionUser.id, {
     email: user.email,

@@ -40,7 +40,7 @@ export const POST = route(
         name: input.name,
         email: input.email,
         passwordHash: await hash(input.password, 10),
-        role: "ADMIN",
+        role: "SUPER_ADMIN", // the first account owns the portal
       },
     });
     await startSession(user.id);

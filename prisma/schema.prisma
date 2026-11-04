@@ -14,9 +14,11 @@ model User {
   name           String
   email          String          @unique
   passwordHash   String
-  role           String          @default("TEACHER") // ADMIN | TEACHER | EXAM_CELL (legacy HOD reads as TEACHER)
+  role           String          @default("TEACHER") // SUPER_ADMIN | ADMIN | TEACHER | EXAM_CELL (legacy HOD reads as TEACHER)
   department     String          @default("") // legacy, unused: access is scoped by ClassAssignment
   active         Boolean         @default(true)
+  /// Raised on password reset, role change or deactivation; older session cookies stop working.
+  sessionVersion Int             @default(0)
   createdAt      DateTime        @default(now())
   questions      Question[]
   papers         Paper[]
@@ -255,12 +257,15 @@ model AuditLog {
   entityType  String   // PAPER, QUESTION, BLUEPRINT, USER, TIMETABLE, LOGISTICS
   entityId    String?
   detailsJson String   @default("{}")
+  ipAddress   String   @default("")
+  userAgent   String   @default("")
   createdAt   DateTime @default(now())
   user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([entityType, entityId])
   @@index([createdAt])
   @@index([userId])
+  @@index([action])
 }
 
 model ExamTimetableEntry {

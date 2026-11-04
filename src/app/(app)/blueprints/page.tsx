@@ -204,7 +204,7 @@ export default function BlueprintsPage() {
   const selectedTotalMarks = selected ? blueprintTotalMarks(selected.sections) : 0;
   const selectedTotalQuestions = selected ? selected.sections.reduce((sum, s) => sum + s.count, 0) : 0;
 
-  const isAdmin = currentUser?.role === "ADMIN";
+  const isAdmin = currentUser?.role === "ADMIN" || currentUser?.role === "SUPER_ADMIN";
   const canManageBlueprint = (bp: { book?: { className: string; subject: string } | null }) => canManageScope(currentUser, bp.book);
   const canCreate = hasAnyWriteScope(currentUser);
 

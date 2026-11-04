@@ -150,7 +150,7 @@ export default function PapersPage() {
   const canCreate = hasAnyWriteScope(currentUser);
 
   async function remove(p: PaperListItem) {
-    const isAdmin = currentUser?.role === "ADMIN";
+    const isAdmin = currentUser?.role === "ADMIN" || currentUser?.role === "SUPER_ADMIN";
 
     if (!isAdmin && p.status === "FINAL") {
       setError("Cannot delete a finalized paper. Only an Administrator can unlock or delete it.");

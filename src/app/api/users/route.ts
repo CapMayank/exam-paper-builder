@@ -13,7 +13,7 @@ export const GET = route(
     });
     return users.map(toUserDto);
   },
-  { roles: ["ADMIN"] },
+  { roles: ["SUPER_ADMIN"] },
 );
 
 export const POST = route(
@@ -49,5 +49,5 @@ export const POST = route(
 
     return toUserDto(created);
   },
-  { roles: ["ADMIN"] },
+  { roles: ["SUPER_ADMIN"] },
 );

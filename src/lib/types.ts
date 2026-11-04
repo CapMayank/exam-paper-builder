@@ -401,6 +401,10 @@ export type AuditLogEntry = {
   entityId: string | null;
   detailsJson: string;
   createdAt: string;
+  /** Super Admin only. */
+  ipAddress?: string;
+  userAgent?: string;
+  category?: string;
 };
 
 export type ExamTimetableItem = {

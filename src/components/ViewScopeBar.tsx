@@ -35,7 +35,7 @@ export function useViewScope(): [ViewScope, (next: Partial<ViewScope>) => void] 
 /** Admin only: reveal subjects outside the school's required set. Renders nothing for teachers. */
 export function ViewScopeBar({ role }: { role?: string }) {
   const [scope, setScope] = useViewScope();
-  if (role !== "ADMIN") return null;
+  if (role !== "ADMIN" && role !== "SUPER_ADMIN") return null;
   return (
     <button
       type="button"

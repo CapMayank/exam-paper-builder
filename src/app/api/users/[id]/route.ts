@@ -20,17 +20,14 @@ export const PATCH = route(
       throw new HttpError(404, "User not found");
     }
 
-    // Safety check: Prevent the logged-in admin from demoting or deactivating their own account if they are the only active ADMIN
-    if (existing.id === adminUser.id) {
-      if (input.active === false) {
-        throw new HttpError(400, "You cannot deactivate your own account");
-      }
-      if (input.role && input.role !== "ADMIN") {
-        const adminCount = await prisma.user.count({ where: { role: "ADMIN", active: true } });
-        if (adminCount <= 1) {
-          throw new HttpError(400, "Cannot remove the only active Administrator");
-        }
-      }
+    if (existing.id === adminUser.id && input.active === false) {
+      throw new HttpError(400, "You cannot deactivate your own account");
+    }
+    // The portal always keeps at least one active Super Admin, or nobody could manage access again.
+    const losesSuperAdmin =
+      existing.role === "SUPER_ADMIN" && existing.active && ((input.role && input.role !== "SUPER_ADMIN") || input.active === false);
+    if (losesSuperAdmin && (await prisma.user.count({ where: { role: "SUPER_ADMIN", active: true } })) <= 1) {
+      throw new HttpError(400, "Cannot remove the only active Super Administrator");
     }
 
     const dataToUpdate: Record<string, unknown> = {};
@@ -39,6 +36,14 @@ export const PATCH = route(
     if (input.active !== undefined) dataToUpdate.active = input.active;
     if (input.password !== undefined) {
       dataToUpdate.passwordHash = await hash(input.password, 10);
+    }
+    // a new password, a different role or a deactivated account signs that user out everywhere
+    if (
+      input.password !== undefined ||
+      (input.role !== undefined && input.role !== existing.role) ||
+      (input.active === false && existing.active)
+    ) {
+      dataToUpdate.sessionVersion = { increment: 1 };
     }
 
     // Only teachers hold class assignments; Admin and Exam Cell work school-wide.
@@ -88,7 +93,7 @@ export const PATCH = route(
 
     return toUserDto(updated);
   },
-  { roles: ["ADMIN"] },
+  { roles: ["SUPER_ADMIN"] },
 );
 
 export const DELETE = route(
@@ -108,10 +113,10 @@ export const DELETE = route(
       throw new HttpError(404, "User not found");
     }
 
-    if (existing.role === "ADMIN") {
-      const adminCount = await prisma.user.count({ where: { role: "ADMIN", active: true } });
-      if (adminCount <= 1) {
-        throw new HttpError(400, "Cannot delete the only active Administrator");
+    if (existing.role === "SUPER_ADMIN") {
+      const superAdmins = await prisma.user.count({ where: { role: "SUPER_ADMIN", active: true } });
+      if (superAdmins <= 1) {
+        throw new HttpError(400, "Cannot delete the only active Super Administrator");
       }
     }
 
@@ -142,5 +147,5 @@ export const DELETE = route(
 
     return { success: true, deletedId: targetUserId };
   },
-  { roles: ["ADMIN"] },
+  { roles: ["SUPER_ADMIN"] },
 );

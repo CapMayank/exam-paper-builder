@@ -139,7 +139,7 @@ export function UserProfileModal({
               {profile?.role && (
                 <span
                   className={`badge font-bold text-[10px] ${
-                    profile.role === "ADMIN"
+                    profile.role === "ADMIN" || profile.role === "SUPER_ADMIN"
                       ? "!bg-purple-100 !text-purple-800"
                       : profile.role === "EXAM_CELL"
                       ? "!bg-amber-100 !text-amber-800"

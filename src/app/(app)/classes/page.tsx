@@ -289,7 +289,7 @@ export default function ClassesHierarchyPage() {
     return counts;
   }, [selectedClass, sessionBooks, classSubjects]);
 
-  const isAdmin = currentUser?.role === "ADMIN";
+  const isAdmin = currentUser?.role === "ADMIN" || currentUser?.role === "SUPER_ADMIN";
   // Class In-charge may manage sections and subjects of their own class; creating, renaming and deleting classes stays with the Admin.
   const canEditSelected = Boolean(selectedClass) && canManageClassSettings(currentUser, selectedClass!.name);
 

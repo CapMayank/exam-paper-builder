@@ -43,6 +43,7 @@ import { POST as postTimetable } from "../app/api/exam-cell/timetable/route";
 // ---------------------------------------------------------------------------
 
 const admin: Actor = { id: "a", role: "ADMIN", assignments: [] };
+const superAdmin: Actor = { id: "sa", role: "SUPER_ADMIN", assignments: [] };
 const exam: Actor = { id: "e", role: "EXAM_CELL", assignments: [] };
 const inCharge: Actor = { id: "c", role: "TEACHER", assignments: [{ className: "Class 10", subject: "" }] };
 const mathsTeacher: Actor = { id: "m", role: "TEACHER", assignments: [{ className: "Class 10", subject: "Mathematics" }] };
@@ -112,11 +113,13 @@ describe("permission matrix (pure)", () => {
   });
 
   it("school-wide powers", () => {
-    for (const a of [inCharge, mathsTeacher, unassigned, exam]) {
+    // accounts, roles and class assignments belong to the Super Admin alone
+    for (const a of [admin, inCharge, mathsTeacher, unassigned, exam]) {
       expect(canManageUsers(a)).toBe(false);
       expect(canManageAiSettings(a)).toBe(false);
     }
-    expect(canManageUsers(admin)).toBe(true);
+    expect(canManageUsers(superAdmin)).toBe(true);
+    expect(canManageAiSettings(superAdmin)).toBe(true);
     expect(canManageTimetable(exam)).toBe(true);
     expect(canViewAudit(exam)).toBe(true);
     expect(canManageTimetable(inCharge)).toBe(false);
@@ -150,7 +153,7 @@ async function as<T>(userId: string, run: () => Promise<Response>): Promise<{ st
 }
 
 describe("permission matrix (API routes)", () => {
-  const ids = {} as Record<"admin" | "inCharge" | "maths" | "unassigned" | "exam" | "hod", string>;
+  const ids = {} as Record<"superAdmin" | "admin" | "inCharge" | "maths" | "unassigned" | "exam" | "hod", string>;
   let mathsBookId = "";
   let scienceBookId = "";
   let otherBookId = "";
@@ -173,6 +176,7 @@ describe("permission matrix (API routes)", () => {
           },
         })
         .then((u) => (ids[key] = u.id));
+    await mk("superAdmin", "SUPER_ADMIN");
     await mk("admin", "ADMIN");
     await mk("inCharge", "TEACHER", [{ className: CLASS, subject: "" }]);
     await mk("maths", "TEACHER", [{ className: CLASS, subject: "Mathematics" }]);
@@ -335,11 +339,12 @@ describe("permission matrix (API routes)", () => {
     expect(bySubjectTeacher.status).toBe(403);
   });
 
-  it("users and assignments: Admin only; assignments are cleaned and dropped for non-teachers", async () => {
+  it("users and assignments: Super Admin only; assignments are cleaned and dropped for non-teachers", async () => {
     expect((await as(ids.inCharge, () => getUsers(req("/api/users", "GET"), p()))).status).toBe(403);
     expect((await as(ids.exam, () => getUsers(req("/api/users", "GET"), p()))).status).toBe(403);
+    expect((await as(ids.admin, () => getUsers(req("/api/users", "GET"), p()))).status).toBe(403);
 
-    const created = await as<{ id: string; assignments: { className: string; subject: string }[] }>(ids.admin, () =>
+    const created = await as<{ id: string; assignments: { className: string; subject: string }[] }>(ids.superAdmin, () =>
       postUser(
         req("/api/users", "POST", {
           name: "New Teacher",
@@ -364,7 +369,7 @@ describe("permission matrix (API routes)", () => {
     ]);
 
     const nid = created.json.id;
-    const toExam = await as<{ role: string; assignments: unknown[] }>(ids.admin, () =>
+    const toExam = await as<{ role: string; assignments: unknown[] }>(ids.superAdmin, () =>
       patchUser(req(`/api/users/${nid}`, "PATCH", { role: "EXAM_CELL" }), p({ id: nid })),
     );
     expect(toExam.json.role).toBe("EXAM_CELL");

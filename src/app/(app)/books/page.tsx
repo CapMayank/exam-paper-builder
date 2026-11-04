@@ -313,7 +313,7 @@ export default function BooksPage() {
     return sub?.code || "";
   }, [classes, selected]);
 
-  const isAdmin = currentUser?.role === "ADMIN";
+  const isAdmin = currentUser?.role === "ADMIN" || currentUser?.role === "SUPER_ADMIN";
   const canManageBooks = (scope: { className: string; subject: string } | null | undefined) => canManageScope(currentUser, scope);
   const canCreate = hasAnyWriteScope(currentUser);
 

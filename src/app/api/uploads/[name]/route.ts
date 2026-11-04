@@ -19,7 +19,12 @@ export const GET = route(async (_req, { name }) => {
   try {
     const data = await readFile(path.join(/*turbopackIgnore: true*/ UPLOAD_DIR, name));
     return new Response(new Uint8Array(data), {
-      headers: { "Content-Type": TYPE_BY_EXT[m[1]], "Cache-Control": "private, max-age=86400" },
+      headers: {
+        "Content-Type": TYPE_BY_EXT[m[1]],
+        "Cache-Control": "private, max-age=86400",
+        // an uploaded SVG opened on its own must not run scripts on the portal's origin
+        "Content-Security-Policy": "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox",
+      },
     });
   } catch {
     throw new HttpError(404, "Not found");

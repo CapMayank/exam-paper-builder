@@ -4,6 +4,7 @@ import type { Prisma } from "@prisma/client";
 import { ZodError } from "zod";
 import { prisma } from "./prisma";
 import { sessionUserId } from "./session";
+import { auditContext, entityFromPath } from "./auditContext";
 
 export class HttpError extends Error {
   constructor(
@@ -37,6 +38,8 @@ export const sessionUserSelect = {
 
 type Ctx = { params: Promise<Record<string, string>> };
 
+const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
 /**
  * Wraps a route handler: requires a logged-in user, parses errors into JSON `{ error }`.
  * Handler receives (request, params, user) and returns any JSON-serialisable value.
@@ -54,12 +57,24 @@ export function route(
         user = row ? { ...row, role: normalizeRole(row.role) } : null;
         if (!user) throw new HttpError(401, "Not signed in");
         if (!user.active) throw new HttpError(403, "Account is deactivated");
-        if (opts.roles && !opts.roles.includes(user.role)) {
+        // the Super Admin holds every right an Admin has; a route meant for the Super Admin alone lists only it
+        if (opts.roles && !opts.roles.includes(user.role) && !(user.role === "SUPER_ADMIN" && opts.roles.includes("ADMIN"))) {
           throw new HttpError(403, "Insufficient permissions for this action");
         }
       }
       const params = ctx?.params ? await ctx.params : {};
-      const result = await handler(req, params, user as SessionUser);
+      const changes = user && WRITE_METHODS.has(req.method);
+      const audit = { audited: false };
+      const result = changes
+        ? await auditContext.run(audit, () => handler(req, params, user as SessionUser))
+        : await handler(req, params, user as SessionUser);
+      // every change is in the activity log: a general entry when the handler wrote no detailed one
+      if (changes && !audit.audited && !(result instanceof Response && !result.ok)) {
+        const path = new URL(req.url).pathname;
+        const { entityType, entityId } = entityFromPath(path);
+        const { recordAudit } = await import("./audit");
+        await recordAudit(user!, "API_CHANGE", entityType as never, entityId, { method: req.method, path });
+      }
       return result instanceof Response ? result : Response.json(result ?? { ok: true });
     } catch (e) {
       unstable_rethrow(e);

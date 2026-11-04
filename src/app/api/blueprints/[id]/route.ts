@@ -1,4 +1,5 @@
 import { body, HttpError, route } from "@/lib/api";
+import { isAdmin } from "@/lib/permissions";
 import { recordAudit } from "@/lib/audit";
 import { diagnosePaperImplications } from "@/lib/blueprint";
 import { assertBlueprintValid, loadBlueprint } from "@/lib/blueprints";
@@ -34,7 +35,7 @@ export const PUT = route(async (req, { id }, user) => {
   await assertCanManageBook(user, existing.bookId);
   if (input.bookId !== existing.bookId) await assertCanManageBook(user, input.bookId);
 
-  if (existing.papers.some((p) => p.status === "FINAL") && user.role !== "ADMIN") {
+  if (existing.papers.some((p) => p.status === "FINAL") && !isAdmin(user)) {
     throw new HttpError(
       403,
       "Cannot modify a blueprint linked to finalised exam papers. Only an Administrator can make changes.",

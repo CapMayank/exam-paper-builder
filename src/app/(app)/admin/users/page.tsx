@@ -6,6 +6,7 @@ import {
   RefreshCw,
   Search,
   Shield,
+  ShieldCheck,
   Trash2,
   AlertTriangle,
   GraduationCap,
@@ -29,12 +30,14 @@ import { assignmentLabel, type Assignment } from "@/lib/permissions";
 import type { AcademicClassDto, UserData } from "@/lib/types";
 
 const ROLE_HELP: Record<UserRole, string> = {
-  ADMIN: "Runs the portal: accounts, class assignments, classes, academic rollover and unlocking final papers.",
+  SUPER_ADMIN: "Controls access and security: accounts, roles, class assignments, AI settings and the full activity log, including sign-ins. Can also do everything an Administrator can.",
+  ADMIN: "Runs the exam work: every paper, question, book, blueprint and class, academic rollover and unlocking final papers. Cannot change who has access.",
   TEACHER: "Works in the classes assigned below. Class In-charge covers every subject of a class and its settings; a subject assignment covers that subject only.",
   EXAM_CELL: "Date sheet, print runs and the audit log. Can open and print every paper, but does not edit content.",
 };
 
 const ROLE_BADGE: Record<UserRole, string> = {
+  SUPER_ADMIN: "!bg-rose-100 !text-rose-800",
   ADMIN: "!bg-purple-100 !text-purple-800",
   TEACHER: "!bg-emerald-100 !text-emerald-800",
   EXAM_CELL: "!bg-amber-100 !text-amber-800",
@@ -231,7 +234,8 @@ export default function UsersAdminPage() {
     });
   }, [users, roleFilter, search]);
 
-  const isAdmin = currentUser?.role === "ADMIN";
+  // only the Super Admin manages accounts and access
+  const isAdmin = currentUser?.role === "SUPER_ADMIN";
   const unassignedCount = users.filter((u) => u.active && u.role === "TEACHER" && (u.assignments ?? []).length === 0).length;
 
   if (loading) {
@@ -284,8 +288,9 @@ export default function UsersAdminPage() {
       )}
 
       {/* What each role can do */}
-      <section aria-label="What each role can do" className="grid grid-cols-1 gap-3 md:grid-cols-3">
+      <section aria-label="What each role can do" className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
         {([
+          ["SUPER_ADMIN", ShieldCheck, "text-rose-700"],
           ["ADMIN", Shield, "text-purple-700"],
           ["TEACHER", GraduationCap, "text-emerald-700"],
           ["EXAM_CELL", Lock, "text-amber-700"],

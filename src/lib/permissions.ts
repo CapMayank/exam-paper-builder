@@ -2,7 +2,10 @@
  * School-shaped access control, shared by API routes and the UI.
  *
  * Roles:
- *  - ADMIN      runs the school portal: users, class assignments, classes, rollover, AI settings, everything else.
+ *  - SUPER_ADMIN  owns access and security: accounts, roles, class assignments, AI settings and the full activity
+ *                 log (sign-ins included). Can also do everything an Admin can.
+ *  - ADMIN      runs the school's exam work: every paper, question, book, blueprint, class and rollover, and
+ *               unlocking final papers. Cannot change who has access.
  *  - TEACHER    works inside the classes the Admin assigned them:
  *                 Class In-charge  (assignment with subject "")      → every subject of that class + class settings
  *                 Subject Teacher  (assignment with a subject name)  → that subject of that class
@@ -10,7 +13,7 @@
  *
  * Everyone can browse and print the whole bank. Writes are limited to the assigned scope, except that a
  * creator always keeps edit rights on their own draft papers and their own questions. FINAL papers are
- * locked to everyone but the Admin.
+ * locked to everyone but the Admins.
  *
  * Assignments match on class and subject *names* (as stored on Book.className / Book.subject), so they
  * survive academic rollover, which recreates classes and books for the new session.
@@ -21,8 +24,8 @@ export type Scope = { className: string; subject: string };
 export type Actor = { id: string; role: string; assignments?: Assignment[] | null };
 
 /** Legacy roles from before the class-assignment model. HOD became an unassigned Teacher. */
-export function normalizeRole(role: string | null | undefined): "ADMIN" | "TEACHER" | "EXAM_CELL" {
-  if (role === "ADMIN" || role === "EXAM_CELL") return role;
+export function normalizeRole(role: string | null | undefined): "SUPER_ADMIN" | "ADMIN" | "TEACHER" | "EXAM_CELL" {
+  if (role === "SUPER_ADMIN" || role === "ADMIN" || role === "EXAM_CELL") return role;
   return "TEACHER";
 }
 
@@ -30,8 +33,16 @@ function norm(s: string | null | undefined): string {
   return (s ?? "").trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+/** Admin or Super Admin: full rights over papers, questions, books, blueprints and classes. */
 export function isAdmin(actor: Actor | null | undefined): boolean {
-  return Boolean(actor) && normalizeRole(actor!.role) === "ADMIN";
+  if (!actor) return false;
+  const r = normalizeRole(actor.role);
+  return r === "ADMIN" || r === "SUPER_ADMIN";
+}
+
+/** Super Admin: also manages accounts, roles, class assignments and security settings. */
+export function isSuperAdmin(actor: Actor | null | undefined): boolean {
+  return Boolean(actor) && normalizeRole(actor!.role) === "SUPER_ADMIN";
 }
 
 function teacherAssignments(actor: Actor | null | undefined): Assignment[] {
@@ -95,20 +106,26 @@ export function canModifyQuestion(actor: Actor | null | undefined, question: Que
   return canManageScope(actor, bookScope(question.book));
 }
 
+/** Accounts, roles and class assignments: the Super Admin only. */
 export function canManageUsers(actor: Actor | null | undefined): boolean {
-  return isAdmin(actor);
+  return isSuperAdmin(actor);
 }
 
 export function canManageTimetable(actor: Actor | null | undefined): boolean {
   if (!actor) return false;
-  const r = normalizeRole(actor.role);
-  return r === "ADMIN" || r === "EXAM_CELL";
+  return isAdmin(actor) || normalizeRole(actor.role) === "EXAM_CELL";
 }
 
+/** Activity of papers, questions, books and blueprints (Admins and the Exam Cell). */
 export const canViewAudit = canManageTimetable;
 
+/** The full activity log including sign-ins, failed sign-ins and access changes. */
+export function canViewSecurityLog(actor: Actor | null | undefined): boolean {
+  return isSuperAdmin(actor);
+}
+
 export function canManageAiSettings(actor: Actor | null | undefined): boolean {
-  return isAdmin(actor);
+  return isSuperAdmin(actor);
 }
 
 /** Short human label for one assignment, e.g. "Class 10 · In-charge" or "Class 10 · Mathematics". */

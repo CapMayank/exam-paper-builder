@@ -4,6 +4,7 @@ import {
   BookOpen,
   FileText,
   GraduationCap,
+  History,
   HelpCircle,
   LayoutDashboard,
   LogOut,
@@ -38,6 +39,7 @@ const NAV: { href: string; label: string; icon: LucideIcon; hint: string }[] = [
   { href: "/papers", label: "Exam papers", icon: FileText, hint: "Build, print and share papers from blueprints" },
   { href: "/exam-cell", label: "Exam cell & Logistics", icon: PackageCheck, hint: "Paper budget calculator, timetable and audit trail" },
   { href: "/admin/users", label: "Faculty & classes", icon: ShieldCheck, hint: "Staff roles and the classes each teacher looks after" },
+  { href: "/admin/activity", label: "Activity log", icon: History, hint: "Who signed in and what they changed" },
 ];
 
 const isActive = (pathname: string, href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
@@ -57,7 +59,7 @@ function NavList({
   onNavigate?: () => void;
 }) {
   const visibleNav = NAV.filter(({ href }) => {
-    if (href === "/admin/users") return role === "ADMIN";
+    if (href === "/admin/users" || href === "/admin/activity") return role === "SUPER_ADMIN";
     return true;
   });
 
