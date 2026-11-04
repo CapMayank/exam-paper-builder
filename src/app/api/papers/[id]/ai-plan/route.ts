@@ -8,6 +8,9 @@ export const GET = route(async (_req, { id }, user) => {
   const paper = await loadPaperView(id);
   if (!paper) throw new HttpError(404, "Paper not found");
   assertCanModifyPaper(user, paper);
+  if (paper.blueprint.chapters.length === 0) {
+    throw new HttpError(400, "This blueprint has no chapters. Add chapters and their marks to the blueprint before generating with AI.");
+  }
 
   const plan = planPaperSlotAssignments(paper);
 

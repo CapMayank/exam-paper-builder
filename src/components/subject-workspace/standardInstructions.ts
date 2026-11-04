@@ -7,6 +7,52 @@ export interface InstructionPreset {
 
 export const STANDARD_INSTRUCTION_PRESETS: InstructionPreset[] = [
   {
+    id: "mpbse-science-9-10",
+    title: "MP Board Science IX/X (75 marks, 2026-27 pattern)",
+    category: "SCIENCE",
+    text: `1. All questions are compulsory. Marks for each question are shown against it.
+2. Questions 1 to 5 are objective questions (MCQ, fill in the blanks, true/false, match the columns, one-word answers) of 1 mark each.
+3. Questions 6 to 17 carry 2 marks each (about 30 words). There is no internal choice in these questions.
+4. Questions 18 to 20 carry 3 marks each (about 75 words) and Questions 21 to 23 carry 4 marks each (about 120 words).
+5. Questions 18 to 23 have an internal choice marked "OR". Attempt ONLY ONE of the two alternatives of such a question.
+6. Draw a neat, well-labelled diagram wherever a question asks for one; a diagram is part of the answer and carries marks.
+7. In numerical questions write the formula, the substitution with units and the final answer with the correct SI unit.`,
+  },
+  {
+    id: "mpbse-science-9-10-hi",
+    title: "म.प्र. बोर्ड विज्ञान IX/X — सामान्य निर्देश (75 अंक)",
+    category: "SCIENCE",
+    text: `1. सभी प्रश्न अनिवार्य हैं। प्रत्येक प्रश्न के अंक उसके सम्मुख अंकित हैं।
+2. प्रश्न क्रमांक 1 से 5 तक वस्तुनिष्ठ प्रश्न हैं (प्रत्येक 1 अंक)।
+3. प्रश्न क्रमांक 6 से 17 तक प्रत्येक प्रश्न 2 अंक का है (लगभग 30 शब्द)। इनमें आंतरिक विकल्प नहीं है।
+4. प्रश्न क्रमांक 18 से 20 तक प्रत्येक प्रश्न 3 अंक (लगभग 75 शब्द) तथा 21 से 23 तक प्रत्येक प्रश्न 4 अंक (लगभग 120 शब्द) का है।
+5. प्रश्न क्रमांक 18 से 23 तक "अथवा" के रूप में आंतरिक विकल्प दिया गया है। ऐसे प्रश्न के दोनों विकल्पों में से केवल एक का ही उत्तर लिखिए।
+6. जहाँ प्रश्न में चित्र बनाने को कहा गया है, वहाँ स्वच्छ एवं नामांकित चित्र बनाइए; चित्र के अंक निर्धारित हैं।
+7. आंकिक प्रश्नों में सूत्र, इकाई सहित मान प्रतिस्थापन तथा सही SI इकाई के साथ अंतिम उत्तर लिखिए।`,
+  },
+  {
+    id: "mpbse-sst-9-10",
+    title: "MP Board Social Science IX/X (75 marks, with map)",
+    category: "SOCIAL_SCIENCE",
+    text: `1. All questions are compulsory. Marks for each question are shown against it.
+2. Questions 1 to 5 are objective questions of 1 mark each.
+3. Questions 6 to 17 carry 2 marks each (about 30 words); there is no internal choice in these questions.
+4. Questions 18 to 20 carry 3 marks each (about 75 words) and Questions 21 to 22 carry 4 marks each (about 120 words). These have an internal choice marked "OR": attempt ONLY ONE of the two alternatives.
+5. Question 23 is a map question of 4 marks. Mark the answers on the outline map of India provided and attach it to the answer book.
+6. Where a question asks for a number of points, write exactly that many points.`,
+  },
+  {
+    id: "mpbse-sst-9-10-hi",
+    title: "म.प्र. बोर्ड सामाजिक विज्ञान IX/X — सामान्य निर्देश (मानचित्र सहित)",
+    category: "SOCIAL_SCIENCE",
+    text: `1. सभी प्रश्न अनिवार्य हैं। प्रत्येक प्रश्न के अंक उसके सम्मुख अंकित हैं।
+2. प्रश्न क्रमांक 1 से 5 तक वस्तुनिष्ठ प्रश्न हैं (प्रत्येक 1 अंक)।
+3. प्रश्न क्रमांक 6 से 17 तक प्रत्येक प्रश्न 2 अंक का है (लगभग 30 शब्द); इनमें आंतरिक विकल्प नहीं है।
+4. प्रश्न क्रमांक 18 से 20 तक प्रत्येक प्रश्न 3 अंक (लगभग 75 शब्द) तथा 21 से 22 तक प्रत्येक प्रश्न 4 अंक (लगभग 120 शब्द) का है। इनमें "अथवा" के रूप में आंतरिक विकल्प है — दोनों में से केवल एक का उत्तर लिखिए।
+5. प्रश्न क्रमांक 23 मानचित्र संबंधी प्रश्न (4 अंक) है। दिए गए भारत के रेखा-मानचित्र पर उत्तर अंकित कर उसे उत्तर-पुस्तिका के साथ संलग्न कीजिए।
+6. जहाँ निश्चित संख्या में बिंदु पूछे गए हों, वहाँ उतने ही बिंदु लिखिए।`,
+  },
+  {
     id: "cbse-general-standard",
     title: "CBSE Standard General Instructions (15 min reading)",
     category: "GENERAL",
@@ -36,7 +82,7 @@ export const STANDARD_INSTRUCTION_PRESETS: InstructionPreset[] = [
     text: `1. Read the questions carefully and answer precisely according to mark allocation.
 2. Wherever required, draw neat, proportionally accurate, and well-labelled diagrams with pencil.
 3. In numerical problems, always write the core formula, step-by-step substitution, and final answer with correct SI units.
-4. Internal choice has been provided in selected 3-mark and 5-mark questions.`,
+4. Where a question has an "OR" alternative, attempt only one of the two.`,
   },
   {
     id: "hindi-general",

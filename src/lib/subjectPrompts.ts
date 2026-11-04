@@ -8,6 +8,72 @@ export interface SubjectPromptDirectives {
   completenessRules: string[];
   rubricDirective: string;
   formattingNotes: string[];
+  /** Kinds of question a good paper in this subject mixes; one per slot is suggested by slotQuestionForm. */
+  varietyRules?: string[];
+}
+
+/**
+ * Precision rules every subject shares. Each one comes from a real error a teacher had to correct in a generated
+ * paper before it could be printed.
+ */
+export const UNIVERSAL_QUALITY_RULES: string[] = [
+  "Fill in the blank: the blank must hold the tested term, and nothing else in the sentence may give that term away (wrong: 'Energy possessed due to position is called ________ potential energy'; right: 'Energy possessed by an object due to its position or configuration is called ________ energy').",
+  "Use the exact technical term the textbook uses for the case asked (e.g. 'formula unit mass' for ionic compounds such as Al2(SO4)3 or NaCl, 'molecular mass' only for molecular substances; 'speed' vs 'velocity'; 'weather' vs 'climate').",
+  "A question that asks students to verify, calculate, compare or interpret MUST supply every value, observation, table or statement needed (e.g. a law-of-constant-proportions question gives the masses of at least two samples). Never ask students to verify a law from data that is not given.",
+  "Instructions must not contradict themselves. When a drawing is wanted, say so plainly: 'Draw a neat, well-labelled diagram of ...'. Never write 'textual outline' for a drawing task, and never refer to a figure that is not supplied.",
+  "Every factual statement in a question, option or answer must be exact, not loosely true (e.g. ask which nutrient a plant obtains mainly from atmospheric CO2, not that 'carbon is supplied by air and water').",
+  "Model answers must be correct and clearly worded in the textbook's own concepts — no vague or confusing phrasing (e.g. explain evaporative cooling as the higher-energy surface particles escaping, which lowers the average kinetic energy of the liquid left behind).",
+  "Each question must be answerable from the prescribed textbook for this class; do not require facts, formulas or data from outside it.",
+  "An OR alternative must be equivalent in marks, length, difficulty and type of thinking to its main question (a definition must not be the alternative to a numerical).",
+  "When the answer needs a set number of points, say how many (e.g. 'Give any three reasons') and make it match the marks.",
+];
+
+/** Chapter cues for Class 9-10 Science, used to suggest which kind of question a slot should be. */
+const SCI_NUMERICAL = /motion|गति|force|बल|gravitation|गुरुत्व|work|कार्य|energy|ऊर्जा|sound|ध्वनि|electric|विद्युत|light|प्रकाश|reflection|refraction|परावर्तन|अपवर्तन|atoms|molecules|परमाणु|अणु|is matter|शुद्ध|solution|विलयन|magnetic/i;
+const SCI_GRAPH = /motion|गति|force|बल|electric|विद्युत|sound|ध्वनि/i;
+const SCI_DIAGRAM = /cell|कोशिका|unit of life|मौलिक इकाई|tissue|ऊतक|atom|परमाणु|improvement in food|crop|sound|ध्वनि|eye|नेत्र|light|प्रकाश|reflection|refraction|life process|जैव प्रक्रम|control|नियंत्रण|reproduc|जनन|heredity|आनुवंश|magnetic|चुम्बक|electric|विद्युत|matter|पदार्थ|diversity|विविधता|food|खाद्य/i;
+
+/**
+ * Suggests the kind of question one slot should be, rotating through what the subject and chapter support, so a
+ * section is not made of one kind of question (e.g. only "explain" questions in a Science paper).
+ * Returns "" when there is nothing useful to add (language papers, most objective items).
+ */
+export function slotQuestionForm(subject: string, chapterTitle: string, type: string, marks: number, position: number): string {
+  const norm = (subject || "").toLowerCase();
+  const subjective = ["VERY_SHORT", "SHORT", "LONG", "NUMERICAL", "CASE_STUDY"].includes(type) && marks >= 2;
+  const ch = chapterTitle || "";
+  const pick = (forms: string[]) => `Question form: ${forms[position % forms.length]}.`;
+  if (!subjective) {
+    if (type === "MCQ" && /science|विज्ञान|physic|chem|bio|math|गणित/i.test(norm) && !/social|सामाजिक/.test(norm)) {
+      return pick(["conceptual (why / which explains)", "application to an everyday observation", "numerical or data-reading in one step", "'which of these is NOT' judgement"]);
+    }
+    return "";
+  }
+  if (/science|विज्ञान/.test(norm) && !/social|सामाजिक/.test(norm)) {
+    const forms: string[] = [];
+    if (SCI_NUMERICAL.test(ch)) forms.push("numerical where the student must identify the relation to use (give data with SI units; do not state the formula in the question)");
+    if (SCI_DIAGRAM.test(ch)) forms.push("diagram-based: 'Draw a neat, well-labelled diagram of ...' and ask one thing about it (e.g. plant/animal cell, stomata, tissues, atomic structure, apparatus)");
+    forms.push("application: explain an everyday observation or situation using the chapter's principle");
+    if (SCI_GRAPH.test(ch)) forms.push("graph-based: give data in a small table or describe the graph exactly (axes, shape, values) and ask the student to plot or interpret it (e.g. distance-time / velocity-time)");
+    forms.push("reasoning: give reasons / compare / distinguish between two related concepts");
+    return pick(forms);
+  }
+  if (/social|सामाजिक|history|इतिहास|geograph|भूगोल|political|राजनीति|econom|अर्थशास्त्र|civics/.test(norm)) {
+    return pick([
+      "cause-and-effect: explain causes or consequences with the stated number of points",
+      "source/situation-based: give a short (2-4 line) factual extract or situation and ask about it",
+      "compare / distinguish between two related concepts, events or features",
+      "evaluate or justify a statement using facts from the chapter",
+    ]);
+  }
+  if (/math|गणित/.test(norm)) return pick(["word problem set in a real situation", "multi-step computation", "prove / show that", "find the unknown and verify"]);
+  if (/physic|भौतिक|chem|रसायन/.test(norm)) {
+    return pick(["numerical where the student chooses the relation", "derivation or reasoning", "application to a practical situation", "diagram / graph based (draw, label or interpret)"]);
+  }
+  if (/bio|जीव/.test(norm)) {
+    return pick(["diagram-based: draw and label, then explain one part", "process explanation in sequence", "compare / distinguish", "application to health, agriculture or everyday life"]);
+  }
+  return "";
 }
 
 /**
@@ -41,7 +107,9 @@ NEVER generate unsolvable equations, negative values under square roots (unless 
         "Include all required initial conditions, constraints (e.g. $x \\neq 0$, $a > 0$), and specified units (cm, m, m^2, cm^3).",
         "Never refer to an unspecified diagram or unstated coordinate system.",
         "MCQs must have exactly 4 mathematically distinct options, with 3 plausible distractors resulting from common algebraic or sign errors.",
+        "Work the problem through yourself before writing the answer; the answer key must show the working.",
       ],
+      varietyRules: ["Mix word problems in real situations, multi-step computations, proofs / 'show that', and find-and-verify questions across the paper."],
       rubricDirective: "Provide step-wise marking breakdown in the 'answer' field (e.g. Formula: 1 mark, Substitution: 1 mark, Final answer with units: 1 mark).",
       formattingNotes: [
         "Enclose ALL math expressions, numbers, variables, and formulas in standard LaTeX $...$ delimiters.",
@@ -97,28 +165,55 @@ Never generate non-existent oxidation states or invalid reaction products.`,
     };
   }
 
-  if (norm.includes("science") || norm.includes("विज्ञान")) {
+  if (norm.includes("biolog") || norm.includes("जीव विज्ञान")) {
+    return {
+      subjectName: "Biology",
+      systemDirective: `You are a Senior Board Moderator in Biology for ${className}.
+Biological terms, processes, structures and examples must be exactly as in the NCERT textbook. Test understanding of processes and their significance, not only names.`,
+      solvabilityRules: [
+        "Processes (photosynthesis, respiration, reproduction, inheritance, excretion) must be described in the correct sequence with correct terminology.",
+        "Genetics problems must state the parental genotypes/phenotypes and give ratios that follow Mendel's laws.",
+      ],
+      completenessRules: [
+        "For a drawing task write 'Draw a neat, well-labelled diagram of ...' and name what must be labelled when it matters.",
+        "Do not refer to figures that are not supplied.",
+      ],
+      rubricDirective: "Point/step-wise marking; for diagrams, the drawing and each required label carry marks.",
+      formattingNotes: ["Write scientific names correctly (genus capitalised, species in lower case)."],
+      varietyRules: ["Mix diagram-based, process-explanation, compare/distinguish and application (health, agriculture, environment) questions."],
+    };
+  }
+
+  // "Social Science" / "सामाजिक विज्ञान" also contain "science" / "विज्ञान": they must reach the Social Science branch
+  if ((norm.includes("science") || norm.includes("विज्ञान")) && !norm.includes("social") && !norm.includes("सामाजिक") && !norm.includes("political")) {
     return {
       subjectName: "Science",
       systemDirective: `You are an expert Secondary Board Examiner in General Science for ${className}.
-Cover Chemical Reactions, Living Organisms, Natural Phenomena, and Physical Effects with authentic conceptual clarity.`,
+Cover Physics, Chemistry and Biology chapters with authentic conceptual clarity. A good Science paper tests scientific thinking — reasoning, application, numericals, diagrams and graphs — not only recall of textbook sentences.`,
       solvabilityRules: [
-        "Ensure all scientific statements adhere to NCERT/MP Board Class 9/10 curriculum standards.",
-        "Chemical reactions must be balanced; physical calculations (light reflection/refraction, electric current) must have valid numerical values.",
-        "Biological diagrams and physiological processes (respiration, photosynthesis, nervous coordination) must use accurate terminology.",
+        "Ensure all scientific statements adhere to NCERT/MP Board Class 9/10 textbook content and terminology.",
+        "Chemical equations must be balanced with correct formulae; use 'formula unit mass' for ionic compounds and 'molecular mass' for molecules; use the textbook's atomic masses (H 1, C 12, N 14, O 16, Na 23, Mg 24, Al 27, S 32, Cl 35.5, K 39, Ca 40 u).",
+        "Numericals: physically plausible values with SI units and a single correct answer, and not a direct substitution into a formula given in the question — the student should identify the relation (e.g. choose between v = u + at and s = ut + ½at²), convert units, or combine two steps.",
+        "Graph questions: either give a small data table to plot, or describe the graph exactly (quantity on each axis, shape, key values) so it can be read without a picture.",
+        "Biological processes and structures (cell organelles, tissues, stomata, respiration, photosynthesis, nervous coordination) must use precise textbook terminology.",
       ],
       completenessRules: [
-        "Provide all necessary context so questions are self-contained.",
-        "Do not refer to unseen figures or unnamed tables.",
+        "Provide all necessary data and context so questions are self-contained; verification questions must give the observations or masses to verify from.",
+        "Do not refer to unseen figures or unnamed tables. For a drawing task write 'Draw a neat, well-labelled diagram of ...'.",
+        "True/False statements must hinge on a real scientific idea (e.g. a common misconception), not on a trivial word change in a textbook line.",
       ],
-      rubricDirective: "Step-wise model answer: Definition/Core concept (1m), Application/Formula/Example (1m).",
+      rubricDirective: "Step-wise model answer: concept/principle, application/formula with substitution and units, final answer or labelled diagram parts — marks per step adding up to the slot's marks.",
       formattingNotes: [
         "Use bilingual phrasing (English & Hindi) when requested.",
+      ],
+      varietyRules: [
+        "Across the paper include diagram-based questions (draw and label), at least one graph-based question when a Motion/Force chapter is assigned, application questions about everyday observations, and numericals that need the right formula to be chosen.",
+        "Do not ask two questions on the same sub-topic.",
       ],
     };
   }
 
-  if (norm.includes("social") || norm.includes("सामाजिक")) {
+  if (norm.includes("social") || norm.includes("सामाजिक") || /history|इतिहास|geograph|भूगोल|political|राजनीति|econom|अर्थशास्त्र/.test(norm)) {
     return {
       subjectName: "Social Science",
       systemDirective: `You are a Senior Board Examiner in Social Science (History, Geography, Political Science, Economics) for ${className}.
@@ -130,11 +225,17 @@ Questions must be historically and geographically accurate, constitutionally gro
         "Economics questions must utilize standard terms: Organized vs Unorganized sectors, Formal vs Informal credit, HDI indicators, GDP.",
       ],
       completenessRules: [
-        "Questions must clearly state the required analytical perspective (e.g. 'Explain three social consequences of...').",
+        "Questions must clearly state the required analytical perspective and the number of points (e.g. 'Explain any three social consequences of...'), matching the marks.",
+        "Dates, names, places and figures used in a question or answer must be exactly as in the NCERT/MP Board textbook for this class.",
+        "A source- or situation-based question must include the extract or situation in the question text.",
         "Avoid politically partisan or speculative inquiries.",
       ],
-      rubricDirective: "Point-wise marking: 1 mark per distinct, well-explained historical/geographical/civic point.",
+      rubricDirective: "Point-wise marking: 1 mark per distinct, well-explained historical/geographical/civic/economic point, with the number of points equal to the marks.",
       formattingNotes: ["Provide crisp, legible paragraphs with standard point formatting."],
+      varietyRules: [
+        "Mix question kinds across the paper: cause-and-effect, compare/distinguish, short source- or situation-based questions, and evaluate/justify — not only 'describe' or 'what is'.",
+        "Objective items should test understanding (sequence of events, which feature belongs to which region, which right is violated in a situation), not only names and dates.",
+      ],
     };
   }
 

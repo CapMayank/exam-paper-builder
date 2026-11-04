@@ -205,6 +205,8 @@ export const POST = route(async (req, { id }, user) => {
         slot: contractRes.contract.slots[i] ?? contractRes.contract.slots[0],
         reasons,
         apiKey: customKey,
+        difficulty: (body as { difficulty?: string }).difficulty ?? null,
+        targetDifficulty: ["EASY", "MEDIUM", "HARD"].includes(String(q.difficulty)) ? q.difficulty : undefined,
       });
       if (!regenerated) break;
       const candidate = { ...q, ...regenerated, type: q.type || section.type } as never;
@@ -264,15 +266,23 @@ export const POST = route(async (req, { id }, user) => {
   };
   for (let i = 0; i < questions.length; i++) {
     const q = questions[i];
+    const chapterId = resolveChapterId(q, i);
+    const type = q.type || section.type;
+    // count the question the way it will be counted once saved (a combined match question carries all its pairs)
+    const asPlaced = toPlacedItems(paper.blueprint.sections, [
+      { sectionId, question: { chapterId, type, text: q.text, options: q.options ?? [], subparts: (q.subparts ?? []) as Array<{ marks: number }> } },
+    ])[0];
     const cand = {
       sectionId,
-      chapterId: resolveChapterId(q, i),
-      type: q.type || section.type,
+      chapterId,
+      type,
+      marks: asPlaced.marks,
+      subpartsCount: asPlaced.subpartsCount,
       passageGroupId: (q as { passageGroupId?: string | null }).passageGroupId ?? null,
     };
     const why = whyCannotAdd(bpDef, placedSoFar, cand);
     if (why) throw new HttpError(409, `Question ${i + 1} cannot be placed: ${why}`);
-    placedSoFar.push({ sectionId, chapterId: cand.chapterId, marks: section.marksEach });
+    placedSoFar.push({ sectionId, chapterId, marks: asPlaced.marks, subpartsCount: asPlaced.subpartsCount });
   }
 
   let nextPos = existingSectionItems.reduce((max, i) => Math.max(max, i.position), -1) + 1;

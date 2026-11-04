@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { DifficultySelect, useDifficultyProfile } from "@/components/DifficultySelect";
 import {
   AlertCircle,
   AlertTriangle,
@@ -68,7 +69,7 @@ export function AIPaperGeneratorModal({
 
   // Form parameters
   const [language, setLanguage] = useState<PaperLanguage>("en");
-  const [difficulty, setDifficulty] = useState<"BALANCED" | "EASY" | "MEDIUM" | "HARD">("BALANCED");
+  const [difficulty, setDifficulty] = useDifficultyProfile();
   const [modelTier, setModelTier] = useState<string>("gemini-pro-latest");
   const [generateDiagrams, setGenerateDiagrams] = useState<boolean>(true);
   const [teacherFocus, setTeacherFocus] = useState<string>("");
@@ -378,6 +379,7 @@ export function AIPaperGeneratorModal({
           json: {
             sectionId: sec.sectionId,
             questions,
+            difficulty,
           },
         });
 
@@ -649,17 +651,8 @@ export function AIPaperGeneratorModal({
 
                 {/* Difficulty Mix */}
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-700">Difficulty Distribution</label>
-                  <select
-                    className="select text-xs w-full"
-                    value={difficulty}
-                    onChange={(e) => setDifficulty(e.target.value as any)}
-                  >
-                    <option value="BALANCED">Balanced Board Standard (30% Easy, 50% Medium, 20% Hard)</option>
-                    <option value="MEDIUM">Standard Medium</option>
-                    <option value="EASY">Foundational / Easy</option>
-                    <option value="HARD">Challenger / High Order Thinking (HOTS)</option>
-                  </select>
+                  <label className="text-xs font-semibold text-slate-700">Difficulty level</label>
+                  <DifficultySelect value={difficulty} onChange={setDifficulty} />
                 </div>
 
                 {/* Model Tier */}

@@ -17,8 +17,11 @@ export async function regenerateSlot(params: {
   slot: GeneratePaperSectionSlot;
   reasons: string[];
   apiKey?: string | null;
+  /** The paper's difficulty profile, and the level the rejected question was commissioned at. */
+  difficulty?: string | null;
+  targetDifficulty?: "EASY" | "MEDIUM" | "HARD";
 }): Promise<GeneratedPaperQuestion | null> {
-  const { paper, section, slot, reasons, apiKey } = params;
+  const { paper, section, slot, reasons, apiKey, difficulty, targetDifficulty } = params;
   const res = await generatePaperSectionWithGemini({
     className: paper.blueprint.book.className,
     subject: paper.blueprint.book.subject,
@@ -27,12 +30,12 @@ export async function regenerateSlot(params: {
     sectionInstructions: section.instructions,
     marksEach: section.marksEach,
     language: detectPaperLanguage(paper, paper.items),
-    difficulty: "BALANCED",
+    difficulty: difficulty ?? null,
     teacherFocus:
       "The previous attempt for this slot was rejected by validation. Fix every problem listed and do not repeat it: " +
       reasons.slice(0, 8).join(" | "),
     generateDiagrams: false,
-    slots: [{ ...slot, slotIndex: 0 }],
+    slots: [{ ...slot, slotIndex: 0, ...(targetDifficulty ? { targetDifficulty } : {}) }],
     schoolName: paper.schoolName,
     blueprintName: paper.blueprint.name,
     academicSession: paper.academicSession || paper.blueprint.academicSession,

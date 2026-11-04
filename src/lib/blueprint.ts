@@ -536,10 +536,54 @@ export function whyCannotAdd(
     : (isMultiUnitMatch && candidate.subpartsCount && candidate.subpartsCount > 1
         ? candidate.subpartsCount * section.marksEach
         : section.marksEach);
-  if (chapter.used + candidateMarks > chapter.target) {
+  // A match question's overflow is not owed by any one chapter: it may be absorbed by whichever chapters stay short.
+  // Judge the candidate against its chapter's own usage, then check the overflow can still be absorbed somewhere.
+  const { targetOf, rawUsedOf, overflow, rep } = rawQuotaUsage(bp, items);
+  const key = rep.get(candidate.chapterId) ?? candidate.chapterId;
+  const target = targetOf.get(key) ?? 0;
+  const ownUsed = rawUsedOf.get(key) ?? 0;
+  const capped = Math.min(ownUsed, target);
+  const isMatchCandidate = section.type === "MATCH_COLUMN";
+  // a combined match question may overshoot its own chapter (its pairs span chapters); the slack check below covers it
+  if (!isMatchCandidate && capped + candidateMarks > target) {
+    return `The blueprint allows only ${target} marks from this chapter; ${capped} are already used.`;
+  }
+  if (isMatchCandidate && ownUsed >= target && target > 0) {
+    return `The blueprint allows only ${target} marks from this chapter; ${capped} are already used.`;
+  }
+  let slack = 0;
+  for (const [k, t] of targetOf) {
+    const used = (rawUsedOf.get(k) ?? 0) + (k === key ? candidateMarks : 0);
+    slack += Math.max(0, t - used);
+  }
+  const overflowAfter = overflow + (isMatchCandidate ? Math.max(0, ownUsed + candidateMarks - target) : 0);
+  if (slack < overflowAfter) {
     return `The blueprint allows only ${chapter.target} marks from this chapter; ${chapter.used} are already used.`;
   }
   return null;
+}
+
+/** Each quota group's target and its own usage, plus the match-question marks that exceed their own group. */
+function rawQuotaUsage(bp: BlueprintDef, items: PlacedItem[]) {
+  const sectionById = new Map(bp.sections.map((s) => [s.id, s]));
+  const rep = quotaRepresentatives(bp.chapters);
+  const targetOf = new Map<string, number>();
+  for (const c of bp.chapters) {
+    const k = rep.get(c.chapterId)!;
+    targetOf.set(k, (targetOf.get(k) ?? 0) + c.marks);
+  }
+  const rawUsedOf = new Map<string, number>();
+  const matchOf = new Map<string, number>();
+  for (const i of items) {
+    const k = rep.get(i.chapterId) ?? i.chapterId;
+    const sec = sectionById.get(i.sectionId);
+    const m = getItemMarks(i, sec?.marksEach ?? 1);
+    rawUsedOf.set(k, (rawUsedOf.get(k) ?? 0) + m);
+    if (sec?.type === "MATCH_COLUMN") matchOf.set(k, (matchOf.get(k) ?? 0) + m);
+  }
+  let overflow = 0;
+  for (const [k, m] of matchOf) overflow += Math.min(m, Math.max(0, (rawUsedOf.get(k) ?? 0) - (targetOf.get(k) ?? 0)));
+  return { targetOf, rawUsedOf, overflow, rep };
 }
 
 export type PaperImplication = {

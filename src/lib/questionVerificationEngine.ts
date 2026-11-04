@@ -24,6 +24,7 @@ import {
 } from "./questionValidator";
 import { subpartsTotalMarks, type SubPart } from "./types";
 import { repairLatex } from "./math";
+import { precisionIssues } from "./precisionChecks";
 
 export interface VerificationIssue {
   code: string;
@@ -481,6 +482,19 @@ export function verifyQuestionAcademicQuality(
         break;
       }
     }
+  }
+
+  // -------------------------------------------------------------
+  // 8b. WORDING PRECISION (giveaway blanks, wrong technical term, contradictory or data-less tasks)
+  // -------------------------------------------------------------
+  for (const p of precisionIssues({ type: qType, text: qText, answer: qAns, subparts: question.subparts as Array<{ text?: string }> | undefined })) {
+    addIssue(dimensions, p.dimension, {
+      code: p.code,
+      severity: "ERROR",
+      message: p.message,
+      evidence: p.evidence,
+      recommendation: p.recommendation,
+    });
   }
 
   // -------------------------------------------------------------

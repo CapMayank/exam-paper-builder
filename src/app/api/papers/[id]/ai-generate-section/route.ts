@@ -2,6 +2,7 @@ import { HttpError, route } from "@/lib/api";
 import { generatePaperSectionWithGemini, getGeminiApiKey, quotaErrorText, type GeneratePaperSectionSlot } from "@/lib/gemini";
 import { resolveInternalChoiceRequirement } from "@/lib/internalChoiceRules";
 import { detectPaperLanguage, type PaperLanguage } from "@/lib/localization";
+import { DEFAULT_DIFFICULTY_PROFILE } from "@/lib/difficultyProfiles";
 import { slotRowRole, slotTaskDirective } from "@/lib/paperAutogen";
 import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
 
@@ -21,7 +22,7 @@ export const POST = route(async (req, { id }, user) => {
     sectionInstructions,
     marksEach,
     language = "en",
-    difficulty = "BALANCED",
+    difficulty = DEFAULT_DIFFICULTY_PROFILE,
     model = "gemini-pro-latest",
     teacherFocus = "",
     generateDiagrams = true,

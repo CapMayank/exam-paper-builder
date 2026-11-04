@@ -38,12 +38,21 @@ import {
   type QuestionValidationIssue,
 } from "./questionValidator";
 import { isParaphraseOrDuplicateChoice } from "./internalChoiceRules";
+import {
+  type DifficultyInput,
+  type DifficultyLevel,
+  difficultyPromptBlock,
+  legacyDifficulty,
+  levelMeaning,
+  planSlotDifficulties,
+  resolveDifficultyProfile,
+} from "./difficultyProfiles";
 import { normalizeQuestionType } from "./paperImport";
 import { ensureLanguageNonChapterUnits } from "./syllabusImport";
 import { parseGeminiJsonWithLatexSafety, repairLatex } from "./math";
 import { normalizeSubpartMarks, type SubPart } from "./types";
 import { allKeysBlocked, configuredKeys, geminiGenerate, quotaMessage } from "./geminiPool";
-import { getSubjectPromptDirectives } from "./subjectPrompts";
+import { UNIVERSAL_QUALITY_RULES, getSubjectPromptDirectives, slotQuestionForm } from "./subjectPrompts";
 import {
   verifyQuestionAcademicQuality,
   repairOrRegenerateQuestion,
@@ -394,6 +403,8 @@ ${subjectDirectives.solvabilityRules.map((r) => `  * ${r}`).join("\n")}
 - Completeness & Clear Conditions:
 ${subjectDirectives.completenessRules.map((r) => `  * ${r}`).join("\n")}
 - Rubric: ${subjectDirectives.rubricDirective}
+- Precision checklist (every question, option and answer):
+${UNIVERSAL_QUALITY_RULES.map((r) => `  * ${r}`).join("\n")}
 - NEVER output generic placeholder templates or cross-subject content.
 Output format: JSON array of question objects only. No conversational wrapper.`;
 
@@ -1031,6 +1042,8 @@ export interface GeneratePaperSectionSlot {
   topicFocus?: string;
   requiresInternalChoice?: boolean;
   curriculumPayload?: CurriculumGenerationPayload;
+  /** Overrides the level the difficulty profile would give this slot. */
+  targetDifficulty?: DifficultyLevel;
 }
 
 export interface GeneratePaperSectionInput {
@@ -1041,7 +1054,8 @@ export interface GeneratePaperSectionInput {
   sectionInstructions?: string | null;
   marksEach: number;
   language: PaperLanguage;
-  difficulty: "BALANCED" | "EASY" | "MEDIUM" | "HARD";
+  /** A difficulty profile id (FOUNDATION | BOARD | SCHOOL | CHALLENGE) or a legacy value (BALANCED | EASY | MEDIUM | HARD). */
+  difficulty: DifficultyInput;
   model?: string;
   teacherFocus?: string;
   generateDiagrams?: boolean;
@@ -1157,7 +1171,7 @@ export async function generatePaperSectionWithGemini(
     sectionInstructions,
     questionType: normalizedType,
     marksEach,
-    difficulty,
+    difficulty: legacyDifficulty(difficulty),
     language,
     requiredCount: normalizedType === "MATCH_COLUMN" ? 1 : slots?.length || 0,
     slots,
@@ -1174,6 +1188,10 @@ export async function generatePaperSectionWithGemini(
   }
 
   const contract = contractRes.contract;
+  const difficultyProfile = resolveDifficultyProfile(difficulty);
+  // one target level per slot, from the profile (harder for longer questions), unless the caller fixed it
+  const plannedLevels = planSlotDifficulties(contract.slots.length, marksEach, difficultyProfile.id, (slots[0]?.slotIndex ?? 0) + marksEach);
+  const slotTargetDifficulty = contract.slots.map((_, idx) => slots[idx]?.targetDifficulty ?? plannedLevels[idx] ?? "MEDIUM");
   const anySlotRequiresChoice = contract.slots.some((s) => s.requiresInternalChoice);
   const choiceForbidden = contract.internalChoiceRequirement.forbidden;
 
@@ -1237,13 +1255,14 @@ ${contract.forbiddenCrossSubjectDomains.length > 0 ? `2. FORBIDDEN CROSS-SUBJECT
    - Internal Choice Isolation: NEVER embed the word 'अथवा' or alternative questions inside the primary question's 'text' field. All alternative questions must strictly be placed in the separate 'orQuestion' object.
    - When language is "hi" (Hindi), generate 100% standard Hindi in Devanagari script. Never leak English words.
    - When language is "en" (English), generate 100% English.
-14. SUBJECT VARIANT & COGNITIVE LEVEL DIRECTIVE:
+14. DIFFICULTY & COGNITIVE LEVEL DIRECTIVE:
    - Subject Variant: ${contract.subjectVariant || "STANDARD"}
    ${
      contract.subjectVariant === "BASIC"
-       ? "- TARGET COGNITIVE LEVEL (BASIC / CODE 101): 50% Easy (Direct Recall / Single-Step Formula Substitution), 40% Average (Standard Textbook Applications), 10% Higher Order. Keep numbers clean, avoid multi-step algebraic manipulations, and focus on fundamental definitions. NEVER generate irrationality proofs (e.g. proof that √5 is irrational) or multi-concept synthesis."
-       : "- TARGET COGNITIVE LEVEL (STANDARD / CODE 100): 30% Easy, 50% Average, 20% Higher Order (Multi-step Problem Solving, Geometric/Algebraic Proofs, In-depth Conceptual Analysis). 3-mark and 4-mark slots must NOT be trivial 1-step substitutions."
+       ? "- BASIC / CODE 101: keep numbers clean, avoid long multi-step algebraic manipulation and multi-concept synthesis; NEVER generate irrationality proofs (e.g. proof that √5 is irrational). Within that limit, follow the difficulty profile below."
+       : "- 3-mark and 4-mark slots must NOT be trivial one-step recall or substitution."
    }
+${difficultyPromptBlock(difficultyProfile.id).split("\n").map((l) => `   ${l}`).join("\n")}
 15. STATUTORY RATIONALIZED SYLLABUS COMPLIANCE (NEGATIVE CONSTRAINT):
    - The Board has officially deleted and rationalized specific chapters and topics for the 2026–27 session.
    - VIOLATION PENALTY: Generating any question, option, distractor, scenario, or alternative (OR) question testing deleted topics is an examination security violation and will cause immediate rejection by deterministic quality gates.
@@ -1260,7 +1279,13 @@ ${contract.forbiddenCrossSubjectDomains.length > 0 ? `2. FORBIDDEN CROSS-SUBJECT
 ${subjectDirectives.solvabilityRules.map((r) => `  * ${r}`).join("\n")}
 - Completeness & Clear Conditions:
 ${subjectDirectives.completenessRules.map((r) => `  * ${r}`).join("\n")}
-- Marking Scheme Rubric: ${subjectDirectives.rubricDirective}`;
+- Marking Scheme Rubric: ${subjectDirectives.rubricDirective}${
+  subjectDirectives.varietyRules?.length
+    ? `\n- Assessment Variety:\n${subjectDirectives.varietyRules.map((r) => `  * ${r}`).join("\n")}`
+    : ""
+}
+20. QUESTION PRECISION CHECKLIST (check every question, option, OR alternative and answer against this before returning):
+${UNIVERSAL_QUALITY_RULES.map((r) => `   - ${r}`).join("\n")}`;
 
   const slotsDescription = contract.slots
     .map((s, idx) => {
@@ -1277,7 +1302,10 @@ ${subjectDirectives.completenessRules.map((r) => `  * ${r}`).join("\n")}
         ? ` | Internal Choice: FORBIDDEN (No "orQuestion")`
         : "";
       const targetWords = s.marks === 2 ? 30 : s.marks === 3 ? 75 : s.marks === 4 ? 120 : 150;
-      return `Question ${idx + 1} (Slot ${s.slotIndex}, slotId: "${slotId}"): Chapter ${s.chapterNumber} - "${s.chapterTitle}" (${s.marks} marks, target length: ~${targetWords} words) | Allowed Topics: ${allowed}${deleted}${choiceRule}${
+      const level = slotTargetDifficulty[idx];
+      // rotate question forms across the section (diagram / numerical / application / graph / reasoning ...)
+      const form = slotQuestionForm(contract.rawSubject, s.chapterTitle, normalizedType, s.marks, (s.slotIndex ?? idx) + idx);
+      return `Question ${idx + 1} (Slot ${s.slotIndex}, slotId: "${slotId}"): Chapter ${s.chapterNumber} - "${s.chapterTitle}" (${s.marks} marks, target length: ~${targetWords} words) | Target difficulty: ${level} (${levelMeaning(level, s.marks)})${form ? ` | ${form}` : ""} | Allowed Topics: ${allowed}${deleted}${choiceRule}${
         origSlot?.topicFocus ? ` | Topic Focus: ${origSlot.topicFocus}` : ""
       }`;
     })
@@ -1351,11 +1379,7 @@ JSON Array Output Schema:
           ? "Bilingual (English with Hindi translation in parentheses)"
           : "English"
       }
-- Difficulty Policy: ${
-        difficulty === "BALANCED"
-          ? "Balanced mix: ~30% Easy, ~50% Medium, ~20% Hard"
-          : difficulty
-      }
+- Difficulty Profile: ${difficultyProfile.label} (${difficultyProfile.mix.EASY}% easy / ${difficultyProfile.mix.MEDIUM}% medium / ${difficultyProfile.mix.HARD}% hard). Follow each slot's "Target difficulty".
 ${teacherFocus ? `- Teacher Specific Instructions / Focus: ${teacherFocus}` : ""}
 - Diagram Generation: ${
         effectiveGenerateDiagrams
@@ -1641,7 +1665,8 @@ JSON Array Output Schema:
           else if (/false|असत्य|गलत/i.test(qAnswer)) qAnswer = "असत्य";
         }
       }
-      const qDiff = ["EASY", "MEDIUM", "HARD"].includes(rawQ.difficulty) ? rawQ.difficulty : "MEDIUM";
+      // the question was commissioned at the slot's target level; the model's own label is only a fallback
+      const qDiff = slotTargetDifficulty[i] ?? (["EASY", "MEDIUM", "HARD"].includes(rawQ.difficulty) ? rawQ.difficulty : "MEDIUM");
       const figurePrompt =
         typeof rawQ.figurePrompt === "string" && rawQ.figurePrompt.trim()
           ? rawQ.figurePrompt.trim()
@@ -1708,9 +1733,8 @@ JSON Array Output Schema:
             else if (/false|असत्य|गलत/i.test(orAnswer)) orAnswer = "असत्य";
           }
         }
-        const orDiff = ["EASY", "MEDIUM", "HARD"].includes(rawQ.orQuestion.difficulty)
-          ? rawQ.orQuestion.difficulty
-          : qDiff;
+        // an OR alternative must be as hard as the question it replaces
+        const orDiff = qDiff;
 
         normalizedOrQuestion = {
           chapterId: slot.chapterId,

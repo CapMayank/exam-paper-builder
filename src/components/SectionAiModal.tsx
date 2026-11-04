@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { DifficultySelect, useDifficultyProfile } from "@/components/DifficultySelect";
 import {
   Sparkles,
   AlertCircle,
@@ -45,7 +46,7 @@ export function SectionAiModal({
   onClose,
   onCommitted,
 }: SectionAiModalProps) {
-  const [difficulty, setDifficulty] = useState<"BALANCED" | "EASY" | "MEDIUM" | "HARD">("BALANCED");
+  const [difficulty, setDifficulty] = useDifficultyProfile();
   const [language, setLanguage] = useState<PaperLanguage>(() => detectPaperLanguage(paper, paper.items));
   const [chapterMode, setChapterMode] = useState<"auto" | "specific">("auto");
   const [selectedChapterId, setSelectedChapterId] = useState<string>("");
@@ -279,6 +280,7 @@ export function SectionAiModal({
         body: JSON.stringify({
           sectionId: section!.id,
           questions: processedQuestions,
+          difficulty,
         }),
       });
 
@@ -369,16 +371,7 @@ export function SectionAiModal({
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     Target Difficulty
                   </label>
-                  <select
-                    value={difficulty}
-                    onChange={(e) => setDifficulty(e.target.value as any)}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium focus:border-indigo-500 focus:outline-hidden"
-                  >
-                    <option value="BALANCED">Balanced (Standard Board Mix)</option>
-                    <option value="EASY">Easy (Direct recall & definitions)</option>
-                    <option value="MEDIUM">Medium (Conceptual understanding)</option>
-                    <option value="HARD">Hard (Higher-order thinking / HOTS)</option>
-                  </select>
+                  <DifficultySelect value={difficulty} onChange={setDifficulty} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium focus:border-indigo-500 focus:outline-hidden" />
                 </div>
               </div>
 
