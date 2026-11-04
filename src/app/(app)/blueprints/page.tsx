@@ -70,6 +70,8 @@ function subjectMatches(bookSubject: string, filterSubject: string): boolean {
   return aParts.some((p) => sParts.includes(p));
 }
 
+const FILTER_KEY = "exam-builder:blueprint-filters";
+
 export default function BlueprintsPage() {
   const router = useRouter();
   const toast = useToast();
@@ -89,6 +91,11 @@ export default function BlueprintsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [rolloverOpen, setRolloverOpen] = useState(false);
   const [aiBlueprintOpen, setAiBlueprintOpen] = useState(false);
+  // blueprints ticked for a bulk change (exam, time allowed, delete)
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [bulkExam, setBulkExam] = useState<string>("");
+  const [bulkMinutes, setBulkMinutes] = useState<string>("");
+  const [bulkBusy, setBulkBusy] = useState(false);
   // the blueprint just saved in the editor: selected, with the next step offered
   const [justSaved, setJustSaved] = useState<{ id: string; created: boolean } | null>(null);
   const [jsonModalBlueprint, setJsonModalBlueprint] = useState<Blueprint | null>(null);
@@ -111,18 +118,23 @@ export default function BlueprintsPage() {
 
   const activeSession = normalizeSession(currentSession);
 
+  // The filters survive leaving the page (editing or creating a blueprint) and coming back.
+  const [filtersReady, setFiltersReady] = useState(false);
   useEffect(() => {
-    if (typeof window === "undefined") return;
     const sp = new URLSearchParams(window.location.search);
+    let stored: Partial<Record<"cls" | "sub" | "exam" | "q", string>> = {};
+    try {
+      stored = JSON.parse(sessionStorage.getItem(FILTER_KEY) || "{}");
+    } catch {}
+    // an explicit class / subject in the link wins over the remembered filters
     const cls = sp.get("className");
     const sub = sp.get("subject");
+    setClassFilter(cls ?? stored.cls ?? "ALL");
+    setSubjectFilter(sub ?? (cls ? "ALL" : stored.sub) ?? "ALL");
+    setExamTypeFilter(stored.exam ?? "ALL");
+    setSearchQuery(stored.q ?? "");
     const saved = sp.get("saved");
     if (saved) {
-      // show the saved blueprint whatever the filters were, then drop the marker so a reload does not repeat it
-      setClassFilter("ALL");
-      setSubjectFilter("ALL");
-      setExamTypeFilter("ALL");
-      setSearchQuery("");
       setSelectedId(saved);
       setMobileTab("details");
       setJustSaved({ id: saved, created: sp.get("created") === "1" });
@@ -131,11 +143,16 @@ export default function BlueprintsPage() {
       const rest = sp.toString();
       window.history.replaceState(null, "", `${window.location.pathname}${rest ? `?${rest}` : ""}`);
       window.scrollTo({ top: 0 });
-      return;
     }
-    if (cls) setClassFilter(cls);
-    if (sub) setSubjectFilter(sub);
+    setFiltersReady(true);
   }, []);
+
+  useEffect(() => {
+    if (!filtersReady) return;
+    try {
+      sessionStorage.setItem(FILTER_KEY, JSON.stringify({ cls: classFilter, sub: subjectFilter, exam: examTypeFilter, q: searchQuery }));
+    } catch {}
+  }, [filtersReady, classFilter, subjectFilter, examTypeFilter, searchQuery]);
 
   const load = useCallback(async () => {
     setError(null);
@@ -192,6 +209,8 @@ export default function BlueprintsPage() {
   // Filtered blueprints based on filters
   const displayedBlueprints = useMemo(() => {
     return sessionItems.filter((b) => {
+      // the blueprint just saved stays in view while its banner is up, whatever the filters
+      if (justSaved && b.id === justSaved.id) return true;
       if (
         classFilter !== "ALL" &&
         b.book.className.trim().toLowerCase() !== classFilter.trim().toLowerCase()
@@ -214,7 +233,7 @@ export default function BlueprintsPage() {
       }
       return true;
     });
-  }, [sessionItems, classFilter, subjectFilter, examTypeFilter, searchQuery]);
+  }, [sessionItems, classFilter, subjectFilter, examTypeFilter, searchQuery, justSaved]);
 
   const selected = useMemo(() => {
     return displayedBlueprints.find((b) => b.id === selectedId) ?? displayedBlueprints[0] ?? null;
@@ -245,6 +264,62 @@ export default function BlueprintsPage() {
       await load();
     } catch (e) {
       setError((e as Error).message);
+    }
+  }
+
+  function toggleChecked(id: string) {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function clearBulk() {
+    setChecked(new Set());
+    setBulkExam("");
+    setBulkMinutes("");
+  }
+
+  async function runBulk(action: "update" | "delete") {
+    const ids = Array.from(checked);
+    if (ids.length === 0) return;
+    const minutes = bulkMinutes.trim() === "" ? undefined : Math.round(Number(bulkMinutes));
+    if (action === "update") {
+      if (!bulkExam && minutes === undefined) return;
+      if (minutes !== undefined && (!Number.isFinite(minutes) || minutes < 5 || minutes > 600)) {
+        toast.error("Time allowed must be between 5 and 600 minutes");
+        return;
+      }
+    } else {
+      const ok = await confirm({
+        title: `Delete ${plural(ids.length, "blueprint")}?`,
+        message: "Blueprints that papers use are kept. This cannot be undone.",
+        confirmLabel: `Delete ${plural(ids.length, "blueprint")}`,
+        tone: "danger",
+      });
+      if (!ok) return;
+    }
+    setBulkBusy(true);
+    try {
+      const res = await api<{ changed: number; unchanged?: number; skipped: Array<{ name: string; reason: string }> }>("/api/blueprints/bulk", {
+        method: "POST",
+        json: action === "delete" ? { action, ids } : { action, ids, examType: bulkExam || undefined, durationMin: minutes },
+      });
+      const done = action === "delete" ? `Deleted ${plural(res.changed, "blueprint")}` : `Updated ${plural(res.changed, "blueprint")}`;
+      if (res.skipped.length > 0) {
+        const first = res.skipped[0];
+        toast.info(`${done}. Skipped ${res.skipped.length}: “${first.name}” – ${first.reason}${res.skipped.length > 1 ? `, and ${res.skipped.length - 1} more` : ""}.`);
+      } else {
+        toast.success(res.changed === 0 && action === "update" ? "Nothing to change: they already match" : done);
+      }
+      clearBulk();
+      await load();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBulkBusy(false);
     }
   }
 
@@ -335,6 +410,12 @@ export default function BlueprintsPage() {
     return `/blueprints/new${qs ? `?${qs}` : ""}`;
   })();
   const savedBp = justSaved ? items.find((b) => b.id === justSaved.id) ?? null : null;
+  const manageableShown = displayedBlueprints.filter((b) => canManageBlueprint(b));
+  const allShownChecked = manageableShown.length > 0 && manageableShown.every((b) => checked.has(b.id));
+  // a ticked blueprint the filters now hide still counts, so the bar says so
+  const checkedCount = checked.size;
+  const hiddenChecked = Array.from(checked).filter((id) => !displayedBlueprints.some((b) => b.id === id)).length;
+
 
   return (
     <div className="space-y-6">
@@ -492,6 +573,64 @@ export default function BlueprintsPage() {
         </div>
       </div>
 
+      {checkedCount > 0 && (
+        <div
+          role="region"
+          aria-label="Change selected blueprints"
+          className="sticky top-14 z-30 flex flex-wrap items-end gap-3 rounded-2xl border border-indigo-200 bg-white/95 px-4 py-3 backdrop-blur"
+          style={{ boxShadow: "var(--shadow-lift)" }}
+        >
+          <div className="mr-auto min-w-0 self-center">
+            <p className="text-sm font-semibold text-slate-900">{plural(checkedCount, "blueprint")} selected</p>
+            <p className="text-xs text-slate-500">
+              {hiddenChecked > 0 ? `${hiddenChecked} not shown by the current filters. ` : ""}Leave a field as it is to keep each blueprint&apos;s own value.
+            </p>
+          </div>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-slate-600">Exam</span>
+            <select className="input w-44 py-1.5 text-sm" value={bulkExam} onChange={(e) => setBulkExam(e.target.value)} disabled={bulkBusy}>
+              <option value="">Keep as it is</option>
+              {EXAM_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {EXAM_TYPE_LABEL[t]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-slate-600">Time allowed (minutes)</span>
+            <input
+              className="input w-40 py-1.5 text-sm tabular-nums"
+              type="number"
+              inputMode="numeric"
+              min={5}
+              max={600}
+              step={5}
+              placeholder="Keep as it is"
+              value={bulkMinutes}
+              onChange={(e) => setBulkMinutes(e.target.value)}
+              disabled={bulkBusy}
+            />
+          </label>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={bulkBusy || (!bulkExam && bulkMinutes.trim() === "")}
+              onClick={() => void runBulk("update")}
+            >
+              {bulkBusy ? "Applying…" : `Apply to ${plural(checkedCount, "blueprint")}`}
+            </button>
+            <button type="button" className="btn btn-danger" disabled={bulkBusy} onClick={() => void runBulk("delete")}>
+              <Trash2 size={15} /> Delete
+            </button>
+            <button type="button" className="btn btn-ghost btn-icon" aria-label="Clear the selection" disabled={bulkBusy} onClick={clearBulk}>
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {!loaded ? (
         <ListSkeleton rows={4} />
       ) : sessionItems.length === 0 ? (
@@ -579,9 +718,27 @@ export default function BlueprintsPage() {
               }`}
             >
               <div className="p-3 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between gap-2 shrink-0">
-                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                  <Ruler size={14} className="text-indigo-600" /> Blueprints ({displayedBlueprints.length})
-                </span>
+                {manageableShown.length > 0 ? (
+                  <label className="flex items-center gap-2 text-xs font-bold text-slate-800 uppercase tracking-wider cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-slate-300 accent-indigo-600"
+                      checked={allShownChecked}
+                      ref={(el) => {
+                        if (el) el.indeterminate = !allShownChecked && manageableShown.some((b) => checked.has(b.id));
+                      }}
+                      onChange={() =>
+                        setChecked(allShownChecked ? new Set() : new Set(manageableShown.map((b) => b.id)))
+                      }
+                      aria-label={allShownChecked ? "Clear the selection" : "Select every blueprint shown"}
+                    />
+                    Blueprints ({displayedBlueprints.length})
+                  </label>
+                ) : (
+                  <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <Ruler size={14} className="text-indigo-600" /> Blueprints ({displayedBlueprints.length})
+                  </span>
+                )}
                 {canCreate && (
                 <Link href={newBlueprintHref} className="btn btn-primary text-[11px] py-1 px-2.5 gap-1">
                   <Plus size={13} /> New
@@ -593,13 +750,24 @@ export default function BlueprintsPage() {
                   const active = selected?.id === bp.id;
                   const totalMarks = blueprintTotalMarks(bp.sections);
 
+                  const manageable = canManageBlueprint(bp);
+                  const isChecked = checked.has(bp.id);
                   return (
                     <li key={bp.id}>
                       <div
-                        className={`group relative rounded-xl border p-3 transition ${
-                          active ? "border-indigo-500/80 ring-1 ring-indigo-500/20 bg-indigo-50/90 text-indigo-950 shadow-2xs" : "border-slate-200 hover:border-slate-300 bg-white"
+                        className={`group relative rounded-xl border p-3 transition ${manageable ? "pl-10" : ""} ${
+                          active ? "border-indigo-500/80 ring-1 ring-indigo-500/20 bg-indigo-50/90 text-indigo-950 shadow-2xs" : isChecked ? "border-indigo-300 bg-indigo-50/40" : "border-slate-200 hover:border-slate-300 bg-white"
                         }`}
                       >
+                        {manageable && (
+                          <input
+                            type="checkbox"
+                            className="absolute left-3.5 top-3.5 z-10 h-4 w-4 cursor-pointer rounded border-slate-300 accent-indigo-600"
+                            checked={isChecked}
+                            onChange={() => toggleChecked(bp.id)}
+                            aria-label={`Select ${bp.name}`}
+                          />
+                        )}
                         <button
                           type="button"
                           onClick={() => {
