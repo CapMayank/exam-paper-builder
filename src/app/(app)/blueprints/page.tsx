@@ -91,8 +91,10 @@ export default function BlueprintsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [rolloverOpen, setRolloverOpen] = useState(false);
   const [aiBlueprintOpen, setAiBlueprintOpen] = useState(false);
+  const filterKey = [classFilter, subjectFilter, examTypeFilter, searchQuery].join("0001");
   // blueprints ticked for a bulk change (exam, time allowed, delete)
-  const [checked, setChecked] = useState<Set<string>>(new Set());
+  // the ticks belong to the filters they were made under: changing a filter starts the selection afresh
+  const [ticks, setTicks] = useState<{ key: string; ids: Set<string> }>({ key: "", ids: new Set() });
   const [bulkExam, setBulkExam] = useState<string>("");
   const [bulkMinutes, setBulkMinutes] = useState<string>("");
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -209,8 +211,6 @@ export default function BlueprintsPage() {
   // Filtered blueprints based on filters
   const displayedBlueprints = useMemo(() => {
     return sessionItems.filter((b) => {
-      // the blueprint just saved stays in view while its banner is up, whatever the filters
-      if (justSaved && b.id === justSaved.id) return true;
       if (
         classFilter !== "ALL" &&
         b.book.className.trim().toLowerCase() !== classFilter.trim().toLowerCase()
@@ -233,7 +233,7 @@ export default function BlueprintsPage() {
       }
       return true;
     });
-  }, [sessionItems, classFilter, subjectFilter, examTypeFilter, searchQuery, justSaved]);
+  }, [sessionItems, classFilter, subjectFilter, examTypeFilter, searchQuery]);
 
   const selected = useMemo(() => {
     return displayedBlueprints.find((b) => b.id === selectedId) ?? displayedBlueprints[0] ?? null;
@@ -268,22 +268,22 @@ export default function BlueprintsPage() {
   }
 
   function toggleChecked(id: string) {
-    setChecked((prev) => {
-      const next = new Set(prev);
+    setTicks((prev) => {
+      const next = new Set(prev.key === filterKey ? prev.ids : []);
       if (next.has(id)) next.delete(id);
       else next.add(id);
-      return next;
+      return { key: filterKey, ids: next };
     });
   }
 
   function clearBulk() {
-    setChecked(new Set());
+    setTicks({ key: filterKey, ids: new Set() });
     setBulkExam("");
     setBulkMinutes("");
   }
 
   async function runBulk(action: "update" | "delete") {
-    const ids = Array.from(checked);
+    const ids = checkedIds;
     if (ids.length === 0) return;
     const minutes = bulkMinutes.trim() === "" ? undefined : Math.round(Number(bulkMinutes));
     if (action === "update") {
@@ -303,11 +303,13 @@ export default function BlueprintsPage() {
     }
     setBulkBusy(true);
     try {
-      const res = await api<{ changed: number; unchanged?: number; skipped: Array<{ name: string; reason: string }> }>("/api/blueprints/bulk", {
+      const res = await api<{ changed: number; unchanged?: number; papersUpdated?: number; papersKept?: number; skipped: Array<{ name: string; reason: string }> }>("/api/blueprints/bulk", {
         method: "POST",
         json: action === "delete" ? { action, ids } : { action, ids, examType: bulkExam || undefined, durationMin: minutes },
       });
-      const done = action === "delete" ? `Deleted ${plural(res.changed, "blueprint")}` : `Updated ${plural(res.changed, "blueprint")}`;
+      let done = action === "delete" ? `Deleted ${plural(res.changed, "blueprint")}` : `Updated ${plural(res.changed, "blueprint")}`;
+      if (res.papersUpdated) done += `, and the exam of ${plural(res.papersUpdated, "draft paper")}`;
+      if (res.papersKept) done += `. ${plural(res.papersKept, "finalised paper")} keep${res.papersKept === 1 ? "s" : ""} the exam as printed`;
       if (res.skipped.length > 0) {
         const first = res.skipped[0];
         toast.info(`${done}. Skipped ${res.skipped.length}: “${first.name}” – ${first.reason}${res.skipped.length > 1 ? `, and ${res.skipped.length - 1} more` : ""}.`);
@@ -394,6 +396,8 @@ export default function BlueprintsPage() {
         },
       });
       setBuildPaperBp(null);
+      // this page stays alive behind the paper; a button left busy would still be greyed out when you come back
+      setBuildingPaper(false);
       toast.success(`Created draft paper "${created.title}"`);
       router.push(autoGenerateWithAI ? `/papers/${created.id}?aiGenerate=true` : `/papers/${created.id}`);
     } catch (err) {
@@ -410,11 +414,15 @@ export default function BlueprintsPage() {
     return `/blueprints/new${qs ? `?${qs}` : ""}`;
   })();
   const savedBp = justSaved ? items.find((b) => b.id === justSaved.id) ?? null : null;
+  // the filters may be on another class: the list shows only what they match, the banner says where the new one is
+  const savedHidden = savedBp !== null && !displayedBlueprints.some((b) => b.id === savedBp.id);
   const manageableShown = displayedBlueprints.filter((b) => canManageBlueprint(b));
+  const checked = ticks.key === filterKey ? ticks.ids : new Set<string>();
   const allShownChecked = manageableShown.length > 0 && manageableShown.every((b) => checked.has(b.id));
   // a ticked blueprint the filters now hide still counts, so the bar says so
-  const checkedCount = checked.size;
-  const hiddenChecked = Array.from(checked).filter((id) => !displayedBlueprints.some((b) => b.id === id)).length;
+  // only blueprints in view count: changing a filter drops the ones it hides from the selection
+  const checkedIds = displayedBlueprints.filter((b) => checked.has(b.id) && canManageBlueprint(b)).map((b) => b.id);
+  const checkedCount = checkedIds.length;
 
 
   return (
@@ -473,11 +481,27 @@ export default function BlueprintsPage() {
                 {justSaved?.created ? "Blueprint created" : "Blueprint saved"}: {savedBp.name}
               </p>
               <p className="text-sm text-emerald-900/80">
-                {savedBp.book.className} · {savedBp.book.subject} · {blueprintTotalMarks(savedBp.sections)} marks. Next, build an exam paper from it.
+                {savedBp.book.className} · {savedBp.book.subject} · {blueprintTotalMarks(savedBp.sections)} marks.{" "}
+                {savedHidden ? "It is not in the list below because of the filters." : "Next, build an exam paper from it."}
               </p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {savedHidden && (
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  setClassFilter(savedBp.book.className);
+                  setSubjectFilter("ALL");
+                  setExamTypeFilter("ALL");
+                  setSearchQuery("");
+                  setSelectedId(savedBp.id);
+                }}
+              >
+                Show it
+              </button>
+            )}
             <button type="button" className="btn btn-primary" onClick={() => openBuildPaperModal(savedBp)}>
               <FileText size={15} /> Build exam paper
             </button>
@@ -583,7 +607,7 @@ export default function BlueprintsPage() {
           <div className="mr-auto min-w-0 self-center">
             <p className="text-sm font-semibold text-slate-900">{plural(checkedCount, "blueprint")} selected</p>
             <p className="text-xs text-slate-500">
-              {hiddenChecked > 0 ? `${hiddenChecked} not shown by the current filters. ` : ""}Leave a field as it is to keep each blueprint&apos;s own value.
+              Leave a field as it is to keep each blueprint&apos;s own value.
             </p>
           </div>
           <label className="block">
@@ -725,10 +749,10 @@ export default function BlueprintsPage() {
                       className="h-4 w-4 rounded border-slate-300 accent-indigo-600"
                       checked={allShownChecked}
                       ref={(el) => {
-                        if (el) el.indeterminate = !allShownChecked && manageableShown.some((b) => checked.has(b.id));
+                        if (el) el.indeterminate = !allShownChecked && checkedCount > 0;
                       }}
                       onChange={() =>
-                        setChecked(allShownChecked ? new Set() : new Set(manageableShown.map((b) => b.id)))
+                        setTicks({ key: filterKey, ids: allShownChecked ? new Set() : new Set(manageableShown.map((b) => b.id)) })
                       }
                       aria-label={allShownChecked ? "Clear the selection" : "Select every blueprint shown"}
                     />

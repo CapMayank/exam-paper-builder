@@ -21,6 +21,9 @@ type Skipped = { id: string; name: string; reason: string };
  * POST { action: "update", ids, examType?, durationMin? }  change the exam and time allowed of many blueprints
  * POST { action: "delete", ids }                            delete many blueprints
  *
+ * The time allowed is read from the blueprint, so papers already made follow it. A paper keeps its own exam only when
+ * one was set on it; those drafts are moved to the new exam too, finalised papers are left as printed and counted.
+ *
  * Each blueprint is checked on its own, with the same rules as editing or deleting it one at a time; the ones the
  * user may not change are skipped and listed with the reason, the rest are changed.
  */
@@ -40,7 +43,7 @@ export const POST = route(
         examType: true,
         durationMin: true,
         book: { select: { className: true, subject: true } },
-        papers: { select: { status: true } },
+        papers: { select: { id: true, status: true, examType: true } },
       },
     });
 
@@ -76,16 +79,32 @@ export const POST = route(
     const toChange = allowed.filter(
       (r) => (data.examType !== undefined && r.examType !== data.examType) || (data.durationMin !== undefined && r.durationMin !== data.durationMin),
     );
+    let papersUpdated = 0;
+    let papersKept = 0;
     if (toChange.length > 0) {
       await prisma.blueprint.updateMany({ where: { id: { in: toChange.map((r) => r.id) } }, data });
+    }
+    if (data.examType !== undefined) {
+      // blueprints already on this exam are not in toChange, but their papers may still hold another one
+      for (const r of allowed) {
+        for (const p of r.papers) {
+          if (!p.examType || p.examType === data.examType) continue;
+          if (p.status === "FINAL") papersKept++;
+          else papersUpdated++;
+        }
+      }
+      const draftIds = allowed.flatMap((r) => r.papers.filter((p) => p.examType && p.examType !== data.examType && p.status !== "FINAL").map((p) => p.id));
+      if (draftIds.length > 0) await prisma.paper.updateMany({ where: { id: { in: draftIds } }, data: { examType: data.examType } });
     }
     await recordAudit(user, "API_CHANGE", "BLUEPRINT", null, {
       title: `Changed ${toChange.length} blueprint(s)`,
       ...data,
       names: toChange.map((r) => r.name),
       skipped: skipped.length,
+      papersUpdated,
+      papersKept,
     });
-    return { changed: toChange.length, unchanged: allowed.length - toChange.length, skipped };
+    return { changed: toChange.length, unchanged: allowed.length - toChange.length, skipped, papersUpdated, papersKept };
   },
   { roles: ["ADMIN", "TEACHER"] },
 );

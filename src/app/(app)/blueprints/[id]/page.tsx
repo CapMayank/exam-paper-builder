@@ -848,8 +848,10 @@ function BlueprintEditor({ params, searchParams }: PageProps<"/blueprints/[id]">
           },
         });
         toast.success(`Created paper "${paper.title}"`);
+        setBusy(false); // the editor stays alive behind the next page; Back must not find it stuck on "Saving…"
         router.push(`/papers/${paper.id}`);
       } else {
+        setBusy(false);
         router.push(`/blueprints?saved=${encodeURIComponent(savedBlueprintId)}${id === "new" ? "&created=1" : ""}`);
       }
     } catch (err) {
@@ -876,6 +878,7 @@ function BlueprintEditor({ params, searchParams }: PageProps<"/blueprints/[id]">
         },
       });
       toast.success(`Created paper "${paper.title}"`);
+      setBusy(false);
       router.push(`/papers/${paper.id}`);
     } catch (err) {
       setError((err as Error).message);

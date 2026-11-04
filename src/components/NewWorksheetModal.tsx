@@ -53,6 +53,8 @@ export function NewWorksheetModal({ session, onClose }: { session?: string; onCl
       try {
         localStorage.setItem(SCHOOL_KEY, schoolName);
       } catch {}
+      // the page behind stays alive; a button left busy would still be greyed out when you come back
+      setBusy(false);
       router.push(`/worksheets/${res.id}`);
     } catch (err) {
       setError((err as Error).message);

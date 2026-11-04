@@ -140,6 +140,9 @@ export default function PapersPage() {
     try {
       const p = await api<PaperData>("/api/papers", { method: "POST", json: form });
       localStorage.setItem(SCHOOL_KEY, form.schoolName);
+      // this page stays alive behind the paper; a button left busy would still be greyed out when you come back
+      setSaving(false);
+      setCreating(false);
       router.push(`/papers/${p.id}`);
     } catch (err) {
       setError((err as Error).message);
