@@ -182,7 +182,7 @@ describe("permission matrix (API routes)", () => {
     await mk("maths", "TEACHER", [{ className: CLASS, subject: "Mathematics" }]);
     await mk("unassigned", "TEACHER");
     await mk("exam", "EXAM_CELL");
-    await mk("hod", "HOD"); // legacy row as it exists before migrate-rbac.mjs runs
+    await mk("hod", "HOD"); // legacy row from before the class-assignment model; it reads as a Teacher
 
     const mkBook = async (className: string, subject: string) => {
       const b = await prisma.book.create({ data: { title: `${subject} ${stamp}`, className, subject, academicSession: "2026–27" } });
