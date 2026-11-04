@@ -1093,6 +1093,13 @@ export interface GeneratePaperSectionInput {
   validBookChapterIds?: Set<string>;
   existingQuestionTexts?: string[];
   apiKey?: string | null;
+  /**
+   * "separate" (default, two-stage): the call writes the questions and only the short key of objective
+   * items; subjective model answers, marking schemes and explanations come from the answer-key pass after
+   * the questions are placed, so the setter's effort goes into the questions.
+   * "together": the old single pass, questions and full answers in one reply.
+   */
+  answerMode?: "separate" | "together";
 }
 
 export interface GeneratedPaperQuestion {
@@ -1177,7 +1184,9 @@ export async function generatePaperSectionWithGemini(
     validBookChapterIds,
     existingQuestionTexts,
     apiKey,
+    answerMode = "separate",
   } = params;
+  const answersLater = answerMode !== "together";
 
   const normalizedType = normalizeQuestionType(sectionType);
   const contractRes = buildAndValidateGenerationContract({
@@ -1252,7 +1261,11 @@ ${contract.forbiddenCrossSubjectDomains.length > 0 ? `2. FORBIDDEN CROSS-SUBJECT
 7. For Case Study / Passage (CASE_STUDY, UNSEEN_PASSAGE, REFERENCE_CONTEXT): Provide a domain-authentic scenario/passage, followed by labeled subparts ((i), (ii), etc.) whose marks sum up exactly to ${marksEach}.
    - UNSEEN_PASSAGE: write a NEW, ORIGINAL passage of 120-180 words (count them: under 100 words is rejected and you will be asked again; keep it under 200 so the printed paper stays within its page limit) (prose or poetry as the section says) in the paper's language. It must NOT quote, paraphrase or summarise any textbook lesson or any published text, and its topic must be independent of the slot's chapter (the chapter only sets the reading level and vocabulary). Every sub-question must be answerable from the passage alone.
    - Any 1-mark sub-question must be a multiple-choice item: put exactly 4 distinct options in the subpart's "options" array and the correct option text in its "answer". Use the sub-question count that makes the marks add up to ${marksEach} (for 5 marks: five 1-mark MCQs unless the section instructions say otherwise).
-8. For subjective questions (VERY_SHORT, SHORT, LONG, NUMERICAL): Provide a detailed step-wise model answer and marking scheme breakdown.
+${
+  answersLater
+    ? `8. ANSWERS ARE WRITTEN SEPARATELY: a different examiner writes the model answers and marking scheme after you, by solving your questions. Do NOT write model answers, solutions, marking schemes or explanations. For subjective questions (VERY_SHORT, SHORT, LONG, NUMERICAL, WRITING_SKILL, GRAMMAR, DRAW, MAP_WORK) and for subparts without options, set "answer" to "". Only objective items carry their short key in "answer": the exact text of the correct option (MCQ, ASSERTION_REASON, and subparts with options), True/False (TRUE_FALSE), the word(s) for the blank (FILL_BLANK), the pairings (MATCH_COLUMN). Put the effort you save into the questions: each must have exactly one defensible answer, be solvable with the data it gives, and ask for work that matches its marks.`
+    : "8. For subjective questions (VERY_SHORT, SHORT, LONG, NUMERICAL): Provide a detailed step-wise model answer and marking scheme breakdown."
+}
 9. LaTeX Math: Enclose all mathematical expressions, equations, symbols, and formulas in standard LaTeX $...$ delimiters.
 10. Vector Diagram Prompt (Figure Studio): If diagram generation is enabled and a question naturally involves a visual diagram, provide a concise description in "figurePrompt". Otherwise leave "figurePrompt" as null.
 11. INTERNAL CHOICE (अथवा / OR) POLICY (${contract.internalChoiceRequirement.patternVersion}):
@@ -1293,22 +1306,24 @@ ${difficultyPromptBlock(difficultyProfile.id).split("\n").map((l) => `   ${l}`).
    - 1-mark & 2-mark questions: Strictly NO internal choice. Target answer length: ~30 words for 2m.
    - 3-mark questions: 100% mandatory internal choice (Full OR alternative from same chapter). Target answer length: ~75 words.
    - 4-mark questions: 100% mandatory internal choice (Full OR alternative from same chapter). Target answer length: ~120 words.
-   - 5-mark questions: 100% mandatory internal choice. Target answer length: ~150 words.
-   - Rubric: For all subjective questions, model answers MUST provide a step-wise mark distribution totaling the exact slot marks.
+   - 5-mark questions: 100% mandatory internal choice. Target answer length: ~150 words.${
+     answersLater
+       ? "\n   - Scope each question so a full answer of that length earns its marks (you do not write the answer)."
+       : "\n   - Rubric: For all subjective questions, model answers MUST provide a step-wise mark distribution totaling the exact slot marks."
+   }
 17. Echo the stable "slotId" provided in each slot specification inside the returned JSON question object.
 18. Return ONLY a valid JSON array of question objects. No markdown wrapping or conversational commentary.
 19. SUBJECT-SPECIFIC ACADEMIC QUALITY DIRECTIVES (${subjectDirectives.subjectName}):
 - Solvability & Numerical Solvability:
 ${subjectDirectives.solvabilityRules.map((r) => `  * ${r}`).join("\n")}
 - Completeness & Clear Conditions:
-${subjectDirectives.completenessRules.map((r) => `  * ${r}`).join("\n")}
-- Marking Scheme Rubric: ${subjectDirectives.rubricDirective}${
+${subjectDirectives.completenessRules.map((r) => `  * ${r}`).join("\n")}${answersLater ? "" : `\n- Marking Scheme Rubric: ${subjectDirectives.rubricDirective}`}${
   subjectDirectives.varietyRules?.length
     ? `\n- Assessment Variety:\n${subjectDirectives.varietyRules.map((r) => `  * ${r}`).join("\n")}`
     : ""
 }
-20. QUESTION PRECISION CHECKLIST (check every question, option, OR alternative and answer against this before returning):
-${UNIVERSAL_QUALITY_RULES.map((r) => `   - ${r}`).join("\n")}`;
+20. QUESTION PRECISION CHECKLIST (check every question, option, OR alternative${answersLater ? " and objective key" : " and answer"} against this before returning):
+${UNIVERSAL_QUALITY_RULES.filter((r) => !answersLater || !/^Model answers/.test(r)).map((r) => `   - ${r}`).join("\n")}`;
 
   const slotsDescription = contract.slots
     .map((s, idx) => {
@@ -1336,6 +1351,20 @@ ${UNIVERSAL_QUALITY_RULES.map((r) => `   - ${r}`).join("\n")}`;
 
   const isMatchSection = normalizedType === "MATCH_COLUMN";
   const testedTerms = extractTestedTerms(existingQuestionTexts ?? []);
+  // what the schema shows in "answer": in two-stage mode only an objective key, never a model answer
+  const objectiveSection = isMcqLikeType(normalizedType) || ["TRUE_FALSE", "FILL_BLANK", "MATCH_COLUMN"].includes(normalizedType);
+  const mainAnswerHint = !answersLater
+    ? "Detailed model answer and marking scheme breakdown"
+    : isMcqLikeType(normalizedType)
+    ? "exact text of the correct option"
+    : normalizedType === "TRUE_FALSE"
+    ? "True or False (in the paper's language)"
+    : normalizedType === "FILL_BLANK"
+    ? "the word(s) that fill the blank"
+    : objectiveSection
+    ? "the pairings"
+    : "";
+  const subpartAnswerHint = answersLater ? 'correct option text if the subpart has options, else ""' : "Model answer";
 
   const baseUserPrompt = isMatchSection
     ? `Generate EXACTLY 1 combined Match the Columns question containing all ${slots.length} matching pairs for the following exam section:
@@ -1455,14 +1484,15 @@ JSON Array Output Schema:
     "options": ${isMcqLikeType(normalizedType) ? '["A", "B", "C", "D"]' : "[]"},
     "subparts": ${
       isSubpartQuestionType(normalizedType)
-        ? '[\n      { "label": "(i)", "text": "Subpart question", "marks": 1, "answer": "Model answer" }\n    ]'
+        ? `[\n      { "label": "(i)", "text": "Subpart question", "marks": 1, "answer": "${subpartAnswerHint}" }\n    ]`
         : '[] // or array of subparts if multi-component'
     },
     "attemptCount": 4, // only when question specifies internal choice among subparts (e.g. answer any 4 of 5)
-    "answer": "Detailed model answer and marking scheme breakdown",
+    "answer": "${mainAnswerHint}",
     "difficulty": "EASY" | "MEDIUM" | "HARD",
-    "cognitiveLevel": "REMEMBERING" | "UNDERSTANDING" | "APPLYING" | "ANALYZING" | "EVALUATING",
-    "explanation": "Brief explanation or concept rationale",
+    "cognitiveLevel": "REMEMBERING" | "UNDERSTANDING" | "APPLYING" | "ANALYZING" | "EVALUATING",${
+      answersLater ? "" : '\n    "explanation": "Brief explanation or concept rationale",'
+    }
     "figurePrompt": "Concise description of diagram to draw"${
       anySlotRequiresChoice
         ? `,
@@ -1474,14 +1504,13 @@ JSON Array Output Schema:
       "options": ${isMcqLikeType(normalizedType) ? '["A", "B", "C", "D"]' : "[]"},
       "subparts": ${
         isSubpartQuestionType(normalizedType)
-          ? '[\n        { "label": "(i)", "text": "Alternative subpart question", "marks": 1, "answer": "Model answer" }\n      ]'
+          ? `[\n        { "label": "(i)", "text": "Alternative subpart question", "marks": 1, "answer": "${subpartAnswerHint}" }\n      ]`
           : '[] // or array of subparts if multi-component'
       },
       "attemptCount": 4, // only if OR question has internal subpart choice
-      "answer": "Complete independent model answer and step-marking scheme for the OR question",
+      "answer": "${answersLater ? mainAnswerHint : "Complete independent model answer and step-marking scheme for the OR question"}",
       "difficulty": "EASY" | "MEDIUM" | "HARD",
-      "cognitiveLevel": "APPLYING",
-      "explanation": "Brief explanation for the alternative question"
+      "cognitiveLevel": "APPLYING"${answersLater ? "" : ',\n      "explanation": "Brief explanation for the alternative question"'}
     }`
         : ""
     }
@@ -1959,6 +1988,7 @@ JSON Array Output Schema:
       normalizedQuestions,
       contract,
       existingQuestionTexts || [],
+      { deferSubjectiveAnswers: answersLater },
     );
 
     // If on the final attempt (or mock fallback) some slots only failed because of missing/invalid orQuestion,
@@ -2015,6 +2045,7 @@ JSON Array Output Schema:
         normalizedQuestions,
         contract,
         existingQuestionTexts || [],
+        { deferSubjectiveAnswers: answersLater },
       );
     }
 
@@ -2073,6 +2104,7 @@ JSON Array Output Schema:
         patchedQuestions,
         contract,
         existingQuestionTexts || [],
+        { deferSubjectiveAnswers: answersLater },
       );
       if (patchedValidation.valid) {
         const trace = createGenerationJobTrace({

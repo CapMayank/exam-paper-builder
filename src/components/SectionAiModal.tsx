@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { MathText } from "@/components/MathText";
 import { QuestionContent } from "@/components/QuestionContent";
+import { useToast } from "@/components/ui";
+import { answerStageSummary, runAnswerStages } from "@/lib/answerStage";
 import { api, retryTransient } from "@/lib/client";
 import {
   cleanMatchItem,
@@ -56,6 +58,8 @@ export function SectionAiModal({
 
   const [loading, setLoading] = useState<boolean>(false);
   const [committing, setCommitting] = useState<boolean>(false);
+  const [commitActivity, setCommitActivity] = useState<string>("");
+  const toast = useToast();
   const [error, setError] = useState<string | null>(null);
   const [generatedQuestions, setGeneratedQuestions] = useState<GeneratedPaperQuestion[]>([]);
   const [step, setStep] = useState<"config" | "preview">("config");
@@ -288,12 +292,24 @@ export function SectionAiModal({
         throw new Error("Failed to commit questions to paper.");
       }
 
-      onCommitted(res.paper);
+      // the questions are saved; answers come from a separate pass, then the objective keys are re-checked
+      const stage = await runAnswerStages(paper.id, { onActivity: setCommitActivity, sectionId: section!.id });
+      onCommitted(stage.paper ?? res.paper);
+      if (stage.answerError || (stage.check?.disagreements.length ?? 0) > 0) {
+        toast.info(
+          `${answerStageSummary(stage)}${
+            stage.check?.disagreements.length
+              ? `: ${stage.check.disagreements.map((d) => `${d.label} (key ${d.storedAnswer}, check ${d.solverAnswer})`).join("; ")}`
+              : ""
+          }`,
+        );
+      }
       onClose();
     } catch (err: any) {
       setError(err?.message || "Failed to insert questions into paper.");
     } finally {
       setCommitting(false);
+      setCommitActivity("");
     }
   }
 
@@ -766,7 +782,7 @@ export function SectionAiModal({
                 {committing ? (
                   <>
                     <Loader2 size={13} className="animate-spin" />
-                    <span>Inserting…</span>
+                    <span>{commitActivity ? (commitActivity.startsWith("Key check") ? "Checking answer keys…" : "Writing answer key…") : "Inserting…"}</span>
                   </>
                 ) : (
                   <>

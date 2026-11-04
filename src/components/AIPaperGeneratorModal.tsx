@@ -29,6 +29,7 @@ import { ErrorBanner, Modal, Spinner, useToast } from "@/components/ui";
 import { renderDocToBlob } from "@/components/figure-studio/render";
 import { embedSceneInPng } from "@/components/figure-studio/pngMeta";
 import type { Doc, GridSettings, SceneFile } from "@/components/figure-studio/types";
+import { answerStageSummary, runAnswerStages, type AnswerStageResult } from "@/lib/answerStage";
 import { api, imageUrl, retryTransient, uploadImage } from "@/lib/client";
 import {
   cleanMatchItem,
@@ -86,6 +87,9 @@ export function AIPaperGeneratorModal({
   >([]);
   const [expandedAnswers, setExpandedAnswers] = useState<Set<number>>(new Set());
   const [latestPaper, setLatestPaper] = useState<PaperData | null>(null);
+  // after the questions: the answer-key pass and the independent key check
+  const [answering, setAnswering] = useState(false);
+  const [answerReport, setAnswerReport] = useState<AnswerStageResult | null>(null);
 
   const abortRef = useRef<boolean>(false);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -214,6 +218,7 @@ export function AIPaperGeneratorModal({
 
     setStatus("generating");
     setError(null);
+    setAnswerReport(null);
     abortRef.current = false;
     let currentPlan = plan;
 
@@ -410,6 +415,23 @@ export function AIPaperGeneratorModal({
           (sum, q) => sum + (q.slotsFilled || 1),
           0
         );
+        // Questions are saved. Now the answers, written by a separate pass so they don't compete with
+        // question quality, then an independent re-solve of the objective keys.
+        if (accumulatedQuestions.length > 0) {
+          setAnswering(true);
+          try {
+            const stage = await runAnswerStages(paperId, { signal, onActivity: setCurrentActivity });
+            setAnswerReport(stage);
+            if (stage.paper) {
+              updatedPaperRef = stage.paper;
+              setLatestPaper(stage.paper);
+            }
+            const disputed = stage.check?.disagreements.length ?? 0;
+            if (stage.answerError || disputed > 0) toast.info(answerStageSummary(stage));
+          } finally {
+            setAnswering(false);
+          }
+        }
         setStatus("done");
         toast.success(`Successfully generated ${totalFilledSlots} question slots!`);
         if (updatedPaperRef) {
@@ -774,7 +796,9 @@ export function AIPaperGeneratorModal({
                       <StopCircle size={18} className="text-amber-600" />
                     )}
                     <span className="text-xs font-bold text-slate-900">
-                      {status === "generating"
+                      {status === "generating" && answering
+                        ? "All sections placed · writing and checking the answer key"
+                        : status === "generating"
                         ? `Section ${currentSectionIndex + 1} of ${pendingSections.length}: ${
                             currentSectionTitle || pendingSections[currentSectionIndex]?.sectionTitle || "Generating..."
                           }`
@@ -799,7 +823,7 @@ export function AIPaperGeneratorModal({
                 </div>
 
                 {/* Active Section Multi-Stage Progress */}
-                {status === "generating" && (
+                {status === "generating" && !answering && (
                   <div className="mt-3 pt-2.5 border-t border-indigo-100 grid grid-cols-1 sm:grid-cols-3 gap-2">
                     {/* Stage 1 */}
                     <div
@@ -866,6 +890,49 @@ export function AIPaperGeneratorModal({
                   </p>
                 )}
               </div>
+
+              {/* Answer key (separate pass) and independent key check */}
+              {answerReport && (
+                <div
+                  className={`rounded-xl border p-3.5 text-xs space-y-2 ${
+                    answerReport.answerError || (answerReport.check?.disagreements.length ?? 0) > 0
+                      ? "border-amber-300 bg-amber-50/70 text-amber-950"
+                      : "border-emerald-200 bg-emerald-50/60 text-emerald-950"
+                  }`}
+                >
+                  <div className="font-bold flex items-center gap-1.5">
+                    {answerReport.answerError || (answerReport.check?.disagreements.length ?? 0) > 0 ? (
+                      <AlertTriangle size={14} className="text-amber-600" />
+                    ) : (
+                      <CheckCircle2 size={14} className="text-emerald-600" />
+                    )}
+                    Answer key
+                  </div>
+                  <p className="leading-relaxed">{answerStageSummary(answerReport)}.</p>
+                  {(answerReport.check?.disagreements.length ?? 0) > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="text-[11px]">
+                        A second AI solved these without seeing the key and got a different answer. Either the key is
+                        wrong or the question allows more than one answer. Nothing was changed; check each one in the
+                        editor.
+                      </p>
+                      <ul className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                        {answerReport.check!.disagreements.map((d) => (
+                          <li key={d.questionId} className="rounded-lg border border-amber-200 bg-white/80 p-2">
+                            <div className="font-semibold text-[11px]">{d.label}</div>
+                            <div className="text-[11px] text-slate-700 line-clamp-2">
+                              <MathText text={d.text} />
+                            </div>
+                            <div className="text-[11px] mt-0.5">
+                              Key: <strong>{d.storedAnswer}</strong> · Independent solver: <strong>{d.solverAnswer}</strong>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Feed of Generated Questions */}
               <div className="space-y-3">
@@ -1070,7 +1137,11 @@ export function AIPaperGeneratorModal({
                             {isExpanded && (
                               <div className="mt-1.5 space-y-1.5">
                                 <div className="p-2 rounded-lg bg-emerald-50/70 border border-emerald-200 text-[11px] text-emerald-950 font-mono whitespace-pre-wrap leading-relaxed">
-                                  {q.orQuestion ? `Primary Answer:\n${q.answer}` : q.answer}
+                                  {!q.answer?.trim()
+                                    ? "Written by the separate answer-key pass after the questions are placed; see the paper's Solutions."
+                                    : q.orQuestion
+                                    ? `Primary Answer:\n${q.answer}`
+                                    : q.answer}
                                 </div>
                                 {q.orQuestion && q.orQuestion.answer && (
                                   <div className="p-2 rounded-lg bg-indigo-50/70 border border-indigo-200 text-[11px] text-indigo-950 font-mono whitespace-pre-wrap leading-relaxed">

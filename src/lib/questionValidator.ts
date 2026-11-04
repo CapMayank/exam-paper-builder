@@ -1189,6 +1189,12 @@ export function validateGeneratedQuestion(
     skipInternalChoiceCheck?: boolean;
     /** Generated questions must carry a full passage; stored/imported papers are not held to this. */
     strictPassage?: boolean;
+    /**
+     * Two-stage generation: subjective model answers are written by a separate answer pass after the
+     * questions are placed, so a subjective question without one is not an error here. Objective keys
+     * (MCQ option, True/False, the blank word, match pairings) are still required.
+     */
+    deferSubjectiveAnswers?: boolean;
   },
 ): QuestionValidationResult {
   const issues: QuestionValidationIssue[] = [];
@@ -1403,7 +1409,7 @@ export function validateGeneratedQuestion(
     }
   } else {
     // Subjective question types (VERY_SHORT, SHORT, LONG, NUMERICAL, etc.)
-    if (!answer || answer.length < 2) {
+    if (!opts?.deferSubjectiveAnswers && (!answer || answer.length < 2)) {
       issues.push({
         code: "INCOMPLETE_CONTENT",
         severity: "ERROR",
@@ -1495,6 +1501,7 @@ export function validateGeneratedQuestion(
             slotIndex: slotIdx,
             existingNormalizedTexts: opts?.existingNormalizedTexts,
             skipInternalChoiceCheck: true,
+            deferSubjectiveAnswers: opts?.deferSubjectiveAnswers,
           },
         );
 
@@ -1544,7 +1551,9 @@ export function validateGeneratedSection(
   questions: ValidatableQuestion[],
   contract: GenerationContract,
   existingPaperQuestionTexts: string[] = [],
+  opts?: { deferSubjectiveAnswers?: boolean },
 ): SectionValidationResult {
+  const defer = opts?.deferSubjectiveAnswers;
   const seenTexts = new Set<string>(
     existingPaperQuestionTexts
       .map((t) =>
@@ -1582,6 +1591,7 @@ export function validateGeneratedSection(
     const res = validateGeneratedQuestion(q, contract, {
       slotIndex: 0,
       existingNormalizedTexts: seenTexts,
+      deferSubjectiveAnswers: defer,
     });
     allIssues.push(...res.issues);
     if (res.valid) {
@@ -1618,6 +1628,7 @@ export function validateGeneratedSection(
       slotIndex: slot.slotIndex,
       existingNormalizedTexts: seenTexts,
       strictPassage: true,
+      deferSubjectiveAnswers: defer,
     });
     allIssues.push(...res.issues);
 

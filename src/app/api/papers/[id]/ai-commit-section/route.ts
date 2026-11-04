@@ -154,7 +154,7 @@ export const POST = route(async (req, { id }, user) => {
         type: q.type || section.type,
       } as any,
       contractRes.contract,
-      { slotIndex: i, strictPassage: true },
+      { slotIndex: i, strictPassage: true, deferSubjectiveAnswers: true },
     );
 
     let vRes = verifyQuestionAcademicQuality(
@@ -186,7 +186,7 @@ export const POST = route(async (req, { id }, user) => {
           answer: repRes.question.answer || q.answer,
           orQuestion: repRes.question.orQuestion ?? q.orQuestion,
         } as any;
-        valRes = validateGeneratedQuestion(questions[i] as any, contractRes.contract, { slotIndex: i, strictPassage: true });
+        valRes = validateGeneratedQuestion(questions[i] as any, contractRes.contract, { slotIndex: i, strictPassage: true, deferSubjectiveAnswers: true });
         vRes = repRes.verificationResult;
       }
     }
@@ -210,7 +210,7 @@ export const POST = route(async (req, { id }, user) => {
       });
       if (!regenerated) break;
       const candidate = { ...q, ...regenerated, type: q.type || section.type } as never;
-      const v2 = validateGeneratedQuestion(candidate, contractRes.contract, { slotIndex: i, strictPassage: true });
+      const v2 = validateGeneratedQuestion(candidate, contractRes.contract, { slotIndex: i, strictPassage: true, deferSubjectiveAnswers: true });
       const vr2 = verifyQuestionAcademicQuality(candidate, contractRes.contract, { slotIndex: i });
       if (v2.valid && vr2.status !== "FAIL") {
         questions[i] = candidate;
@@ -241,7 +241,7 @@ export const POST = route(async (req, { id }, user) => {
           orQuestion: grounded.orQuestion ?? q.orQuestion,
           requiresInternalChoice: grounded.requiresInternalChoice ?? q.requiresInternalChoice,
         } as never;
-        valRes = validateGeneratedQuestion(questions[i] as never, contractRes.contract, { slotIndex: i, strictPassage: true });
+        valRes = validateGeneratedQuestion(questions[i] as never, contractRes.contract, { slotIndex: i, strictPassage: true, deferSubjectiveAnswers: true });
         vRes = verifyQuestionAcademicQuality(questions[i] as never, contractRes.contract, { slotIndex: i });
       }
     }

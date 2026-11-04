@@ -28,6 +28,7 @@ export const POST = route(async (req, { id }, user) => {
     generateDiagrams = true,
     slots = [],
     customKey,
+    answerMode = "separate",
   } = body;
 
   if (!Array.isArray(slots) || slots.length === 0) {
@@ -125,6 +126,8 @@ export const POST = route(async (req, { id }, user) => {
     validBookChapterIds,
     existingQuestionTexts,
     apiKey: customKey || req.headers.get("x-gemini-api-key") || (user as any)?.apiKey || null,
+    // two-stage by default: questions here, model answers from the answer-key pass after commit
+    answerMode: answerMode === "together" ? "together" : "separate",
   });
 
   if (res.isMock && ["UNSEEN_PASSAGE", "REFERENCE_CONTEXT"].includes(String(sectionType || matchedSection?.type))) {
