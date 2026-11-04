@@ -4,6 +4,7 @@ import {
   ArrowRight,
   BookOpen,
   Calendar,
+  Check,
   CheckCircle2,
   ChevronRight,
   Code2,
@@ -20,6 +21,7 @@ import {
   Sparkles,
   Trash2,
   Upload,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -28,7 +30,6 @@ import { AcademicRolloverModal } from "@/components/AcademicRolloverModal";
 import { AIBlueprintModal } from "@/components/AIBlueprintModal";
 import { BlueprintJsonModal } from "@/components/BlueprintJsonModal";
 import { BlueprintExportModal } from "@/components/BlueprintExportModal";
-import { BlueprintTemplateModal } from "@/components/BlueprintTemplateModal";
 import {
   EmptyState,
   ErrorBanner,
@@ -88,7 +89,8 @@ export default function BlueprintsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [rolloverOpen, setRolloverOpen] = useState(false);
   const [aiBlueprintOpen, setAiBlueprintOpen] = useState(false);
-  const [templateModalOpen, setTemplateModalOpen] = useState(false);
+  // the blueprint just saved in the editor: selected, with the next step offered
+  const [justSaved, setJustSaved] = useState<{ id: string; created: boolean } | null>(null);
   const [jsonModalBlueprint, setJsonModalBlueprint] = useState<Blueprint | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState<"directory" | "details">("directory");
@@ -114,6 +116,23 @@ export default function BlueprintsPage() {
     const sp = new URLSearchParams(window.location.search);
     const cls = sp.get("className");
     const sub = sp.get("subject");
+    const saved = sp.get("saved");
+    if (saved) {
+      // show the saved blueprint whatever the filters were, then drop the marker so a reload does not repeat it
+      setClassFilter("ALL");
+      setSubjectFilter("ALL");
+      setExamTypeFilter("ALL");
+      setSearchQuery("");
+      setSelectedId(saved);
+      setMobileTab("details");
+      setJustSaved({ id: saved, created: sp.get("created") === "1" });
+      sp.delete("saved");
+      sp.delete("created");
+      const rest = sp.toString();
+      window.history.replaceState(null, "", `${window.location.pathname}${rest ? `?${rest}` : ""}`);
+      window.scrollTo({ top: 0 });
+      return;
+    }
     if (cls) setClassFilter(cls);
     if (sub) setSubjectFilter(sub);
   }, []);
@@ -308,6 +327,15 @@ export default function BlueprintsPage() {
     }
   }
 
+  const newBlueprintHref = (() => {
+    const q = new URLSearchParams();
+    if (classFilter !== "ALL") q.set("className", classFilter);
+    if (subjectFilter !== "ALL") q.set("subject", subjectFilter);
+    const qs = q.toString();
+    return `/blueprints/new${qs ? `?${qs}` : ""}`;
+  })();
+  const savedBp = justSaved ? items.find((b) => b.id === justSaved.id) ?? null : null;
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -342,34 +370,51 @@ export default function BlueprintsPage() {
                 <RotateCcw size={15} className="text-slate-600" /> Rollover Session
               </button>
             )}
-            {canCreate && (<>
-            <button
-              type="button"
-              onClick={() => setTemplateModalOpen(true)}
-              className="btn btn-ghost border border-purple-200 bg-purple-50/80 text-purple-900 hover:bg-purple-100 text-xs py-1.5 font-semibold flex items-center gap-1.5"
-              title="Start from an MPBSE 2026-27 blueprint template"
-            >
-              <Layers size={15} className="text-purple-600" /> Starter Templates
-            </button>
-            <Link
-              href="/blueprints/new?import=true"
-              className="btn btn-ghost border border-slate-200 bg-white text-slate-800 hover:bg-slate-50 text-xs py-1.5"
-              title="Import blueprint specification from JSON or CSV"
-            >
-              <Upload size={15} className="text-slate-600" /> Import Blueprint
-            </Link>
-            <Link
-              href={`/blueprints/new${classFilter !== "ALL" ? `?className=${encodeURIComponent(classFilter)}` : ""}${subjectFilter !== "ALL" ? `&subject=${encodeURIComponent(subjectFilter)}` : ""}`}
-              className="btn btn-primary text-xs py-1.5"
-            >
-              <Plus size={15} /> New Blueprint
-            </Link>
-            </>)}
+            {canCreate && (
+              <Link href={newBlueprintHref} className="btn btn-primary text-xs py-1.5">
+                <Plus size={15} /> New blueprint
+              </Link>
+            )}
           </div>
         }
       />
 
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
+
+      {savedBp && (
+        <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/80 px-4 py-3">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
+              <Check size={16} aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <p className="font-semibold text-emerald-950">
+                {justSaved?.created ? "Blueprint created" : "Blueprint saved"}: {savedBp.name}
+              </p>
+              <p className="text-sm text-emerald-900/80">
+                {savedBp.book.className} · {savedBp.book.subject} · {blueprintTotalMarks(savedBp.sections)} marks. Next, build an exam paper from it.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" className="btn btn-primary" onClick={() => openBuildPaperModal(savedBp)}>
+              <FileText size={15} /> Build exam paper
+            </button>
+            {canCreate && (
+              <Link
+                href={`/blueprints/new?className=${encodeURIComponent(savedBp.book.className)}`}
+                className="btn"
+                onClick={() => setJustSaved(null)}
+              >
+                <Plus size={15} /> Another for {savedBp.book.className}
+              </Link>
+            )}
+            <button type="button" className="btn btn-ghost btn-icon" aria-label="Dismiss" onClick={() => setJustSaved(null)}>
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Top Filter Card (Matching Books & Syllabus) */}
       <div className="card p-4 space-y-3 bg-white">
@@ -460,7 +505,7 @@ export default function BlueprintsPage() {
                 <GraduationCap size={16} /> Open Classes &amp; Subjects Hub
               </Link>
               <Link href="/blueprints/new" className="btn btn-ghost border border-slate-200">
-                <Plus size={16} /> Create Blueprint
+                <Plus size={16} /> New blueprint
               </Link>
             </div>
           }
@@ -481,7 +526,7 @@ export default function BlueprintsPage() {
           action={
             <div className="flex flex-wrap items-center justify-center gap-2">
               <Link
-                href={`/blueprints/new${classFilter !== "ALL" ? `?className=${encodeURIComponent(classFilter)}` : ""}${subjectFilter !== "ALL" ? `${classFilter !== "ALL" ? "&" : "?"}subject=${encodeURIComponent(subjectFilter)}` : ""}`}
+                href={newBlueprintHref}
                 className="btn btn-primary"
               >
                 <Plus size={16} /> Create Blueprint {subjectFilter !== "ALL" ? `for ${subjectFilter}` : ""}
@@ -538,7 +583,7 @@ export default function BlueprintsPage() {
                   <Ruler size={14} className="text-indigo-600" /> Blueprints ({displayedBlueprints.length})
                 </span>
                 {canCreate && (
-                <Link href="/blueprints/new" className="btn btn-primary text-[11px] py-1 px-2.5 gap-1">
+                <Link href={newBlueprintHref} className="btn btn-primary text-[11px] py-1 px-2.5 gap-1">
                   <Plus size={13} /> New
                 </Link>
                 )}
@@ -1050,17 +1095,6 @@ export default function BlueprintsPage() {
         blueprint={jsonModalBlueprint}
       />
 
-      <BlueprintTemplateModal
-        className={classFilter !== "ALL" ? classFilter : undefined}
-        isOpen={templateModalOpen}
-        onClose={() => setTemplateModalOpen(false)}
-        onSelectTemplate={(tmpl) => {
-          setTemplateModalOpen(false);
-          const classQuery = classFilter !== "ALL" ? `&className=${encodeURIComponent(classFilter)}` : "";
-          const subjectQuery = subjectFilter !== "ALL" ? `&subject=${encodeURIComponent(subjectFilter)}` : "";
-          router.push(`/blueprints/new?templateId=${encodeURIComponent(tmpl.id)}${classQuery}${subjectQuery}`);
-        }}
-      />
     </div>
   );
 }

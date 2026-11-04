@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUp, BookOpen, Code2, Download, FileText, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, BookOpen, Check, Code2, Download, FileText, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, use, useEffect, useMemo, useState } from "react";
@@ -59,7 +59,20 @@ const newSectionGroup = (over: Partial<SectionGroup> = {}, defaultIndex = 0): Se
 
 const num = (v: string) => Math.max(0, Math.floor(Number(v) || 0));
 
-export default function BlueprintEditorPage({ params, searchParams }: PageProps<"/blueprints/[id]">) {
+/**
+ * The app keeps pages alive between visits (Cache Components preserve state with <Activity>), so without a key
+ * a second "New blueprint" would reopen the last blueprint's editor instead of the picker. Keying on bfcacheId
+ * gives every fresh visit a clean editor and still restores a draft on browser back / forward.
+ */
+export default function BlueprintEditorPage(props: PageProps<"/blueprints/[id]">) {
+  const { bfcacheId } = useRouter();
+  const { id } = use(props.params);
+  const sp = use(props.searchParams);
+  const from = typeof sp.from === "string" ? sp.from : "";
+  return <BlueprintEditor key={`${bfcacheId}|${id}|${from}`} {...props} />;
+}
+
+function BlueprintEditor({ params, searchParams }: PageProps<"/blueprints/[id]">) {
   const { id } = use(params);
   const sp = use(searchParams);
   const from = typeof sp.from === "string" ? sp.from : undefined;
@@ -761,7 +774,7 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
       }
     }
 
-    toast.success(`Loaded MPBSE Official Pattern: ${template.title} (${template.totalMarks} marks)`);
+    toast.success(`MPBSE board pattern loaded: ${template.totalMarks} marks`);
   }
 
   async function save(e?: React.FormEvent, andBuildPaper = false) {
@@ -814,10 +827,10 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
       if (id === "new") {
         const created = await api<{ id: string }>("/api/blueprints", { method: "POST", json });
         savedBlueprintId = created.id;
-        toast.success("Blueprint created successfully");
       } else {
         await api(`/api/blueprints/${id}`, { method: "PUT", json });
-        toast.success(hasPapers ? `Updated blueprint & synchronized ${paperCount} paper(s)` : "Blueprint saved successfully");
+        // the list's banner confirms a plain save; the paper count is news only here
+        if (hasPapers) toast.success(`Updated blueprint & synchronized ${paperCount} paper(s)`);
       }
 
       if (andBuildPaper) {
@@ -837,7 +850,7 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
         toast.success(`Created paper "${paper.title}"`);
         router.push(`/papers/${paper.id}`);
       } else {
-        router.push("/blueprints");
+        router.push(`/blueprints?saved=${encodeURIComponent(savedBlueprintId)}${id === "new" ? "&created=1" : ""}`);
       }
     } catch (err) {
       setError((err as Error).message);
@@ -879,13 +892,41 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
           <h1 className="text-xl font-semibold">
             {id === "new" ? "New blueprint" : isReadOnly ? "View blueprint" : "Edit blueprint"}
           </h1>
+          {id === "new" && !isReadOnly && (
+            <ol className="mt-2 flex flex-wrap items-center gap-2 text-xs" aria-label="Steps">
+              <li>
+                <button
+                  type="button"
+                  onClick={() => setStarted(false)}
+                  disabled={!started}
+                  aria-current={!started ? "step" : undefined}
+                  className={`inline-flex items-center gap-1.5 rounded-full py-0.5 pl-0.5 pr-2.5 font-medium ${
+                    started ? "text-slate-600 hover:bg-slate-100 hover:text-slate-900" : "bg-indigo-50 text-indigo-800"
+                  }`}
+                >
+                  <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] ${started ? "bg-emerald-600 text-white" : "bg-indigo-600 text-white"}`}>
+                    {started ? <Check size={12} aria-hidden /> : "1"}
+                  </span>
+                  Class, subject and pattern
+                </button>
+              </li>
+              <li aria-hidden className="h-px w-5 bg-slate-300" />
+              <li
+                aria-current={started ? "step" : undefined}
+                className={`inline-flex items-center gap-1.5 rounded-full py-0.5 pl-0.5 pr-2.5 font-medium ${started ? "bg-indigo-50 text-indigo-800" : "text-slate-400"}`}
+              >
+                <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] ${started ? "bg-indigo-600 text-white" : "bg-slate-200 text-slate-500"}`}>2</span>
+                Sections, marks and chapters
+              </li>
+            </ol>
+          )}
           {started && (book || selectedClassFilter) && (
             <p className="mt-0.5 text-sm text-slate-500">
               {book?.className ?? selectedClassFilter} · {book?.subject ?? selectedSubjectFilter}
               {curriculumMode === "STANDARD_MPBSE" ? " · MPBSE 2026–27 board pattern" : curriculumMode === "CUSTOM_SCHOOL" ? " · school exam adapted from the board pattern" : " · custom pattern"}
               {id === "new" && !isReadOnly && (
                 <button type="button" className="ml-2 font-medium text-indigo-700 hover:underline" onClick={() => setStarted(false)}>
-                  Change
+                  Change class or pattern
                 </button>
               )}
             </p>
@@ -1723,6 +1764,10 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
           onBlank={startBlank}
           onImport={() => {
             setImportModalTab("import");
+            setImportModalOpen(true);
+          }}
+          onAi={() => {
+            setImportModalTab("ai");
             setImportModalOpen(true);
           }}
         />

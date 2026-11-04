@@ -1,6 +1,6 @@
 "use client";
 
-import { FilePlus2, FileUp, ShieldCheck } from "lucide-react";
+import { FilePlus2, FileUp, ShieldCheck, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
 import { sortClassNames } from "@/lib/constants";
 import { QUESTION_TYPE_LABEL } from "@/lib/constants";
@@ -54,6 +54,7 @@ export function BlueprintStartPicker({
   onUseSchoolPattern,
   onBlank,
   onImport,
+  onAi,
 }: {
   classes: AcademicClassDto[];
   books: Book[];
@@ -64,6 +65,8 @@ export function BlueprintStartPicker({
   onUseSchoolPattern: (t: BlueprintTemplate, pick: { className: string; subject: string }) => void;
   onBlank: (pick: { className: string; subject: string }) => void;
   onImport: () => void;
+  /** Read the blueprint from a circular, syllabus image, PDF or text with AI. */
+  onAi?: () => void;
 }) {
   const classNames = useMemo(
     () => sortClassNames(Array.from(new Set([...classes.map((c) => c.name), ...books.map((b) => b.className)]))),
@@ -269,6 +272,11 @@ export function BlueprintStartPicker({
         <button type="button" className="inline-flex items-center gap-1.5 font-medium text-indigo-700 hover:underline" onClick={onImport}>
           <FileUp size={15} /> Import a file
         </button>
+        {onAi && (
+          <button type="button" className="inline-flex items-center gap-1.5 font-medium text-indigo-700 hover:underline" onClick={onAi}>
+            <Sparkles size={15} /> Read from a document with AI
+          </button>
+        )}
       </div>
     </section>
   );
