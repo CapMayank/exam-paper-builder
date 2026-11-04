@@ -530,3 +530,22 @@ export function normalizePresetSubject(presetSubject: string, targetSubject?: st
   }
   return presetSubject.trim();
 }
+
+/**
+ * Name a subject is listed under on the Books page: the canonical name, except that Mathematics Basic and
+ * Mathematics Standard stay apart (separate MPBSE papers with their own subject codes and books).
+ */
+export function subjectGroupName(rawSubject?: string | null): string {
+  const canon = getCanonicalSubjectName(rawSubject) || (rawSubject ?? "").trim();
+  if (canon === "Mathematics") {
+    const s = (rawSubject ?? "").toLowerCase();
+    if (/\bbasic\b/.test(s)) return "Mathematics Basic";
+    if (/\bstandard\b/.test(s)) return "Mathematics Standard";
+  }
+  return canon;
+}
+
+export function isSameSubjectGroup(a?: string | null, b?: string | null): boolean {
+  if (!a || !b) return false;
+  return subjectGroupName(a).toLowerCase() === subjectGroupName(b).toLowerCase();
+}

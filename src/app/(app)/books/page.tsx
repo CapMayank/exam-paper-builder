@@ -2,17 +2,17 @@
 
 import { BookOpen, Calendar, GraduationCap, HelpCircle, Layers, Library, Pencil, Plus, RotateCcw, Ruler, Sparkles, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EmptyState, ErrorBanner, Field, ListSkeleton, Modal, PageHeader, Spinner, useConfirm, useToast } from "@/components/ui";
 import { SyllabusImportModal } from "@/components/SyllabusImportModal";
-import { CombineBooksModal } from "@/components/CombineBooksModal";
 import { AcademicRolloverModal } from "@/components/AcademicRolloverModal";
 import { normalizeSession, useAcademicSession } from "@/lib/academicSession";
 import { canManageScope, hasAnyWriteScope, type Actor } from "@/lib/permissions";
 import { api } from "@/lib/client";
 import { sortClassNames } from "@/lib/constants";
 import { plural } from "@/lib/format";
-import { getCanonicalSubjectName, isSubjectMatching } from "@/lib/schoolCurriculum";
+import { getCanonicalSubjectName, isSameSubjectGroup, isSubjectMatching, subjectGroupName } from "@/lib/schoolCurriculum";
+import { splitChapterTitle } from "@/lib/subjectBooks";
 import type { AcademicClassDto, Book, Chapter } from "@/lib/types";
 
 const emptyBook = { title: "", subject: "", className: "", academicSession: "" };
@@ -35,11 +35,9 @@ export default function BooksPage() {
   const [chapterForm, setChapterForm] = useState({ number: "", title: "" });
   const [editingChapterId, setEditingChapterId] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
-  const [importInitialTab, setImportInitialTab] = useState<"preset" | "rollover" | "ai_scan" | "text" | "csv" | "json">("preset");
   const [importTargetBook, setImportTargetBook] = useState<{ id: string; title: string; className: string; subject: string } | null>(null);
   const [importTargetClass, setImportTargetClass] = useState<string | undefined>(undefined);
   const [importTargetSubject, setImportTargetSubject] = useState<string | undefined>(undefined);
-  const [combineOpen, setCombineOpen] = useState(false);
   const [rolloverModalOpen, setRolloverModalOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState<"directory" | "details">("directory");
   const [error, setError] = useState<string | null>(null);
@@ -165,7 +163,7 @@ export default function BooksPage() {
       // 1. Add all enrolled subjects for this class (canonicalized)
       if (clsObj) {
         for (const sub of clsObj.subjects) {
-          const canon = getCanonicalSubjectName(sub.name) || sub.name;
+          const canon = subjectGroupName(sub.name);
           const key = canon.trim().toLowerCase();
           if (!map.has(key)) {
             map.set(key, {
@@ -181,12 +179,12 @@ export default function BooksPage() {
       // 2. Add books for this class
       for (const b of sessionBooks) {
         if (b.className.trim().toLowerCase() !== classFilter.trim().toLowerCase()) continue;
-        const canonSub = getCanonicalSubjectName(b.subject) || b.subject;
+        const canonSub = subjectGroupName(b.subject);
         const key = canonSub.trim().toLowerCase();
         let existing = map.get(key);
         if (!existing) {
           const matchedEntry = Array.from(map.values()).find((item) =>
-            isSubjectMatching(b.subject, item.subjectName)
+            isSameSubjectGroup(b.subject, item.subjectName)
           );
           if (matchedEntry) {
             existing = matchedEntry;
@@ -205,6 +203,13 @@ export default function BooksPage() {
       }
 
       let items = Array.from(map.values());
+      // A bare "Mathematics" subject with no book is only noise next to Mathematics Basic / Standard.
+      items = items.filter(
+        (item) =>
+          item.books.length > 0 ||
+          item.subjectName !== "Mathematics" ||
+          !items.some((o) => o !== item && o.subjectName.startsWith("Mathematics ")),
+      );
       if (subjectFilter !== "ALL") {
         items = items.filter((item) => isSubjectMatching(item.subjectName, subjectFilter));
       }
@@ -219,7 +224,7 @@ export default function BooksPage() {
         if (sessionFilter !== "ALL" && normalizeSession(cls.academicSession) !== sessionFilter) continue;
         const matchingSub = cls.subjects.find((s) => isSubjectMatching(s.name, subjectFilter));
         if (matchingSub) {
-          const canon = getCanonicalSubjectName(matchingSub.name) || matchingSub.name;
+          const canon = subjectGroupName(matchingSub.name);
           const key = `${cls.name}__${canon}`.toLowerCase();
           if (!map.has(key)) {
             map.set(key, {
@@ -235,7 +240,7 @@ export default function BooksPage() {
 
     for (const b of sessionBooks) {
       if (subjectFilter !== "ALL" && !isSubjectMatching(b.subject, subjectFilter)) continue;
-      const canonSub = getCanonicalSubjectName(b.subject) || b.subject;
+      const canonSub = subjectGroupName(b.subject);
       const key = `${b.className}__${canonSub}`.toLowerCase();
       let existing = map.get(key);
       if (!existing) {
@@ -262,7 +267,7 @@ export default function BooksPage() {
     if (selectedSubjectKey) {
       const subjectBook = displayedBooks.find(
         (b) =>
-          isSubjectMatching(b.subject, selectedSubjectKey) &&
+          isSameSubjectGroup(b.subject, selectedSubjectKey) &&
           (classFilter === "ALL" || b.className.trim().toLowerCase() === classFilter.trim().toLowerCase())
       );
       if (subjectBook) return subjectBook;
@@ -285,7 +290,7 @@ export default function BooksPage() {
     if (selected) return null;
     if (selectedSubjectKey) {
       const match = subjectDirectory.find(
-        (g) => isSubjectMatching(g.subjectName, selectedSubjectKey)
+        (g) => isSameSubjectGroup(g.subjectName, selectedSubjectKey)
       );
       if (match) return match;
     }
@@ -302,7 +307,9 @@ export default function BooksPage() {
   const selectedSubjectCode = useMemo(() => {
     if (!selected) return "";
     const cls = classes.find((c) => c.name.trim().toLowerCase() === selected.className.trim().toLowerCase());
-    const sub = cls?.subjects.find((s) => isSubjectMatching(s.name, selected.subject));
+    const sub =
+      cls?.subjects.find((s) => isSameSubjectGroup(s.name, selected.subject)) ??
+      cls?.subjects.find((s) => isSubjectMatching(s.name, selected.subject));
     return sub?.code || "";
   }, [classes, selected]);
 
@@ -329,11 +336,11 @@ export default function BooksPage() {
   function openBookDialog(b?: Book, overrideClass?: string, overrideSubject?: string) {
     setError(null);
     const rawSub = overrideSubject || (selectedSubjectKey || (subjectFilter !== "ALL" ? subjectFilter : ""));
-    const initialSub = getCanonicalSubjectName(rawSub) || rawSub;
+    const initialSub = subjectGroupName(rawSub) || rawSub;
     const initialCls = overrideClass || (classFilter !== "ALL" ? classFilter : availableClasses[0] || "");
     setBookForm(
       b
-        ? { title: b.title, subject: getCanonicalSubjectName(b.subject) || b.subject, className: b.className, academicSession: b.academicSession || currentSession }
+        ? { title: b.title, subject: subjectGroupName(b.subject) || b.subject, className: b.className, academicSession: b.academicSession || currentSession }
         : {
             ...emptyBook,
             className: initialCls,
@@ -348,7 +355,7 @@ export default function BooksPage() {
   async function saveBook(e: React.FormEvent) {
     e.preventDefault();
     const editingId = bookDialog?.editingId;
-    const canonicalSubject = getCanonicalSubjectName(bookForm.subject) || bookForm.subject.trim();
+    const canonicalSubject = subjectGroupName(bookForm.subject) || bookForm.subject.trim();
     const payload = {
       ...bookForm,
       subject: canonicalSubject,
@@ -431,20 +438,11 @@ export default function BooksPage() {
             {canCreate && (<>
             <button
               type="button"
-              className="btn btn-ghost border border-purple-200 bg-purple-50/50 text-purple-800 hover:bg-purple-100 hover:border-purple-300"
-              onClick={() => setCombineOpen(true)}
-              title="Combine multiple readers (e.g. English First Flight + Footprints, or Social Science 4-books) into a single composite exam subject"
-            >
-              <Layers size={16} className="text-purple-600" /> Combine for Multi-Book Exam
-            </button>
-            <button
-              type="button"
               className="btn btn-ghost border border-slate-200 hover:border-slate-300"
               onClick={() => {
                 setImportTargetBook(null);
                 setImportTargetClass(classFilter !== "ALL" ? classFilter : undefined);
                 setImportTargetSubject(subjectFilter !== "ALL" ? subjectFilter : undefined);
-                setImportInitialTab("preset");
                 setImportOpen(true);
               }}
             >
@@ -522,11 +520,10 @@ export default function BooksPage() {
                   setImportTargetBook(null);
                   setImportTargetClass(classFilter !== "ALL" ? classFilter : undefined);
                   setImportTargetSubject(subjectFilter !== "ALL" ? subjectFilter : undefined);
-                  setImportInitialTab("preset");
                   setImportOpen(true);
                 }}
               >
-                <Sparkles size={16} /> Import syllabus &amp; books
+                <Sparkles size={16} /> Import syllabus
               </button>
               <button type="button" className="btn" onClick={() => openBookDialog()}>
                 <Plus size={16} /> Add manually
@@ -653,7 +650,7 @@ export default function BooksPage() {
                                         {b.title}
                                       </span>
                                       <span className="inline-flex shrink-0 items-center rounded-md bg-indigo-50 px-1.5 py-0.2 text-[10px] font-medium text-indigo-700 ring-1 ring-inset ring-indigo-700/10 whitespace-nowrap">
-                                        {b.academicSession || "2025–26"}
+                                        {normalizeSession(b.academicSession)}
                                       </span>
                                     </div>
                                     <span className="mt-1 block text-[11px] text-slate-500">
@@ -722,8 +719,7 @@ export default function BooksPage() {
                                 onClick={() => {
                                   setImportTargetBook(null);
                                   setImportTargetClass(group.className);
-                                  setImportTargetSubject(getCanonicalSubjectName(group.subjectName) || group.subjectName);
-                                  setImportInitialTab("preset");
+                                  setImportTargetSubject(group.subjectName);
                                   setImportOpen(true);
                                 }}
                                 className="btn btn-ghost border border-slate-200 bg-white text-[10px] py-0.5 px-2 text-slate-700 hover:bg-slate-50"
@@ -772,7 +768,7 @@ export default function BooksPage() {
                           {selected.className} · {selected.subject} · {plural(selected.chapters.length, "chapter")}
                         </span>
                         <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700 ring-1 ring-inset ring-indigo-700/10 whitespace-nowrap">
-                          <Calendar size={12} /> Session {selected.academicSession || "2025–26"}
+                          <Calendar size={12} /> Session {normalizeSession(selected.academicSession)}
                         </span>
                       </div>
                     </div>
@@ -799,14 +795,14 @@ export default function BooksPage() {
                             id: selected.id,
                             title: selected.title,
                             className: selected.className,
-                            subject: getCanonicalSubjectName(selected.subject) || selected.subject,
+                            subject: selected.subject,
                           });
                           setImportTargetClass(selected.className);
-                          setImportTargetSubject(getCanonicalSubjectName(selected.subject) || selected.subject);
+                          setImportTargetSubject(selected.subject);
                           setImportOpen(true);
                         }}
                       >
-                        <Sparkles size={14} className="text-indigo-600" /> Bulk import chapters
+                        <Sparkles size={14} className="text-indigo-600" /> Import syllabus
                       </button>
                     </div>
                   </div>
@@ -875,10 +871,21 @@ export default function BooksPage() {
                         <tbody>
                           {[...selected.chapters]
                             .sort((a, b) => a.number - b.number)
-                            .map((c) => (
-                              <tr key={c.id} className={editingChapterId === c.id ? "bg-amber-50/70" : ""}>
+                            .map((c, i, sorted) => {
+                              const { part, title } = splitChapterTitle(c.title);
+                              const prevPart = i > 0 ? splitChapterTitle(sorted[i - 1].title).part : undefined;
+                              return (
+                              <Fragment key={c.id}>
+                              {part !== null && part !== prevPart && (
+                                <tr className="bg-slate-50">
+                                  <td colSpan={3} className="py-1.5 text-[11px] font-bold uppercase tracking-wider text-indigo-700">
+                                    {part}
+                                  </td>
+                                </tr>
+                              )}
+                              <tr className={editingChapterId === c.id ? "bg-amber-50/70" : ""}>
                                 <td className="font-semibold tabular-nums text-slate-500">{c.number}</td>
-                                <td className="font-medium text-slate-800">{c.title}</td>
+                                <td className="font-medium text-slate-800">{title}</td>
                                 <td className="text-right whitespace-nowrap">
                                   {canManageBooks(selected) && (
                                   <button type="button" className="btn btn-ghost btn-icon btn-sm" title="Edit chapter" aria-label={`Edit chapter ${c.number}`} onClick={() => editChapter(c)}>
@@ -898,7 +905,9 @@ export default function BooksPage() {
                                   )}
                                 </td>
                               </tr>
-                            ))}
+                              </Fragment>
+                              );
+                            })}
                         </tbody>
                       </table>
                     </div>
@@ -959,12 +968,11 @@ export default function BooksPage() {
                         onClick={() => {
                           setImportTargetBook(null);
                           setImportTargetClass(activeEmptySubject.className);
-                          setImportTargetSubject(getCanonicalSubjectName(activeEmptySubject.subjectName) || activeEmptySubject.subjectName);
-                          setImportInitialTab("preset");
+                          setImportTargetSubject(activeEmptySubject.subjectName);
                           setImportOpen(true);
                         }}
                       >
-                        <Sparkles size={15} className="text-amber-600" /> Import Syllabus (CBSE / NCERT)
+                        <Sparkles size={15} className="text-amber-600" /> Import syllabus
                       </button>
                     </div>
                   </div>
@@ -1048,23 +1056,10 @@ export default function BooksPage() {
           targetBook={importTargetBook}
           targetClass={importTargetClass}
           targetSubject={importTargetSubject}
-          initialTab={importInitialTab}
           onClose={() => setImportOpen(false)}
           onSuccess={({ bookId }) => {
             void load().then(() => {
               if (bookId) setSelectedId(bookId);
-            });
-          }}
-        />
-      )}
-
-      {combineOpen && (
-        <CombineBooksModal
-          books={books}
-          onClose={() => setCombineOpen(false)}
-          onSuccess={(newBookId) => {
-            void load().then(() => {
-              if (newBookId) setSelectedId(newBookId);
             });
           }}
         />

@@ -425,6 +425,8 @@ export const syllabusImportSchema = z.object({
     .optional(),
   dryRun: z.boolean().optional().default(false),
   upsert: z.boolean().optional().default(true),
+  /** Final chapter titles (as returned by a dry run) to add; omitted = every new chapter. */
+  onlyChapters: z.array(z.string()).optional(),
 });
 
 export const combineBooksSchema = z.object({

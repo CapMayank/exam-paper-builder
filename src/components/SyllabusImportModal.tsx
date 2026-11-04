@@ -1,1342 +1,386 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState } from "react";
-import {
-  AlertCircle,
-  BookOpen,
-  Check,
-  CheckSquare,
-  Download,
-  Edit2,
-  FileCode,
-  FileSpreadsheet,
-  FileText,
-  Filter,
-  Layers,
-  Plus,
-  RotateCcw,
-  Sparkles,
-  Square,
-  Trash2,
-  Upload,
-  X,
-} from "lucide-react";
-import { Modal, Spinner, useToast } from "@/components/ui";
+import { useEffect, useMemo, useState } from "react";
+import { BookOpen, Check, FileText, Library } from "lucide-react";
+import { ErrorBanner, Modal, Spinner, useToast } from "@/components/ui";
 import { api } from "@/lib/client";
-import { useAcademicSession } from "@/lib/academicSession";
-import { getCanonicalSubjectName, isSubjectMatching, normalizePresetSubject } from "@/lib/schoolCurriculum";
-import type { Book } from "@/lib/types";
-import {
-  ensureLanguageNonChapterUnits,
-  isLanguageSubject,
-  parseSyllabusContent,
-  STANDARD_CURRICULUM_PRESETS,
-  type StandardCurriculumPreset,
-  type ParsedBookItem,
-  type ParsedChapterItem,
-} from "@/lib/syllabusImport";
-
-type ImportFormat = "preset" | "rollover" | "ai_scan" | "text" | "csv" | "json";
-
-interface EditableChapter extends ParsedChapterItem {
-  id: string; // unique key for React
-  selected: boolean;
-}
-
-interface EditableBook {
-  title: string;
-  className: string;
-  subject: string;
-  chapters: EditableChapter[];
-}
+import { normalizeSession, useAcademicSession } from "@/lib/academicSession";
+import { sortClassNames } from "@/lib/constants";
+import { SUBJECTS_SEED } from "@/lib/curriculumData";
+import { isSameSubjectGroup, isSubjectMatching, subjectGroupName } from "@/lib/schoolCurriculum";
+import { parsePastedChapters, splitChapterTitle, type ImportPart, type SubjectImportPlan } from "@/lib/subjectBooks";
+import { STANDARD_CURRICULUM_PRESETS } from "@/lib/syllabusImport";
+import type { AcademicClassDto } from "@/lib/types";
 
 interface SyllabusImportModalProps {
   onClose: () => void;
   onSuccess: (result: { bookId?: string }) => void;
+  /** Import into this book (class and subject are then fixed). */
   targetBook?: { id: string; title: string; className: string; subject: string } | null;
   targetClass?: string;
   targetSubject?: string;
-  initialTab?: ImportFormat;
 }
 
-const SAMPLE_TEXT_SYLLABUS = `1. Chemical Reactions and Equations (रासायनिक अभिक्रियाएँ एवं समीकरण)
-2. Acids, Bases and Salts (अम्ल, क्षारक एवं लवण)
-3. Metals and Non-metals (धातु एवं अधातु)
-4. Carbon and its Compounds (कार्बन एवं उसके यौगिक)
-5. Life Processes (जैव प्रक्रम)
-6. Control and Coordination (नियंत्रण एवं समन्वय)
-7. How do Organisms Reproduce? (जीव जनन कैसे करते हैं?)
-8. Heredity (आनुवंशिकता)
-9. Light - Reflection and Refraction (प्रकाश - परावर्तन तथा अपवर्तन)
-10. The Human Eye and the Colourful World (मानव नेत्र तथा रंगबिरंगा संसार)
-11. Electricity (विद्युत)
-12. Magnetic Effects of Electric Current (विद्युत धारा के चुंबकीय प्रभाव)
-13. Our Environment (हमारा पर्यावरण)`;
+type Source = { id: string; label: string; detail: string; parts: ImportPart[] };
 
-const SAMPLE_CSV_FULL = `Book,Class,Subject,Chapter,Title
-Science (NCERT),Class 10,Science,1,"Chemical Reactions and Equations"
-Science (NCERT),Class 10,Science,2,"Acids, Bases and Salts"
-Science (NCERT),Class 10,Science,3,"Metals and Non-metals"
-Science (NCERT),Class 10,Science,4,"Carbon and its Compounds"
-Science (NCERT),Class 10,Science,5,"Life Processes"`;
+const PASTE_HINT = `# First Flight
+A Letter to God
+Nelson Mandela: Long Walk to Freedom
+# Footprints without Feet
+A Triumph of Surgery`;
 
-const SAMPLE_CSV_CHAPTERS_ONLY = `Chapter,Title
-1,"Chemical Reactions and Equations"
-2,"Acids, Bases and Salts"
-3,"Metals and Non-metals"
-4,"Carbon and its Compounds"
-5,"Life Processes"`;
+/** Official syllabi for a class + subject: the MPBSE scheme (what blueprints and quotas use), else NCERT presets. */
+function sourcesFor(className: string, subject: string): Source[] {
+  if (!className || !subject) return [];
+  const out: Source[] = [];
+  for (const s of SUBJECTS_SEED) {
+    if (`Class ${s.classLevel}` !== className || !isSameSubjectGroup(s.name, subject)) continue;
+    out.push({
+      id: `mpbse-${s.classLevel}-${s.code}`,
+      label: `MPBSE ${s.name} (${s.code})`,
+      detail: s.textbooks.map((t) => t.title).join(" + "),
+      parts: s.textbooks.map((t) => ({
+        title: t.title,
+        chapters: t.chapters.map((c) => ({ number: c.chapterNumber, title: c.title })),
+      })),
+    });
+  }
+  // The school follows MPBSE: where its scheme exists, NCERT presets would only add the same lessons under other titles.
+  if (out.length > 0) return out;
+  for (const p of STANDARD_CURRICULUM_PRESETS) {
+    if (p.className !== className || !isSubjectMatching(p.subject, subject)) continue;
+    out.push({
+      id: p.id,
+      label: p.title,
+      detail: p.subBooks?.length ? p.subBooks.join(" + ") : p.board,
+      parts: [{ title: p.title, chapters: p.chapters }],
+    });
+  }
+  return out;
+}
 
-const SAMPLE_JSON = JSON.stringify(
-  [
-    {
-      title: "Science (NCERT Class X)",
-      className: "Class 10",
-      subject: "Science",
-      chapters: [
-        { number: 1, title: "Chemical Reactions and Equations" },
-        { number: 2, title: "Acids, Bases and Salts" },
-        { number: 3, title: "Metals and Non-metals" },
-        { number: 4, title: "Carbon and its Compounds" },
-        { number: 5, title: "Life Processes" },
-      ],
-    },
-  ],
-  null,
-  2,
-);
-
-const SAMPLE_AI_INDEX = `TABLE OF CONTENTS
-UNIT 1: Prose & Poetry
-Chapter 1: A Letter to God - G.L. Fuentes (pg 3)
-Dust of Snow & Fire and Ice (Poetry) (pg 14)
-Chapter 2: Nelson Mandela: Long Walk to Freedom (pg 16)
-A Tiger in the Zoo (pg 24)
-Chapter 3: Two Stories about Flying (pg 32)
-His First Flight & Black Aeroplane
-Chapter 4: From the Diary of Anne Frank (pg 48)
-
-UNIT 2: Supplementary Reader (Footprints)
-1. A Triumph of Surgery - James Herriot (pg 1)
-2. The Thief's Story - Ruskin Bond (pg 8)
-3. The Midnight Visitor - Robert Arthur (pg 14)
-4. A Question of Trust - Victor Canning (pg 20)`;
-
-export function SyllabusImportModal({
-  onClose,
-  onSuccess,
-  targetBook,
-  targetClass,
-  targetSubject,
-  initialTab,
-}: SyllabusImportModalProps) {
+export function SyllabusImportModal({ onClose, onSuccess, targetBook, targetClass, targetSubject }: SyllabusImportModalProps) {
   const toast = useToast();
-  const fileInputId = useId();
+  const { currentSession } = useAcademicSession();
+  const session = normalizeSession(currentSession);
 
-  const initialClass = targetClass || targetBook?.className;
-  const rawSubject = targetSubject || targetBook?.subject;
-  const initialSubject = getCanonicalSubjectName(rawSubject) || rawSubject;
+  const [classes, setClasses] = useState<AcademicClassDto[]>([]);
+  const [className, setClassName] = useState(targetBook?.className ?? targetClass ?? "");
+  const [subject, setSubject] = useState(targetBook?.subject ?? (targetSubject ? subjectGroupName(targetSubject) : ""));
+  const [chosenMode, setMode] = useState<"official" | "paste">("official");
+  const [chosenSourceId, setSourceId] = useState("");
+  const [pasted, setPasted] = useState("");
 
-  // Active Tab
-  const [activeTab, setActiveTab] = useState<ImportFormat>(initialTab || (targetBook ? "text" : "preset"));
+  const [fetchedPlan, setPlan] = useState<SubjectImportPlan | null>(null);
+  const [planBusy, setPlanBusy] = useState(false);
+  const [skipped, setSkipped] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Computed matching initial preset based on target class and subject
-  const initialPresetId = useMemo(() => {
-    if (initialClass && initialSubject) {
-      const match = STANDARD_CURRICULUM_PRESETS.find(
-        (p) =>
-          p.className.toLowerCase() === initialClass.toLowerCase() &&
-          isSubjectMatching(p.subject, initialSubject)
-      );
-      if (match) return match.id;
-    }
-    if (initialClass) {
-      const match = STANDARD_CURRICULUM_PRESETS.find(
-        (p) => p.className.toLowerCase() === initialClass.toLowerCase()
-      );
-      if (match) return match.id;
-    }
-    return "cbse-10-science";
-  }, [initialClass, initialSubject]);
-
-  // Preset Filters
-  const [filterClass, setFilterClass] = useState<string>(initialClass || "ALL");
-  const [filterSubject, setFilterSubject] = useState<string>(initialSubject || "ALL");
-  const [filterCompositeOnly, setFilterCompositeOnly] = useState<boolean>(false);
-  const [selectedPresetId, setSelectedPresetId] = useState<string>(initialPresetId);
+  const locked = Boolean(targetBook);
 
   useEffect(() => {
-    if (initialPresetId) {
-      setSelectedPresetId(initialPresetId);
-    }
-  }, [initialPresetId]);
-
-  // Raw Content Inputs
-  const [textContent, setTextContent] = useState<string>(SAMPLE_TEXT_SYLLABUS);
-  const [csvContent, setCsvContent] = useState<string>(targetBook ? SAMPLE_CSV_CHAPTERS_ONLY : SAMPLE_CSV_FULL);
-  const [jsonContent, setJsonContent] = useState<string>(SAMPLE_JSON);
-
-  // AI Scanner State
-  const [aiRawText, setAiRawText] = useState<string>(SAMPLE_AI_INDEX);
-  const [aiClass, setAiClass] = useState<string>(initialClass || "Class 10");
-  const [aiSubject, setAiSubject] = useState<string>(initialSubject || "English");
-  const [aiBusy, setAiBusy] = useState<boolean>(false);
-  const [aiError, setAiError] = useState<string | null>(null);
-
-  // Academic Session Context
-  const { currentSession, availableSessions } = useAcademicSession();
-
-  // Rollover State
-  const [existingBooks, setExistingBooks] = useState<Book[]>([]);
-  const [selectedRolloverBookId, setSelectedRolloverBookId] = useState<string>("");
-  const [rolloverTargetSession, setRolloverTargetSession] = useState<string>(currentSession);
-  const [rolloverTitle, setRolloverTitle] = useState<string>("");
-  const [rolloverIncludeQuestions, setRolloverIncludeQuestions] = useState<boolean>(false);
-
-  useEffect(() => {
-    api<Book[]>("/api/books").then(
-      (data) => {
-        setExistingBooks(data);
-        if (data.length > 0 && !selectedRolloverBookId) {
-          setSelectedRolloverBookId(data[0].id);
-          setRolloverTitle(data[0].title);
-        }
-      },
-      () => {},
-    );
+    api<AcademicClassDto[]>("/api/classes").then(setClasses, () => {});
   }, []);
 
-  // Update rolloverTitle when selectedRolloverBookId changes
-  useEffect(() => {
-    if (selectedRolloverBookId) {
-      const b = existingBooks.find((book) => book.id === selectedRolloverBookId);
-      if (b) {
-        setRolloverTitle(b.title);
-      }
-    }
-  }, [selectedRolloverBookId, existingBooks]);
-
-  // Metadata Defaults
-  const [defaultTitle, setDefaultTitle] = useState<string>(
-    targetBook?.title || (initialSubject ? `NCERT ${initialSubject}` : "NCERT Science")
+  const sessionClasses = useMemo(
+    () => classes.filter((c) => normalizeSession(c.academicSession) === session),
+    [classes, session],
   );
-  const [defaultClass, setDefaultClass] = useState<string>(initialClass || "Class 10");
-  const [defaultSubject, setDefaultSubject] = useState<string>(initialSubject || "Science");
-  const [upsert, setUpsert] = useState<boolean>(true);
+  const classOptions = useMemo(
+    () => sortClassNames(Array.from(new Set([...sessionClasses.map((c) => c.name), ...(className ? [className] : [])]))),
+    [sessionClasses, className],
+  );
+  const subjectOptions = useMemo(() => {
+    const cls = sessionClasses.find((c) => c.name === className);
+    const names = (cls?.subjects ?? []).map((s) => subjectGroupName(s.name));
+    const unique = Array.from(new Set([...names, ...(subject ? [subject] : [])]));
+    // a bare "Mathematics" next to Basic / Standard is the same subject twice
+    return unique.filter((n) => n !== "Mathematics" || !unique.some((o) => o.startsWith("Mathematics ")) || n === subject);
+  }, [sessionClasses, className, subject]);
 
-  // Editable Books State (Interactive Checklist & Customizer)
-  const [editableBooks, setEditableBooks] = useState<EditableBook[]>([]);
+  const sources = useMemo(() => sourcesFor(className, subject), [className, subject]);
 
-  // Submission State
-  const [busy, setBusy] = useState<boolean>(false);
-  const [apiError, setApiError] = useState<string | null>(null);
+  // Default to the first official syllabus; fall back to pasting when there is none.
+  const mode = sources.length === 0 ? "paste" : chosenMode;
+  const sourceId = sources.some((s) => s.id === chosenSourceId) ? chosenSourceId : (sources[0]?.id ?? "");
 
-  // Filtered Presets
-  const filteredPresets = useMemo(() => {
-    return STANDARD_CURRICULUM_PRESETS.filter((p) => {
-      if (filterClass !== "ALL" && p.className !== filterClass) return false;
-      if (filterSubject !== "ALL" && !isSubjectMatching(p.subject, filterSubject)) return false;
-      if (filterCompositeOnly && !p.isComposite) return false;
-      return true;
-    });
-  }, [filterClass, filterSubject, filterCompositeOnly]);
+  const parts: ImportPart[] = useMemo(() => {
+    if (mode === "official") return sources.find((s) => s.id === sourceId)?.parts ?? [];
+    return parsePastedChapters(pasted, targetBook?.title ?? `${subject} (${className})`);
+  }, [mode, sources, sourceId, pasted, targetBook, subject, className]);
 
-  // Sync parsed content to editableBooks whenever raw input or preset changes
+  const payload = (extra: Record<string, unknown>) => ({
+    format: "custom" as const,
+    content: "",
+    targetBookId: targetBook?.id ?? null,
+    customBooks: parts.map((p) => ({ title: p.title, className, subject, academicSession: session, chapters: p.chapters })),
+    ...extra,
+  });
+
+  // Preview: ask the server what would change (debounced while typing).
+  const ready = Boolean(className && subject && parts.length > 0);
   useEffect(() => {
-    let sourceBooks: ParsedBookItem[] = [];
-
-    if (activeTab === "rollover") {
-      const book = existingBooks.find((b) => b.id === selectedRolloverBookId);
-      if (book) {
-        const { chapters: ensuredChapters } = ensureLanguageNonChapterUnits(
-          book.chapters,
-          book.subject,
-          book.className,
-        );
-        sourceBooks = [
-          {
-            title: rolloverTitle.trim() || book.title,
-            className: book.className,
-            subject: book.subject,
-            chapters: ensuredChapters,
-          },
-        ];
-      }
-    } else if (activeTab === "preset") {
-      const preset = STANDARD_CURRICULUM_PRESETS.find((p) => p.id === selectedPresetId);
-      if (preset) {
-        const finalClass = initialClass || preset.className;
-        const finalSubject = normalizePresetSubject(
-          preset.subject,
-          initialSubject || (filterSubject !== "ALL" ? filterSubject : undefined)
-        );
-        const { chapters: ensuredChapters } = ensureLanguageNonChapterUnits(
-          preset.chapters,
-          finalSubject,
-          finalClass,
-        );
-        sourceBooks = [
-          {
-            title: preset.title,
-            className: finalClass,
-            subject: finalSubject,
-            chapters: ensuredChapters,
-          },
-        ];
-      }
-    } else if (activeTab === "text") {
-      const res = parseSyllabusContent("text", textContent, {
-        defaultTitle: defaultTitle.trim() || undefined,
-        defaultClass: defaultClass.trim() || undefined,
-        defaultSubject: defaultSubject.trim() || undefined,
-      });
-      sourceBooks = res.books;
-    } else if (activeTab === "csv") {
-      const res = parseSyllabusContent("csv", csvContent, {
-        defaultTitle: defaultTitle.trim() || undefined,
-        defaultClass: defaultClass.trim() || undefined,
-        defaultSubject: defaultSubject.trim() || undefined,
-      });
-      sourceBooks = res.books;
-    } else if (activeTab === "json") {
-      const res = parseSyllabusContent("json", jsonContent, {
-        defaultTitle: defaultTitle.trim() || undefined,
-        defaultClass: defaultClass.trim() || undefined,
-        defaultSubject: defaultSubject.trim() || undefined,
-      });
-      sourceBooks = res.books;
-    }
-
-    if (sourceBooks.length > 0) {
-      setEditableBooks(
-        sourceBooks.map((b, bIdx) => ({
-          title: b.title,
-          className: b.className,
-          subject: b.subject,
-          chapters: b.chapters.map((c, cIdx) => ({
-            number: c.number,
-            title: c.title,
-            id: `b${bIdx}_c${cIdx}_${c.number}`,
-            selected: true,
-          })),
-        })),
-      );
-    }
-  }, [
-    activeTab,
-    selectedPresetId,
-    selectedRolloverBookId,
-    existingBooks,
-    textContent,
-    csvContent,
-    jsonContent,
-    defaultTitle,
-    defaultClass,
-    defaultSubject,
-  ]);
-
-  // AI Scanner Handler
-  async function handleAiScan() {
-    if (!aiRawText.trim() || aiRawText.trim().length < 5) {
-      setAiError("Please paste some table of contents or syllabus text to scan.");
-      return;
-    }
-    setAiBusy(true);
-    setAiError(null);
-    try {
-      const headers: Record<string, string> = {};
-      const customKey = typeof window !== "undefined" ? localStorage.getItem("exam_gemini_api_key") : null;
-      if (customKey) headers["x-gemini-api-key"] = customKey;
-
-      const canonicalAiSubject = getCanonicalSubjectName(aiSubject) || aiSubject.trim();
-      const res = await api<{
-        success: boolean;
-        isMock: boolean;
-        data: {
-          bookTitle: string;
-          className: string;
-          subject: string;
-          isComposite: boolean;
-          books: Array<{
-            title: string;
-            className: string;
-            subject: string;
-            chapters: Array<{ number: number; title: string }>;
-          }>;
-        };
-        error?: string;
-      }>("/api/ai/parse-syllabus", {
-        method: "POST",
-        headers,
-        json: {
-          rawText: aiRawText,
-          className: aiClass,
-          subject: canonicalAiSubject,
-        },
-      });
-
-      if (!res.success && res.error) {
-        setAiError(res.error);
-        return;
-      }
-
-      const scannedBooks = res.data?.books || [];
-      if (scannedBooks.length === 0) {
-        setAiError("No chapters could be identified from the text. Please check the text format.");
-        return;
-      }
-
-      setEditableBooks(
-        scannedBooks.map((b, bIdx) => ({
-          title: b.title,
-          className: b.className,
-          subject: getCanonicalSubjectName(b.subject) || canonicalAiSubject || b.subject,
-          chapters: b.chapters.map((c, cIdx) => ({
-            number: c.number,
-            title: c.title,
-            id: `ai_b${bIdx}_c${cIdx}_${c.number}`,
-            selected: true,
-          })),
-        })),
-      );
-
-      toast.success(
-        `AI successfully extracted ${scannedBooks.reduce((sum, b) => sum + b.chapters.length, 0)} chapters across ${scannedBooks.length} book(s)!`,
-      );
-    } catch (err) {
-      setAiError((err as Error).message);
-    } finally {
-      setAiBusy(false);
-    }
-  }
-
-  // Chapter Toggle Handlers
-  function toggleChapter(bookIdx: number, chapterId: string) {
-    setEditableBooks((prev) =>
-      prev.map((b, bIdx) => {
-        if (bIdx !== bookIdx) return b;
-        return {
-          ...b,
-          chapters: b.chapters.map((c) => (c.id === chapterId ? { ...c, selected: !c.selected } : c)),
-        };
-      }),
-    );
-  }
-
-  function selectAllChapters(selected: boolean) {
-    setEditableBooks((prev) =>
-      prev.map((b) => ({
-        ...b,
-        chapters: b.chapters.map((c) => ({ ...c, selected })),
-      })),
-    );
-  }
-
-  function updateChapterTitle(bookIdx: number, chapterId: string, newTitle: string) {
-    setEditableBooks((prev) =>
-      prev.map((b, bIdx) => {
-        if (bIdx !== bookIdx) return b;
-        return {
-          ...b,
-          chapters: b.chapters.map((c) => (c.id === chapterId ? { ...c, title: newTitle } : c)),
-        };
-      }),
-    );
-  }
-
-  function addCustomChapter(bookIdx: number) {
-    setEditableBooks((prev) =>
-      prev.map((b, bIdx) => {
-        if (bIdx !== bookIdx) return b;
-        const nextNum = b.chapters.length > 0 ? Math.max(...b.chapters.map((c) => c.number)) + 1 : 1;
-        return {
-          ...b,
-          chapters: [
-            ...b.chapters,
-            {
-              id: `custom_${Date.now()}_${nextNum}`,
-              number: nextNum,
-              title: `Chapter ${nextNum}: New Topic`,
-              selected: true,
-            },
-          ],
-        };
-      }),
-    );
-  }
-
-  function deleteChapter(bookIdx: number, chapterId: string) {
-    setEditableBooks((prev) =>
-      prev.map((b, bIdx) => {
-        if (bIdx !== bookIdx) return b;
-        return {
-          ...b,
-          chapters: b.chapters.filter((c) => c.id !== chapterId),
-        };
-      }),
-    );
-  }
-
-  // Count selected chapters
-  const totalChapters = useMemo(() => {
-    return editableBooks.reduce((acc, b) => acc + b.chapters.length, 0);
-  }, [editableBooks]);
-
-  const selectedChaptersCount = useMemo(() => {
-    return editableBooks.reduce((acc, b) => acc + b.chapters.filter((c) => c.selected).length, 0);
-  }, [editableBooks]);
-
-  // Handle CSV file upload
-  function handleCsvFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target?.result as string;
-      if (text) {
-        setCsvContent(text);
-        toast.info(`Loaded ${file.name} (${text.length} chars)`);
-      }
-    };
-    reader.readAsText(file);
-  }
-
-  function downloadCsvTemplate() {
-    const content = targetBook ? SAMPLE_CSV_CHAPTERS_ONLY : SAMPLE_CSV_FULL;
-    const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute("download", targetBook ? "chapters_template.csv" : "syllabus_template.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  }
-
-  // Perform Final Import
-  async function handleImport() {
-    setApiError(null);
-    if (selectedChaptersCount === 0) {
-      setApiError("Please select at least one chapter using the checkboxes before importing.");
-      return;
-    }
-
-    setBusy(true);
-    try {
-      if (activeTab === "rollover" && selectedRolloverBookId) {
-        const bookToRoll = editableBooks[0];
-        const selectedChapters = bookToRoll?.chapters.filter((c) => c.selected) ?? [];
-        if (selectedChapters.length === 0) {
-          setApiError("Please select at least one chapter to roll over.");
-          setBusy(false);
-          return;
-        }
-        const rolled = await api<{ id: string }>("/api/books/rollover", {
-          method: "POST",
-          json: {
-            sourceBookId: selectedRolloverBookId,
-            targetAcademicSession: rolloverTargetSession,
-            title: (rolloverTitle.trim() || bookToRoll.title).trim(),
-            chapters: selectedChapters.map((c) => ({ number: c.number, title: c.title.trim() })),
-            includeQuestions: rolloverIncludeQuestions,
-          },
-        });
-        toast.success(`Textbook successfully rolled over into Session ${rolloverTargetSession}!`);
-        onSuccess({ bookId: rolled.id });
-        return;
-      }
-
-      // Build customBooks payload containing ONLY selected and edited chapters
-      const booksToImport = editableBooks
-        .map((b) => {
-          let bSubject = getCanonicalSubjectName(b.subject) || b.subject.trim();
-          if (initialSubject && isSubjectMatching(bSubject, initialSubject)) {
-            bSubject = getCanonicalSubjectName(initialSubject) || initialSubject.trim();
-          } else {
-            bSubject = normalizePresetSubject(bSubject);
-          }
-          let bClass = b.className.trim();
-          if (initialClass) {
-            bClass = initialClass.trim();
-          }
-
-          const selectedChapters = b.chapters
-            .filter((c) => c.selected)
-            .map((c) => ({
-              number: c.number,
-              title: c.title.trim(),
-            }));
-
-          const { chapters: finalChapters } = ensureLanguageNonChapterUnits(
-            selectedChapters,
-            bSubject,
-            bClass,
-          );
-
-          return {
-            title: b.title.trim(),
-            className: bClass,
-            subject: bSubject,
-            academicSession: currentSession,
-            chapters: finalChapters,
-          };
+    if (!ready) return;
+    let cancelled = false;
+    const t = setTimeout(() => {
+      setPlanBusy(true);
+      api<{ plans: SubjectImportPlan[] }>("/api/books/import", { method: "POST", json: payload({ dryRun: true }) })
+        .then((res) => {
+          if (cancelled) return;
+          setPlan(res.plans[0] ?? null);
+          setSkipped(new Set());
+          setError(null);
         })
-        .filter((b) => b.chapters.length > 0);
+        .catch((e) => !cancelled && setError((e as Error).message))
+        .finally(() => !cancelled && setPlanBusy(false));
+    }, mode === "paste" ? 400 : 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, parts, className, subject, targetBook?.id, session]);
 
-      const payload = {
-        format: "custom" as const,
-        content: "",
-        targetBookId: targetBook ? targetBook.id : null,
-        defaults: {
-          defaultTitle: defaultTitle.trim() || undefined,
-          defaultClass: defaultClass.trim() || undefined,
-          defaultSubject: defaultSubject.trim() || undefined,
-          academicSession: currentSession,
-        },
-        customBooks: booksToImport,
-        dryRun: false,
-        upsert,
-      };
+  const plan = ready ? fetchedPlan : null;
+  const newChapters = plan?.chapters.filter((c) => c.status === "new") ?? [];
+  const chosen = newChapters.filter((c) => !skipped.has(c.title));
+  const existingCount = (plan?.chapters.length ?? 0) - newChapters.length;
 
-      const res = await api<{
-        success: boolean;
-        mode: string;
-        book?: { id: string };
-        bookIds?: string[];
-        createdBooks?: number;
-        updatedBooks?: number;
-        createdChapters?: number;
-        updatedChapters?: number;
-        warnings?: string[];
-      }>("/api/books/import", {
+  function toggle(title: string) {
+    setSkipped((prev) => {
+      const next = new Set(prev);
+      if (next.has(title)) next.delete(title);
+      else next.add(title);
+      return next;
+    });
+  }
+
+  async function apply() {
+    if (!plan || chosen.length === 0) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await api<{ bookIds: string[]; createdChapters: number }>("/api/books/import", {
         method: "POST",
-        json: payload,
+        json: payload({ onlyChapters: chosen.map((c) => c.title) }),
       });
-
-      if (res.warnings && res.warnings.length > 0) {
-        toast.info(res.warnings[0]);
-      }
-
-      if (targetBook) {
-        toast.success(
-          `Imported ${res.createdChapters ?? selectedChaptersCount} chapters into "${targetBook.title}".`,
-        );
-        onSuccess({ bookId: targetBook.id });
-      } else {
-        const primaryId = res.bookIds?.[0] || res.book?.id;
-        const totalBooksAffected =
-          (res.createdBooks ?? 0) + (res.updatedBooks ?? 0) || booksToImport.length;
-        const actionLabel =
-          res.createdBooks === 0 && (res.updatedBooks ?? 0) > 0
-            ? "Updated syllabus for"
-            : "Successfully imported";
-        toast.success(
-          `${actionLabel} ${totalBooksAffected} textbook(s) (${selectedChaptersCount} chapters)!`,
-        );
-        onSuccess({ bookId: primaryId });
-      }
+      toast.success(`Added ${res.createdChapters} chapter${res.createdChapters === 1 ? "" : "s"} to “${plan.bookTitle}”`);
+      onSuccess({ bookId: res.bookIds[0] });
       onClose();
-    } catch (err) {
-      setApiError((err as Error).message);
+    } catch (e) {
+      setError((e as Error).message);
     } finally {
       setBusy(false);
     }
   }
 
+  // Group preview rows under their textbook
+  const groupedPreview = useMemo(() => {
+    const groups: Array<{ part: string | null; rows: SubjectImportPlan["chapters"] }> = [];
+    for (const row of plan?.chapters ?? []) {
+      const { part } = splitChapterTitle(row.title);
+      const last = groups[groups.length - 1];
+      if (last && last.part === part) last.rows.push(row);
+      else groups.push({ part, rows: [row] });
+    }
+    return groups;
+  }, [plan]);
+
   return (
     <Modal
-      size="xl"
-      title={targetBook ? `Import chapters into "${targetBook.title}"` : "Textbook & Syllabus Management"}
-      subtitle={
-        targetBook
-          ? `Append or update chapters for ${targetBook.className} · ${targetBook.subject}`
-          : "Official CBSE/NCERT presets, AI Index scanner for private publishers, and multi-book composite exams"
-      }
+      size="lg"
+      title="Import syllabus"
+      subtitle="Adds missing chapters to the subject's book. Chapters already there, and the blueprints that use them, stay as they are."
       onClose={onClose}
+      preventClose={busy}
       footer={
         <div className="flex w-full flex-wrap items-center justify-between gap-3">
-          <div className="text-xs text-slate-600 flex items-center gap-2">
-            {selectedChaptersCount > 0 ? (
-              <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-700">
-                <Check size={14} className="text-emerald-600" />
-                {selectedChaptersCount} of {totalChapters} chapter(s) selected
-              </span>
-            ) : (
-              <span className="text-amber-700 font-medium">Select chapters below to proceed</span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <button type="button" className="btn" onClick={onClose} disabled={busy || aiBusy}>
+          <p className="text-xs text-slate-600" aria-live="polite">
+            {plan
+              ? `${chosen.length} new chapter${chosen.length === 1 ? "" : "s"} selected${existingCount ? ` · ${existingCount} already in the book` : ""}`
+              : "Pick a class, subject and syllabus to see what will be added."}
+          </p>
+          <div className="flex gap-2">
+            <button type="button" className="btn" onClick={onClose} disabled={busy}>
               Cancel
             </button>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={handleImport}
-              disabled={busy || aiBusy || selectedChaptersCount === 0}
-            >
-              {busy ? (
-                <>
-                  <Spinner /> Importing...
-                </>
-              ) : (
-                `Import Selected (${selectedChaptersCount} Chapters)`
-              )}
+            <button type="button" className="btn btn-primary" onClick={apply} disabled={busy || planBusy || chosen.length === 0}>
+              {busy && <Spinner />}
+              {plan?.createsBook ? "Create book and add chapters" : `Add ${chosen.length} chapter${chosen.length === 1 ? "" : "s"}`}
             </button>
           </div>
         </div>
       }
     >
-      <div className="space-y-4">
-        {/* Navigation Tabs */}
-        <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-100 p-1">
-          <button
-            type="button"
-            onClick={() => setActiveTab("preset")}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-              activeTab === "preset"
-                ? "bg-white text-indigo-700 shadow-xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
-            }`}
-          >
-            <BookOpen size={14} /> Official CBSE / NCERT Presets
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("rollover")}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-              activeTab === "rollover"
-                ? "bg-white text-emerald-700 shadow-xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
-            }`}
-          >
-            <RotateCcw size={14} className="text-emerald-600" /> Rollover from Previous Session / Books
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("ai_scan")}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-              activeTab === "ai_scan"
-                ? "bg-white text-purple-700 shadow-xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
-            }`}
-          >
-            <Sparkles size={14} className="text-purple-600" /> AI Table of Contents Scanner (Private Books)
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("text")}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-              activeTab === "text"
-                ? "bg-white text-indigo-700 shadow-xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
-            }`}
-          >
-            <FileText size={14} /> Paste Text
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("csv")}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-              activeTab === "csv"
-                ? "bg-white text-indigo-700 shadow-xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
-            }`}
-          >
-            <FileSpreadsheet size={14} /> CSV / Spreadsheet
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("json")}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-              activeTab === "json"
-                ? "bg-white text-indigo-700 shadow-xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
-            }`}
-          >
-            <FileCode size={14} /> JSON
-          </button>
-        </div>
-
-        {/* TAB 1: OFFICIAL PRESETS (WITH GRANULAR FILTERS) */}
-        {activeTab === "preset" && (
-          <div className="space-y-3">
-            {/* Filter Bar */}
-            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs">
-              <div className="flex items-center gap-1.5 font-semibold text-slate-700">
-                <Filter size={13} className="text-slate-500" /> Filter:
-              </div>
-              {/* Class Filter */}
-              <select
-                className="input py-1 px-2 text-xs"
-                value={filterClass}
-                onChange={(e) => setFilterClass(e.target.value)}
-              >
-                <option value="ALL">All Classes (Nursery–12th)</option>
-                <option value="Class 12">Class 12</option>
-                <option value="Class 11">Class 11</option>
-                <option value="Class 10">Class 10</option>
-                <option value="Class 9">Class 9</option>
-                <option value="Class 8">Class 8</option>
-                <option value="Class 7">Class 7</option>
-                <option value="Class 6">Class 6</option>
-                <option value="Class 5">Class 5</option>
-                <option value="Class 4">Class 4</option>
-                <option value="Class 3">Class 3</option>
-                <option value="Class 2">Class 2</option>
-                <option value="Class 1">Class 1</option>
-                <option value="UKG">UKG</option>
-                <option value="LKG">LKG</option>
-                <option value="Nursery">Nursery</option>
-              </select>
-
-              {/* Subject Filter */}
-              <select
-                className="input py-1 px-2 text-xs"
-                value={filterSubject}
-                onChange={(e) => setFilterSubject(e.target.value)}
-              >
-                <option value="ALL">All Subjects</option>
-                <option value="English">English</option>
-                <option value="Hindi">Hindi</option>
-                <option value="Mathematics">Mathematics</option>
-                <option value="Science">Science</option>
-                <option value="Social Science">Social Science</option>
-                <option value="Sanskrit">Sanskrit</option>
-                <option value="EVS">EVS / पर्यावरण</option>
-                <option value="Physics">Physics</option>
-                <option value="Chemistry">Chemistry</option>
-                <option value="Biology">Biology</option>
-                <option value="Accountancy">Accountancy</option>
-                <option value="Business Studies">Business Studies</option>
-                <option value="Economics">Economics</option>
-                <option value="History">History</option>
-                <option value="Political Science">Political Science</option>
-                <option value="Geography">Geography</option>
-                <option value="Sociology">Sociology</option>
-                <option value="Psychology">Psychology</option>
-                <option value="Information Technology">Information Technology</option>
-                <option value="Computer Science">Computer Science</option>
-                <option value="Foundational English & Math">Foundational English & Math</option>
-                {filterSubject !== "ALL" &&
-                  ![
-                    "English",
-                    "Hindi",
-                    "Mathematics",
-                    "Science",
-                    "Social Science",
-                    "Sanskrit",
-                    "EVS",
-                    "Physics",
-                    "Chemistry",
-                    "Biology",
-                    "Accountancy",
-                    "Business Studies",
-                    "Economics",
-                    "History",
-                    "Political Science",
-                    "Geography",
-                    "Sociology",
-                    "Psychology",
-                    "Information Technology",
-                    "Computer Science",
-                    "Foundational English & Math",
-                  ].includes(filterSubject) && (
-                    <option value={filterSubject}>{filterSubject}</option>
-                  )}
-              </select>
-
-              {/* Multi-Book Toggle */}
-              <label className="flex items-center gap-1.5 font-medium text-slate-700 cursor-pointer ml-auto">
-                <input
-                  type="checkbox"
-                  checked={filterCompositeOnly}
-                  onChange={(e) => setFilterCompositeOnly(e.target.checked)}
-                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                />
-                <span className="flex items-center gap-1">
-                  <Layers size={13} className="text-purple-600" /> Multi-Book Composite Syllabi Only
-                </span>
+      <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+        {/* Left: what to import */}
+        <div className="space-y-5">
+          <fieldset className="space-y-3">
+            <legend className="text-sm font-semibold text-slate-900">Class and subject</legend>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="label">Class</span>
+                <select
+                  className="input"
+                  value={className}
+                  disabled={locked}
+                  onChange={(e) => {
+                    setClassName(e.target.value);
+                    setSubject("");
+                  }}
+                >
+                  <option value="">Choose…</option>
+                  {classOptions.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="label">Subject</span>
+                <select className="input" value={subject} disabled={locked || !className} onChange={(e) => setSubject(e.target.value)}>
+                  <option value="">Choose…</option>
+                  {subjectOptions.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
               </label>
             </div>
+          </fieldset>
 
-            {/* Presets Grid */}
-            <div className="grid max-h-56 overflow-y-auto gap-2.5 sm:grid-cols-2 lg:grid-cols-3 pr-1">
-              {filteredPresets.map((preset: StandardCurriculumPreset) => {
-                const isSelected = selectedPresetId === preset.id;
-                return (
+          {className && subject && (
+            <fieldset className="space-y-3">
+              <legend className="text-sm font-semibold text-slate-900">Chapters from</legend>
+              <div role="radiogroup" aria-label="Chapters from" className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
+                {(
+                  [
+                    ["official", "Official syllabus", Library],
+                    ["paste", "Type or paste", FileText],
+                  ] as const
+                ).map(([value, label, Icon]) => (
                   <button
-                    key={preset.id}
+                    key={value}
                     type="button"
-                    onClick={() => {
-                      setSelectedPresetId(preset.id);
-                      setDefaultTitle(preset.title);
-                      setDefaultClass(preset.className);
-                      setDefaultSubject(preset.subject);
-                    }}
-                    className={`flex flex-col items-start rounded-xl border p-3 text-left transition ${
-                      isSelected
-                        ? "border-indigo-600 bg-indigo-50/70 ring-2 ring-indigo-500/20 shadow-xs"
-                        : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                    role="radio"
+                    aria-checked={mode === value}
+                    disabled={value === "official" && sources.length === 0}
+                    onClick={() => setMode(value)}
+                    className={`flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                      mode === value ? "bg-white text-slate-900 shadow-2xs" : "text-slate-600 hover:text-slate-900"
                     }`}
                   >
-                    <div className="flex w-full items-center justify-between gap-1.5">
-                      <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[11px] font-semibold text-indigo-800">
-                        {preset.className}
-                      </span>
-                      {preset.isComposite && (
-                        <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[10px] font-semibold text-purple-800 flex items-center gap-1">
-                          <Layers size={10} /> Multi-Book
-                        </span>
-                      )}
-                      <span className="text-[11px] font-medium text-slate-500 ml-auto">
-                        {preset.chapters.length} ch
-                      </span>
-                    </div>
-                    <span className="mt-1 font-semibold text-slate-900 line-clamp-1">{preset.title}</span>
-                    <span className="text-xs text-slate-500">{preset.subject}</span>
-                    <span className="mt-1 line-clamp-1 text-[11px] text-slate-500">{preset.description}</span>
+                    <Icon size={14} /> {label}
                   </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* TAB: ROLLOVER FROM EXISTING / PREVIOUS BOOKS */}
-        {activeTab === "rollover" && (
-          <div className="space-y-4">
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3.5 text-xs text-emerald-950 flex items-start gap-3">
-              <RotateCcw size={18} className="text-emerald-700 shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <p className="font-semibold text-emerald-950 text-sm">Rollover Existing Syllabus into a New Session</p>
-                <p className="text-emerald-800 leading-relaxed">
-                  Select an existing textbook from a prior session. Its chapters will be loaded into the Interactive Checklist below where you can deselect removed chapters, renumber, or add new chapters before creating the textbook in your target session.
-                </p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Source Textbook to Rollover
-                </label>
-                {existingBooks.length === 0 ? (
-                  <p className="text-xs text-slate-500 italic py-2">No textbooks currently in database to roll over.</p>
-                ) : (
-                  <select
-                    value={selectedRolloverBookId}
-                    onChange={(e) => setSelectedRolloverBookId(e.target.value)}
-                    className="input input-sm w-full text-xs font-medium"
-                  >
-                    {existingBooks.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.className} · {b.subject}: {b.title} ({b.chapters.length} ch) [{b.academicSession || "2025–26"}]
-                      </option>
-                    ))}
-                  </select>
-                )}
+                ))}
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Target Academic Session
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={rolloverTargetSession}
-                    onChange={(e) => setRolloverTargetSession(e.target.value)}
-                    placeholder="e.g. 2026–27"
-                    className="input input-sm flex-1 text-xs font-semibold text-emerald-950"
-                  />
-                  <select
-                    value={rolloverTargetSession}
-                    onChange={(e) => setRolloverTargetSession(e.target.value)}
-                    className="input input-sm w-32 text-xs"
-                  >
-                    {availableSessions.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Rolled-over Book Title in Target Session
-                </label>
-                <input
-                  type="text"
-                  value={rolloverTitle}
-                  onChange={(e) => setRolloverTitle(e.target.value)}
-                  placeholder="e.g. Science (NCERT Class X)"
-                  className="input input-sm w-full text-xs"
-                />
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={rolloverIncludeQuestions}
-                    onChange={(e) => setRolloverIncludeQuestions(e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                  />
-                  <span>Also duplicate and carry forward questions from question bank into this session</span>
-                </label>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 2: AI INDEX / SYLLABUS SCANNER (FOR PRIVATE BOOKS) */}
-        {activeTab === "ai_scan" && (
-          <div className="space-y-3 rounded-xl border border-purple-200 bg-purple-50/40 p-3.5">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h4 className="text-xs font-bold text-purple-950 flex items-center gap-1.5">
-                  <Sparkles size={14} className="text-purple-600" /> AI Table of Contents &amp; Circular Scanner
-                </h4>
-                <p className="text-xs text-slate-600 mt-0.5">
-                  Paste unformatted index text or syllabus circulars from <strong>any private publisher</strong> (Oxford, Pearson, Ratna Sagar, Cambridge, S. Chand, Cordova). Gemini extracts chapters and separates multi-book parts automatically.
-                </p>
-              </div>
-            </div>
-
-            {aiError && (
-              <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-900">
-                <AlertCircle size={14} className="mt-0.5 shrink-0 text-red-600" />
-                <span>{aiError}</span>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-              <label className="block">
-                <span className="text-[11px] font-semibold text-slate-700">Target Class:</span>
-                <input
-                  type="text"
-                  className="input text-xs py-1"
-                  value={aiClass}
-                  onChange={(e) => setAiClass(e.target.value)}
-                  placeholder="e.g. Class 7 or Class 10"
-                />
-              </label>
-              <label className="block">
-                <span className="text-[11px] font-semibold text-slate-700">Target Subject:</span>
-                <input
-                  type="text"
-                  list="ai-scan-subject-suggestions"
-                  className="input text-xs py-1"
-                  value={aiSubject}
-                  onChange={(e) => setAiSubject(e.target.value)}
-                  placeholder="e.g. English, Science, Mathematics, Hindi"
-                />
-                <datalist id="ai-scan-subject-suggestions">
-                  <option value="English" />
-                  <option value="Hindi" />
-                  <option value="Mathematics" />
-                  <option value="Science" />
-                  <option value="Social Science" />
-                  <option value="Sanskrit" />
-                  <option value="EVS" />
-                  <option value="Physics" />
-                  <option value="Chemistry" />
-                  <option value="Biology" />
-                  <option value="Accountancy" />
-                  <option value="Business Studies" />
-                  <option value="Economics" />
-                  <option value="Information Technology" />
-                  <option value="Foundational English & Math" />
-                </datalist>
-              </label>
-            </div>
-
-            <textarea
-              className="input font-mono text-xs leading-relaxed"
-              rows={6}
-              value={aiRawText}
-              onChange={(e) => setAiRawText(e.target.value)}
-              placeholder="Paste Table of Contents or Syllabus Circular text here..."
-            />
-
-            <div className="flex justify-between items-center">
-              <button
-                type="button"
-                className="btn btn-sm btn-ghost text-xs"
-                onClick={() => setAiRawText(SAMPLE_AI_INDEX)}
-              >
-                Load Sample Multi-Book Index
-              </button>
-              <button
-                type="button"
-                className="btn btn-sm border-purple-300 bg-purple-600 text-white hover:bg-purple-700 shadow-xs font-semibold"
-                onClick={handleAiScan}
-                disabled={aiBusy}
-              >
-                {aiBusy ? (
-                  <>
-                    <Spinner /> Scanning with AI...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles size={14} /> Scan &amp; Extract Chapters
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 3: TEXT SYLLABUS */}
-        {activeTab === "text" && (
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-xs text-slate-600">
-                Paste syllabus text directly. Chapter numbers are detected automatically.
-              </span>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  className="btn btn-sm btn-ghost text-xs"
-                  onClick={() => setTextContent(SAMPLE_TEXT_SYLLABUS)}
-                >
-                  Load sample CBSE Science
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-sm btn-ghost text-xs text-red-600 hover:text-red-700"
-                  onClick={() => setTextContent("")}
-                >
-                  Clear
-                </button>
-              </div>
-            </div>
-
-            <textarea
-              className="input font-mono text-xs leading-relaxed"
-              rows={6}
-              value={textContent}
-              onChange={(e) => setTextContent(e.target.value)}
-            />
-
-            {!targetBook && (
-              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-                <label className="block">
-                  <span className="text-xs font-semibold text-slate-700">Textbook title</span>
-                  <input
-                    type="text"
-                    className="input text-xs"
-                    value={defaultTitle}
-                    onChange={(e) => setDefaultTitle(e.target.value)}
-                    placeholder="e.g. Oxford Science Class 7"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs font-semibold text-slate-700">Class</span>
-                  <input
-                    type="text"
-                    className="input text-xs"
-                    value={defaultClass}
-                    onChange={(e) => setDefaultClass(e.target.value)}
-                    placeholder="e.g. Class 7"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs font-semibold text-slate-700">Subject</span>
-                  <input
-                    type="text"
-                    className="input text-xs"
-                    value={defaultSubject}
-                    onChange={(e) => setDefaultSubject(e.target.value)}
-                    placeholder="e.g. Science"
-                  />
-                </label>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* TAB 4: CSV IMPORT */}
-        {activeTab === "csv" && (
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-xs text-slate-600">
-                Headers: <code>Book</code>, <code>Class</code>, <code>Subject</code>, <code>Chapter</code>, <code>Title</code>.
-              </span>
-              <div className="flex items-center gap-2">
-                <button type="button" className="btn btn-sm btn-ghost text-xs" onClick={downloadCsvTemplate}>
-                  <Download size={13} /> Download template
-                </button>
-                <label
-                  htmlFor={fileInputId}
-                  className="btn btn-sm btn-ghost text-xs cursor-pointer text-indigo-700 hover:text-indigo-800"
-                >
-                  <Upload size={13} /> Upload .csv file
-                  <input
-                    id={fileInputId}
-                    type="file"
-                    accept=".csv,text/csv,text/plain"
-                    className="sr-only"
-                    onChange={handleCsvFileUpload}
-                  />
-                </label>
-              </div>
-            </div>
-
-            <textarea
-              className="input font-mono text-xs leading-relaxed"
-              rows={6}
-              value={csvContent}
-              onChange={(e) => setCsvContent(e.target.value)}
-            />
-          </div>
-        )}
-
-        {/* TAB 5: JSON IMPORT */}
-        {activeTab === "json" && (
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-xs text-slate-600">Paste structured JSON array of books with chapters.</span>
-              <button type="button" className="btn btn-sm btn-ghost text-xs" onClick={() => setJsonContent(SAMPLE_JSON)}>
-                Load sample JSON
-              </button>
-            </div>
-            <textarea
-              className="input font-mono text-xs leading-relaxed"
-              rows={6}
-              value={jsonContent}
-              onChange={(e) => setJsonContent(e.target.value)}
-            />
-          </div>
-        )}
-
-        {/* INTERACTIVE CHAPTER CHECKLIST & CUSTOMIZER (THE CORE SOLUTION) */}
-        {editableBooks.length > 0 && (
-          <div className="space-y-3 rounded-xl border border-indigo-200 bg-white p-4 shadow-2xs">
-            {/* Header with Select All / Deselect All */}
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
-              <div className="flex items-center gap-2">
-                <CheckSquare size={16} className="text-indigo-600" />
-                <h4 className="text-xs font-bold text-slate-900">
-                  Interactive Chapter Selection ({selectedChaptersCount} of {totalChapters} chapters active)
-                </h4>
-              </div>
-              <div className="flex items-center gap-2 text-xs">
-                <button
-                  type="button"
-                  onClick={() => selectAllChapters(true)}
-                  className="btn btn-sm btn-ghost text-indigo-600 hover:text-indigo-700 font-semibold"
-                >
-                  Select All
-                </button>
-                <span className="text-slate-300">|</span>
-                <button
-                  type="button"
-                  onClick={() => selectAllChapters(false)}
-                  className="btn btn-sm btn-ghost text-slate-500 hover:text-slate-700"
-                >
-                  Deselect All
-                </button>
-              </div>
-            </div>
-
-            {/* Book Chapter Groups */}
-            <div className="max-h-60 overflow-y-auto space-y-4 pr-1">
-              {editableBooks.map((b, bIdx) => (
-                <div key={bIdx} className="space-y-2">
-                  <div className="flex items-center justify-between bg-slate-50 rounded-lg px-2.5 py-1.5 border border-slate-200">
-                    <span className="text-xs font-bold text-slate-800 flex items-center gap-2">
-                      <BookOpen size={13} className="text-indigo-600" />
-                      {b.title} <span className="text-slate-500 font-normal">({b.className} · {b.subject})</span>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => addCustomChapter(bIdx)}
-                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800"
-                    >
-                      <Plus size={12} /> Add Chapter
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs">
-                    {b.chapters.map((c) => {
-                      // Check for part prefix e.g. "[First Flight]"
-                      const partMatch = c.title.match(/^\[(.*?)\]\s*(.*)$/);
-                      const partBadge = partMatch ? partMatch[1] : null;
-                      const displayTitle = partMatch ? partMatch[2] : c.title;
-
-                      return (
-                        <div
-                          key={c.id}
-                          className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 transition ${
-                            c.selected
-                              ? "border-indigo-200 bg-indigo-50/50 text-slate-900"
-                              : "border-slate-100 bg-slate-50 text-slate-400 line-through opacity-70"
+              {mode === "official" ? (
+                <div className="space-y-2" role="radiogroup" aria-label="Syllabus">
+                  {sources.map((s) => {
+                    const active = s.id === sourceId;
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() => setSourceId(s.id)}
+                        className={`flex w-full items-start gap-3 rounded-xl border p-3 text-left transition ${
+                          active ? "border-indigo-500 bg-indigo-50/70 ring-1 ring-indigo-500/20" : "border-slate-200 bg-white hover:border-slate-300"
+                        }`}
+                      >
+                        <span
+                          className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                            active ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-300"
                           }`}
                         >
-                          <input
-                            type="checkbox"
-                            checked={c.selected}
-                            onChange={() => toggleChapter(bIdx, c.id)}
-                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 shrink-0"
-                          />
-                          <span className="w-5 font-bold text-slate-500 shrink-0 text-right">{c.number}.</span>
-                          {partBadge && (
-                            <span className="rounded bg-purple-100 px-1.5 py-0.2 text-[10px] font-bold text-purple-800 shrink-0">
-                              {partBadge}
-                            </span>
-                          )}
-                          <input
-                            type="text"
-                            value={c.title}
-                            onChange={(e) => updateChapterTitle(bIdx, c.id, e.target.value)}
-                            className={`min-w-0 flex-1 bg-transparent text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400 rounded px-1 ${
-                              !c.selected ? "line-through text-slate-400" : "text-slate-800"
-                            }`}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => deleteChapter(bIdx, c.id)}
-                            className="text-slate-300 hover:text-red-500 shrink-0"
-                            title="Remove chapter"
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
+                          {active && <Check size={10} strokeWidth={3} />}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-sm font-semibold text-slate-900">{s.label}</span>
+                          <span className="block text-xs text-slate-500">{s.detail}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                  {sources.length === 0 && <p className="text-xs text-slate-500">No official syllabus is stored for {className} {subject}.</p>}
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Upsert Safe Guard */}
-        <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs">
-          <label className="flex cursor-pointer items-center gap-2 text-slate-700 font-medium">
-            <input
-              type="checkbox"
-              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-              checked={upsert}
-              onChange={(e) => setUpsert(e.target.checked)}
-            />
-            <span>Safely update chapter titles if numbers match (keeps existing questions intact)</span>
-          </label>
-          <span className="text-slate-400 font-medium">Non-destructive</span>
+              ) : (
+                <label className="block">
+                  <span className="label">One chapter per line</span>
+                  <textarea
+                    className="input min-h-48 font-normal"
+                    value={pasted}
+                    placeholder={PASTE_HINT}
+                    onChange={(e) => setPasted(e.target.value)}
+                  />
+                  <span className="mt-1 block text-xs text-slate-500">
+                    Numbers like “3.” are removed. Start a line with # to name the textbook the next chapters belong to.
+                  </span>
+                </label>
+              )}
+            </fieldset>
+          )}
         </div>
 
-        {/* API Error Notification */}
-        {apiError && (
-          <div className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-900">
-            <AlertCircle size={15} className="mt-0.5 shrink-0 text-red-600" />
-            <div className="font-medium">{apiError}</div>
-          </div>
-        )}
+        {/* Right: what will change */}
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-slate-900">What changes</h3>
+          <ErrorBanner message={error} onDismiss={() => setError(null)} />
+          {!plan ? (
+            <div className="flex min-h-48 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-200 p-6 text-center text-xs text-slate-500">
+              {planBusy ? <Spinner /> : <BookOpen size={20} className="text-slate-400" />}
+              {planBusy ? "Checking the book…" : "The chapters to add appear here."}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-slate-200">
+              <div className="border-b border-slate-100 bg-slate-50/70 px-3 py-2.5">
+                <p className="text-sm font-semibold text-slate-900">{plan.bookTitle}</p>
+                <p className="text-xs text-slate-500">
+                  {plan.createsBook ? `New book for ${className} ${subject}` : `The ${className} ${subject} book`}
+                </p>
+              </div>
+              <ul className="max-h-96 overflow-y-auto overscroll-contain py-1 text-sm">
+                {groupedPreview.map((g, gi) => (
+                  <li key={gi}>
+                    {g.part !== null && <p className="px-3 pb-1 pt-2 text-[11px] font-bold text-indigo-700">{g.part}</p>}
+                    <ul>
+                      {g.rows.map((row) => {
+                        const title = splitChapterTitle(row.title).title;
+                        if (row.status === "exists") {
+                          return (
+                            <li key={row.title} className="flex items-center gap-2.5 px-3 py-1.5 text-slate-400">
+                              <Check size={14} className="shrink-0" aria-hidden />
+                              <span className="min-w-0 flex-1 truncate">{title}</span>
+                              <span className="shrink-0 text-[11px]">already there</span>
+                            </li>
+                          );
+                        }
+                        const on = !skipped.has(row.title);
+                        return (
+                          <li key={row.title}>
+                            <label className="flex cursor-pointer items-center gap-2.5 px-3 py-1.5 hover:bg-slate-50">
+                              <input type="checkbox" className="h-4 w-4 shrink-0 accent-indigo-600" checked={on} onChange={() => toggle(row.title)} />
+                              <span className={`min-w-0 flex-1 truncate ${on ? "text-slate-900" : "text-slate-400 line-through"}`}>{title}</span>
+                              <span className="shrink-0 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700">new</span>
+                            </label>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </li>
+                ))}
+              </ul>
+              {newChapters.length === 0 && (
+                <p className="border-t border-slate-100 px-3 py-2.5 text-xs text-slate-600">Every chapter of this syllabus is already in the book.</p>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </Modal>
   );

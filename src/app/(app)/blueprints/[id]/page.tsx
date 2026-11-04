@@ -655,7 +655,10 @@ export default function BlueprintEditorPage({ params, searchParams }: PageProps<
       // The paper covers every prescribed book (e.g. Kshitij + Kritika + writing/grammar components), so the
       // blueprint needs all of them as one syllabus. Reuse the combined book if it already exists.
       const officialTbs: Array<{ legacyBookId?: string | null }> = tData?.subject?.textbooks ?? [];
-      const legacyIds = officialTbs.map((tb) => tb.legacyBookId).filter((x): x is string => Boolean(x));
+      // Textbooks of one subject now share one book, so their links collapse to a single id.
+      const legacyIds = Array.from(
+        new Set(officialTbs.map((tb) => tb.legacyBookId).filter((x): x is string => Boolean(x))),
+      );
       if (legacyIds.length === 1) {
         const legacyMatch = bookList.find((b) => b.id === legacyIds[0]);
         if (legacyMatch) matchedBook = legacyMatch;

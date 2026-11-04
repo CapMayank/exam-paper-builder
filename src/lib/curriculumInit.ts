@@ -1,6 +1,14 @@
 import { PrismaClient, Prisma } from "@prisma/client";
 import { prisma as defaultPrisma } from "@/lib/prisma";
 import {
+  consolidateCurriculumBooks,
+  normalizeBookSessions,
+  partChapterTitle,
+  sameChapterTitle,
+  sessionForms,
+  subjectBookTitle,
+} from "@/lib/subjectBooks";
+import {
   MPBSE_BLUEPRINT_TEMPLATES,
   BlueprintTemplate,
   ChoicePolicy,
@@ -506,6 +514,21 @@ export async function syncBlueprintTemplates(client?: PrismaClient): Promise<num
   return updatedCount;
 }
 
+const SEED_SESSION = "2026–27";
+
+/** The chapter of a multi-textbook book: the one already linked, else the one with this title, else a new one. */
+async function findOrCreatePartChapter(prisma: PrismaClient, bookId: string, title: string, linkedId?: string | null) {
+  if (linkedId) {
+    const linked = await prisma.chapter.findFirst({ where: { id: linkedId, bookId } });
+    if (linked) return linked;
+  }
+  const chapters = await prisma.chapter.findMany({ where: { bookId }, select: { id: true, number: true, title: true } });
+  const byTitle = chapters.find((c) => sameChapterTitle(c.title, title));
+  if (byTitle) return prisma.chapter.findUniqueOrThrow({ where: { id: byTitle.id } });
+  const number = chapters.reduce((m, c) => Math.max(m, c.number), 0) + 1;
+  return prisma.chapter.create({ data: { bookId, number, title } });
+}
+
 /**
  * Full idempotent curriculum seed: Board, Documents, Classes, Streams, Subjects, Textbooks,
  * Chapters, Topics, Marks Schemes, and CurriculumBlueprintTemplates.
@@ -517,6 +540,10 @@ export async function seedCurriculumData(client?: PrismaClient): Promise<{
   templatesCount: number;
 }> {
   const prisma = client || defaultPrisma;
+
+  // 0. One book per class + subject: fold leftover per-textbook books into the subject's book first
+  await consolidateCurriculumBooks(prisma, SUBJECTS_SEED);
+  await normalizeBookSessions(prisma);
 
   // 1. Board
   const board = await prisma.curriculumBoard.upsert({
@@ -666,23 +693,26 @@ export async function seedCurriculumData(client?: PrismaClient): Promise<{
       });
     }
 
-    // Textbooks & Chapters
+    // Textbooks & Chapters. A subject with several textbooks gets ONE book; each textbook is a "[Title] " part of it.
+    const className = `Class ${s.classLevel}`;
+    const multiPart = s.textbooks.length > 1;
+    const subjectTitle = subjectBookTitle(s.name, className, s.textbooks.map((t) => t.title));
     for (const tb of s.textbooks) {
       let legacyBook = await prisma.book.findFirst({
         where: {
-          title: tb.title,
-          className: `Class ${s.classLevel}`,
-          academicSession: "2026-27",
+          title: multiPart ? subjectTitle : tb.title,
+          className,
+          academicSession: { in: sessionForms(SEED_SESSION) },
         },
       });
 
       if (!legacyBook) {
         legacyBook = await prisma.book.create({
           data: {
-            title: tb.title,
+            title: multiPart ? subjectTitle : tb.title,
             subject: s.name,
-            className: `Class ${s.classLevel}`,
-            academicSession: "2026-27",
+            className,
+            academicSession: SEED_SESSION,
           },
         });
       }
@@ -717,29 +747,17 @@ export async function seedCurriculumData(client?: PrismaClient): Promise<{
       totalTextbooksCreated++;
 
       for (const ch of tb.chapters) {
-        let legacyChapter = await prisma.chapter.findFirst({
-          where: {
-            bookId: legacyBook.id,
-            number: ch.chapterNumber,
-          },
-        });
-
-        if (!legacyChapter) {
-          legacyChapter = await prisma.chapter.create({
-            data: {
-              bookId: legacyBook.id,
-              number: ch.chapterNumber,
-              title: ch.title,
-            },
-          });
-        }
-
         let currChapter = await prisma.curriculumChapter.findFirst({
           where: {
             textbookId: textbook.id,
             chapterNumber: ch.chapterNumber,
           },
         });
+
+        const legacyChapter = multiPart
+          ? await findOrCreatePartChapter(prisma, legacyBook.id, partChapterTitle(tb.title, ch.title), currChapter?.legacyChapterId)
+          : ((await prisma.chapter.findFirst({ where: { bookId: legacyBook.id, number: ch.chapterNumber } })) ??
+            (await prisma.chapter.create({ data: { bookId: legacyBook.id, number: ch.chapterNumber, title: ch.title } })));
 
         if (currChapter) {
           currChapter = await prisma.curriculumChapter.update({
@@ -958,6 +976,10 @@ export async function ensureCurriculumSeeded(
           `✅ [CurriculumInit] Seeding complete: ${result.subjectsCount} subjects, ${result.templatesCount} templates.`
         );
       } else {
+        // Cheap when there is nothing to do; folds leftover per-textbook books even without a re-seed
+        await consolidateCurriculumBooks(prisma, SUBJECTS_SEED);
+        await normalizeBookSessions(prisma);
+
         // Check if existing templates have outdated Hindi headings for non-Hindi subjects
         const mathTemplate = await prisma.curriculumBlueprintTemplate.findUnique({
           where: { templateCode: "mpbse-10th-mathematics-standard-100-75m" },

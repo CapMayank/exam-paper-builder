@@ -3,222 +3,109 @@ import { assertCanManageBook, assertCanManageScope } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { syllabusImportSchema } from "@/lib/schemas";
+import { normalizeSession } from "@/lib/academicSessionUtils";
 import { ensureLanguageNonChapterUnits, isLanguageSubject, parseSyllabusContent } from "@/lib/syllabusImport";
+import { importIntoSubjectBook, type ImportPart } from "@/lib/subjectBooks";
 
+/**
+ * Adds a syllabus to the ONE book of a class + subject (creating it only when the subject has none yet).
+ * Several textbooks of a subject become "[Textbook] " parts of that book. Only missing chapters are added;
+ * existing chapters are never renamed or removed, so blueprints and their chapter quotas stay intact.
+ * `dryRun` returns the plan (which chapters are new / already there) for the preview.
+ */
 export const POST = route(async (req, _params, user) => {
   const data = await body(req, syllabusImportSchema);
-  const { format, content, targetBookId, defaults, dryRun, upsert, customBooks } = data;
+  const { format, content, targetBookId, defaults, dryRun, customBooks, onlyChapters } = data;
 
   const parsed =
     customBooks && customBooks.length > 0
-      ? { books: customBooks, errors: [], warnings: [] }
-      : parseSyllabusContent(format as any, content || "", defaults);
-
-  // Ensure language non-chapter units (Reading, Writing, Grammar) across all books
-  for (const book of parsed.books) {
-    if (isLanguageSubject(book.subject)) {
-      const { chapters, addedUnits } = ensureLanguageNonChapterUnits(
-        book.chapters,
-        book.subject,
-        book.className,
-      );
-      book.chapters = chapters;
-      if (addedUnits.length > 0) {
-        parsed.warnings.push(
-          `Appended language exam sections (${addedUnits.join(", ")}) to "${book.title}".`,
-        );
-      }
-    }
-  }
+      ? { books: customBooks, errors: [], warnings: [] as string[] }
+      : parseSyllabusContent(format as Parameters<typeof parseSyllabusContent>[0], content || "", defaults);
 
   if (parsed.errors.length > 0 && parsed.books.length === 0) {
     throw new HttpError(400, parsed.errors.map((e) => e.message).join("; "));
   }
+  if (parsed.books.every((b) => b.chapters.length === 0)) {
+    throw new HttpError(400, "No chapters found in syllabus content to import");
+  }
+
+  const target = targetBookId
+    ? await prisma.book.findUnique({ where: { id: targetBookId }, include: { chapters: { orderBy: { number: "asc" } } } })
+    : null;
+  if (targetBookId && !target) throw new HttpError(404, "Target textbook not found");
+
+  // One group per class + subject; with a target book everything goes into it.
+  const groups = new Map<string, { className: string; subject: string; session: string; parts: ImportPart[] }>();
+  for (const b of parsed.books) {
+    const className = target?.className ?? b.className.trim();
+    const subject = target?.subject ?? b.subject.trim();
+    const session = normalizeSession(target?.academicSession ?? b.academicSession ?? defaults?.academicSession);
+    const key = `${className}\u0000${subject.toLowerCase()}\u0000${session}`;
+    const g = groups.get(key) ?? { className, subject, session, parts: [] };
+    g.parts.push({ title: b.title, chapters: b.chapters });
+    groups.set(key, g);
+  }
 
   if (!dryRun) {
-    if (targetBookId) await assertCanManageBook(user, targetBookId);
-    else for (const book of parsed.books) assertCanManageScope(user, book);
+    if (target) await assertCanManageBook(user, target.id);
+    else for (const g of groups.values()) assertCanManageScope(user, g);
   }
+
+  const warnings = [...parsed.warnings];
+  const languageUnits = (subject: string, className: string) =>
+    isLanguageSubject(subject)
+      ? (titles: string[]) => {
+          const { chapters, addedUnits } = ensureLanguageNonChapterUnits(
+            titles.map((title, i) => ({ number: i + 1, title })),
+            subject,
+            className,
+          );
+          if (addedUnits.length > 0) warnings.push(`Added the language exam sections (${addedUnits.join(", ")}) for ${className} ${subject}.`);
+          return chapters.slice(titles.length).map((c) => c.title);
+        }
+      : undefined;
+
+  const run = (db: Parameters<typeof importIntoSubjectBook>[0]) =>
+    Promise.all(
+      [...groups.values()].map((g) =>
+        importIntoSubjectBook(
+          db,
+          { ...g, target: target ?? undefined },
+          { dryRun, extraChapters: languageUnits(g.subject, g.className) },
+        ),
+      ),
+    );
 
   if (dryRun) {
-    return {
-      dryRun: true,
-      books: parsed.books,
-      errors: parsed.errors,
-      warnings: parsed.warnings,
-    };
+    return { dryRun: true, plans: await run(prisma), books: parsed.books, errors: parsed.errors, warnings };
   }
 
-  // If targetBookId is specified, import / append chapters directly into existing book
-  if (targetBookId) {
-    const targetBook = await prisma.book.findUnique({
-      where: { id: targetBookId },
-      include: { chapters: true },
-    });
-    if (!targetBook) {
-      throw new HttpError(404, "Target textbook not found");
-    }
-
-    const allParsedChapters = parsed.books.flatMap((b) => b.chapters);
-    if (allParsedChapters.length === 0) {
-      throw new HttpError(400, "No chapters found in syllabus content to import");
-    }
-
-    if (isLanguageSubject(targetBook.subject)) {
-      const combined = [
-        ...targetBook.chapters.map((c) => ({ number: c.number, title: c.title })),
-        ...allParsedChapters,
-      ];
-      const { chapters: ensuredCombined } = ensureLanguageNonChapterUnits(
-        combined,
-        targetBook.subject,
-        targetBook.className,
+  // sequential inside one transaction: a group may create the book a later group of the same subject reuses
+  const results = await prisma.$transaction(async (tx) => {
+    const out = [];
+    for (const g of groups.values()) {
+      out.push(
+        await importIntoSubjectBook(tx, { ...g, target: target ?? undefined }, { extraChapters: languageUnits(g.subject, g.className), onlyChapters }),
       );
-      const existingTitles = new Set(targetBook.chapters.map((c) => c.title));
-      for (const ch of ensuredCombined) {
-        if (!existingTitles.has(ch.title) && !allParsedChapters.some((c) => c.title === ch.title)) {
-          allParsedChapters.push(ch);
-        }
-      }
     }
-
-    let createdCount = 0;
-    let updatedCount = 0;
-    const existingChapterMap = new Map(targetBook.chapters.map((c) => [c.number, c]));
-
-    await prisma.$transaction(async (tx) => {
-      for (const ch of allParsedChapters) {
-        const existing = existingChapterMap.get(ch.number);
-        if (existing) {
-          if (upsert && existing.title !== ch.title) {
-            await tx.chapter.update({
-              where: { id: existing.id },
-              data: { title: ch.title },
-            });
-            updatedCount++;
-          }
-        } else {
-          await tx.chapter.create({
-            data: {
-              bookId: targetBook.id,
-              number: ch.number,
-              title: ch.title,
-            },
-          });
-          createdCount++;
-        }
-      }
-    });
-
-    await recordAudit(user, "BOOK_IMPORT", "BOOK", targetBook.id, {
-      action: "CHAPTERS_BULK_IMPORTED",
-      bookTitle: targetBook.title,
-      format,
-      createdCount,
-      updatedCount,
-      totalCount: allParsedChapters.length,
-    });
-
-    const updatedBook = await prisma.book.findUnique({
-      where: { id: targetBookId },
-      include: {
-        chapters: { orderBy: { number: "asc" } },
-        _count: { select: { questions: true, blueprints: true } },
-      },
-    });
-
-    return {
-      success: true,
-      mode: "chapters",
-      book: updatedBook,
-      createdChapters: createdCount,
-      updatedChapters: updatedCount,
-      warnings: parsed.warnings,
-    };
-  }
-
-  // Otherwise, import textbooks + syllabi
-  let createdBooks = 0;
-  let updatedBooks = 0;
-  let createdChapters = 0;
-  let updatedChapters = 0;
-  const processedBookIds: string[] = [];
-
-  await prisma.$transaction(async (tx) => {
-    for (const b of parsed.books) {
-      const existing = await tx.book.findFirst({
-        where: {
-          title: b.title,
-          className: b.className,
-          subject: b.subject,
-        },
-        include: { chapters: true },
-      });
-
-      let bookId: string;
-      const existingChapterMap = new Map<number, { id: string; title: string }>();
-
-      if (existing) {
-        bookId = existing.id;
-        existing.chapters.forEach((c) => existingChapterMap.set(c.number, c));
-        updatedBooks++;
-      } else {
-        const targetSession = b.academicSession || defaults?.academicSession || "2025–26";
-        const created = await tx.book.create({
-          data: {
-            title: b.title,
-            className: b.className,
-            subject: b.subject,
-            academicSession: targetSession.replace(/-/g, "–"),
-          },
-        });
-        bookId = created.id;
-        createdBooks++;
-      }
-      processedBookIds.push(bookId);
-
-      for (const ch of b.chapters) {
-        const existingCh = existingChapterMap.get(ch.number);
-        if (existingCh) {
-          if (upsert && existingCh.title !== ch.title) {
-            await tx.chapter.update({
-              where: { id: existingCh.id },
-              data: { title: ch.title },
-            });
-            updatedChapters++;
-          }
-        } else {
-          await tx.chapter.create({
-            data: {
-              bookId,
-              number: ch.number,
-              title: ch.title,
-            },
-          });
-          createdChapters++;
-        }
-      }
-    }
+    return out;
   });
 
-  await recordAudit(user, "BOOK_IMPORT", "BOOK", processedBookIds[0] ?? null, {
+  const bookIds = results.map((r) => r.bookId).filter((x): x is string => Boolean(x));
+  const createdChapters = results.reduce((n, r) => n + r.createdChapters, 0);
+  await recordAudit(user, "BOOK_IMPORT", "BOOK", bookIds[0] ?? null, {
     action: "SYLLABUS_IMPORTED",
     format,
-    createdBooks,
-    updatedBooks,
-    createdChapters,
-    updatedChapters,
-    bookCount: parsed.books.length,
+    books: results.map((r) => ({ bookId: r.bookId, title: r.bookTitle, createdBook: r.createsBook, createdChapters: r.createdChapters })),
   });
 
   return {
     success: true,
-    mode: "books",
-    createdBooks,
-    updatedBooks,
+    results,
+    bookIds,
+    createdBooks: results.filter((r) => r.createsBook && r.createdChapters > 0).length,
+    updatedBooks: results.filter((r) => !r.createsBook).length,
     createdChapters,
-    updatedChapters,
-    bookIds: processedBookIds,
-    warnings: parsed.warnings,
+    warnings,
   };
 });
