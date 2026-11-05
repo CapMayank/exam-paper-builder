@@ -1,9 +1,10 @@
 import { body, route } from "@/lib/api";
 import { assertBlueprintValid, blueprintInclude, loadBlueprint } from "@/lib/blueprints";
+import { createBlueprint } from "@/lib/blueprintWrite";
 import { assertCanManageBook } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { blueprintSchema } from "@/lib/schemas";
-import { DEFAULT_ACADEMIC_SESSION, WORKSHEET_MODE } from "@/lib/constants";
+import { WORKSHEET_MODE } from "@/lib/constants";
 import { ensureCurriculumSeeded } from "@/lib/curriculumInit";
 
 import { keepActive, scopeFromRequest } from "@/lib/viewScope";
@@ -29,70 +30,5 @@ export const POST = route(async (req, _params, user) => {
   input.chapters = input.chapters.filter((c) => c.marks > 0);
   await assertBlueprintValid(input);
 
-  // Safely resolve foreign key IDs so template codes never trigger constraint violations
-  let validTemplateId: string | null = null;
-  if (input.curriculumTemplateId) {
-    const tmpl = await prisma.curriculumBlueprintTemplate.findFirst({
-      where: {
-        OR: [
-          { id: input.curriculumTemplateId },
-          { templateCode: input.curriculumTemplateId },
-        ],
-      },
-      select: { id: true },
-    });
-    validTemplateId = tmpl?.id || null;
-  }
-
-  let validVariantId: string | null = null;
-  if (input.curriculumVariantId) {
-    const v = await prisma.curriculumSubjectVariant.findFirst({
-      where: {
-        OR: [
-          { id: input.curriculumVariantId },
-          { code: input.curriculumVariantId },
-        ],
-      },
-      select: { id: true },
-    });
-    validVariantId = v?.id || null;
-  }
-
-  const created = await prisma.blueprint.create({
-    data: {
-      name: input.name,
-      bookId: input.bookId,
-      academicSession: input.academicSession || DEFAULT_ACADEMIC_SESSION,
-      examType: input.examType,
-      durationMin: input.durationMin,
-      subjectCode: input.subjectCode ?? "",
-      language: input.language || "en",
-      curriculumMode: input.curriculumMode || "BLANK_CUSTOM",
-      curriculumTemplateId: validTemplateId,
-      curriculumVariantId: validVariantId,
-      verificationStatus: input.verificationStatus ?? "UNVERIFIED",
-      sourceRef: input.sourceRef ?? "",
-      textbookVariant: input.textbookVariant ?? "",
-      blueprintVersion: input.blueprintVersion ?? "",
-      componentsJson: input.componentsJson ?? "[]",
-      chapters: { create: input.chapters },
-      sections: {
-        create: input.sections.map((s, position) => ({
-          title: s.title,
-          instructions: s.instructions,
-          type: s.type,
-          count: s.count,
-          marksEach: s.marksEach,
-          orChoiceMode: s.orChoiceMode || "BOARD_DEFAULT",
-          orAlternativeCount: s.orAlternativeCount ?? 1,
-          orSlotsJson: s.orSlotsJson || "[]",
-          allowedTypesJson: s.allowedTypesJson || "[]",
-          role: s.role || "STANDARD",
-          groupKey: s.groupKey || "",
-          position,
-        })),
-      },
-    },
-  });
-  return loadBlueprint(created.id);
+  return loadBlueprint(await createBlueprint(input));
 });

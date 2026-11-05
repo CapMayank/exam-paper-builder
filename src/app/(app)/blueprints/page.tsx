@@ -461,6 +461,15 @@ export default function BlueprintsPage() {
               </button>
             )}
             {canCreate && (
+              <Link
+                href="/blueprints/setup"
+                className="btn btn-ghost border border-slate-200 bg-white text-slate-800 hover:bg-slate-50 text-xs py-1.5"
+                title="Create or update the blueprints of one exam for many classes and subjects at once"
+              >
+                <Layers size={15} className="text-slate-600" /> Set up an exam
+              </Link>
+            )}
+            {canCreate && (
               <Link href={newBlueprintHref} className="btn btn-primary text-xs py-1.5">
                 <Plus size={15} /> New blueprint
               </Link>
@@ -667,6 +676,9 @@ export default function BlueprintsPage() {
             <div className="flex flex-wrap items-center gap-2">
               <Link href="/classes" className="btn btn-primary">
                 <GraduationCap size={16} /> Open Classes &amp; Subjects Hub
+              </Link>
+              <Link href="/blueprints/setup" className="btn btn-ghost border border-slate-200">
+                <Layers size={16} /> Set up an exam for many classes
               </Link>
               <Link href="/blueprints/new" className="btn btn-ghost border border-slate-200">
                 <Plus size={16} /> New blueprint
