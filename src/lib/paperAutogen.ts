@@ -169,20 +169,41 @@ export function slotFitsRole(type: string, marks: number, role: ChapterRole): bo
  * Tells the model what a slot on this kind of row must be. Without it a grammar row or an unseen-passage row
  * reads like a textbook lesson, and the model writes lesson questions (or passage questions) in its place.
  */
-export function slotTaskDirective(role: ChapterRole, rowTitle: string, type: string, marks: number, subject?: string | null): string {
+/**
+ * How hard a passage may read, by class. Without it the model writes the same dense, adult prose ("subterranean
+ * ecosystem untouched by sunlight for millennia") for Class 7 as for Class 12.
+ */
+export function passageReadingLevel(className?: string | null): string {
+  const n = parseInt(String(className ?? "").replace(/\D/g, ""), 10);
+  if (!Number.isFinite(n)) return "";
+  if (n <= 5) return ` Write for Class ${n}: short, simple sentences and everyday words a child of that age knows; no technical terms.`;
+  if (n <= 8) return ` Write for Class ${n}: plain, familiar vocabulary and sentences mostly under 20 words; explain or avoid technical and rare words (no "subterranean", "bioluminescent" style vocabulary).`;
+  if (n <= 10) return ` Write for Class ${n}: clear prose at a secondary-school level; occasional subject words are fine if the context makes them clear.`;
+  return ` Write for Class ${n}: senior-secondary prose; richer vocabulary is fine.`;
+}
+
+export function slotTaskDirective(rowRole: ChapterRole, rowTitle: string, type: string, marks: number, subject?: string | null, className?: string | null): string {
+  // A form the teacher picked explicitly decides the task, whatever the row is called: a writing task on the
+  // "Unseen Passage" row must not come back as a reading passage with comprehension questions.
+  const typeRole: ChapterRole | null =
+    type === "UNSEEN_PASSAGE" ? "PASSAGE" : type === "WRITING_SKILL" ? "WRITING" : type === "MAP_WORK" ? "MAP" : type === "GRAMMAR" ? "GRAMMAR" : null;
+  const role = typeRole ?? rowRole;
+  // the row's title names the topic only when the row is of the same kind as the task
+  const topic = role === rowRole ? rowTitle : "";
   // outside language papers every row is a chapter, and the chapter title already says it all
   if (role === "LESSON" && !(subject && LANGUAGE_SUBJECT.test(subject))) return "";
   switch (role) {
     case "GRAMMAR":
+      if (!topic) return `Grammar item: test one grammar point suited to the class directly with your own words or sentences (e.g. form, identify, join or change them). Do not base it on any passage, poem, story or textbook lesson.`;
       return `Grammar item on "${rowTitle}": test this grammar point directly with your own words or sentences (e.g. form, identify, join or change them). Do not base it on any passage, poem, story or textbook lesson, and do not refer to an unseen passage.`;
     case "PASSAGE":
       return type === "UNSEEN_PASSAGE"
-        ? `Unseen passage worth ${marks} marks: write a new, original passage of ${marks >= 8 ? "180-220" : marks >= 5 ? "130-170" : "100-130"} words (count them; under 100 is rejected and over ${marks >= 8 ? 240 : marks >= 5 ? 190 : 150} is too long for the printed booklet), then sub-questions whose marks add up to exactly ${marks}.`
-        : `Unseen passage worth ${marks} marks: write a NEW, ORIGINAL passage (100-150 words, not from any textbook or published text) in the paper's language as the question text, then put comprehension sub-questions in "subparts" (answerable from the passage alone) whose marks add up to exactly ${marks}.`;
+        ? `Unseen passage worth ${marks} marks: write a new, original passage of ${marks >= 8 ? "180-220" : marks >= 5 ? "130-170" : "100-130"} words (count them; under 100 is rejected and over ${marks >= 8 ? 240 : marks >= 5 ? 190 : 150} is too long for the printed booklet), then sub-questions whose marks add up to exactly ${marks}.${passageReadingLevel(className)}`
+        : `Unseen passage worth ${marks} marks: write a NEW, ORIGINAL passage (100-150 words, not from any textbook or published text) in the paper's language as the question text, then put comprehension sub-questions in "subparts" (answerable from the passage alone) whose marks add up to exactly ${marks}.${passageReadingLevel(className)}`;
     case "WRITING":
-      return `Writing task on "${rowTitle}": set one realistic task in the paper's language (for a letter/application: who writes to whom and why; for an essay/paragraph: the topic with 3-4 guiding points). Do not ask about a textbook lesson. The answer is a complete model response in the correct format, followed by the marking scheme (format, content, expression) adding up to ${marks} marks.`;
+      return `Writing task${topic ? ` on "${topic}"` : " (a letter, application, notice, message, paragraph, diary entry or story suited to the class; NOT a reading passage with comprehension questions)"}: set one realistic task in the paper's language (for a letter/application: who writes to whom and why; for an essay/paragraph: the topic with 3-4 guiding points). Do not ask about a textbook lesson. The answer is a complete model response in the correct format, followed by the marking scheme (format, content, expression) adding up to ${marks} marks.`;
     case "MAP":
-      return `Map work: ask the student to locate and mark specific places/features from "${rowTitle}" on an outline map of India. Keep only the instruction in "text" (e.g. "On the outline political map of India provided, locate and label any four of the following:") and put each feature in "subparts" as its own item, labelled (i), (ii), (iii)... with a short noun phrase as the text (e.g. "The river that forms the Sunderbans delta"). Offer one more feature than must be attempted and set "attemptCount" to the number required, so the marks (${marks}) are 1 per attempted feature. Never run the features together in one paragraph. The answer says where each feature lies.`;
+      return `Map work: ask the student to locate and mark specific places/features${topic ? ` from "${topic}"` : ""} on an outline map of India. Keep only the instruction in "text" (e.g. "On the outline political map of India provided, locate and label any four of the following:") and put each feature in "subparts" as its own item, labelled (i), (ii), (iii)... with a short noun phrase as the text (e.g. "The river that forms the Sunderbans delta"). Offer one more feature than must be attempted and set "attemptCount" to the number required, so the marks (${marks}) are 1 per attempted feature. Never run the features together in one paragraph. The answer says where each feature lies.`;
     default:
       return `Textbook-based: the question must come from the lesson "${rowTitle}" (its content, characters, ideas or language), not from grammar drills or unseen passages.`;
   }

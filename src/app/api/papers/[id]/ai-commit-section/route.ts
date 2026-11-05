@@ -78,12 +78,26 @@ export const POST = route(async (req, { id }, user) => {
   );
   const bodyIsMock = (body as { isMock?: boolean }).isMock === true;
   const templateFallbackIdx = new Set<number>();
-  if (bodyIsMock && ["UNSEEN_PASSAGE", "REFERENCE_CONTEXT"].includes(section.type)) {
+  if (bodyIsMock && questions.some((q) => ["UNSEEN_PASSAGE", "REFERENCE_CONTEXT"].includes(q.type || section.type))) {
     throw new HttpError(422, "Offline templates cannot write a real unseen passage. Connect a Gemini API key, or add the passage and its questions manually.");
   }
 
   // Enforce Subject & Curriculum Validation Gate before committing to paper or Question Bank
-  const contractRes = buildAndValidateGenerationContract({
+  // A question is checked as the form it actually is: a section may accept other forms at the same marks
+  // (an unseen passage in a long-answer section), and checking it as the section's default form failed it
+  // with "expected LONG" and then regenerated it as a LONG question that kept the passage label.
+  const contractCache = new Map<string, NonNullable<ReturnType<typeof buildAndValidateGenerationContract>["contract"]>>();
+  const contractFor = (questionType: string) => {
+    const hit = contractCache.get(questionType);
+    if (hit) return hit;
+    const res = buildContract(questionType);
+    if (!res.valid || !res.contract) {
+      throw new HttpError(422, `Invalid generation contract: ${res.errors.join(" ")}`);
+    }
+    contractCache.set(questionType, res.contract);
+    return res.contract;
+  };
+  const buildContract = (questionType: string) => buildAndValidateGenerationContract({
     schoolName: paper.schoolName,
     blueprintName: paper.blueprint.name,
     className: paper.blueprint.book.className,
@@ -94,7 +108,7 @@ export const POST = route(async (req, { id }, user) => {
     subjectCode: paper.subjectCode || paper.blueprint.subjectCode,
     sectionTitle: section.title,
     sectionInstructions: section.instructions,
-    questionType: section.type,
+    questionType,
     marksEach: section.marksEach,
     slots: questions.map((q, idx) => {
       const ch =
@@ -111,9 +125,7 @@ export const POST = route(async (req, { id }, user) => {
     }),
   });
 
-  if (!contractRes.valid || !contractRes.contract) {
-    throw new HttpError(422, `Invalid generation contract: ${contractRes.errors.join(" ")}`);
-  }
+  const contractRes = { contract: contractFor(section.type) };
 
   const choiceForbidden = contractRes.contract.internalChoiceRequirement.forbidden;
 
@@ -125,6 +137,8 @@ export const POST = route(async (req, { id }, user) => {
     if (q.type && !isTypeAllowed(section, q.type)) {
       throw new HttpError(422, `Question ${i + 1} is ${q.type} but section "${section.title}" only accepts ${allowedTypesFor(section).join(", ")}.`);
     }
+    const qType = q.type || section.type;
+    const qContract = contractFor(qType);
     if (choiceForbidden && q.orQuestion) {
       q.orQuestion = undefined;
       q.requiresInternalChoice = false;
@@ -154,7 +168,7 @@ export const POST = route(async (req, { id }, user) => {
         ...q,
         type: q.type || section.type,
       } as any,
-      contractRes.contract,
+      qContract,
       { slotIndex: i, strictPassage: true, deferSubjectiveAnswers: true },
     );
 
@@ -163,7 +177,7 @@ export const POST = route(async (req, { id }, user) => {
         ...q,
         type: q.type || section.type,
       } as any,
-      contractRes.contract,
+      qContract,
       { slotIndex: i },
     );
 
@@ -174,7 +188,7 @@ export const POST = route(async (req, { id }, user) => {
           ...q,
           type: q.type || section.type,
         } as any,
-        contractRes.contract,
+        qContract,
         { slotIndex: i, maxRetries: 1 },
       );
 
@@ -187,7 +201,7 @@ export const POST = route(async (req, { id }, user) => {
           answer: repRes.question.answer || q.answer,
           orQuestion: repRes.question.orQuestion ?? q.orQuestion,
         } as any;
-        valRes = validateGeneratedQuestion(questions[i] as any, contractRes.contract, { slotIndex: i, strictPassage: true, deferSubjectiveAnswers: true });
+        valRes = validateGeneratedQuestion(questions[i] as any, qContract, { slotIndex: i, strictPassage: true, deferSubjectiveAnswers: true });
         vRes = repRes.verificationResult;
       }
     }
@@ -203,7 +217,8 @@ export const POST = route(async (req, { id }, user) => {
       const regenerated = await regenerateSlot({
         paper,
         section,
-        slot: contractRes.contract.slots[i] ?? contractRes.contract.slots[0],
+        sectionType: qType,
+        slot: qContract.slots[i] ?? qContract.slots[0],
         reasons,
         apiKey: customKey,
         difficulty: (body as { difficulty?: string }).difficulty ?? null,
@@ -211,8 +226,8 @@ export const POST = route(async (req, { id }, user) => {
       });
       if (!regenerated) break;
       const candidate = { ...q, ...regenerated, type: q.type || section.type } as never;
-      const v2 = validateGeneratedQuestion(candidate, contractRes.contract, { slotIndex: i, strictPassage: true, deferSubjectiveAnswers: true });
-      const vr2 = verifyQuestionAcademicQuality(candidate, contractRes.contract, { slotIndex: i });
+      const v2 = validateGeneratedQuestion(candidate, qContract, { slotIndex: i, strictPassage: true, deferSubjectiveAnswers: true });
+      const vr2 = verifyQuestionAcademicQuality(candidate, qContract, { slotIndex: i });
       if (v2.valid && vr2.status !== "FAIL") {
         questions[i] = candidate;
         valRes = v2;
@@ -224,7 +239,7 @@ export const POST = route(async (req, { id }, user) => {
     }
 
     if ((!valRes.valid || vRes.status === "FAIL") && bodyIsMock) {
-      const grounded = generateCurriculumGroundedSectionQuestions(contractRes.contract, {
+      const grounded = generateCurriculumGroundedSectionQuestions(qContract, {
         generateDiagrams: false,
         existingQuestionTexts: questions.map((item) => item.text).filter((t): t is string => Boolean(t)),
       })[i];
@@ -242,8 +257,8 @@ export const POST = route(async (req, { id }, user) => {
           orQuestion: grounded.orQuestion ?? q.orQuestion,
           requiresInternalChoice: grounded.requiresInternalChoice ?? q.requiresInternalChoice,
         } as never;
-        valRes = validateGeneratedQuestion(questions[i] as never, contractRes.contract, { slotIndex: i, strictPassage: true, deferSubjectiveAnswers: true });
-        vRes = verifyQuestionAcademicQuality(questions[i] as never, contractRes.contract, { slotIndex: i });
+        valRes = validateGeneratedQuestion(questions[i] as never, qContract, { slotIndex: i, strictPassage: true, deferSubjectiveAnswers: true });
+        vRes = verifyQuestionAcademicQuality(questions[i] as never, qContract, { slotIndex: i });
       }
     }
 

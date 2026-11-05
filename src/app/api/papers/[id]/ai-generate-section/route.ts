@@ -123,6 +123,7 @@ export const POST = route(async (req, { id }, user) => {
       effectiveType,
       matchedSection?.marksEach ?? (Number(marksEach) || 1),
       subjectName,
+      paper.blueprint.book.className,
     );
     const focus = [cTitle ? `Syllabus component: ${cTitle}. Keep the question inside this component.` : "", task, alternateDirective]
       .filter(Boolean)
@@ -167,7 +168,8 @@ export const POST = route(async (req, { id }, user) => {
     answerMode: answerMode === "together" ? "together" : "separate",
   });
 
-  if (res.isMock && ["UNSEEN_PASSAGE", "REFERENCE_CONTEXT"].includes(effectiveType)) {
+  // with no key at all, a passage cannot come from templates; with a key, the real failure reason is reported below
+  if (res.isMock && ["UNSEEN_PASSAGE", "REFERENCE_CONTEXT"].includes(effectiveType) && !getGeminiApiKey(customKey || req.headers.get("x-gemini-api-key"))) {
     throw new HttpError(422, "Offline templates cannot write a real unseen passage. Connect a Gemini API key, or add the passage and its questions manually.");
   }
 

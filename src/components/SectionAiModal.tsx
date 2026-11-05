@@ -30,7 +30,7 @@ import {
   serializeMatchColumnPair,
 } from "@/lib/constants";
 import type { GeneratedPaperQuestion } from "@/lib/gemini";
-import { planPaperSlotAssignments } from "@/lib/paperAutogen";
+import { planPaperSlotAssignments, slotFitsRole, slotRowRole } from "@/lib/paperAutogen";
 import { allowedTypesFor } from "@/lib/sectionTypes";
 import { type PaperData, type Section, subpartsTotalMarks, normalizeSubpartMarks } from "@/lib/types";
 
@@ -40,6 +40,29 @@ interface SectionAiModalProps {
   paper: PaperData;
   onClose: () => void;
   onCommitted: (updatedPaper: PaperData) => void;
+}
+
+/** What the model will write for one question of this form, in the teacher's words. */
+function formDescription(type: string, marks: number): string {
+  const m = `${marks} mark${marks === 1 ? "" : "s"}`;
+  switch (type) {
+    case "UNSEEN_PASSAGE":
+      return `Each question is one new passage with comprehension sub-questions adding up to ${m}.`;
+    case "REFERENCE_CONTEXT":
+      return `Each question is an extract from the lesson with sub-questions adding up to ${m}.`;
+    case "CASE_STUDY":
+      return `Each question is a short case with sub-questions adding up to ${m}.`;
+    case "WRITING_SKILL":
+      return `Each question is one writing task (letter, notice, paragraph, story…) worth ${m}, with a model answer and marking scheme.`;
+    case "GRAMMAR":
+      return `Each question tests one grammar point, worth ${m}.`;
+    case "MATCH_COLUMN":
+      return `Each question is one match-the-columns set worth ${m}.`;
+    case "MAP_WORK":
+      return `Each question asks for places to be marked on an outline map, worth ${m}.`;
+    default:
+      return `Each question carries ${m}.`;
+  }
 }
 
 export function SectionAiModal({
@@ -115,55 +138,50 @@ export function SectionAiModal({
     return chapterQuotas.map((cq) => ({ id: cq.id, number: cq.number, title: cq.title }));
   }, [chapterQuotas]);
 
-  // Globally balance chapter allocations using the blueprint quota planner
-  // to avoid quota fragmentation and ensure large marks (4m/3m) are matched to chapters with adequate quota.
+  // Which chapter each new question goes to. The blueprint planner balances quotas for the section's default
+  // form; when the teacher picks another form (a passage, a writing task, grammar), chapters suited to that form
+  // come first. Each entry carries the chapter's real remaining marks, not the slot's marks.
   const plannedChapterAllocations = React.useMemo(() => {
     if (!section) return [];
-    try {
-      const plan = planPaperSlotAssignments(paper);
-      const secPlan = plan.sections.find((s) => s.sectionId === section.id);
-      if (secPlan && secPlan.slots && secPlan.slots.length > 0) {
-        return secPlan.slots.slice(0, questionCount).map((s) => ({
-          id: s.chapterId,
-          number: s.chapterNumber,
-          title: s.chapterTitle,
-          remainingMarks: targetSlotMarks,
-        }));
-      }
-    } catch {}
-
-    // Fallback if paper plan has no slots or throws
-    const count = questionCount;
-    const deficits = chapterQuotas.map((c) => ({ ...c }));
-    const result: Array<{ id: string; number: number; title: string; remainingMarks: number }> = [];
-
-    for (let i = 0; i < count; i++) {
-      const sorted = deficits.filter((d) => d.remainingMarks >= targetSlotMarks).sort((a, b) => b.remainingMarks - a.remainingMarks);
-      if (sorted.length > 0) {
-        const best = sorted[0];
-        result.push({ id: best.id, number: best.number, title: best.title, remainingMarks: best.remainingMarks });
-        best.remainingMarks -= targetSlotMarks;
-      } else {
-        const anyRemaining = deficits.filter((d) => d.remainingMarks > 0).sort((a, b) => b.remainingMarks - a.remainingMarks);
-        if (anyRemaining.length > 0) {
-          const best = anyRemaining[0];
-          result.push({ id: best.id, number: best.number, title: best.title, remainingMarks: best.remainingMarks });
-          best.remainingMarks = Math.max(0, best.remainingMarks - targetSlotMarks);
-        } else if (deficits.length > 0) {
-          const fallback = deficits[i % deficits.length];
-          result.push({ id: fallback.id, number: fallback.number, title: fallback.title, remainingMarks: 0 });
+    const left = new Map(chapterQuotas.map((c) => [c.id, c.remainingMarks]));
+    const take = (c: { id: string; number: number; title: string }) => {
+      const before = left.get(c.id) ?? 0;
+      left.set(c.id, before - targetSlotMarks);
+      return { id: c.id, number: c.number, title: c.title, remainingMarks: before };
+    };
+    const subject = paper.blueprint.book?.subject;
+    const otherForm = Boolean(aiType && aiType !== section.type);
+    if (!otherForm) {
+      try {
+        const plan = planPaperSlotAssignments(paper);
+        const secPlan = plan.sections.find((s) => s.sectionId === section.id);
+        if (secPlan && secPlan.slots && secPlan.slots.length > 0) {
+          return secPlan.slots.slice(0, questionCount).map((sl) => take({ id: sl.chapterId, number: sl.chapterNumber, title: sl.chapterTitle }));
         }
-      }
+      } catch {}
+    }
+
+    const fits = (title: string) => slotFitsRole(aiType || section.type, targetSlotMarks, slotRowRole(title, subject));
+    const result: Array<{ id: string; number: number; title: string; remainingMarks: number }> = [];
+    for (let i = 0; i < questionCount; i++) {
+      const byRoom = (pool: typeof chapterQuotas) =>
+        pool.filter((c) => (left.get(c.id) ?? 0) >= targetSlotMarks).sort((a, b) => (left.get(b.id) ?? 0) - (left.get(a.id) ?? 0));
+      const suited = chapterQuotas.filter((c) => fits(c.title));
+      const pick =
+        byRoom(suited)[0] ??
+        byRoom(chapterQuotas)[0] ??
+        [...chapterQuotas].sort((a, b) => (left.get(b.id) ?? 0) - (left.get(a.id) ?? 0))[0];
+      if (pick) result.push(take(pick));
     }
     return result;
-  }, [paper, section, questionCount, chapterQuotas, targetSlotMarks]);
+  }, [paper, section, questionCount, chapterQuotas, targetSlotMarks, aiType]);
 
   useEffect(() => {
     if (isOpen && section) {
       setStep("config");
       setGeneratedQuestions([]);
       setError(null);
-      setQuestionCount(Math.max(1, remainingQuestions));
+      setQuestionCount(Math.max(1, Math.min(remainingQuestions, 5)));
       const paperLang = detectPaperLanguage(paper, paper.items);
       setLanguage(paperLang === "sa" ? "sa" : paperLang === "hi" ? "hi" : "en");
       if (availableChapters.length > 0) {
@@ -183,13 +201,14 @@ export function SectionAiModal({
 
     try {
       // Determine slot targets
-      const slots: { chapterId: string; chapterTitle: string; marks: number }[] = [];
+      const slots: { chapterId: string; chapterNumber: number; chapterTitle: string; marks: number }[] = [];
 
       for (let i = 0; i < questionCount; i++) {
         if (chapterMode === "specific" && selectedChapterId) {
           const chap = availableChapters.find((c) => c.id === selectedChapterId);
           slots.push({
             chapterId: selectedChapterId,
+            chapterNumber: chap?.number ?? 0,
             chapterTitle: chap?.title || "General",
             marks: targetSlotMarks,
           });
@@ -197,6 +216,7 @@ export function SectionAiModal({
           const planned = plannedChapterAllocations[i];
           slots.push({
             chapterId: planned?.id || availableChapters[0]?.id || "",
+            chapterNumber: planned?.number ?? availableChapters[0]?.number ?? 0,
             chapterTitle: planned?.title || "General",
             marks: targetSlotMarks,
           });
@@ -230,7 +250,7 @@ export function SectionAiModal({
           slots: slots.map((s, idx) => ({
             slotIndex: idx,
             chapterId: s.chapterId,
-            chapterNumber: idx + 1,
+            chapterNumber: s.chapterNumber,
             chapterTitle: s.chapterTitle,
             marks: s.marks,
           })),
@@ -380,15 +400,17 @@ export function SectionAiModal({
                   <input
                     type="number"
                     min={1}
-                    max={Math.max(section.count, 20)}
+                    max={Math.max(1, remainingQuestions)}
                     value={questionCount}
-                    onChange={(e) => setQuestionCount(Math.max(1, parseInt(e.target.value) || 1))}
+                    onChange={(e) => setQuestionCount(Math.min(Math.max(1, remainingQuestions), Math.max(1, parseInt(e.target.value) || 1)))}
                     className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium focus:border-indigo-500 focus:outline-hidden"
                   />
                   <p className="mt-1 text-[11px] text-slate-500">
                     {isMultiUnitMatch
                       ? `Section requires 1 match set (${section.count} pairs, ${targetSlotMarks} marks)`
-                      : `Remaining section slots: ${remainingQuestions} question(s) (${remainingUnits * section.marksEach} marks needed)`}
+                      : remainingQuestions === 0
+                      ? "This section is full. Replace a question to change it."
+                      : `${remainingQuestions} empty slot${remainingQuestions === 1 ? "" : "s"} left in this section (${remainingUnits * section.marksEach} marks).`}
                   </p>
                 </div>
 
@@ -400,6 +422,28 @@ export function SectionAiModal({
                   <DifficultySelect value={difficulty} onChange={setDifficulty} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium focus:border-indigo-500 focus:outline-hidden" />
                 </div>
               </div>
+
+              {allowedTypes.length > 1 && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1" htmlFor="section-ai-type">
+                    Question type
+                  </label>
+                  <select
+                    id="section-ai-type"
+                    value={aiType}
+                    onChange={(e) => setAiType(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium focus:border-indigo-500 focus:outline-hidden"
+                  >
+                    {allowedTypes.map((t) => (
+                      <option key={t} value={t}>
+                        {QUESTION_TYPE_LABEL[t as keyof typeof QUESTION_TYPE_LABEL] ?? t}
+                        {t === section.type ? " (default)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-[11px] text-slate-500">{formDescription(aiType || section.type, targetSlotMarks)}</p>
+                </div>
+              )}
 
               {/* Chapter Selection */}
               <div>
@@ -437,7 +481,7 @@ export function SectionAiModal({
                         Planned Deficit Allocation
                       </span>
                       <span className="text-[11px] font-normal text-indigo-700">
-                        {targetSlotMarks}m per slot
+                        {targetSlotMarks} mark{targetSlotMarks === 1 ? "" : "s"} per question
                       </span>
                     </div>
                     <p className="text-[11px] text-indigo-800/80 mb-2">
@@ -456,7 +500,7 @@ export function SectionAiModal({
                               ? "bg-indigo-50 text-indigo-700"
                               : "bg-amber-50 text-amber-700"
                           }`}>
-                            {alloc.remainingMarks}m left
+                            {Math.max(0, alloc.remainingMarks)} marks left
                           </span>
                         </div>
                       ))}
@@ -510,28 +554,6 @@ export function SectionAiModal({
                   </div>
                 )}
               </div>
-
-              {allowedTypes.length > 1 && (
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1" htmlFor="section-ai-type">
-                    Question type
-                  </label>
-                  <select
-                    id="section-ai-type"
-                    value={aiType}
-                    onChange={(e) => setAiType(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium focus:border-indigo-500 focus:outline-hidden"
-                  >
-                    {allowedTypes.map((t) => (
-                      <option key={t} value={t}>
-                        {QUESTION_TYPE_LABEL[t as keyof typeof QUESTION_TYPE_LABEL] ?? t}
-                        {t === section.type ? " (default)" : ""}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="mt-1 text-[11px] text-slate-500">Each question still carries {section.marksEach} mark{section.marksEach > 1 ? "s" : ""}.</p>
-                </div>
-              )}
 
               {/* Language & Diagram Options */}
               <div className="grid grid-cols-2 gap-4">

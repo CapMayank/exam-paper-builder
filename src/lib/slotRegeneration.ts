@@ -20,13 +20,15 @@ export async function regenerateSlot(params: {
   /** The paper's difficulty profile, and the level the rejected question was commissioned at. */
   difficulty?: string | null;
   targetDifficulty?: "EASY" | "MEDIUM" | "HARD";
+  /** The form of the rejected question when it is not the section's default (e.g. a passage in a long-answer section). */
+  sectionType?: string;
 }): Promise<GeneratedPaperQuestion | null> {
-  const { paper, section, slot, reasons, apiKey, difficulty, targetDifficulty } = params;
+  const { paper, section, slot, reasons, apiKey, difficulty, targetDifficulty, sectionType } = params;
   const res = await generatePaperSectionWithGemini({
     className: paper.blueprint.book.className,
     subject: paper.blueprint.book.subject,
     sectionTitle: section.title,
-    sectionType: section.type,
+    sectionType: sectionType || section.type,
     sectionInstructions: section.instructions,
     marksEach: section.marksEach,
     language: detectPaperLanguage(paper, paper.items),
