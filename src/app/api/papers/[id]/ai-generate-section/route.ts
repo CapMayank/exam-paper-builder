@@ -44,9 +44,11 @@ export const POST = route(async (req, { id }, user) => {
     throw new HttpError(400, "Slots array is required and must not be empty.");
   }
 
-  const matchedSection = paper.blueprint.sections.find(
-    (s) => (sectionId && s.id === sectionId) || s.title === sectionTitle,
-  );
+  // by id first: several rows of one printed section share its title (lessons, grammar and the unseen passage
+  // under "Short Answer Type Questions"), and matching by title found the lesson row for the passage row
+  const matchedSection =
+    (sectionId ? paper.blueprint.sections.find((s) => s.id === sectionId) : undefined) ??
+    paper.blueprint.sections.find((s) => s.title === sectionTitle);
   // the teacher may generate any form the section accepts; the slot's marks never change
   if (matchedSection && sectionType && !isTypeAllowed(matchedSection, String(sectionType))) {
     throw new HttpError(

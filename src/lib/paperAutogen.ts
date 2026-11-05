@@ -190,6 +190,8 @@ export function slotTaskDirective(rowRole: ChapterRole, rowTitle: string, type: 
   const role = typeRole ?? rowRole;
   // the row's title names the topic only when the row is of the same kind as the task
   const topic = role === rowRole ? rowTitle : "";
+  const classNum = parseInt(String(className ?? "").replace(/\D/g, ""), 10);
+  const juniorSanskrit = Boolean(subject && /sanskrit|संस्कृत/i.test(subject)) && Number.isFinite(classNum) && classNum <= 8;
   // outside language papers every row is a chapter, and the chapter title already says it all
   if (role === "LESSON" && !(subject && LANGUAGE_SUBJECT.test(subject))) return "";
   switch (role) {
@@ -201,10 +203,17 @@ export function slotTaskDirective(rowRole: ChapterRole, rowTitle: string, type: 
         ? `Unseen passage worth ${marks} marks: write a new, original passage of ${marks >= 8 ? "180-220" : marks >= 5 ? "130-170" : "100-130"} words (count them; under 100 is rejected and over ${marks >= 8 ? 240 : marks >= 5 ? 190 : 150} is too long for the printed booklet), then sub-questions whose marks add up to exactly ${marks}.${passageReadingLevel(className)}`
         : `Unseen passage worth ${marks} marks: write a NEW, ORIGINAL passage (100-150 words, not from any textbook or published text) in the paper's language as the question text, then put comprehension sub-questions in "subparts" (answerable from the passage alone) whose marks add up to exactly ${marks}.${passageReadingLevel(className)}`;
     case "WRITING":
+      if (juniorSanskrit) {
+        // Rajya Shiksha Kendra Class 8 Sanskrit: a letter completed from a word bank, and five sentences on one topic
+        return `Sanskrit writing task for ${className} (no textbook lesson, no reading passage), one of these two forms: (a) a short letter or application (to the headmaster, a father or a friend) in Sanskrit with 5 blanks (________) and a word bank of the 5 missing words in brackets above it, "अधोलिखितपदैः पत्रं पूरयत" — 1 mark per blank; or (b) "अधोलिखितेषु कस्यापि एकविषयस्य संस्कृते पञ्च वाक्यानि लिखत" with 3-4 simple topics such as विद्यालयः, पुस्तकम्, उद्यानम्, धेनुः — 1 mark per sentence. Keep the Sanskrit simple, at Class ${classNum} level. The answer gives the filled words or five model sentences. Worth ${marks} marks.`;
+      }
       return `Writing task${topic ? ` on "${topic}"` : " (a letter, application, notice, message, paragraph, diary entry or story suited to the class; NOT a reading passage with comprehension questions)"}: set one realistic task in the paper's language (for a letter/application: who writes to whom and why; for an essay/paragraph: the topic with 3-4 guiding points). Do not ask about a textbook lesson. The answer is a complete model response in the correct format, followed by the marking scheme (format, content, expression) adding up to ${marks} marks.`;
     case "MAP":
       return `Map work: ask the student to locate and mark specific places/features${topic ? ` from "${topic}"` : ""} on an outline map of India. Keep only the instruction in "text" (e.g. "On the outline political map of India provided, locate and label any four of the following:") and put each feature in "subparts" as its own item, labelled (i), (ii), (iii)... with a short noun phrase as the text (e.g. "The river that forms the Sunderbans delta"). Offer one more feature than must be attempted and set "attemptCount" to the number required, so the marks (${marks}) are 1 per attempted feature. Never run the features together in one paragraph. The answer says where each feature lies.`;
     default:
+      if (type === "REFERENCE_CONTEXT") {
+        return `Reference to context from the lesson "${rowTitle}": the question text MUST first quote, exactly as printed in the textbook, a 2-4 line extract from that lesson (a श्लोक / stanza or a few lines of prose) inside quotation marks, then the instruction; the sub-questions are answered from that extract (meaning, who said it, a word's form or grammar), their marks adding up to exactly ${marks}.`;
+      }
       return `Textbook-based: the question must come from the lesson "${rowTitle}" (its content, characters, ideas or language), not from grammar drills or unseen passages.`;
   }
 }

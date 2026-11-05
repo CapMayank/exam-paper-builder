@@ -1257,6 +1257,10 @@ export async function generatePaperSectionWithGemini(
   const plannedLevels = planSlotDifficulties(contract.slots.length, marksEach, difficultyProfile.id, (slots[0]?.slotIndex ?? 0) + marksEach);
   const slotTargetDifficulty = contract.slots.map((_, idx) => slots[idx]?.targetDifficulty ?? plannedLevels[idx] ?? "MEDIUM");
   const anySlotRequiresChoice = contract.slots.some((s) => s.requiresInternalChoice);
+  // Circular 465/2026 (internal choice on 3-5 mark questions, board answer lengths) governs Classes 9-12 only;
+  // a Class 1-8 school paper follows its own pattern (Rajya Shiksha Kendra papers have no internal choice)
+  const classNumForRules = parseInt(String(className ?? "").replace(/\D/g, ""), 10);
+  const boardClass = !Number.isFinite(classNumForRules) || classNumForRules >= 9;
   const choiceForbidden = contract.internalChoiceRequirement.forbidden;
 
   const subjectDirectives = getSubjectPromptDirectives(
@@ -1334,11 +1338,17 @@ ${difficultyPromptBlock(difficultyProfile.id).split("\n").map((l) => `   ${l}`).
 15. STATUTORY RATIONALIZED SYLLABUS COMPLIANCE (NEGATIVE CONSTRAINT):
    - The Board has officially deleted and rationalized specific chapters and topics for the 2026–27 session.
    - VIOLATION PENALTY: Generating any question, option, distractor, scenario, or alternative (OR) question testing deleted topics is an examination security violation and will cause immediate rejection by deterministic quality gates.
-16. STATUTORY INTERNAL CHOICE & WORD COUNT RUBRIC (Circular 465/2026):
+${
+  boardClass
+    ? `16. STATUTORY INTERNAL CHOICE & WORD COUNT RUBRIC (Circular 465/2026):
    - 1-mark & 2-mark questions: Strictly NO internal choice. Target answer length: ~30 words for 2m.
    - 3-mark questions: 100% mandatory internal choice (Full OR alternative from same chapter). Target answer length: ~75 words.
    - 4-mark questions: 100% mandatory internal choice (Full OR alternative from same chapter). Target answer length: ~120 words.
-   - 5-mark questions: 100% mandatory internal choice. Target answer length: ~150 words.${
+   - 5-mark questions: 100% mandatory internal choice. Target answer length: ~150 words.`
+    : `16. INTERNAL CHOICE & ANSWER LENGTH (school paper, ${className}):
+   - Give an OR alternative ONLY on a slot marked "Internal Choice: REQUIRED"; never add one on your own.
+   - Target answer length: 2 marks ~20 words, 3 marks 30-40 words, 5 marks 70-80 words (a letter or essay may be 100-120 words).`
+}${
      answersLater
        ? "\n   - Scope each question so a full answer of that length earns its marks (you do not write the answer)."
        : "\n   - Rubric: For all subjective questions, model answers MUST provide a step-wise mark distribution totaling the exact slot marks."
@@ -1739,7 +1749,8 @@ JSON Array Output Schema:
       const slotRequiresChoice = Boolean(!choiceForbidden && slot.requiresInternalChoice);
       let normalizedOrQuestion: GeneratedPaperQuestion["orQuestion"] = undefined;
 
-      if (!choiceForbidden && rawQ.orQuestion && typeof rawQ.orQuestion.text === "string" && rawQ.orQuestion.text.trim()) {
+      // only a slot that asks for an internal choice gets one: an OR the model adds on its own is dropped
+      if (slotRequiresChoice && rawQ.orQuestion && typeof rawQ.orQuestion.text === "string" && rawQ.orQuestion.text.trim()) {
         const orText = repairLatex(cleanQuestionStatement(rawQ.orQuestion.text.trim(), qType));
         let orOptions = Array.isArray(rawQ.orQuestion.options)
           ? rawQ.orQuestion.options.map((o: unknown) => repairLatex(cleanOptionText(String(o).trim())))

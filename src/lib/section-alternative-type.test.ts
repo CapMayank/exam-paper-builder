@@ -157,3 +157,16 @@ describe("passage reading level follows the class", () => {
     expect(slotTaskDirective("PASSAGE", "Unseen passage", "UNSEEN_PASSAGE", 5, "English")).not.toMatch(/Write for Class/);
   });
 });
+
+describe("Sanskrit and reference-to-context tasks", () => {
+  it("asks Class 8 Sanskrit writing in the paper's forms: a letter from a word bank or five sentences", () => {
+    const d = slotTaskDirective("WRITING", "रचनात्मक कार्यम्", "WRITING_SKILL", 5, "Sanskrit", "Class 8");
+    expect(d).toMatch(/पत्रं पूरयत/);
+    expect(d).toMatch(/पञ्च वाक्यानि/);
+    expect(slotTaskDirective("WRITING", "Writing", "WRITING_SKILL", 5, "Sanskrit", "Class 10")).not.toMatch(/पञ्च वाक्यानि/);
+  });
+
+  it("makes a reference-to-context question quote its extract", () => {
+    expect(slotTaskDirective("LESSON", "मित्रलक्षणम्", "REFERENCE_CONTEXT", 5, "Sanskrit", "Class 8")).toMatch(/MUST first quote/);
+  });
+});

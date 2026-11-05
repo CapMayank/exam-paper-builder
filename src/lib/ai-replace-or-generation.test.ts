@@ -172,3 +172,60 @@ describe("AI replace and OR alternative use the section pipeline", () => {
     expect(generateMock).not.toHaveBeenCalled();
   });
 });
+
+describe("rows of one printed section share its title", () => {
+  const stamp = Date.now() + 1;
+  let userId: string, bookId: string, chapterId: string, blueprintId: string, paperId: string, passageRowId: string;
+
+  beforeAll(async () => {
+    userId = (await prisma.user.create({ data: { name: `Rows ${stamp}`, email: `rows-${stamp}@test.internal`, passwordHash: "hash", role: "TEACHER", active: true } })).id;
+    bookId = (await prisma.book.create({ data: { title: `Rows ${stamp}`, subject: "Hindi", className: "Class 8", academicSession: "2026–27" } })).id;
+    chapterId = (await prisma.chapter.create({ data: { bookId, number: 1, title: "अपठित गद्यांश (Unseen Passage)" } })).id;
+    const bp = await prisma.blueprint.create({
+      data: {
+        name: `Rows BP ${stamp}`, bookId, academicSession: "2026–27", examType: "ANNUAL", durationMin: 60,
+        chapters: { create: [{ chapterId, marks: 6 }] },
+        sections: {
+          create: [
+            { position: 1, title: "लघु उत्तरीय प्रश्न", instructions: "", type: "SHORT", count: 1, marksEach: 3, role: "LITERATURE", allowedTypesJson: '["SHORT"]' },
+            { position: 2, title: "लघु उत्तरीय प्रश्न", instructions: "", type: "UNSEEN_PASSAGE", count: 1, marksEach: 3, role: "PASSAGE", allowedTypesJson: '["UNSEEN_PASSAGE"]' },
+          ],
+        },
+      },
+      include: { sections: true },
+    });
+    blueprintId = bp.id;
+    passageRowId = bp.sections.find((s) => s.type === "UNSEEN_PASSAGE")!.id;
+    paperId = (await prisma.paper.create({ data: { title: `Rows ${stamp}`, blueprintId, layout: "PAGE", schoolName: "S", createdById: userId, status: "DRAFT" } })).id;
+  });
+
+  afterAll(async () => {
+    await prisma.paper.deleteMany({ where: { id: paperId } });
+    await prisma.blueprintSection.deleteMany({ where: { blueprintId } });
+    await prisma.blueprintChapter.deleteMany({ where: { blueprintId } });
+    await prisma.blueprint.deleteMany({ where: { id: blueprintId } });
+    await prisma.chapter.deleteMany({ where: { bookId } });
+    await prisma.book.deleteMany({ where: { id: bookId } });
+    await prisma.auditLog.deleteMany({ where: { userId } });
+    await prisma.user.deleteMany({ where: { id: userId } });
+  });
+
+  it("generates for the row named by id, not the first row with that title", async () => {
+    mockSessionUserId = userId;
+    generateMock.mockReset();
+    generateMock.mockImplementation(async () => ({ success: true, isMock: false, data: [] }));
+    const res = await generateSection(
+      new Request(`http://localhost/api/papers/${paperId}/ai-generate-section`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sectionId: passageRowId, sectionTitle: "लघु उत्तरीय प्रश्न", sectionType: "UNSEEN_PASSAGE", marksEach: 3,
+          slots: [{ slotIndex: 0, chapterId, chapterNumber: 1, chapterTitle: "अपठित गद्यांश (Unseen Passage)", marks: 3 }],
+        }),
+      }),
+      { params: Promise.resolve({ id: paperId }) },
+    );
+    expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+    expect(generateMock.mock.calls[0][0].sectionType).toBe("UNSEEN_PASSAGE");
+  });
+});
