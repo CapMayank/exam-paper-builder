@@ -50,6 +50,7 @@ import { parseSubparts, parseSubpartsPayload, subpartsTotalMarks, type SubPart }
 import { UPLOAD_DIR } from "@/lib/uploads";
 import {
   computeDisplayedPaperNumbering,
+  mergeSameFormRows,
   reconcileSectionGroupInstruction,
   resolveGroupedExerciseInstruction,
 } from "@/lib/layout";
@@ -288,7 +289,7 @@ export async function buildPaperDocx(
   isMarkingScheme: boolean,
   user: SessionUser,
 ): Promise<{ buffer: Buffer; safeFilename: string; title: string }> {
-  const paper = await prisma.paper.findUnique({
+  const loaded = await prisma.paper.findUnique({
     where: { id: paperId },
     include: {
       blueprint: {
@@ -308,7 +309,10 @@ export async function buildPaperDocx(
     },
   });
 
-  if (!paper) throw new HttpError(404, "Paper not found");
+  if (!loaded) throw new HttpError(404, "Paper not found");
+  // exported as printed: rows of one form under one heading are one run (one sub-heading, one numbering)
+  const view = mergeSameFormRows(loaded.blueprint.sections, loaded.items);
+  const paper = { ...loaded, blueprint: { ...loaded.blueprint, sections: view.sections }, items: view.items };
 
   const paperLang = detectPaperLanguage(paper, paper.items);
   const locale = getPaperLocale(paperLang);

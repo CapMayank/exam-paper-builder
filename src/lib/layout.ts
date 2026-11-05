@@ -185,15 +185,58 @@ export interface DisplayedPaperNumbering {
 }
 
 /**
+ * The paper as it is printed: consecutive rows with the same heading, the same form and the same marks are one run.
+ * A blueprint keeps them as separate rows when they differ only in where their marks come from (four lesson blanks
+ * and one grammar blank under "Fill in the blanks"); printed separately they got two sub-headings and two numbers.
+ * Items move to the run's first row, positioned after the earlier rows' items. `aliasOf` maps a merged row's id to
+ * the row it was merged into.
+ */
+export function mergeSameFormRows<
+  S extends { id: string; title: string; type: string; marksEach?: number; count?: number },
+  I extends { sectionId?: string | null; position?: number },
+>(sections: S[], items: I[]): { sections: S[]; items: I[]; aliasOf: Record<string, string> } {
+  const key = (s: S) => `${s.title.trim().toLowerCase()}|${s.type}|${s.marksEach ?? ""}`;
+  const merged: S[] = [];
+  const aliasOf: Record<string, string> = {};
+  for (const s of sections) {
+    const last = merged[merged.length - 1];
+    if (last && key(last) === key(s)) {
+      aliasOf[s.id] = last.id;
+      merged[merged.length - 1] = { ...last, count: (Number(last.count) || 0) + (Number(s.count) || 0) };
+    } else {
+      merged.push(s);
+    }
+  }
+  if (Object.keys(aliasOf).length === 0) return { sections, items, aliasOf };
+  const target = (id?: string | null) => (id ? aliasOf[id] ?? id : id);
+  const next = new Map<string, number>();
+  const out: I[] = [];
+  const byRow = (id: string) => items.filter((it) => it.sectionId === id).sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+  for (const s of sections) {
+    const t = target(s.id) as string;
+    for (const it of byRow(s.id)) {
+      const pos = next.get(t) ?? 0;
+      next.set(t, pos + 1);
+      out.push({ ...it, sectionId: t, position: pos });
+    }
+  }
+  const known = new Set(sections.map((s) => s.id));
+  for (const it of items) if (!it.sectionId || !known.has(it.sectionId)) out.push(it);
+  return { sections: merged, items: out, aliasOf };
+}
+
+/**
  * Computes consistent displayed question numbers across sections and items,
  * accounting for grouped objective exercises (TRUE_FALSE and FILL_BLANK with >1 item)
  * which occupy 1 top-level question number with (a), (b), ... sub-items.
  */
 export function computeDisplayedPaperNumbering(
-  sections: Array<{ id: string; title: string; type: string; order?: number }>,
-  items: Array<{ id: string; sectionId?: string | null; position?: number; question?: { type?: string } }>,
+  rawSections: Array<{ id: string; title: string; type: string; order?: number }>,
+  rawItems: Array<{ id: string; sectionId?: string | null; position?: number; question?: { type?: string } }>,
   numberingStyle: NumberingStyle = "CONTINUOUS"
 ): DisplayedPaperNumbering {
+  // numbered as printed: rows of one form under one heading count as one run
+  const { sections, items, aliasOf } = mergeSameFormRows(rawSections, rawItems);
   const sortedSections = [...sections].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const itemNumbers: Record<string, DisplayedItemNumber> = {};
   const rawSectionRanges: Array<{
@@ -342,6 +385,9 @@ export function computeDisplayedPaperNumbering(
       };
     }
     i = j + 1;
+  }
+  for (const [alias, into] of Object.entries(aliasOf)) {
+    if (sectionRanges[into]) sectionRanges[alias] = { ...sectionRanges[into], sectionId: alias };
   }
 
   // Separate, consistent metrics for parent questions, blueprint allocation units, atomic response tasks, and marks

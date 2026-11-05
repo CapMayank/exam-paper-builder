@@ -34,6 +34,7 @@ import { decomposeStemSubparts } from "@/lib/subpartExtractor";
 import { WorkbookHeader } from "@/lib/kindergarten/components/WorkbookHeader";
 import {
   computeDisplayedPaperNumbering,
+  mergeSameFormRows,
   formatQuestionNumber,
   imposeBooklet,
   imposeTwoUpCut,
@@ -71,7 +72,10 @@ function extractSectionLetter(title: string, fallbackIndex: number): string {
   return String.fromCharCode(65 + (fallbackIndex % 26));
 }
 
-function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSignatures?: boolean, fit: PrintFit = getFit(0)): Block[] {
+function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, showSignatures?: boolean, fit: PrintFit = getFit(0)): Block[] {
+  // printed as the paper reads: rows of one form under one heading are one run (one sub-heading, one numbering)
+  const view = mergeSameFormRows(rawPaper.blueprint.sections, rawPaper.items);
+  const paper: PaperData = { ...rawPaper, blueprint: { ...rawPaper.blueprint, sections: view.sections }, items: view.items };
   const g = (mm: number, floor?: number) => fitMm(mm, fit, floor);
   const { blueprint } = paper;
   const paperLang = detectPaperLanguage(paper, paper.items);
