@@ -119,6 +119,8 @@ describe("Super Admin, sign-in logging and automatic change logging (API)", () =
   afterAll(async () => {
     const userIds = Object.values(ids);
     await prisma.book.deleteMany({ where: { className: `Sec Class ${stamp}` } });
+    // adding a book registers its class; without this every run left a "Sec Class …" in teachers' class pickers
+    await prisma.academicClass.deleteMany({ where: { name: `Sec Class ${stamp}` } });
     await prisma.auditLog.deleteMany({ where: { OR: [{ userId: { in: userIds } }, { userName: { contains: stamp } }] } });
     await prisma.user.deleteMany({ where: { OR: [{ id: { in: userIds } }, { email: { contains: stamp } }] } });
   });
