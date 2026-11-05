@@ -4,7 +4,6 @@ import {
   cleanMatchItem,
   cleanOptionText,
   cleanQuestionStatement,
-  derangeMatchColumnPairs,
   extractMatchPairsFromExplanation,
   getMatchColumnInstruction,
   isKindergartenType,
@@ -15,6 +14,7 @@ import {
   QUESTION_TYPES,
 } from "./constants";
 import { decomposeStemSubparts } from "./subpartExtractor";
+import { layoutMatchColumn } from "./matchColumnKey";
 import {
   findEligibleDiagrams,
   isSectionVisuallyEligible,
@@ -853,39 +853,23 @@ Return a JSON array strictly matching this TypeScript structure:
             pairs = pairs.slice(0, targetPairCount);
           }
 
-          const isDirectMatch =
-            /^\s*\(?[Aa]\)?\s*[-→:]\s*\(?([1iI])\)?\s*,\s*\(?[Bb]\)?\s*[-→:]\s*\(?([2iI]{2})\)?/.test(qAnswer) ||
-            !qAnswer ||
-            qAnswer.toLowerCase().includes("direct");
-
-          const deranged = isDirectMatch && pairs.length > 1 ? derangeMatchColumnPairs(pairs) : pairs;
+          const layout = layoutMatchColumn(pairs, options, qAnswer);
           const col1Lines = pairs.map((p, idx) => `(${letters[idx] ?? idx + 1}) ${cleanMatchItem(p.left)}`);
-          const col2Items = deranged.map((p) => cleanMatchItem(p.right));
-          const answers = pairs.map((p, idx) => {
-            const optIdx = col2Items.indexOf(cleanMatchItem(p.right));
-            const romanLabel = optIdx >= 0 ? (romans[optIdx] ?? `(${optIdx + 1})`) : (romans[idx] ?? `(${idx + 1})`);
-            return `(${letters[idx] ?? idx + 1})-${romanLabel}`;
-          });
           const instr = getMatchColumnInstruction(qText);
           qText = `${instr}\nColumn I:\n${col1Lines.join("\n")}`;
-          options = col2Items;
-          qAnswer = answers.join(", ");
+          options = layout.column2;
+          qAnswer = layout.answer;
         } else {
           const fallbackPairs = chapterSupplementPairs.slice(0, targetPairCount).map((p, idx) => ({
             left: `(${letters[idx] ?? idx + 1}) ${p.left}`,
             right: p.right,
           }));
-          const deranged = derangeMatchColumnPairs(fallbackPairs);
+          const layout = layoutMatchColumn(fallbackPairs, [], "");
           const col1Lines = fallbackPairs.map((p, idx) => `(${letters[idx] ?? idx + 1}) ${cleanMatchItem(p.left)}`);
-          const col2Items = deranged.map((p) => cleanMatchItem(p.right));
-          const answers = fallbackPairs.map((p, idx) => {
-            const optIdx = col2Items.indexOf(cleanMatchItem(p.right));
-            return `(${letters[idx] ?? idx + 1})-${romans[optIdx] ?? `(${optIdx + 1})`}`;
-          });
           const instr = getMatchColumnInstruction(qText);
           qText = `${instr}\nColumn I:\n${col1Lines.join("\n")}`;
-          options = col2Items;
-          qAnswer = answers.join(", ");
+          options = layout.column2;
+          qAnswer = layout.answer;
         }
       }
 
@@ -1551,7 +1535,6 @@ JSON Array Output Schema:
       let qOptions = Array.isArray(primaryQ.options) ? primaryQ.options.map((o: unknown) => String(o).trim()) : [];
       let qAnswer = typeof primaryQ.answer === "string" ? primaryQ.answer : "";
       const letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
-      const romans = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
 
       if (rawArray.length > 1) {
         const rawPairs = rawArray.map((item, idx) => {
@@ -1566,17 +1549,13 @@ JSON Array Output Schema:
           };
         });
 
-        const deranged = derangeMatchColumnPairs(rawPairs);
+        // Each raw item carries its own right-hand match, so these pairs are the truth: shuffle and key them.
+        const layout = layoutMatchColumn(rawPairs, [], "");
         const col1Items = rawPairs.map((p) => p.left);
-        const col2Items = deranged.map((p) => p.right);
-        const answers = rawPairs.map((p, idx) => {
-          const optIdx = col2Items.indexOf(p.right);
-          return `(${letters[idx] ?? idx + 1})-${romans[optIdx] ?? `(${optIdx + 1})`}`;
-        });
 
         qText = `Match the items in Column I with Column II:\nColumn I:\n${col1Items.join("\n")}`;
-        qOptions = col2Items;
-        qAnswer = answers.join(", ");
+        qOptions = layout.column2;
+        qAnswer = layout.answer;
       } else if (rawArray.length === 1) {
         let pairs = parseMatchColumnPairs(qOptions, qText, primaryQ.explanation);
         if (pairs.length === 0) {
@@ -1604,21 +1583,12 @@ JSON Array Output Schema:
             pairs = pairs.slice(0, contract.slots.length);
           }
 
-          const isDirectMatch =
-            /^\s*\(?[Aa]\)?\s*[-→:]\s*\(?([1iI])\)?\s*,\s*\(?[Bb]\)?\s*[-→:]\s*\(?([2iI]{2})\)?/.test(qAnswer) ||
-            !qAnswer ||
-            qAnswer.toLowerCase().includes("direct");
-          const deranged = isDirectMatch && pairs.length > 1 ? derangeMatchColumnPairs(pairs) : pairs;
+          const layout = layoutMatchColumn(pairs, qOptions, qAnswer);
           const col1Lines = pairs.map((p, idx) => `(${letters[idx] ?? idx + 1}) ${cleanMatchItem(p.left)}`);
-          const col2Items = deranged.map((p) => cleanMatchItem(p.right));
-          const answers = pairs.map((p, idx) => {
-            const optIdx = col2Items.indexOf(cleanMatchItem(p.right));
-            return `(${letters[idx] ?? idx + 1})-${romans[optIdx] ?? `(${optIdx + 1})`}`;
-          });
           const instr = getMatchColumnInstruction(qText);
           qText = `${instr}\nColumn I:\n${col1Lines.join("\n")}`;
-          qOptions = col2Items;
-          qAnswer = answers.join(", ");
+          qOptions = layout.column2;
+          qAnswer = layout.answer;
         }
       }
 
@@ -2343,13 +2313,25 @@ Write correct, textbook-accurate model answers. Use LaTeX inside $...$ for every
 
   const payload = items.map((it) => {
     const bilingual = hasDevanagari(it.text) && hasLatinWords(it.text);
+    let questionText = it.text;
+    let optionList: string[] = it.options;
+    if (it.type === "MATCH_COLUMN") {
+      // The printed paper lists Column II as (i), (ii), ... in stored order. Show exactly that, with no row
+      // alignment between the columns (stored pairs are display rows, not the answer), so the key is solved, not read off.
+      const pairs = parseMatchColumnPairs(it.options, it.text, null);
+      const col1 = pairs.map((p, i) => `(${String.fromCharCode(65 + i)}) ${cleanMatchItem(p.left)}`).filter((l) => !/^\([A-Z]\)\s*$/.test(l));
+      if (pairs.length > 0) {
+        questionText = `${getMatchColumnInstruction(it.text)}\nColumn I:\n${col1.join("\n")}`;
+        optionList = pairs.map((p, i) => `(${["i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x"][i] ?? i + 1}) ${cleanMatchItem(p.right)}`);
+      }
+    }
     return {
       id: it.id,
       type: it.type,
       marks: it.marks,
       language: bilingual ? "BILINGUAL (English + Hindi)" : hasDevanagari(it.text) ? "HINDI/DEVANAGARI" : "ENGLISH",
-      question: it.text,
-      options: it.options.length ? it.options : undefined,
+      question: questionText,
+      options: optionList.length ? optionList : undefined,
       needsAnswer: it.main,
       subpartsNeedingAnswers: it.subparts.length
         ? it.subparts.map((sp) => ({ path: sp.path, label: sp.label, text: sp.text, options: sp.options.length ? sp.options : undefined }))
@@ -2363,7 +2345,7 @@ Answer format by type:
 - MCQ / ASSERTION_REASON: only the correct option letter, e.g. "B".
 - TRUE_FALSE: "True" or "False" (bilingual: "True (सत्य)" / "False (असत्य)").
 - FILL_BLANK: only the word(s) that fill the blank.
-- MATCH_COLUMN: the correct pairing using the labels in the question, e.g. "(A) → (ii), (B) → (iv), (C) → (i), (D) → (iii)".
+- MATCH_COLUMN: the correct pairing, one entry per Column I item, using the Column I letters and the Column II numerals in "options", e.g. "(A)-(ii), (B)-(iv), (C)-(i), (D)-(iii)". Work out each match from the subject; Column II is NOT in the same order as Column I, so never answer (A)-(i), (B)-(ii)... unless that is genuinely correct.
 - VERY_SHORT: one word or one sentence.
 - SHORT / LONG / other descriptive types: a model answer with the key points an examiner expects, in proportion to the marks.
 - A subpart that has options: only the correct option letter.
