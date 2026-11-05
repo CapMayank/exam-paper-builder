@@ -185,3 +185,39 @@ existing questions (Part 3).
 2. **OR editing (B1–B5):** a PUT `target: "or"` path plus Primary/OR tabs in Edit, and "Edit current OR" in Change OR.
 3. **One generation standard (Part 3):** Replace and Change OR go through the section pipeline.
 4. Clean-ups: C1, C2, A4/A5 retry budget, A7 labels.
+
+---
+
+## Round 2 — "Unseen passage in a long-answer section" and a full workflow sweep (not committed yet)
+
+Reported: generating an Unseen passage in Class 7 English, Section E (Long answer, 5 marks), failed when added:
+*"the unseen passage has only 91 words … Expected question type LONG, but received UNSEEN_PASSAGE … requires graded
+subparts"*. Reproduced exactly on a Class 7 English test paper.
+
+| # | Where | Bug | Fix |
+|---|---|---|---|
+| R1 | `ai-commit-section/route.ts` | Every question was validated against the **section's default type**. A passage (or writing task) the section allows failed "expected LONG", was then **regenerated as a LONG question** that kept the passage label, hence "91 words" and "no subparts". | Each question is validated, repaired and regenerated as its own type (`contractFor(type)`); `regenerateSlot` takes the type. The offline-passage guard checks each question. |
+| R2 | `paperAutogen.ts` `slotTaskDirective` | The model's task came from the **chapter's name**, not the chosen type: Writing skill on an "Unseen Passage" row produced a reading passage. | An explicit form (passage, writing, map, grammar) decides the task; the row's title is the topic only when it matches. |
+| R3 | `paperAutogen.ts` | Passages read like adult prose in Class 7 ("subterranean ecosystem… bioluminescent fungi"). | The passage instruction adds a reading level by class. |
+| R4 | `gemini.ts` section generator | **Match the columns never came from the AI**: a single match question was asked for "all 1 matching pairs" while the validator wanted 4, so it always fell back to template filler. | One pair count for prompt and validator; too few pairs is retried, never padded with template text. |
+| R5 | `gemini.ts` / `geminiPool.ts` | After a few 503s **every model was paused**, so requests failed in 0 s without reaching Google. | When all models are paused, one real attempt goes to the model nearest its resume. |
+| R6 | `gemini.ts` model chain | `gemini-3.5-flash` also has a **20 requests/day** free limit (served as 3.6-flash) and ran out; nothing else with a separate bucket was in the chain. | Chain: 3.5-flash, 3-flash-preview, flash-latest, 3.5-flash-lite, 3.1-flash-lite, flash-lite-latest. A mix of spent quota and busy models gets its own message; `/api/ai/settings` states the real limit. |
+| R7 | `ai-generate-section/route.ts`, `gemini.ts` | Busy-AI failures said "Offline templates cannot write a passage. Connect a Gemini API key" (a key was configured) or "validation failed". | The real reason is reported. |
+| R8 | `answer-key/route.ts`, `gemini.ts` | The answer key gave up on the first 503, leaving answers blank, and stored Google's raw JSON as the reason. | Retries after 4 s and 10 s on a busy AI; plain-language reason. |
+| R9 | `gemini.ts` | Models copied `"attemptCount": 4` from the prompt example onto questions with no sub-questions (stray "attempt any 4"). | `validAttemptCount`: kept only when there are more sub-questions than must be attempted. |
+| R10 | `paperDocx.ts` | Word export printed sub-question marks as **"[[1 Mark]]"**. | Single brackets (test added). |
+| R11 | Answer-key check | A key the independent check disputed (a wrong Hindi True/False key, verified) showed once in a toast, then printed in the marking scheme. | **Answer keys to review** banner on the paper, kept until the teacher picks "Use checked answer" (written in the key's own words, e.g. असत्य) or "Keep key"; **Tools & AI → Check answer key** runs it any time. |
+| R12 | `SectionAiModal.tsx` | The question count could exceed the empty slots; chips said "5m left" (the slot's marks, not the chapter's); chapter numbers were the slot index; the type picker came after the chapter choice. | Count capped at the empty slots; real marks left per chapter; chapters suited to the chosen form first; real chapter numbers; type first, with a line saying what will be generated. |
+
+Verified live after the fixes:
+- Every allowed form in every section of a Class 7 English paper (16 combinations) was generated, committed and keyed; the failures seen were Google 503 spells, now reported as such.
+- Full "Generate with AI" made **17/17 questions in about 70 s** with no template fallbacks; answer key written; 6/6 objective keys confirmed.
+- Print view and Word export (paper and marking scheme) work.
+- Snapshot, duplicate, Set B, finalise (locks edits), reopen and reconcile all work.
+- Replace with an AI Unseen passage works through the picker.
+- Hindi Class 9: MCQ, True/False (सत्य/असत्य) and अपठित गद्यांश generated and committed; the disputed key was caught and fixed through the banner.
+- Every app page loads with no console errors or failed requests.
+
+Known limits:
+- **Free-tier capacity.** About 20 requests a day per key on each full Flash model; one paper uses roughly 15–40. After that the Lite models write the questions (quality is fine, slightly simpler). More keys from other Google projects, or a billed key, raise it.
+- **Content accuracy.** It depends on the model. The key check covers objective answers only; subjective model answers still need a teacher's read.
