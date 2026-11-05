@@ -121,7 +121,7 @@ function renderSubpartsDocx(
         children: [
           new TextRun({ text: `${spLabel} `, bold: true, font }),
           ...formatMathTextRuns(sp.text || "", { font }),
-          new TextRun({ text: ` [${formatMarksLabel(spMarks, lang)}]`, bold: true, font }),
+          new TextRun({ text: ` ${formatMarksLabel(spMarks, lang)}`, bold: true, font }),
         ],
       }),
     );

@@ -272,6 +272,15 @@ In crystal field theory, the interaction between transition metal d-orbitals and
       expect(result.safeFilename).toContain(".docx");
     });
 
+    it("prints each sub-question's marks once in brackets, never doubled ([[1 Mark]])", async () => {
+      const result = await buildPaperDocx(paperId, false, teacherUser as any);
+      const { default: JSZip } = await import("jszip");
+      const xml = await (await JSZip.loadAsync(result.buffer)).file("word/document.xml")!.async("string");
+      const text = xml.replace(/<[^>]+>/g, "");
+      expect(text).toMatch(/\[\d+ Marks?\]/);
+      expect(text).not.toMatch(/\[\[\d+ Marks?\]\]/);
+    });
+
     it("generates a valid teacher marking scheme .docx buffer including the OR question model answer without dropping it", async () => {
       const result = await buildPaperDocx(paperId, true, teacherUser as any);
       expect(result).toBeDefined();
