@@ -362,7 +362,11 @@ Return a JSON object matching this schema:
 
       if (res.ok) {
         const json = res.json;
-        const candText = json.candidates?.[0]?.content?.parts?.[0]?.text;
+        // skip a thinking model's "thought" parts: the answer is the non-thought text
+        const candText = ((json.candidates?.[0]?.content?.parts ?? []) as Array<{ thought?: boolean; text?: string }>)
+          .filter((p) => !p.thought && typeof p.text === "string")
+          .map((p) => p.text)
+          .join("");
         if (candText) {
           const parsed = parseGeminiJsonWithLatexSafety<any>(candText);
           if (Array.isArray(parsed?.defects)) {

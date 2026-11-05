@@ -14,6 +14,25 @@ const DEFAULT_RPM: Record<Family, number> = { pro: 4, flash: 8, lite: 12 }; // a
 const MAX_INLINE_WAIT_MS = 4_000; // a call waits this long for a key to free up; beyond that it moves on
 const AUTH_COOLDOWN_MS = 10 * MINUTE;
 const OVERLOAD_COOLDOWN_MS = 2_000;
+// A 503 means the model is overloaded for everyone (every key, every request), and Google holds the connection
+// ~5-20 s before answering it. Skip that model briefly instead of paying that wait on every call. Keep it short:
+// Google's "high demand" spells come and go within seconds, and a pause of minutes once parked every model of the
+// chain at the same time, so requests failed in milliseconds without ever reaching Google.
+const OVERLOAD_BREAKER_BASE_MS = 8_000;
+const OVERLOAD_BREAKER_MAX_MS = 30_000;
+
+const overload = new Map<string, { until: number; strikes: number }>();
+
+/** Milliseconds `model` should be left alone because Google reported it overloaded (0 when it may be tried). */
+export function overloadedForMs(model: string, now: number = Date.now()): number {
+  const o = overload.get(model);
+  return o && o.until > now ? o.until - now : 0;
+}
+
+function tripOverload(model: string, now: number): void {
+  const strikes = (overload.get(model)?.strikes ?? 0) + 1;
+  overload.set(model, { until: now + Math.min(OVERLOAD_BREAKER_BASE_MS * 2 ** (strikes - 1), OVERLOAD_BREAKER_MAX_MS), strikes });
+}
 
 export function modelFamily(model: string): Family {
   return /pro/i.test(model) ? "pro" : /lite/i.test(model) ? "lite" : "flash";
@@ -141,7 +160,8 @@ export function reportOutcome(key: string, model: string, status: number, body =
   if (status === 429) {
     s.blockedUntil.set(model, now.getTime() + interpretRateLimit(body, now).cooldownMs);
   } else if (status === 503) {
-    // the model is overloaded for everyone: a short pause, not a quota problem
+    // the model is overloaded for everyone: a pause, not a quota problem
+    tripOverload(model, now.getTime());
     s.blockedUntil.set(model, now.getTime() + OVERLOAD_COOLDOWN_MS);
   } else if (status === 401 || status === 403 || (status === 400 && /API key not valid|API_KEY_INVALID/i.test(body))) {
     s.disabledUntil = now.getTime() + AUTH_COOLDOWN_MS;
@@ -166,6 +186,16 @@ export async function geminiGenerate(
   let lastStatus = 0;
   let lastText = "";
 
+  const paused = overloadedForMs(model);
+  if (paused > 0) {
+    return {
+      ok: false,
+      status: 503,
+      errorText: `${model} is overloaded right now (HTTP 503); skipped for ${Math.ceil(paused / 1000)}s.`,
+      retryAfterMs: paused,
+    };
+  }
+
   for (let attempt = 0; attempt < poolSize + 2; attempt++) {
     const pick = pickKey(model, customKey);
     if (pick.key === null) {
@@ -187,7 +217,10 @@ export async function geminiGenerate(
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(opts.timeoutMs ?? 120_000),
     });
-    if (res.ok) return { ok: true, json: await res.json(), keyLabel: pick.label };
+    if (res.ok) {
+      overload.delete(model);
+      return { ok: true, json: await res.json(), keyLabel: pick.label };
+    }
 
     lastStatus = res.status;
     lastText = await res.text();
@@ -252,5 +285,6 @@ export function poolStatus(now: number = Date.now()): KeyStatus[] {
 /** Test helper: forget every counter. */
 export function resetPoolState(): void {
   states.clear();
+  overload.clear();
   rotation = 0;
 }

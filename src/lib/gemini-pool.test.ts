@@ -4,6 +4,7 @@ import {
   configuredKeys,
   geminiGenerate,
   interpretRateLimit,
+  overloadedForMs,
   msUntilPacificMidnight,
   parseKeyList,
   pickKey,
@@ -157,5 +158,59 @@ describe("failover", () => {
     await geminiGenerate("gemini-flash-latest", { contents: [] });
     expect(urls[0]).not.toContain("key=");
     expect(urls[0]).not.toContain("keyA");
+  });
+});
+
+describe("overloaded model (503)", () => {
+  beforeEach(() => {
+    resetPoolState();
+    vi.stubEnv("GEMINI_API_KEYS", A);
+    vi.stubEnv("GEMINI_API_KEY", "");
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("is skipped without another network call once Google has said it is overloaded", async () => {
+    const fetchMock = vi.fn(async () => new Response('{"error":{"code":503}}', { status: 503 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const first = await geminiGenerate("gemini-flash-latest", { contents: [] });
+    expect(first.ok).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const second = await geminiGenerate("gemini-flash-latest", { contents: [] });
+    expect(second).toMatchObject({ ok: false, status: 503 });
+    expect(fetchMock).toHaveBeenCalledTimes(1); // no second ~20 s wait
+    // other models are unaffected
+    fetchMock.mockImplementationOnce(async () => new Response('{"candidates":[]}', { status: 200 }));
+    expect((await geminiGenerate("gemini-flash-lite-latest", { contents: [] })).ok).toBe(true);
+  });
+
+  it("pauses an overloaded model for seconds, never minutes, even after repeated 503s", async () => {
+    const t0 = Date.now();
+    vi.useFakeTimers({ now: t0, toFake: ["Date"] });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response('{"error":{"code":503}}', { status: 503 })));
+    for (let i = 0; i < 6; i++) {
+      vi.setSystemTime(t0 + i * 60_000); // let each pause run out, then fail again
+      await geminiGenerate("gemini-3.5-flash", { contents: [] });
+    }
+    const left = overloadedForMs("gemini-3.5-flash", Date.now());
+    vi.useRealTimers();
+    expect(left).toBeGreaterThan(0);
+    expect(left).toBeLessThanOrEqual(30_000);
+  });
+
+  it("tries the model again once its pause is over", async () => {
+    const t0 = Date.now();
+    vi.useFakeTimers({ now: t0, toFake: ["Date"] });
+    const fetchMock = vi.fn(async () => new Response('{"error":{"code":503}}', { status: 503 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await geminiGenerate("gemini-3.5-flash", { contents: [] });
+    fetchMock.mockImplementationOnce(async () => new Response('{"candidates":[]}', { status: 200 }));
+    vi.setSystemTime(t0 + 31_000);
+    const res = await geminiGenerate("gemini-3.5-flash", { contents: [] });
+    vi.useRealTimers();
+    expect(res.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

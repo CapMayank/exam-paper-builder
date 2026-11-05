@@ -51,7 +51,7 @@ import { normalizeQuestionType } from "./paperImport";
 import { ensureLanguageNonChapterUnits } from "./syllabusImport";
 import { parseGeminiJsonWithLatexSafety, repairLatex } from "./math";
 import { normalizeSubpartMarks, type SubPart } from "./types";
-import { allKeysBlocked, configuredKeys, geminiGenerate, quotaMessage } from "./geminiPool";
+import { allKeysBlocked, configuredKeys, geminiGenerate, overloadedForMs, quotaMessage } from "./geminiPool";
 import { UNIVERSAL_QUALITY_RULES, getSubjectPromptDirectives, slotQuestionForm } from "./subjectPrompts";
 import {
   verifyQuestionAcademicQuality,
@@ -73,16 +73,16 @@ export interface GeminiCallResult<T> {
 
 /**
  * Google retires dated model names ("no longer available to new users" => 404). Saved preferences and the
- * UI still carry the old names, so they are mapped onto the maintained "-latest" aliases.
+ * UI still carry the old names, so they are mapped onto maintained models (Flash onto the pinned versions with a free quota).
  */
 const LEGACY_MODEL_ALIASES: Record<string, string> = {
   "gemini-2.5-pro": "gemini-pro-latest",
   "gemini-1.5-pro": "gemini-pro-latest",
-  "gemini-2.5-flash": "gemini-flash-latest",
-  "gemini-2.0-flash": "gemini-flash-latest",
-  "gemini-1.5-flash": "gemini-flash-latest",
-  "gemini-2.5-flash-lite": "gemini-flash-lite-latest",
-  "gemini-2.0-flash-lite": "gemini-flash-lite-latest",
+  "gemini-2.5-flash": "gemini-3.5-flash",
+  "gemini-2.0-flash": "gemini-3.5-flash",
+  "gemini-1.5-flash": "gemini-3.5-flash",
+  "gemini-2.5-flash-lite": "gemini-3.5-flash-lite",
+  "gemini-2.0-flash-lite": "gemini-3.5-flash-lite",
 };
 
 export function normalizeModelName(model?: string | null): string | undefined {
@@ -91,12 +91,19 @@ export function normalizeModelName(model?: string | null): string | undefined {
   return LEGACY_MODEL_ALIASES[m] ?? m;
 }
 
+/**
+ * Fallback order after the chosen model. Google re-points the "-latest" aliases at new models with their own free-tier
+ * quotas (Nov 2026: flash-latest -> gemini-3.8-flash at 20 requests/day per key, pro-latest -> gemini-3.1-pro at 0),
+ * so pinned versions with a usable free quota lead and the aliases follow. Several distinct models also matter
+ * because Google's 503 "high demand" hits one model at a time.
+ */
+export const FLASH_MODEL_TIER = ["gemini-3.5-flash", "gemini-flash-latest", "gemini-3.5-flash-lite", "gemini-flash-lite-latest"];
+export const DEFAULT_GENERATION_MODEL = FLASH_MODEL_TIER[0];
+
 export function resolveModelChain(chosen?: string | null): string[] {
   const first = normalizeModelName(chosen);
   const isPro = Boolean(first?.includes("pro"));
-  const tier = isPro
-    ? ["gemini-pro-latest", "gemini-flash-latest", "gemini-flash-lite-latest"]
-    : ["gemini-flash-latest", "gemini-flash-lite-latest"];
+  const tier = isPro ? ["gemini-pro-latest", ...FLASH_MODEL_TIER] : FLASH_MODEL_TIER;
   return Array.from(new Set([first, normalizeModelName(process.env.GEMINI_MODEL), ...tier].filter((m): m is string => Boolean(m))));
 }
 
@@ -202,7 +209,8 @@ export async function callGeminiApi<T>(
           lastErrorText = res.errorText;
           if (res.status === 404) deadModels.add(model);
           // a busy model (503) is worth one more try on the primary model; a 429 means every key is spent for it
-          if (res.status === 503 && retry === 0 && model === candidateModels[0]) {
+          // (not when the pool has just parked the model as overloaded: Google took ~20 s to say so, so go straight on)
+          if (res.status === 503 && retry === 0 && model === candidateModels[0] && overloadedForMs(model) === 0) {
             await new Promise((r) => setTimeout(r, 450));
             continue;
           }
@@ -291,13 +299,11 @@ export function describeGeminiFailure(status: number, errorText: string): string
 }
 
 /** A plain-language reason when the failure is the free-tier quota, else null. */
-export function quotaErrorText(model?: string): string | null {
-  const first = model ?? resolveModelChain(process.env.GEMINI_MODEL)[0];
-  // the whole chain is exhausted when even the lightest model has no key left
-  const state = allKeysBlocked(first);
-  const lite = allKeysBlocked("gemini-flash-lite-latest");
-  if (!state.blocked || !lite.blocked) return null;
-  return quotaMessage(Math.min(state.retryAfterMs, lite.retryAfterMs), state.daily && lite.daily);
+export function quotaErrorText(model?: string | null): string | null {
+  // it is a quota problem only when no model of the chain has a key left (checking two of them missed the rest)
+  const states = resolveModelChain(model || process.env.GEMINI_MODEL).map((m) => allKeysBlocked(m));
+  if (states.length === 0 || states.some((s) => !s.blocked)) return null;
+  return quotaMessage(Math.min(...states.map((s) => s.retryAfterMs)), states.every((s) => s.daily));
 }
 
 /* ------------------------------------------------------------------ */
@@ -1007,7 +1013,7 @@ Return a JSON array strictly matching this TypeScript structure:
       const validation = validateGeneratedSection(callResult.data, contract);
       const trace = createGenerationJobTrace({
         contract,
-        modelUsed: callResult.modelUsed || "gemini-2.5-flash",
+        modelUsed: callResult.modelUsed || DEFAULT_GENERATION_MODEL,
         isOfflineCurriculumMode: callResult.isMock,
         retryCount: 0,
         acceptedCount: validation.acceptedQuestions.length,
@@ -1893,13 +1899,13 @@ JSON Array Output Schema:
   let lastAccepted: GeneratedPaperQuestion[] = [];
   let lastNormalizedQuestions: GeneratedPaperQuestion[] = [];
   let lastIsMock = false;
-  let lastModelUsed = model || "gemini-2.5-pro";
+  let lastModelUsed = model || DEFAULT_GENERATION_MODEL;
 
   for (let attempt = 0; attempt <= MAX_VALIDATION_RETRIES; attempt++) {
     const callResult = await callGeminiApi<GeneratedPaperQuestion[]>(activePrompt, systemPrompt, {
       json: true,
       apiKey,
-      model: model || "gemini-2.5-pro",
+      model: model || DEFAULT_GENERATION_MODEL,
       mockFallback: fallbackQuestions,
       allowFallbackOnApiFailure: true,
     });
@@ -2038,6 +2044,8 @@ JSON Array Output Schema:
         isMock: callResult.isMock,
         modelUsed: lastModelUsed,
         data: normalizedQuestions,
+        // offline templates stand in for a failed model call: keep why it failed, the route shows it to the teacher
+        ...(callResult.isMock && callResult.error ? { error: callResult.error } : {}),
         trace,
         contract,
         validationIssues: validation.issues,

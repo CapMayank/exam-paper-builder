@@ -71,7 +71,8 @@ export function AIPaperGeneratorModal({
   // Form parameters
   const [language, setLanguage] = useState<PaperLanguage>("en");
   const [difficulty, setDifficulty] = useDifficultyProfile();
-  const [modelTier, setModelTier] = useState<string>("gemini-pro-latest");
+  // Flash by default: Pro has no free-tier quota (every call is refused with 429 unless the key is billed)
+  const [modelTier, setModelTier] = useState<string>("gemini-3.5-flash");
   const [generateDiagrams, setGenerateDiagrams] = useState<boolean>(true);
   const [teacherFocus, setTeacherFocus] = useState<string>("");
   const [generationMode, setGenerationMode] = useState<"fill" | "fresh">("fresh");
@@ -694,11 +695,13 @@ export function AIPaperGeneratorModal({
                     value={modelTier}
                     onChange={(e) => setModelTier(e.target.value)}
                   >
-                    <option value="gemini-pro-latest">Gemini Pro (latest · Senior Examiner Quality · Deep Thinking)</option>
-                    <option value="gemini-flash-latest">Gemini Flash (latest · Fast generation)</option>
+                    <option value="gemini-3.5-flash">Gemini Flash (recommended · works on free API keys)</option>
+                    <option value="gemini-pro-latest">Gemini Pro (needs a billed API key)</option>
                   </select>
                   <p className="text-[10px] text-slate-500">
-                    Pro model enforces Bloom taxonomy, rigorous distractors, and clean LaTeX.
+                    {modelTier.includes("pro")
+                      ? "Google gives Pro no free quota: on a free key every request is refused and the paper is written by Flash instead."
+                      : "Every section passes the same curriculum, quality and answer-key checks whichever model writes it."}
                   </p>
                 </div>
 
