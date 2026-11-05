@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_GENERATION_MODEL, FLASH_MODEL_TIER, normalizeModelName, quotaErrorText, resolveModelChain } from "./gemini";
+import { callGeminiApi, DEFAULT_GENERATION_MODEL, FLASH_MODEL_TIER, normalizeModelName, quotaErrorText, resolveModelChain, validAttemptCount } from "./gemini";
 import { reportOutcome, resetPoolState } from "./geminiPool";
 
 afterEach(() => vi.unstubAllEnvs());
@@ -60,5 +60,39 @@ describe("quota message", () => {
   it("is shown, as the daily quota, once every model of the chain is spent", () => {
     for (const m of ["gemini-pro-latest", ...FLASH_MODEL_TIER]) reportOutcome(KEY, m, 429, daily);
     expect(quotaErrorText("gemini-pro-latest")).toMatch(/quota for today is used up/);
+  });
+});
+
+describe("attempt any N", () => {
+  it("is kept only when there are more sub-questions than must be attempted", () => {
+    expect(validAttemptCount(4, 5)).toBe(4);
+    expect(validAttemptCount(4, 0)).toBeUndefined(); // copied from the prompt's example onto a plain question
+    expect(validAttemptCount(3, 3)).toBeUndefined(); // "attempt all": nothing to choose
+    expect(validAttemptCount(undefined, 5)).toBeUndefined();
+  });
+});
+
+describe("every model paused after recent 503s", () => {
+  const KEY = "AQ.keyP_000000000000";
+  beforeEach(() => {
+    resetPoolState();
+    vi.stubEnv("GEMINI_API_KEYS", KEY);
+    vi.stubEnv("GEMINI_API_KEY", "");
+    vi.stubEnv("GEMINI_MODEL", "");
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("still sends one real request instead of failing without trying", async () => {
+    const fetchMock = vi.fn(async () => new Response('{"error":{"code":503}}', { status: 503 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await callGeminiApi("hi", "sys", { json: false }); // every model of the chain answers 503 and is paused
+    const before = fetchMock.mock.calls.length;
+    fetchMock.mockImplementation(async () =>
+      new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "ok" }] }, finishReason: "STOP" }] }), { status: 200 }),
+    );
+    const res = await callGeminiApi<string>("hi", "sys", { json: false });
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(before);
+    expect(res.success).toBe(true);
+    expect(res.data).toBe("ok");
   });
 });

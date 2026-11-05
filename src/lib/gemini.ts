@@ -92,12 +92,20 @@ export function normalizeModelName(model?: string | null): string | undefined {
 }
 
 /**
- * Fallback order after the chosen model. Google re-points the "-latest" aliases at new models with their own free-tier
- * quotas (Nov 2026: flash-latest -> gemini-3.8-flash at 20 requests/day per key, pro-latest -> gemini-3.1-pro at 0),
- * so pinned versions with a usable free quota lead and the aliases follow. Several distinct models also matter
- * because Google's 503 "high demand" hits one model at a time.
+ * Fallback order after the chosen model. On the free tier every full Flash model allows only about 20 requests a day
+ * per key (Nov 2026: gemini-3.5-flash is served as gemini-3.6-flash, flash-latest as gemini-3.8-flash; pro-latest has
+ * 0), and each model has its own daily bucket. So the chain spreads over every Flash model with a separate bucket,
+ * then the lite models, which have far larger free limits. Several distinct models also matter because Google's
+ * 503 "high demand" hits one model at a time. A model Google retires answers 404 and is skipped from then on.
  */
-export const FLASH_MODEL_TIER = ["gemini-3.5-flash", "gemini-flash-latest", "gemini-3.5-flash-lite", "gemini-flash-lite-latest"];
+export const FLASH_MODEL_TIER = [
+  "gemini-3.5-flash",
+  "gemini-3-flash-preview",
+  "gemini-flash-latest",
+  "gemini-3.5-flash-lite",
+  "gemini-3.1-flash-lite",
+  "gemini-flash-lite-latest",
+];
 export const DEFAULT_GENERATION_MODEL = FLASH_MODEL_TIER[0];
 
 export function resolveModelChain(chosen?: string | null): string[] {
@@ -193,16 +201,26 @@ export async function callGeminiApi<T>(
 
   let lastStatus = 0;
   let lastErrorText = "";
+  // did any request actually reach Google? When every model of the chain is paused after a recent 503, the
+  // chain would fail in milliseconds without trying; one real attempt then goes to the model nearest its resume.
+  let reachedGoogle = false;
+  // the last status each model gave: a mix of spent daily quota (429) and busy models (503) is explained as such
+  const statusByModel = new Map<string, number>();
+  const modelsToTry = [...candidateModels];
+  let forcedModel: string | null = null;
 
-  for (const model of candidateModels) {
+  for (let mi = 0; mi < modelsToTry.length; mi++) {
+    const model = modelsToTry[mi];
     for (let retry = 0; retry < 2; retry++) {
       try {
         // the pool spreads the call over every configured key and skips keys whose quota is used up
         const res = await geminiGenerate(
           model,
           { ...payload, generationConfig: { ...(payload.generationConfig as object), ...thinkingConfigFor(model) } },
-          { customKey: opts.apiKey, timeoutMs: 120_000 },
+          { customKey: opts.apiKey, timeoutMs: 120_000, ignoreOverloadPause: model === forcedModel },
         );
+        if (res.ok || !res.skipped) reachedGoogle = true;
+        if (!res.ok) statusByModel.set(model, res.status);
 
         if (!res.ok) {
           lastStatus = res.status;
@@ -251,8 +269,13 @@ export async function callGeminiApi<T>(
         console.warn(`Gemini API Model ${model} fetch/parse failed:`, lastErrorText);
         // malformed JSON is usually a one-off: ask the same model once more before moving to the next one
         if (retry === 0 && err instanceof SyntaxError) continue;
+        reachedGoogle = true;
         break;
       }
+    }
+    if (mi === modelsToTry.length - 1 && !reachedGoogle && !forcedModel && candidateModels.length > 0) {
+      forcedModel = [...candidateModels].sort((x, y) => overloadedForMs(x) - overloadedForMs(y))[0];
+      modelsToTry.push(forcedModel);
     }
   }
 
@@ -263,14 +286,15 @@ export async function callGeminiApi<T>(
       isMock: true,
       modelUsed: "curriculum-grounded-fallback",
       data: opts.mockFallback(),
-      error: quotaErrorText(candidateModels[0]) ?? describeGeminiFailure(lastStatus, lastErrorText),
+      error: quotaErrorText(candidateModels[0]) ?? mixedFailureText(statusByModel) ?? describeGeminiFailure(lastStatus, lastErrorText),
     };
   }
 
   return {
     success: false,
     isMock: false,
-    error: quotaErrorText(candidateModels[0]) ?? `Gemini API Error (${lastStatus || "PARSE_OR_NETWORK"}): ${lastErrorText || "All model endpoints unavailable"}`,
+    // the same plain-language reason as the fallback path, never Google's raw JSON
+    error: quotaErrorText(candidateModels[0]) ?? mixedFailureText(statusByModel) ?? describeGeminiFailure(lastStatus, lastErrorText),
     data: null as unknown as T,
   };
 }
@@ -296,6 +320,16 @@ export function describeGeminiFailure(status: number, errorText: string): string
   if (/timeout|timed out|aborted/i.test(t)) return "The model took too long to reply (over 2 minutes). Try again, or choose the Flash model.";
   if (/JSON|Unexpected token|parse/i.test(t)) return "The model's reply was not valid JSON. Try again.";
   return t ? `The AI call failed: ${t.replace(/\s+/g, " ").slice(0, 160)}` : "The AI call failed for an unknown reason.";
+}
+
+/**
+ * When some models of the chain are out of today's quota (429) and the rest are busy (503), saying only "busy"
+ * hides why it keeps failing; say both, and what helps.
+ */
+export function mixedFailureText(statusByModel: Map<string, number>): string | null {
+  const statuses = [...statusByModel.values()];
+  if (!statuses.includes(429) || !statuses.some((s) => s === 503 || s >= 500)) return null;
+  return "Today's free AI quota for the full models is used up on your API keys, and the backup models are busy right now (Google 503). Try again in a minute; for more daily capacity add API keys from other Google projects or use a billed key.";
 }
 
 /** A plain-language reason when the failure is the free-tier quota, else null. */
@@ -1139,6 +1173,14 @@ export interface GeneratedPaperQuestion {
  * word a grammar question is about ("अस्मद् शब्दस्य", "गम् धातुः"). Listing them stops the model from asking
  * about the same word again in another section.
  */
+/**
+ * "Attempt any N" only means something when there are more than N sub-questions. Models copy the prompt's example
+ * ("attemptCount": 4) onto questions without sub-questions, which would print a stray "attempt any 4" note.
+ */
+export function validAttemptCount(attemptCount: number | undefined, subpartCount: number): number | undefined {
+  return typeof attemptCount === "number" && attemptCount > 0 && subpartCount > 0 && attemptCount < subpartCount ? attemptCount : undefined;
+}
+
 export function extractTestedTerms(texts: string[]): string[] {
   const terms = new Set<string>();
   for (const t of texts) {
@@ -1340,6 +1382,10 @@ ${UNIVERSAL_QUALITY_RULES.filter((r) => !answersLater || !/^Model answers/.test(
     .join("\n");
 
   const isMatchSection = normalizedType === "MATCH_COLUMN";
+  // How many pairs the match question has, the same rule the validator applies: one pair per slot when the
+  // section is one combined set, else one per mark (at least 4) for a single match question in one slot.
+  // Asking for "all 1 matching pairs" for a single slot got one pair back, which the validator always rejected.
+  const matchPairCount = slots.length > 1 ? slots.length : marksEach > 1 ? Math.min(marksEach, 10) : 4;
   const testedTerms = extractTestedTerms(existingQuestionTexts ?? []);
   // what the schema shows in "answer": in two-stage mode only an objective key, never a model answer
   const objectiveSection = isMcqLikeType(normalizedType) || ["TRUE_FALSE", "FILL_BLANK", "MATCH_COLUMN"].includes(normalizedType);
@@ -1357,13 +1403,13 @@ ${UNIVERSAL_QUALITY_RULES.filter((r) => !answersLater || !/^Model answers/.test(
   const subpartAnswerHint = answersLater ? 'correct option text if the subpart has options, else ""' : "Model answer";
 
   const baseUserPrompt = isMatchSection
-    ? `Generate EXACTLY 1 combined Match the Columns question containing all ${slots.length} matching pairs for the following exam section:
+    ? `Generate EXACTLY 1 combined Match the Columns question containing exactly ${matchPairCount} matching pairs for the following exam section:
 - Board: ${contract.boardDisplayName} (${contract.academicSession})
 - Class: ${className}
 - Subject: ${contract.canonicalSubject} (Subject Code: ${contract.subjectCode})
 - Section Title: ${sectionTitle}
 - Section Question Type: MATCH_COLUMN
-- Total Marks: ${slots.length * marksEach} (${slots.length} pairs × ${marksEach} mark each)
+- Total Marks: ${slots.length > 1 ? `${slots.length * marksEach} (${slots.length} pairs × ${marksEach} mark each)` : `${marksEach} for the whole question (${matchPairCount} pairs)`}
 - Language: ${
         language === "sa"
           ? "Pure Sanskrit in authentic Devanagari script (संस्कृतम्). Follow NCERT/MPBSE Shemushi standards. Use proper sandhi, vibhakti, and Paninian grammar: 'पठितवान्' is 'क्तवतु-प्रत्ययः' (never 'तप्रत्ययः'), passive is 'प्रदीयते'/'दीयते' (never 'प्रदत्तोग्छति'), interrogatives must agree in number (use 'कौ' for dual entities like लवकुशौ). Dual masculine nouns end in '-ौ' (द्वौ बालकौ). Match columns must use 'स्तम्भ अ' / 'स्तम्भ ब'. Never output English column names or marks inside question text."
@@ -1375,8 +1421,8 @@ ${UNIVERSAL_QUALITY_RULES.filter((r) => !answersLater || !/^Model answers/.test(
       }
 - Instructions:
   1. Return a JSON array containing EXACTLY ONE question object.
-  2. The 'text' field must contain the instruction prompt followed by the list of ${slots.length} Column I items labeled (A), (B), (C), etc., derived from the assigned ${contract.canonicalSubject} chapters. For Sanskrit use 'स्तम्भ अ' / 'स्तम्भ ब', for Hindi use 'स्तम्भ क' / 'स्तम्भ ख'.
-  3. The 'options' array must contain the corresponding ${slots.length} Column II matching items/expressions.
+  2. The 'text' field must contain the instruction prompt followed by the list of ${matchPairCount} Column I items labeled (A), (B), (C), etc., derived from the assigned ${contract.canonicalSubject} chapters. For Sanskrit use 'स्तम्भ अ' / 'स्तम्भ ब', for Hindi use 'स्तम्भ क' / 'स्तम्भ ख'.
+  3. The 'options' array must contain the corresponding ${matchPairCount} Column II matching items/expressions, shuffled so they are not in the same order as Column I.
   4. The 'answer' field must specify all correct pairings (e.g. '(A)-(ii), (B)-(i), (C)-(iv), (D)-(iii)').
 
 Assigned Chapter Targets for each matching pair:
@@ -1572,21 +1618,9 @@ JSON Array Output Schema:
         }
 
         if (pairs.length > 0) {
-          if (pairs.length < contract.slots.length) {
-            for (let idx = pairs.length; idx < contract.slots.length; idx++) {
-              const s = contract.slots[idx];
-              const cleanCh = cleanChapterTitleForLookup(s.chapterTitle);
-              const samplePair = s.curriculumSpec.sampleMatchPairs[0] || {
-                left: `${cleanCh}: ${s.curriculumSpec.includedTopics[0] || "Core relation"}`,
-                right: s.curriculumSpec.keyFormulasOrConcepts[0] || `Verified formula in ${cleanCh}`,
-              };
-              pairs.push({
-                left: `(${letters[idx] ?? idx + 1}) ${samplePair.left}`,
-                right: samplePair.right,
-              });
-            }
-          } else if (pairs.length > contract.slots.length) {
-            pairs = pairs.slice(0, contract.slots.length);
+          // too few pairs is not padded with template filler: the validator rejects it and the model retries with the reason
+          if (pairs.length > matchPairCount) {
+            pairs = pairs.slice(0, matchPairCount);
           }
 
           const layout = layoutMatchColumn(pairs, qOptions, qAnswer);
@@ -1677,6 +1711,7 @@ JSON Array Output Schema:
         }
       }
 
+      attemptCount = validAttemptCount(attemptCount, rawSubparts.length);
       const qSubparts = rawSubparts.length > 0 ? normalizeSubpartMarks(rawSubparts, targetSlotMarks, attemptCount) : [];
       let qAnswer =
         typeof rawQ.answer === "string"
@@ -1745,6 +1780,7 @@ JSON Array Output Schema:
           }
         }
 
+        orAttemptCount = validAttemptCount(orAttemptCount, rawOrSubparts.length);
         const orSubparts = rawOrSubparts.length > 0 ? normalizeSubpartMarks(rawOrSubparts, targetSlotMarks, orAttemptCount) : [];
         let orAnswer =
           typeof rawQ.orQuestion.answer === "string"
@@ -1899,6 +1935,8 @@ JSON Array Output Schema:
   let lastAccepted: GeneratedPaperQuestion[] = [];
   let lastNormalizedQuestions: GeneratedPaperQuestion[] = [];
   let lastIsMock = false;
+  // why the model call itself failed (busy, quota...) when templates stood in; reported instead of their validation
+  let lastCallError: string | undefined;
   let lastModelUsed = model || DEFAULT_GENERATION_MODEL;
 
   for (let attempt = 0; attempt <= MAX_VALIDATION_RETRIES; attempt++) {
@@ -1911,6 +1949,7 @@ JSON Array Output Schema:
     });
 
     lastIsMock = callResult.isMock;
+    lastCallError = callResult.isMock ? callResult.error : undefined;
     lastModelUsed = callResult.modelUsed || lastModelUsed;
 
     if (!callResult.success || !Array.isArray(callResult.data)) {
@@ -2126,7 +2165,10 @@ JSON Array Output Schema:
     success: false,
     isMock: lastIsMock,
     modelUsed: lastModelUsed,
-    error: `Section generation failed subject/curriculum validation after ${retryCount + 1} attempt(s): ${lastValidationIssues.map((i) => i.message).join("; ")}`,
+    error:
+      lastIsMock && lastCallError
+        ? lastCallError
+        : `Section generation failed subject/curriculum validation after ${retryCount + 1} attempt(s): ${lastValidationIssues.map((i) => i.message).join("; ")}`,
     data: lastAccepted,
     trace,
     contract,

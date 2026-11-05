@@ -170,7 +170,7 @@ export function reportOutcome(key: string, model: string, status: number, body =
 
 export type PoolCallResult =
   | { ok: true; json: any; keyLabel: string }
-  | { ok: false; status: number; errorText: string; retryAfterMs?: number };
+  | { ok: false; status: number; errorText: string; retryAfterMs?: number; /** no request was sent: the model is paused after a 503 */ skipped?: boolean };
 
 /**
  * POSTs a generateContent body to `model`, rotating over the configured keys. Returns the first success, or the
@@ -179,20 +179,21 @@ export type PoolCallResult =
 export async function geminiGenerate(
   model: string,
   body: unknown,
-  opts: { customKey?: string | null; timeoutMs?: number } = {},
+  opts: { customKey?: string | null; timeoutMs?: number; /** send even though the model is paused after a 503 */ ignoreOverloadPause?: boolean } = {},
 ): Promise<PoolCallResult> {
   const customKey = opts.customKey && opts.customKey.trim().length > 5 ? opts.customKey.trim() : null;
   const poolSize = customKey ? 1 : Math.max(1, configuredKeys().length);
   let lastStatus = 0;
   let lastText = "";
 
-  const paused = overloadedForMs(model);
+  const paused = opts.ignoreOverloadPause ? 0 : overloadedForMs(model);
   if (paused > 0) {
     return {
       ok: false,
       status: 503,
       errorText: `${model} is overloaded right now (HTTP 503); skipped for ${Math.ceil(paused / 1000)}s.`,
       retryAfterMs: paused,
+      skipped: true,
     };
   }
 

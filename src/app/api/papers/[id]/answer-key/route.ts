@@ -12,6 +12,9 @@ const answerFields = { id: true, type: true, text: true, optionsJson: true, subp
  * questions without one are sent to the AI. Each generated answer is saved to its
  * question (blanks only), then the refreshed paper comes back with what is still missing.
  */
+/** Waits before asking again when the AI is busy (Google 503); tests set it to [] via the env. */
+const ANSWER_RETRY_WAITS_MS = process.env.ANSWER_KEY_NO_RETRY ? [] : [4_000, 10_000];
+
 export const POST = route(async (req, { id }, user) => {
   const paper = await prisma.paper.findUnique({
     where: { id },
@@ -48,12 +51,21 @@ export const POST = route(async (req, { id }, user) => {
     generate: async (batch) => {
       // short keys instead of cuids: the model copies "q3" back reliably, a 25-char id not always
       const idByKey = new Map(batch.map((need, i) => [`q${i + 1}`, need.id]));
-      const res = await generateAnswerKeyWithGemini({
-        className: paper.blueprint.book.className,
-        subject: paper.blueprint.book.subject,
-        items: batch.map((need, i) => ({ ...need, id: `q${i + 1}`, marks: marksById.get(need.id) })),
-        apiKey: customKey,
-      });
+      const ask = () =>
+        generateAnswerKeyWithGemini({
+          className: paper.blueprint.book.className,
+          subject: paper.blueprint.book.subject,
+          items: batch.map((need, i) => ({ ...need, id: `q${i + 1}`, marks: marksById.get(need.id) })),
+          apiKey: customKey,
+        });
+      // The questions are already saved, so a short wait beats leaving answers blank: Google's "high demand"
+      // (503) spells usually pass within seconds. A spent quota or a bad key is not retried.
+      let res = await ask();
+      for (const waitMs of ANSWER_RETRY_WAITS_MS) {
+        if ((res.success && !res.isMock) || !/overloaded|HTTP 503|server failed|took too long/i.test(res.error ?? "")) break;
+        await new Promise((r) => setTimeout(r, waitMs));
+        res = await ask();
+      }
       if (!res.success || res.isMock) throw new Error(res.error || "AI answer generation is unavailable right now.");
       const answers = new Map<string, GeneratedAnswer>();
       const list = Array.isArray(res.data) ? res.data : Array.isArray(res.data?.answers) ? res.data.answers : [];

@@ -12,9 +12,9 @@ export const GET = route(async (_req, _ctx, user) => {
     model: DEFAULT_GENERATION_MODEL,
     keyCount: keys,
     freeQuotaInfo:
-      keys > 1
-        ? `Requests are spread over ${keys} API keys. Google's free tier limits requests per minute and per day for each model and project; the daily count resets at midnight Pacific time.`
-        : "Google's free tier limits requests per minute and per day for each model; add more API keys (GEMINI_API_KEYS) from separate Google projects to raise the limit.",
+      (keys > 1 ? `Requests are spread over ${keys} API keys. ` : "") +
+      "On Google's free tier each full Flash model allows about 20 requests a day per key, and one full paper uses roughly 15–40. " +
+      "When those run out the lighter Flash-Lite models take over. The daily count resets at midnight Pacific time; add keys from other Google projects (GEMINI_API_KEYS) or a billed key for more.",
     // masked key endings and live cooldowns, for administrators only
     keys: privileged ? poolStatus() : undefined,
   };
