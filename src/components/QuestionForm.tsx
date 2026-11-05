@@ -729,14 +729,28 @@ export function QuestionForm({
                 </button>
               </div>
             </div>
+          </div>
 
-            {/* Maths toolbar: stays in view while the form scrolls (tall windows only), so it reaches options and subparts too. */}
-            {mathBarOpen && (
-              <div className="z-20 -mx-5 bg-white/95 px-5 py-1.5 backdrop-blur-xs [@media(min-height:720px)]:sticky [@media(min-height:720px)]:top-0">
+          {/* Maths toolbar: a direct child of the form, so it stays pinned to the top of the modal all the way down
+              to the options, match rows and parts (tall windows only; on short ones it would cover the field). */}
+          {mathBarOpen && (
+            <div className="z-20 -mx-5 !mt-1.5 border-b border-slate-200 bg-white/95 px-5 py-1.5 shadow-[0_6px_12px_-10px_rgb(15_23_42/0.35)] backdrop-blur-xs [@media(min-height:640px)]:sticky [@media(min-height:640px)]:-top-5">
+              <div className="relative">
                 <MathToolbar onInsert={handleInsertSnippet} onNewFormula={handleNewFormula} />
+                <button
+                  type="button"
+                  onClick={() => toggleMathBar(false)}
+                  className="absolute right-1 top-1 inline-flex size-7 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                  aria-label="Close the Maths toolbar"
+                  title="Close the Maths toolbar"
+                >
+                  <X size={14} aria-hidden />
+                </button>
               </div>
-            )}
+            </div>
+          )}
 
+          <div className="!mt-1.5">
             <MathRichEditor
               multiline
               value={text}
