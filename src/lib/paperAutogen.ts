@@ -11,6 +11,7 @@ import {
 import { componentTitle, slotComponentKey, suggestSlotComponents } from "./componentSuggestion";
 import { parseComponents } from "./languageComponents";
 import { detectPaperLanguage, type PaperLanguage } from "./localization";
+import { openSlotSpecs } from "./slotPlan";
 import type { PaperData, Section } from "./types";
 
 export interface PaperAutogenSlot {
@@ -82,6 +83,8 @@ export interface PaperAutogenInput {
       marksEach: number;
       /** STANDARD | PASSAGE | GRAMMAR | WRITING | LITERATURE: what the section is for (language papers) */
       role?: string | null;
+      /** per-slot roles when the row's slots are not all of one kind (see slotPlan.ts) */
+      slotPlanJson?: string | null;
     }>;
     chapters: Array<{
       chapterId: string;
@@ -332,6 +335,13 @@ export function planPaperSlotAssignments(paper: PaperAutogenInput): PaperAutogen
   const planningUnits: PlanningUnit[] = [];
   let globalOrderCounter = 0;
 
+  // the kind of each placed question (by its chapter), so a row's grammar or passage slot counts as filled
+  const placedKindsBySection = new Map<string, ChapterRole[]>();
+  for (const item of items) {
+    const st = chapterMap.get(item.question.chapterId);
+    placedKindsBySection.set(item.sectionId, [...(placedKindsBySection.get(item.sectionId) ?? []), st?.role ?? "LESSON"]);
+  }
+
   for (const sec of blueprint.sections) {
     const placed = placedCountBySection.get(sec.id) ?? 0;
     const needed = Math.max(0, sec.count - placed);
@@ -353,12 +363,15 @@ export function planPaperSlotAssignments(paper: PaperAutogenInput): PaperAutogen
         globalOrder: globalOrderCounter++,
       });
     } else {
+      // each empty slot keeps its own kind: a row of five MCQs whose fourth is a grammar item
+      const open = openSlotSpecs(sec, placedKindsBySection.get(sec.id) ?? []);
       for (let i = 0; i < needed; i++) {
+        const spec = open[i];
         planningUnits.push({
           kind: "SINGLE_SLOT",
           sectionId: sec.id,
-          sectionType: sec.type,
-          sectionRole: sec.role || "STANDARD",
+          sectionType: spec?.type || sec.type,
+          sectionRole: spec?.role || sec.role || "STANDARD",
           slotIndex: placed + i,
           marksEach: sec.marksEach,
           totalMarks: sec.marksEach,
@@ -484,8 +497,14 @@ export function planPaperSlotAssignments(paper: PaperAutogenInput): PaperAutogen
     }
   }
 
-  // 6. Assemble section plans
-  const sectionPlans: PaperAutogenSectionPlan[] = blueprint.sections.map((sec) => {
+  // 6. Assemble section plans: one per row, or one per form when a row's slots differ in form (a 3-mark row
+  //    with an unseen passage among its short answers is generated as two batches into the same row)
+  const rowForms = (sec: (typeof blueprint.sections)[number]): string[] => {
+    if (sec.type === "MATCH_COLUMN") return [sec.type];
+    const forms = [...new Set(planningUnits.filter((u) => u.sectionId === sec.id).map((u) => u.sectionType))];
+    return forms.length === 0 ? [sec.type] : forms.sort((a, b) => Number(b === sec.type) - Number(a === sec.type));
+  };
+  const sectionPlans: PaperAutogenSectionPlan[] = blueprint.sections.flatMap((sec) => rowForms(sec).map((form) => ({ sec, form }))).map(({ sec, form }) => {
     const placed = placedCountBySection.get(sec.id) ?? 0;
     const needed = Math.max(0, sec.count - placed);
 
@@ -499,7 +518,7 @@ export function planPaperSlotAssignments(paper: PaperAutogenInput): PaperAutogen
       examType: paper.examType || blueprint.examType,
       sectionTitle: sec.title,
       sectionInstructions: sec.instructions,
-      questionType: sec.type,
+      questionType: form,
       marksEach: sec.marksEach,
     });
 
@@ -563,7 +582,7 @@ export function planPaperSlotAssignments(paper: PaperAutogenInput): PaperAutogen
     } else {
       const singleUnits = planningUnits.filter(
         (u): u is Extract<PlanningUnit, { kind: "SINGLE_SLOT" }> =>
-          u.kind === "SINGLE_SLOT" && u.sectionId === sec.id,
+          u.kind === "SINGLE_SLOT" && u.sectionId === sec.id && u.sectionType === form,
       );
       sectionSlots = singleUnits
         .sort((a, b) => a.slotIndex - b.slotIndex)
@@ -572,7 +591,7 @@ export function planPaperSlotAssignments(paper: PaperAutogenInput): PaperAutogen
           const slotId = `slot_${sec.id}_${s.slotIndex}`;
           const choicePolicy = resolveChoicePolicyForSlot({
             marks: s.marksEach,
-            questionType: sec.type,
+            questionType: form,
             requiresChoice: choiceReq.required,
             forbiddenChoice: choiceReq.forbidden,
           });
@@ -596,7 +615,7 @@ export function planPaperSlotAssignments(paper: PaperAutogenInput): PaperAutogen
             excludedTopics: currCtx.excludedTopics,
             competencies: currCtx.competencies,
             slotId,
-            questionType: sec.type,
+            questionType: form,
             marks: s.marksEach,
             targetWordCount,
             choicePolicy,
@@ -619,12 +638,12 @@ export function planPaperSlotAssignments(paper: PaperAutogenInput): PaperAutogen
     return {
       sectionId: sec.id,
       sectionTitle: sec.title,
-      sectionType: sec.type,
+      sectionType: form,
       sectionInstructions: sec.instructions || undefined,
       marksEach: sec.marksEach,
       requiresInternalChoice: choiceReq.required,
       internalChoiceRequirement: choiceReq,
-      totalQuestionsNeeded: needed,
+      totalQuestionsNeeded: sec.type === "MATCH_COLUMN" ? needed : sectionSlots.length,
       alreadyPlacedCount: placed,
       slots: sectionSlots,
     };

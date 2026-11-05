@@ -138,9 +138,21 @@ export function SectionAiModal({
     return chapterQuotas.map((cq) => ({ id: cq.id, number: cq.number, title: cq.title }));
   }, [chapterQuotas]);
 
-  // Which chapter each new question goes to. The blueprint planner balances quotas for the section's default
-  // form; when the teacher picks another form (a passage, a writing task, grammar), chapters suited to that form
-  // come first. Each entry carries the chapter's real remaining marks, not the slot's marks.
+  // The blueprint planner's empty slots of this row, by form: a row of six 3-mark questions may plan five short
+  // answers (one on the grammar unit) and one unseen passage.
+  const plannedSlotsByForm = React.useMemo(() => {
+    const out = new Map<string, Array<{ chapterId: string; chapterNumber: number; chapterTitle: string }>>();
+    if (!section) return out;
+    try {
+      for (const sp of planPaperSlotAssignments(paper).sections) {
+        if (sp.sectionId === section.id && sp.slots.length > 0) out.set(sp.sectionType, sp.slots);
+      }
+    } catch {}
+    return out;
+  }, [paper, section]);
+
+  // Which chapter each new question goes to: the planner's slots for the chosen form first, then chapters suited
+  // to that form (a passage, a writing task, grammar). Each entry carries the chapter's real remaining marks.
   const plannedChapterAllocations = React.useMemo(() => {
     if (!section) return [];
     const left = new Map(chapterQuotas.map((c) => [c.id, c.remainingMarks]));
@@ -150,20 +162,13 @@ export function SectionAiModal({
       return { id: c.id, number: c.number, title: c.title, remainingMarks: before };
     };
     const subject = paper.blueprint.book?.subject;
-    const otherForm = Boolean(aiType && aiType !== section.type);
-    if (!otherForm) {
-      try {
-        const plan = planPaperSlotAssignments(paper);
-        const secPlan = plan.sections.find((s) => s.sectionId === section.id);
-        if (secPlan && secPlan.slots && secPlan.slots.length > 0) {
-          return secPlan.slots.slice(0, questionCount).map((sl) => take({ id: sl.chapterId, number: sl.chapterNumber, title: sl.chapterTitle }));
-        }
-      } catch {}
+    const result: Array<{ id: string; number: number; title: string; remainingMarks: number }> = [];
+    for (const sl of (plannedSlotsByForm.get(aiType || section.type) ?? []).slice(0, questionCount)) {
+      result.push(take({ id: sl.chapterId, number: sl.chapterNumber, title: sl.chapterTitle }));
     }
 
     const fits = (title: string) => slotFitsRole(aiType || section.type, targetSlotMarks, slotRowRole(title, subject));
-    const result: Array<{ id: string; number: number; title: string; remainingMarks: number }> = [];
-    for (let i = 0; i < questionCount; i++) {
+    for (let i = result.length; i < questionCount; i++) {
       const byRoom = (pool: typeof chapterQuotas) =>
         pool.filter((c) => (left.get(c.id) ?? 0) >= targetSlotMarks).sort((a, b) => (left.get(b.id) ?? 0) - (left.get(a.id) ?? 0));
       const suited = chapterQuotas.filter((c) => fits(c.title));
@@ -174,14 +179,16 @@ export function SectionAiModal({
       if (pick) result.push(take(pick));
     }
     return result;
-  }, [paper, section, questionCount, chapterQuotas, targetSlotMarks, aiType]);
+  }, [paper, section, questionCount, chapterQuotas, targetSlotMarks, aiType, plannedSlotsByForm]);
 
   useEffect(() => {
     if (isOpen && section) {
       setStep("config");
       setGeneratedQuestions([]);
       setError(null);
-      setQuestionCount(Math.max(1, Math.min(remainingQuestions, 5)));
+      // as many as the planner has empty slots of the row's own form (a passage slot in the row waits for its own run)
+      const planned = plannedSlotsByForm.get(section.type)?.length ?? 0;
+      setQuestionCount(Math.max(1, Math.min(remainingQuestions, planned > 0 ? planned : 5)));
       const paperLang = detectPaperLanguage(paper, paper.items);
       setLanguage(paperLang === "sa" ? "sa" : paperLang === "hi" ? "hi" : "en");
       if (availableChapters.length > 0) {
@@ -190,7 +197,7 @@ export function SectionAiModal({
         setSelectedChapterId(topDeficit?.id || availableChapters[0].id);
       }
     }
-  }, [isOpen, section, remainingQuestions, availableChapters, chapterQuotas, paper]);
+  }, [isOpen, section, remainingQuestions, availableChapters, chapterQuotas, paper, plannedSlotsByForm]);
 
   if (!isOpen || !section) return null;
 
@@ -431,7 +438,11 @@ export function SectionAiModal({
                   <select
                     id="section-ai-type"
                     value={aiType}
-                    onChange={(e) => setAiType(e.target.value)}
+                    onChange={(e) => {
+                      setAiType(e.target.value);
+                      const planned = plannedSlotsByForm.get(e.target.value)?.length ?? 0;
+                      if (planned > 0) setQuestionCount(Math.min(Math.max(1, remainingQuestions), planned));
+                    }}
                     className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium focus:border-indigo-500 focus:outline-hidden"
                   >
                     {allowedTypes.map((t) => (

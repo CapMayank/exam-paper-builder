@@ -5,6 +5,7 @@ import { builtInBlueprintPresets } from "./presets";
 import { distributeMarksByRole, missingUnitRoles } from "./roleMarks";
 import { distributeSlotMarks, marksByRole, schoolPatternsForLevel } from "./schoolPatterns";
 import { getLanguageNonChapterUnits } from "./syllabusImport";
+import { templateSlots } from "./slotPlan";
 
 const presets = builtInBlueprintPresets();
 const exam = { examType: "ANNUAL" as const, academicSession: "2026–27" };
@@ -67,7 +68,7 @@ describe("Classes 5–8 English and Hindi follow the Rajya Shiksha Kendra M.P. p
   it("asks for the units a hand-made book is missing, and meanwhile keeps every mark on a real row", () => {
     const lessonsOnly = { ...book("English"), chapters: book("English").chapters.filter((c) => c.id.startsWith("l")) };
     const preset = suggestPreset(presets, lessonsOnly)!;
-    const slots = preset.sections.flatMap((g) => g.questionTypes.flatMap((q) => Array.from({ length: q.count }, () => ({ marks: q.marksEach, role: q.role }))));
+    const slots = templateSlots(preset);
     expect(missingUnitRoles(slots, lessonsOnly.chapters, "English").sort()).toEqual(["GRAMMAR", "PASSAGE", "WRITING"]);
     const marks = distributeMarksByRole(slots, lessonsOnly.chapters, "English");
     expect(Object.values(marks).reduce((a, b) => a + b, 0)).toBe(60);

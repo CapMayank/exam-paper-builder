@@ -92,6 +92,7 @@ export const POST = route(
             orAlternativeCount: s.orAlternativeCount ?? 1,
             orSlotsJson: s.orSlotsJson || "[]",
             allowedTypesJson: s.allowedTypesJson || "[]",
+            slotPlanJson: s.slotPlanJson || "[]",
             role: s.role,
             groupKey: s.groupKey,
           })),

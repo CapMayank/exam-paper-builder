@@ -477,6 +477,7 @@ export function templateSectionsToSectionsJson(template: BlueprintTemplate) {
         choicePolicy,
         role: qt.role ?? "STANDARD",
         groupKey: qt.groupKey ?? "",
+        ...(qt.slotPlan?.length ? { slotPlanJson: JSON.stringify(qt.slotPlan) } : {}),
       });
     }
   }

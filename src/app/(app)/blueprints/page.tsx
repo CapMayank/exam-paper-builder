@@ -346,6 +346,9 @@ export default function BlueprintsPage() {
             orAlternativeCount: s.orAlternativeCount ?? 1,
             orSlotsJson: s.orSlotsJson || "[]",
             allowedTypesJson: (s as { allowedTypesJson?: string }).allowedTypesJson || "[]",
+            slotPlanJson: s.slotPlanJson || "[]",
+            role: s.role || "STANDARD",
+            groupKey: s.groupKey || "",
           })),
           chapters: b.chapters.map((c) => ({
             chapterId: c.chapterId,

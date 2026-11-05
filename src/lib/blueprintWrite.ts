@@ -6,6 +6,7 @@ import { recordAudit } from "@/lib/audit";
 import type { SessionUser } from "@/lib/api";
 import { diagnosePaperImplications } from "@/lib/blueprint";
 import { loadBlueprint, type BlueprintInput } from "@/lib/blueprints";
+import { absorbingRows } from "@/lib/blueprintSetupPlan";
 import { DEFAULT_ACADEMIC_SESSION } from "@/lib/constants";
 import { prisma } from "@/lib/prisma";
 
@@ -41,6 +42,7 @@ function sectionData(s: BlueprintInput["sections"][number], position: number) {
     orAlternativeCount: s.orAlternativeCount ?? 1,
     orSlotsJson: s.orSlotsJson || "[]",
     allowedTypesJson: s.allowedTypesJson || "[]",
+    slotPlanJson: s.slotPlanJson || "[]",
     role: s.role || "STANDARD",
     groupKey: s.groupKey || "",
     position,
@@ -99,9 +101,21 @@ export async function updateBlueprintWithPapers(id: string, input: BlueprintInpu
   const existingSectionIds = new Set(existing.sections.map((s) => s.id));
   const keptIds = new Set(input.sections.map((s) => s.id).filter((sid): sid is string => Boolean(sid)));
   const removed = existing.sections.filter((s) => !keptIds.has(s.id));
+  // a dropped row merged into a kept row of the same heading and marks hands its questions over
+  const absorbed = absorbingRows(removed, input.sections);
   let archivedQuestions = 0;
 
   await prisma.$transaction(async (tx) => {
+    for (const [from, to] of absorbed) {
+      const last = await tx.paperQuestion.findMany({ where: { sectionId: to }, select: { paperId: true, position: true } });
+      const next = new Map<string, number>();
+      for (const it of last) next.set(it.paperId, Math.max(next.get(it.paperId) ?? -1, it.position));
+      for (const it of await tx.paperQuestion.findMany({ where: { sectionId: from }, orderBy: { position: "asc" } })) {
+        const pos = (next.get(it.paperId) ?? -1) + 1;
+        next.set(it.paperId, pos);
+        await tx.paperQuestion.update({ where: { id: it.id }, data: { sectionId: to, position: pos } });
+      }
+    }
     if (removed.length > 0) {
       const affected = await tx.paperQuestion.findMany({
         where: { sectionId: { in: removed.map((s) => s.id) } },

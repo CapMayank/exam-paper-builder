@@ -35,20 +35,38 @@ function schoolPattern(range: [number, number], totalMarks: number, longCount: n
 }
 
 type Row = BlueprintTemplate["sections"][number]["questionTypes"][number];
-const row = (type: Row["type"], count: number, marksEach: number, role: NonNullable<Row["role"]>, groupKey: string): Row => ({
-  type,
-  count,
-  marksEach,
-  orChoiceMode: "NOT_REQUIRED",
-  role,
-  groupKey,
-});
+type SlotRole = NonNullable<Row["slotPlan"]>[number];
+const SLOT: Record<string, SlotRole> = {
+  L: { role: "LITERATURE" },
+  G: { role: "GRAMMAR" },
+  P: { role: "PASSAGE", type: "UNSEEN_PASSAGE" },
+  W: { role: "WRITING", type: "WRITING_SKILL" },
+  R: { role: "LITERATURE", type: "REFERENCE_CONTEXT" },
+};
+/**
+ * One row of a section: all its slots under one heading and one count, `slots` naming each slot in question order
+ * (L lesson, G grammar, P unseen passage, W writing, R reference to context from a lesson).
+ */
+const row = (type: Row["type"], marksEach: number, slots: string, groupKey: string): Row => {
+  const plan = [...slots].map((c) => SLOT[c]);
+  const mixed = plan.some((e) => e.role !== "LITERATURE" || e.type);
+  return {
+    type,
+    count: plan.length,
+    marksEach,
+    orChoiceMode: "NOT_REQUIRED",
+    role: "LITERATURE",
+    groupKey,
+    ...(mixed ? { slotPlan: plan } : {}),
+  };
+};
 
 /**
  * English and Hindi (first language), Classes 5–8, as set by Rajya Shiksha Kendra M.P. (Annual Examination
  * 2025-26, Class 8 English 108149 and Hindi 108110): the same 60-mark grid, but some slots are not lesson
- * questions. Each of those is its own row with a role, so its marks go to the matching syllabus unit (unseen
- * passage, writing, grammar) and never use up a lesson's quota; a passage taken from a lesson would be a seen one.
+ * questions. Each section is one row (five MCQs, not four and one) whose slot plan names the slots that are not
+ * lessons, so their marks go to the matching syllabus unit (unseen passage, writing, grammar) and never use up a
+ * lesson's quota; a passage taken from a lesson would be a seen one.
  *
  *   English: Q1-5 MCQ (Q4 grammar) · Q6-10 blanks (Q9 homophones) · Q11-16 2 marks (Q14 grammar) · Q17-22 3 marks (Q20 grammar,
  *            Q22 unseen passage, 3 sub-questions) · Q23-26 5 marks (Q25 application, Q26 paragraph)
@@ -56,7 +74,6 @@ const row = (type: Row["type"], count: number, marksEach: number, role: NonNulla
  *   Hindi:   Q1-5 बहुविकल्पीय (5 अलंकार) · Q6-10 रिक्त स्थान (10 उपसर्ग) · Q11-16 अति लघु (16 वर्तनी) ·
  *            Q17-22 लघु (20 अनेकार्थी, 22 पर्यायवाची, 21 अपठित गद्यांश) · Q23-26 दीर्घ (25 पत्र, 26 निबंध)
  *            पाठ 37, व्याकरण 10, अपठित 3, लेखन 10
- * Rows in one section share its title, so the printed paper shows one heading per section, as the board's does.
  */
 function languagePattern(lang: "English" | "Hindi"): BlueprintTemplate {
   const hi = lang === "Hindi";
@@ -92,16 +109,12 @@ function languagePattern(lang: "English" | "Hindi"): BlueprintTemplate {
     language: hi ? "hi" : "en",
     archetype: "SCHOOL",
     sections: [
-      g(t.mcq, row("MCQ", 4, 1, "LITERATURE", "lessons.mcq"), row("MCQ", 1, 1, "GRAMMAR", "grammar.mcq")),
-      g(t.blank, row("FILL_BLANK", 4, 1, "LITERATURE", "lessons.blank"), row("FILL_BLANK", 1, 1, "GRAMMAR", "grammar.blank")),
-      g(t.vsa, row("VERY_SHORT", 5, 2, "LITERATURE", "lessons.very-short"), row("VERY_SHORT", 1, 2, "GRAMMAR", "grammar.very-short")),
-      g(
-        t.sa,
-        row("SHORT", hi ? 3 : 4, 3, "LITERATURE", "lessons.short"),
-        row("SHORT", hi ? 2 : 1, 3, "GRAMMAR", "grammar.short"),
-        row("UNSEEN_PASSAGE", 1, 3, "PASSAGE", "reading.unseen-passage"),
-      ),
-      g(t.la, row("LONG", 2, 5, "LITERATURE", "lessons.long"), row("WRITING_SKILL", 2, 5, "WRITING", "writing.letter-and-composition")),
+      // question order as the board prints it: English Q4 grammar, Hindi Q5 अलंकार, and so on
+      g(t.mcq, row("MCQ", 1, hi ? "LLLLG" : "LLLGL", "mcq")),
+      g(t.blank, row("FILL_BLANK", 1, hi ? "LLLLG" : "LLLGL", "fill-in-the-blanks")),
+      g(t.vsa, row("VERY_SHORT", 2, hi ? "LLLLLG" : "LLLGLL", "very-short")),
+      g(t.sa, row("SHORT", 3, hi ? "LLLGPG" : "LLLGLP", "short")),
+      g(t.la, row("LONG", 5, "LLWW", "long")),
     ],
   };
 }
@@ -130,18 +143,11 @@ function sanskritPattern(): BlueprintTemplate {
     language: "sa",
     archetype: "SCHOOL",
     sections: [
-      g("बहुविकल्पीयप्रश्नाः", "उचितं विकल्पं चित्वा लिखत। प्रत्येकप्रश्नस्य कृते 1 अङ्कः निर्धारितः अस्ति।",
-        row("MCQ", 4, 1, "LITERATURE", "lessons.mcq"), row("MCQ", 1, 1, "GRAMMAR", "grammar.mcq")),
-      g("रिक्तस्थानानि", "उचितशब्दैः रिक्तस्थानानि पूरयत। प्रत्येकप्रश्नस्य कृते 1 अङ्कः निर्धारितः अस्ति।",
-        row("FILL_BLANK", 4, 1, "LITERATURE", "lessons.blank"), row("FILL_BLANK", 1, 1, "GRAMMAR", "grammar.blank")),
-      g("अतिलघु-उत्तरीयप्रश्नाः", "अधोलिखितप्रश्नानाम् एकपदेन उत्तरं लिखत। प्रत्येकप्रश्नस्य कृते 2 अङ्कौ निर्धारितौ स्तः।",
-        row("VERY_SHORT", 6, 2, "LITERATURE", "lessons.very-short")),
-      g("लघु-उत्तरीयप्रश्नाः", "अधोलिखितप्रश्नानाम् उत्तराणि एकवाक्येन लिखत। प्रत्येकप्रश्नस्य कृते 3 अङ्काः निर्धारिताः सन्ति।",
-        row("SHORT", 4, 3, "LITERATURE", "lessons.short"), row("SHORT", 2, 3, "GRAMMAR", "grammar.short")),
-      g("दीर्घ-उत्तरीयप्रश्नाः", "अधोलिखितप्रश्नानाम् उत्तराणि संस्कृते लिखत। प्रत्येकप्रश्नस्य कृते 5 अङ्काः निर्धारिताः सन्ति।",
-        row("REFERENCE_CONTEXT", 1, 5, "LITERATURE", "lessons.verse-extract"),
-        row("UNSEEN_PASSAGE", 1, 5, "PASSAGE", "reading.unseen-passage"),
-        row("WRITING_SKILL", 2, 5, "WRITING", "writing.letter-and-composition")),
+      g("बहुविकल्पीयप्रश्नाः", "उचितं विकल्पं चित्वा लिखत। प्रत्येकप्रश्नस्य कृते 1 अङ्कः निर्धारितः अस्ति।", row("MCQ", 1, "LLLLG", "mcq")),
+      g("रिक्तस्थानानि", "उचितशब्दैः रिक्तस्थानानि पूरयत। प्रत्येकप्रश्नस्य कृते 1 अङ्कः निर्धारितः अस्ति।", row("FILL_BLANK", 1, "LLLLG", "fill-in-the-blanks")),
+      g("अतिलघु-उत्तरीयप्रश्नाः", "अधोलिखितप्रश्नानाम् एकपदेन उत्तरं लिखत। प्रत्येकप्रश्नस्य कृते 2 अङ्कौ निर्धारितौ स्तः।", row("VERY_SHORT", 2, "LLLLLL", "very-short")),
+      g("लघु-उत्तरीयप्रश्नाः", "अधोलिखितप्रश्नानाम् उत्तराणि एकवाक्येन लिखत। प्रत्येकप्रश्नस्य कृते 3 अङ्काः निर्धारिताः सन्ति।", row("SHORT", 3, "LLLGGL", "short")),
+      g("दीर्घ-उत्तरीयप्रश्नाः", "अधोलिखितप्रश्नानाम् उत्तराणि संस्कृते लिखत। प्रत्येकप्रश्नस्य कृते 5 अङ्काः निर्धारिताः सन्ति।", row("LONG", 5, "RPWW", "long")),
     ],
   };
 }
@@ -158,8 +164,10 @@ export const SCHOOL_PATTERNS: Array<{ levels: [number, number]; template: Bluepr
 export function marksByRole(template: Pick<BlueprintTemplate, "sections">): Record<string, number> {
   const out: Record<string, number> = {};
   for (const grp of template.sections) for (const q of grp.questionTypes) {
-    const r = q.role ?? "STANDARD";
-    out[r] = (out[r] ?? 0) + q.count * q.marksEach;
+    for (let i = 0; i < q.count; i++) {
+      const r = q.slotPlan?.[i]?.role ?? q.role ?? "STANDARD";
+      out[r] = (out[r] ?? 0) + q.marksEach;
+    }
   }
   return out;
 }

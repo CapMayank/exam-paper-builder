@@ -37,6 +37,8 @@ export interface BlueprintTemplateSectionGroup {
     /** Examination purpose; defaults to STANDARD. */
     role?: "STANDARD" | "PASSAGE" | "GRAMMAR" | "WRITING" | "LITERATURE";
     groupKey?: string;
+    /** Per-slot roles when the row's slots are not all of one kind (see slotPlan.ts). */
+    slotPlan?: Array<{ role: "STANDARD" | "PASSAGE" | "GRAMMAR" | "WRITING" | "LITERATURE"; type?: QuestionType }>;
   }>;
 }
 

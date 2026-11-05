@@ -36,9 +36,10 @@ import { DEFAULT_SCHOOL_NAME, EXAM_TYPES, EXAM_TYPE_LABEL, KINDERGARTEN_QUESTION
 import { BlueprintStartPicker } from "@/components/blueprints/BlueprintStartPicker";
 import { isSubjectMatching } from "@/lib/schoolCurriculum";
 import { distributeMarksByRole, missingUnitRoles } from "@/lib/roleMarks";
-import { schoolAllowedTypes } from "@/lib/blueprintSetupPlan";
+import { rowAllowedTypes } from "@/lib/blueprintSetupPlan";
+import { rowSlotSpecs, slotsWithRoles, templateSlots } from "@/lib/slotPlan";
 import { getLanguageNonChapterUnits } from "@/lib/syllabusImport";
-import { allowedTypesFor } from "@/lib/sectionTypes";
+import { allowedTypesFor, subjectFamily } from "@/lib/sectionTypes";
 import type { AcademicClassDto, Blueprint, Book, PaperData } from "@/lib/types";
 
 let qtSeq = 0;
@@ -362,7 +363,7 @@ function BlueprintEditor({ params, searchParams }: PageProps<"/blueprints/[id]">
     const inExam = book.chapters.filter((c) => (marks[c.id] ?? 0) > 0);
     const pool = inExam.length > 0 ? inExam : book.chapters;
     // passage, writing and grammar slots go to their own syllabus units, the rest to the lessons
-    const slots = sections.flatMap((s) => Array.from({ length: Math.max(0, s.count) }, () => ({ marks: s.marksEach, role: s.role })));
+    const slots = slotsWithRoles(sections);
     const nextMarks = distributeMarksByRole(slots, pool.map((c) => ({ id: c.id, title: c.title })), book.subject);
     for (const c of book.chapters) nextMarks[c.id] ??= 0;
     setMarks(nextMarks);
@@ -618,9 +619,7 @@ function BlueprintEditor({ params, searchParams }: PageProps<"/blueprints/[id]">
     setName(`${pick.className} ${pick.subject} – ${template.title}`);
     let target = books.find((b) => b.className === pick.className && isSubjectMatching(b.subject, pick.subject));
     if (!target || target.chapters.length === 0) return;
-    const slots = template.sections.flatMap((g) =>
-      g.questionTypes.flatMap((qt) => Array.from({ length: qt.count }, () => ({ marks: qt.marksEach, role: qt.role ?? null }))),
-    );
+    const slots = templateSlots(template);
     const missing = missingUnitRoles(slots, target.chapters, target.subject);
     if (missing.length > 0) {
       const domain = { PASSAGE: "reading", WRITING: "writing", GRAMMAR: "grammar" } as const;
@@ -661,8 +660,9 @@ function BlueprintEditor({ params, searchParams }: PageProps<"/blueprints/[id]">
         orAlternativeCount: (qt as any).orAlternativeCount ?? ((qt as any).orChoiceMode === "NOT_REQUIRED" ? 0 : null),
         orSlotsJson: (qt as any).orSlotsJson ?? null,
         allowedTypesJson: subject
-          ? JSON.stringify(schoolAllowedTypes(qt.type, qt.marksEach, subject, qt.role))
+          ? JSON.stringify(rowAllowedTypes({ type: qt.type, count: qt.count, role: qt.role, slotPlanJson: qt.slotPlan ? JSON.stringify(qt.slotPlan) : "[]" }, qt.marksEach, subject))
           : ((qt as { allowedTypesJson?: string }).allowedTypesJson ?? "[]"),
+        slotPlanJson: qt.slotPlan?.length ? JSON.stringify(qt.slotPlan) : "[]",
         role: (qt as any).role ?? "STANDARD",
         groupKey: (qt as any).groupKey ?? "",
       })),
@@ -701,6 +701,7 @@ function BlueprintEditor({ params, searchParams }: PageProps<"/blueprints/[id]">
         orAlternativeCount: (qt as any).orAlternativeCount ?? null,
         orSlotsJson: (qt as any).orSlotsJson ?? null,
         allowedTypesJson: (qt as { allowedTypesJson?: string }).allowedTypesJson ?? "[]",
+        slotPlanJson: qt.slotPlan?.length ? JSON.stringify(qt.slotPlan) : "[]",
         role: (qt as any).role ?? "STANDARD",
         groupKey: (qt as any).groupKey ?? "",
       })),
@@ -855,6 +856,7 @@ function BlueprintEditor({ params, searchParams }: PageProps<"/blueprints/[id]">
           orAlternativeCount: (s as any).orAlternativeCount ?? null,
           orSlotsJson: (s as any).orSlotsJson ?? null,
           allowedTypesJson: s.allowedTypesJson ?? "[]",
+          slotPlanJson: s.slotPlanJson ?? "[]",
           role: (s as any).role ?? "STANDARD",
           groupKey: (s as any).groupKey ?? "",
         })),
@@ -1486,6 +1488,50 @@ function BlueprintEditor({ params, searchParams }: PageProps<"/blueprints/[id]">
                                         </button>
                                       );
                                     })}
+                                  </div>
+                                </div>
+                              );
+                            })()}
+
+                            {/* What each question of the row is for: a lesson, grammar, the unseen passage or writing (language papers) */}
+                            {(() => {
+                              const specs = rowSlotSpecs(qt);
+                              const mixed = new Set(specs.map((x) => x.role)).size > 1;
+                              if (!mixed && subjectFamily(book?.subject) !== "LANGUAGE") return null;
+                              const ROLE_TYPE: Record<string, string | undefined> = { PASSAGE: "UNSEEN_PASSAGE", WRITING: "WRITING_SKILL" };
+                              const setSlot = (i: number, role: string) => {
+                                const next = specs.map((x, j) => (j === i ? { role, ...(ROLE_TYPE[role] ? { type: ROLE_TYPE[role] } : {}) } : { role: x.role, ...(x.type !== qt.type ? { type: x.type } : {}) }));
+                                const accepted = allowedTypesFor(qt);
+                                const extra = ROLE_TYPE[role];
+                                patchQuestionType(grp.key, qt.key, {
+                                  slotPlanJson: next.every((x) => x.role === (qt.role || "STANDARD") && !("type" in x)) ? "[]" : JSON.stringify(next),
+                                  ...(extra && !accepted.includes(extra) ? { allowedTypesJson: JSON.stringify([...accepted, extra]) } : {}),
+                                });
+                              };
+                              return (
+                                <div className="pt-2 border-t border-slate-200/80 space-y-1.5">
+                                  <div className="text-[11px] font-semibold text-slate-700">
+                                    Each question is from:
+                                    <span className="ml-1 font-normal text-slate-500">its marks count towards that syllabus row (a grammar or unseen-passage question never uses up a lesson&apos;s marks)</span>
+                                  </div>
+                                  <div className="flex flex-wrap gap-1.5" role="group" aria-label="What each question is for">
+                                    {specs.map((x, i) => (
+                                      <label key={i} className="flex items-center gap-1 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10.5px] text-slate-600">
+                                        <span className="font-semibold text-slate-500">{i + 1}.</span>
+                                        <select
+                                          className="bg-transparent text-[10.5px] font-medium text-slate-800 outline-none"
+                                          value={x.role === "STANDARD" ? "LITERATURE" : x.role}
+                                          disabled={isReadOnly}
+                                          onChange={(e) => setSlot(i, e.target.value)}
+                                          aria-label={`Question ${i + 1} is from`}
+                                        >
+                                          <option value="LITERATURE">Lesson</option>
+                                          <option value="GRAMMAR">Grammar</option>
+                                          <option value="PASSAGE">Unseen passage</option>
+                                          <option value="WRITING">Writing</option>
+                                        </select>
+                                      </label>
+                                    ))}
                                   </div>
                                 </div>
                               );

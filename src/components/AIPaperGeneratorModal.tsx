@@ -756,7 +756,7 @@ export function AIPaperGeneratorModal({
                 <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                   {pendingSections.map((sec, idx) => (
                     <div
-                      key={sec.sectionId}
+                      key={`${sec.sectionId}:${sec.sectionType}`}
                       className="flex items-center justify-between text-xs p-2.5 rounded-lg border border-slate-200 bg-slate-50/50"
                     >
                       <div className="flex flex-wrap items-center gap-2">

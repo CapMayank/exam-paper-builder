@@ -7,7 +7,7 @@ import type { SessionUser } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { diagnosePaperImplications, validateBlueprint } from "@/lib/blueprint";
 import { mapCurriculumTemplateToBlueprintInput, type BlueprintInput } from "@/lib/blueprints";
-import { buildSetupInput, matchSectionIds, presetTotals, type SetupExam } from "@/lib/blueprintSetupPlan";
+import { absorbingRows, buildSetupInput, matchSectionIds, presetTotals, type SetupExam } from "@/lib/blueprintSetupPlan";
 import { createBlueprint, updateBlueprintWithPapers, type BlueprintUpdateResult } from "@/lib/blueprintWrite";
 import { WORKSHEET_MODE } from "@/lib/constants";
 import { canManageScope, isAdmin } from "@/lib/permissions";
@@ -16,6 +16,7 @@ import { prisma } from "@/lib/prisma";
 import { missingUnitRoles } from "@/lib/roleMarks";
 import { getLanguageNonChapterUnits } from "@/lib/syllabusImport";
 import { presetSections } from "@/lib/blueprintSetupPlan";
+import { slotsWithRoles } from "@/lib/slotPlan";
 
 const DOMAIN_OF = { PASSAGE: "reading", WRITING: "writing", GRAMMAR: "grammar" } as const;
 
@@ -26,7 +27,7 @@ const DOMAIN_OF = { PASSAGE: "reading", WRITING: "writing", GRAMMAR: "grammar" }
  */
 async function ensureUnitsFor(preset: BlueprintPreset, book: SetupBookRow): Promise<SetupBookRow> {
   const sections = presetSections(preset, book.subject);
-  const slots = sections.flatMap((s) => Array.from({ length: s.count }, () => ({ marks: s.marksEach, role: s.role })));
+  const slots = slotsWithRoles(sections);
   const missing = missingUnitRoles(slots, book.chapters, book.subject);
   if (missing.length === 0) return book;
   const units = getLanguageNonChapterUnits(book.subject, book.className);
@@ -143,7 +144,8 @@ async function updateImpact(bp: ExistingBlueprint, input: BlueprintInput, user: 
   if (finalised > 0 && !isAdmin(user)) impact.blocked = "A finalised paper uses it; only an administrator can change it.";
   if (bp.papers.length === 0) return impact;
 
-  const removed = new Set(removedIds);
+  const absorbed = absorbingRows(bp.sections.filter((s) => removedIds.includes(s.id)), sections);
+  const removed = new Set(removedIds.filter((rid) => !absorbed.has(rid)));
   const def = {
     sections: sections.map((s, i) => ({ ...s, id: s.id ?? `new-${i}` })),
     chapters: input.chapters.map((c) => ({ chapterId: c.chapterId, marks: c.marks, unitKey: c.unitKey, unitTitle: c.unitTitle })),
@@ -158,7 +160,7 @@ async function updateImpact(bp: ExistingBlueprint, input: BlueprintInput, user: 
     const kept = own.filter((i) => !removed.has(i.sectionId));
     const implications = diagnosePaperImplications(
       def,
-      kept.map((i) => ({ id: i.id, sectionId: i.sectionId, chapterId: i.question.chapterId, type: i.question.type, text: i.question.text })),
+      kept.map((i) => ({ id: i.id, sectionId: absorbed.get(i.sectionId) ?? i.sectionId, chapterId: i.question.chapterId, type: i.question.type, text: i.question.text })),
     );
     // a slot or chapter still to fill is unfinished work, not something the change broke
     const problems = implications.filter((x) => x.code !== "SECTION_UNDERFILLED" && x.code !== "CHAPTER_DEFICIT");

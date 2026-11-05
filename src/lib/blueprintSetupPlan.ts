@@ -6,6 +6,7 @@ import { isSchoolPattern, type BlueprintPreset } from "./presets";
 import { isSubjectMatching } from "./schoolCurriculum";
 import { distributeMarksByRole } from "./roleMarks";
 import { defaultAllowedTypes } from "./sectionTypes";
+import { rowSlotSpecs, slotsWithRoles } from "./slotPlan";
 
 export type SetupBook = { id: string; className: string; subject: string; chapters: Array<{ id: string; title?: string }> };
 
@@ -22,6 +23,7 @@ export type SetupSection = {
   orAlternativeCount: number;
   orSlotsJson: string;
   allowedTypesJson: string;
+  slotPlanJson: string;
   role: "STANDARD" | "PASSAGE" | "GRAMMAR" | "WRITING" | "LITERATURE";
   groupKey: string;
 };
@@ -94,6 +96,8 @@ export function presetSections(preset: BlueprintPreset, subject: string): SetupS
       let orChoiceMode: SetupSection["orChoiceMode"] = "BOARD_DEFAULT";
       if (qt.type === "UNSEEN_PASSAGE" || raw === "NOT_REQUIRED" || raw === "NO_CHOICE" || policy === "NO_CHOICE") orChoiceMode = "NOT_REQUIRED";
       else if (raw === "REQUIRED" || raw === "FULL_OR_ALTERNATIVE" || policy === "FULL_OR_ALTERNATIVE") orChoiceMode = "REQUIRED";
+      const role = (ROLES.includes(qt.role ?? "") ? qt.role : "STANDARD") as SetupSection["role"];
+      const slotPlanJson = Array.isArray(qt.slotPlan) && qt.slotPlan.length > 0 ? JSON.stringify(qt.slotPlan) : "[]";
       return {
         title: g.title,
         instructions: g.instructions ?? "",
@@ -103,8 +107,9 @@ export function presetSections(preset: BlueprintPreset, subject: string): SetupS
         orChoiceMode,
         orAlternativeCount: qt.orAlternativeCount ?? (orChoiceMode === "REQUIRED" ? 1 : orChoiceMode === "NOT_REQUIRED" ? 0 : 1),
         orSlotsJson: Array.isArray(qt.orSlots) ? JSON.stringify(qt.orSlots) : "[]",
-        allowedTypesJson: school ? JSON.stringify(schoolAllowedTypes(qt.type, qt.marksEach, subject, qt.role)) : "[]",
-        role: (ROLES.includes(qt.role ?? "") ? qt.role : "STANDARD") as SetupSection["role"],
+        allowedTypesJson: school ? JSON.stringify(rowAllowedTypes({ type: qt.type, count: qt.count, role, slotPlanJson }, qt.marksEach, subject)) : "[]",
+        slotPlanJson,
+        role,
         groupKey: qt.groupKey ?? "",
       };
     }),
@@ -123,6 +128,21 @@ export function schoolAllowedTypes(type: string, marksEach: number, subject: str
   return role === "LITERATURE" ? all.filter((t) => t === type || !["UNSEEN_PASSAGE", "WRITING_SKILL", "GRAMMAR"].includes(t)) : all;
 }
 
+/** Forms a school-pattern row accepts: those of every kind of slot it has (a lesson MCQ row with one grammar slot). */
+export function rowAllowedTypes(
+  row: { type: string; count: number; role?: string | null; slotPlanJson?: string | null },
+  marksEach: number,
+  subject: string,
+): string[] {
+  const specs = rowSlotSpecs(row);
+  const out: string[] = [row.type];
+  for (const role of new Set(specs.map((s) => s.role))) {
+    for (const t of schoolAllowedTypes(row.type, marksEach, subject, role)) if (!out.includes(t)) out.push(t);
+  }
+  for (const s of specs) if (!out.includes(s.type)) out.push(s.type);
+  return out;
+}
+
 export function setupBlueprintName(book: Pick<SetupBook, "className" | "subject">, examType: ExamType): string {
   return `${book.className} ${book.subject} – ${EXAM_TYPE_LABEL[examType]}`;
 }
@@ -134,7 +154,7 @@ export function setupBlueprintName(book: Pick<SetupBook, "className" | "subject"
  */
 export function buildSetupInput(preset: BlueprintPreset, book: SetupBook, exam: SetupExam) {
   const sections = presetSections(preset, book.subject);
-  const slots = sections.flatMap((s) => Array.from({ length: Math.max(0, s.count) }, () => ({ marks: s.marksEach, role: s.role })));
+  const slots = slotsWithRoles(sections);
   const marks = distributeMarksByRole(slots, book.chapters.map((c) => ({ id: c.id, title: c.title ?? "" })), book.subject);
   return {
     name: setupBlueprintName(book, exam.examType),
@@ -164,6 +184,23 @@ export function buildSetupInput(preset: BlueprintPreset, book: SetupBook, exam: 
  * the questions placed in them): first the same type at the same marks, then any free section at the same marks,
  * in order. Sections left over are new; existing sections not reused will be removed.
  */
+/**
+ * Rows an update drops whose questions have a home in a kept row: the same heading and marks (a pattern that
+ * printed "MCQ 4 + MCQ 1" under one heading now has one row of five). Returns dropped row id -> kept row id.
+ */
+export function absorbingRows(
+  removed: Array<{ id: string; title: string; marksEach: number }>,
+  kept: Array<{ id?: string; title: string; marksEach: number }>,
+): Map<string, string> {
+  const key = (s: { title: string; marksEach: number }) => `${s.title.trim().toLowerCase()}|${s.marksEach}`;
+  const out = new Map<string, string>();
+  for (const r of removed) {
+    const home = kept.find((k) => k.id && key(k) === key(r));
+    if (home?.id) out.set(r.id, home.id);
+  }
+  return out;
+}
+
 export function matchSectionIds<T extends { type: string; marksEach: number; id?: string }>(
   existing: Array<{ id: string; type: string; marksEach: number }>,
   incoming: T[],

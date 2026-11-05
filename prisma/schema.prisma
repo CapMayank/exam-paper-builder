@@ -148,6 +148,7 @@ model BlueprintSection {
   role               String          @default("STANDARD") // STANDARD | PASSAGE | GRAMMAR | WRITING | LITERATURE
   groupKey           String          @default("") // stable blueprint group id, e.g. "reading.unseen-prose"
   allowedTypesJson   String          @default("[]") // other question types a slot may take at the same marks; "[]" = legacy rule (see sectionTypes.ts)
+  slotPlanJson       String          @default("[]") // per-slot role (and form): which slots of the row are grammar, passage or writing; "[]" = all the row's role (see slotPlan.ts)
   blueprint          Blueprint       @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
   paperQuestions PaperQuestion[]
 }

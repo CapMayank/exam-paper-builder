@@ -46,6 +46,7 @@ import { PaperSnapshotDrawer } from "@/components/PaperSnapshotDrawer";
 import { SubjectWorkspaceDrawer } from "@/components/subject-workspace/SubjectWorkspaceDrawer";
 import { SectionAiModal } from "@/components/SectionAiModal";
 import { KeyDisputesBanner } from "@/components/KeyDisputesBanner";
+import { slotPlanSummary } from "@/lib/slotPlan";
 import { answerStageSummary, runAnswerStages } from "@/lib/answerStage";
 import { QuestionForm } from "@/components/QuestionForm";
 import { QuestionPicker } from "@/components/QuestionPicker";
@@ -1918,6 +1919,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                       {QUESTION_TYPE_LABEL[s.type as keyof typeof QUESTION_TYPE_LABEL]} · {s.count} slot(s) ×{" "}
                       {s.marksEach} mark(s) ={" "}
                       <span className="font-semibold text-slate-700">{targetSectionMarks} marks</span>
+                      {slotPlanSummary(s) && <span className="ml-1.5 text-indigo-700">({slotPlanSummary(s)})</span>}
                       {isMarksMismatch && (
                         <span className="ml-2 font-bold text-amber-700">
                           ⚠ Placed marks ({placedSectionMarks}m) do not match target ({targetSectionMarks}m)

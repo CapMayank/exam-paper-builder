@@ -16,6 +16,8 @@ export type SectionDef = {
   orSlotsJson?: string | null;
   /** Other question types this slot accepts at the same marks (see sectionTypes.ts). */
   allowedTypesJson?: string | null;
+  /** Which slots are grammar, passage or writing (see slotPlan.ts). */
+  slotPlanJson?: string | null;
   /** Examination purpose of the slot; placement honours it, not just type + marks. */
   role?: SectionRole | string | null;
   groupKey?: string | null;
@@ -91,6 +93,7 @@ export type QuestionTypeItem = {
   orAlternativeCount?: number;
   orSlotsJson?: string;
   allowedTypesJson?: string;
+  slotPlanJson?: string;
   role?: string;
   groupKey?: string;
 };
@@ -142,6 +145,7 @@ export function groupSectionsFromFlat(
     orAlternativeCount?: number | null;
     orSlotsJson?: string | null;
     allowedTypesJson?: string | null;
+    slotPlanJson?: string | null;
     role?: string | null;
     groupKey?: string | null;
   }[]
@@ -154,6 +158,7 @@ export function groupSectionsFromFlat(
     const orAlternativeCount = s.orAlternativeCount ?? 1;
     const orSlotsJson = s.orSlotsJson || "[]";
     const allowedTypesJson = s.allowedTypesJson || "[]";
+    const slotPlanJson = s.slotPlanJson || "[]";
     const role = s.role || "STANDARD";
     const groupKey = s.groupKey || "";
     if (last && last.title.trim().toLowerCase() === s.title.trim().toLowerCase()) {
@@ -167,6 +172,7 @@ export function groupSectionsFromFlat(
         orAlternativeCount,
         orSlotsJson,
         allowedTypesJson,
+        slotPlanJson,
         role,
         groupKey,
       });
@@ -189,6 +195,7 @@ export function groupSectionsFromFlat(
             orAlternativeCount,
             orSlotsJson,
             allowedTypesJson,
+            slotPlanJson,
             role,
             groupKey,
           },
@@ -222,6 +229,7 @@ export function flattenSectionGroups(groups: SectionGroup[]): {
   orAlternativeCount: number;
   orSlotsJson: string;
   allowedTypesJson: string;
+  slotPlanJson: string;
   role: string;
   groupKey: string;
 }[] {
@@ -237,6 +245,7 @@ export function flattenSectionGroups(groups: SectionGroup[]): {
       orAlternativeCount: qt.orAlternativeCount ?? 1,
       orSlotsJson: qt.orSlotsJson || "[]",
       allowedTypesJson: qt.allowedTypesJson || "[]",
+      slotPlanJson: qt.slotPlanJson || "[]",
       role: qt.role || "STANDARD",
       groupKey: qt.groupKey || "",
     }))
