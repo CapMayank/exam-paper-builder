@@ -45,6 +45,8 @@ import { PaperSheets } from "@/components/PaperSheets";
 import { PaperSnapshotDrawer } from "@/components/PaperSnapshotDrawer";
 import { SubjectWorkspaceDrawer } from "@/components/subject-workspace/SubjectWorkspaceDrawer";
 import { SectionAiModal } from "@/components/SectionAiModal";
+import { KeyDisputesBanner } from "@/components/KeyDisputesBanner";
+import { answerStageSummary, runAnswerStages } from "@/lib/answerStage";
 import { QuestionForm } from "@/components/QuestionForm";
 import { QuestionPicker } from "@/components/QuestionPicker";
 import { questionInstruction, toleratesType } from "@/lib/sectionTypes";
@@ -113,6 +115,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   const { id } = use(params);
   const confirm = useConfirm();
   const toast = useToast();
+  const [checkingKey, setCheckingKey] = useState(false);
   const [paper, setPaper] = useState<PaperData | null>(null);
   const [books, setBooks] = useState<Book[]>([]);
   const [pickerSectionId, setPickerSectionId] = useState<string | null>(null);
@@ -740,6 +743,37 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
 
                   <button
                     type="button"
+                    disabled={paper.items.length === 0 || checkingKey}
+                    onClick={async () => {
+                      setToolsMenuOpen(false);
+                      setCheckingKey(true);
+                      try {
+                        // writes any missing answers, then an independent solver re-checks the objective keys;
+                        // anything it disputes stays listed on the paper until the teacher decides
+                        const stage = await runAnswerStages(paper.id, {});
+                        if (stage.paper) adopt(stage.paper);
+                        toast.info(answerStageSummary(stage));
+                      } finally {
+                        setCheckingKey(false);
+                      }
+                    }}
+                    className={`w-full flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-medium transition ${
+                      paper.items.length === 0 || checkingKey
+                        ? "opacity-50 cursor-not-allowed text-slate-400"
+                        : "text-slate-700 hover:bg-slate-100 hover:text-slate-900"
+                    }`}
+                  >
+                    <div className="rounded-md bg-amber-50 p-1.5 text-amber-700">
+                      <KeyRound size={14} />
+                    </div>
+                    <div>
+                      <div className="font-semibold text-slate-900">{checkingKey ? "Checking answer key…" : "Check answer key"}</div>
+                      <div className="text-[11px] text-slate-500">Fill missing answers and re-check objective keys</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => {
                       setToolsMenuOpen(false);
                       setAiAuditOpen(true);
@@ -970,6 +1004,8 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
       </div>
 
       <ErrorBanner message={error} />
+
+      <KeyDisputesBanner key={paper.id} paperId={paper.id} canEdit={canModifyPaper(currentUser, paper)} onPaper={adopt} />
 
       {infoMessage && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50/90 px-4 py-3 text-sm text-emerald-900 shadow-2xs">

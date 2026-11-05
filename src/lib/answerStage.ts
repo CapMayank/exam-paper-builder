@@ -6,6 +6,7 @@
  */
 import type { KeyCheckReport } from "./answerKeyCheck";
 import { api } from "./client";
+import { recordKeyCheck } from "./keyDisputes";
 import type { PaperData } from "./types";
 
 export interface AnswerStageResult {
@@ -54,6 +55,8 @@ export async function runAnswerStages(
     try {
       const qs = opts.sectionId ? `?sectionId=${encodeURIComponent(opts.sectionId)}` : "";
       result.check = await api<KeyCheckReport>(`/api/papers/${paperId}/verify-key${qs}`, { method: "POST", headers, signal: opts.signal });
+      // keep what the check disputes on the paper until the teacher decides, instead of only a passing toast
+      recordKeyCheck(paperId, result.check.disagreements);
     } catch (err) {
       if (opts.signal?.aborted) throw err;
       result.checkError = err instanceof Error ? err.message : String(err);
