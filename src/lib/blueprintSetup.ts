@@ -13,6 +13,32 @@ import { WORKSHEET_MODE } from "@/lib/constants";
 import { canManageScope, isAdmin } from "@/lib/permissions";
 import { effectivePresets, isSchoolPattern, type BlueprintPreset } from "@/lib/presets";
 import { prisma } from "@/lib/prisma";
+import { missingUnitRoles } from "@/lib/roleMarks";
+import { getLanguageNonChapterUnits } from "@/lib/syllabusImport";
+import { presetSections } from "@/lib/blueprintSetupPlan";
+
+const DOMAIN_OF = { PASSAGE: "reading", WRITING: "writing", GRAMMAR: "grammar" } as const;
+
+/**
+ * Adds the syllabus units a pattern's passage, writing and grammar slots need when the book has none (a book typed
+ * in by hand has only its lessons). Without them those marks would fall back onto lessons. Returns the book as it
+ * now is.
+ */
+async function ensureUnitsFor(preset: BlueprintPreset, book: SetupBookRow): Promise<SetupBookRow> {
+  const sections = presetSections(preset, book.subject);
+  const slots = sections.flatMap((s) => Array.from({ length: s.count }, () => ({ marks: s.marksEach, role: s.role })));
+  const missing = missingUnitRoles(slots, book.chapters, book.subject);
+  if (missing.length === 0) return book;
+  const units = getLanguageNonChapterUnits(book.subject, book.className);
+  let next = book.chapters.reduce((m, c) => Math.max(m, c.number), 0) + 1;
+  const added = [];
+  for (const role of missing) {
+    const unit = units.find((u) => u.domain === DOMAIN_OF[role]);
+    if (!unit) continue;
+    added.push(await prisma.chapter.create({ data: { bookId: book.id, number: next++, title: unit.title }, select: { id: true, title: true, number: true } }));
+  }
+  return { ...book, chapters: [...book.chapters, ...added] };
+}
 
 export type SetupRowInput = {
   bookId: string;
@@ -68,7 +94,7 @@ async function loadPresets(): Promise<BlueprintPreset[]> {
 async function loadBooks(ids: string[]) {
   return prisma.book.findMany({
     where: { id: { in: ids } },
-    select: { id: true, title: true, className: true, subject: true, chapters: { select: { id: true }, orderBy: { number: "asc" } } },
+    select: { id: true, title: true, className: true, subject: true, chapters: { select: { id: true, title: true, number: true }, orderBy: { number: "asc" } } },
   });
 }
 type SetupBookRow = Awaited<ReturnType<typeof loadBooks>>[number];
@@ -195,7 +221,7 @@ export async function applySetup(exam: SetupExam, rows: SetupRowInput[], user: S
       if (!book) throw new Error("This book no longer exists.");
       if (!preset) throw new Error("This pattern is no longer offered.");
       if (!canManageScope(user, book)) throw new Error(`You do not look after ${book.className} ${book.subject}.`);
-      const input = await inputFor(preset, book, exam);
+      const input = await inputFor(preset, await ensureUnitsFor(preset, book), exam);
       const errors = validateBlueprint(input as never);
       if (errors.length > 0) throw new Error(errors.join(" "));
 

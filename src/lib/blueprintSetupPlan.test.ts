@@ -44,8 +44,11 @@ describe("the blueprint a pattern makes", () => {
     expect(input.durationMin).toBe(preset.durationMin);
     expect(validateBlueprint(input)).toEqual([]);
     expect(input.chapters.reduce((s, c) => s + c.marks, 0)).toBe(presetTotals(preset).marks);
-    const threeMark = input.sections.find((s) => s.marksEach === 3)!;
-    expect(JSON.parse(threeMark.allowedTypesJson)).toContain("GRAMMAR");
+    // English has its own pattern: grammar and the unseen passage are rows of their own in the 3-mark section
+    expect(preset.subjectName).toBe("English");
+    const threeMark = input.sections.filter((s) => s.marksEach === 3);
+    expect(threeMark.find((s) => s.role === "GRAMMAR")!.allowedTypesJson).toContain("GRAMMAR");
+    expect(JSON.parse(threeMark.find((s) => s.role === "PASSAGE")!.allowedTypesJson)).toEqual(["UNSEEN_PASSAGE"]);
   });
 
   it("uses the chosen time when one is given for every subject", () => {

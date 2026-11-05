@@ -35,8 +35,10 @@ import { api } from "@/lib/client";
 import { DEFAULT_SCHOOL_NAME, EXAM_TYPES, EXAM_TYPE_LABEL, KINDERGARTEN_QUESTION_TYPES, QUESTION_TYPES, QUESTION_TYPE_LABEL, STANDARD_QUESTION_TYPES, defaultExamDurationMin, defaultLayoutForClass, sortClassNames } from "@/lib/constants";
 import { BlueprintStartPicker } from "@/components/blueprints/BlueprintStartPicker";
 import { isSubjectMatching } from "@/lib/schoolCurriculum";
-import { distributeSlotMarks, slotMarksOf } from "@/lib/schoolPatterns";
-import { allowedTypesFor, defaultAllowedTypes } from "@/lib/sectionTypes";
+import { distributeMarksByRole, missingUnitRoles } from "@/lib/roleMarks";
+import { schoolAllowedTypes } from "@/lib/blueprintSetupPlan";
+import { getLanguageNonChapterUnits } from "@/lib/syllabusImport";
+import { allowedTypesFor } from "@/lib/sectionTypes";
 import type { AcademicClassDto, Blueprint, Book, PaperData } from "@/lib/types";
 
 let qtSeq = 0;
@@ -358,8 +360,10 @@ function BlueprintEditor({ params, searchParams }: PageProps<"/blueprints/[id]">
   function autoDistributeMarks() {
     if (!book || book.chapters.length === 0 || total === 0) return;
     const inExam = book.chapters.filter((c) => (marks[c.id] ?? 0) > 0);
-    const chapterIds = (inExam.length > 0 ? inExam : book.chapters).map((c) => c.id);
-    const nextMarks = distributeSlotMarks(slotMarksOf(sections), chapterIds);
+    const pool = inExam.length > 0 ? inExam : book.chapters;
+    // passage, writing and grammar slots go to their own syllabus units, the rest to the lessons
+    const slots = sections.flatMap((s) => Array.from({ length: Math.max(0, s.count) }, () => ({ marks: s.marksEach, role: s.role })));
+    const nextMarks = distributeMarksByRole(slots, pool.map((c) => ({ id: c.id, title: c.title })), book.subject);
     for (const c of book.chapters) nextMarks[c.id] ??= 0;
     setMarks(nextMarks);
   }
@@ -603,16 +607,40 @@ function BlueprintEditor({ params, searchParams }: PageProps<"/blueprints/[id]">
     );
   }
 
-  /** Classes 1–8: the school's 50 / 60-mark pattern on the class + subject book, chapter marks spread over its chapters. */
-  function applySchoolPattern(template: BlueprintTemplate, pick: { className: string; subject: string }) {
+  /**
+   * Classes 1–8: the school's 50 / 60-mark pattern on the class + subject book. Chapter marks are handed out whole
+   * question by question; a language pattern's unseen passage, writing and grammar slots go to their own syllabus
+   * units (added to the book first if it has none), so they never use up a lesson's quota.
+   */
+  async function applySchoolPattern(template: BlueprintTemplate, pick: { className: string; subject: string }) {
     startBlank(pick);
     applyStarterTemplate(template, pick.subject);
     setName(`${pick.className} ${pick.subject} – ${template.title}`);
-    const target = books.find((b) => b.className === pick.className && isSubjectMatching(b.subject, pick.subject));
-    if (target && target.chapters.length > 0) {
-      const slots = template.sections.flatMap((g) => g.questionTypes.flatMap((qt) => Array<number>(qt.count).fill(qt.marksEach)));
-      setMarks(distributeSlotMarks(slots, target.chapters.map((c) => c.id)));
+    let target = books.find((b) => b.className === pick.className && isSubjectMatching(b.subject, pick.subject));
+    if (!target || target.chapters.length === 0) return;
+    const slots = template.sections.flatMap((g) =>
+      g.questionTypes.flatMap((qt) => Array.from({ length: qt.count }, () => ({ marks: qt.marksEach, role: qt.role ?? null }))),
+    );
+    const missing = missingUnitRoles(slots, target.chapters, target.subject);
+    if (missing.length > 0) {
+      const domain = { PASSAGE: "reading", WRITING: "writing", GRAMMAR: "grammar" } as const;
+      const units = getLanguageNonChapterUnits(target.subject, target.className);
+      let next = target.chapters.reduce((m, c) => Math.max(m, c.number), 0) + 1;
+      try {
+        const added: Book["chapters"] = [];
+        for (const role of missing) {
+          const unit = units.find((u) => u.domain === domain[role]);
+          if (unit) added.push(await api<Book["chapters"][number]>(`/api/books/${target.id}/chapters`, { method: "POST", json: { number: next++, title: unit.title } }));
+        }
+        target = { ...target, chapters: [...target.chapters, ...added] };
+        const updated = target;
+        setBooks((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
+        if (added.length > 0) toast.info(`Added ${added.map((c) => `"${c.title}"`).join(", ")} to ${target.className} ${target.subject}, so these marks have their own row.`);
+      } catch (e) {
+        toast.error(`Could not add the unseen passage / writing / grammar units to the book: ${(e as Error).message}`);
+      }
     }
+    setMarks(distributeMarksByRole(slots, target.chapters.map((c) => ({ id: c.id, title: c.title })), target.subject));
   }
 
   /** `subject` given: each slot also accepts that subject's other forms at the same marks (school patterns). */
@@ -629,10 +657,11 @@ function BlueprintEditor({ params, searchParams }: PageProps<"/blueprints/[id]">
         count: qt.count,
         marksEach: qt.marksEach,
         orChoiceMode: (qt as any).orChoiceMode ?? "BOARD_DEFAULT",
-        orAlternativeCount: (qt as any).orAlternativeCount ?? null,
+        // a row with no internal choice has no alternatives (as multi-class setup saves it)
+        orAlternativeCount: (qt as any).orAlternativeCount ?? ((qt as any).orChoiceMode === "NOT_REQUIRED" ? 0 : null),
         orSlotsJson: (qt as any).orSlotsJson ?? null,
         allowedTypesJson: subject
-          ? JSON.stringify(defaultAllowedTypes(qt.type, qt.marksEach, subject))
+          ? JSON.stringify(schoolAllowedTypes(qt.type, qt.marksEach, subject, qt.role))
           : ((qt as { allowedTypesJson?: string }).allowedTypesJson ?? "[]"),
         role: (qt as any).role ?? "STANDARD",
         groupKey: (qt as any).groupKey ?? "",

@@ -125,9 +125,39 @@ export function isPrePrimaryClass(className?: string | null): boolean {
  * Returns the official standard non-chapter examination units for a given language.
  * Uses official bilingual board terminology for English, Hindi, and Sanskrit.
  */
-export function getLanguageNonChapterUnits(subject?: string | null): LanguageNonChapterUnit[] {
+export function getLanguageNonChapterUnits(subject?: string | null, className?: string | null): LanguageNonChapterUnit[] {
   const canon = getCanonicalSubjectName(subject);
   const s = (subject || "").toLowerCase();
+  const level = parseInt(String(className ?? "").replace(/\D/g, ""), 10);
+  const isHindi = canon === "Hindi" || s.includes("hindi") || s.includes("हिंदी") || s.includes("हिन्दी");
+  const isEnglish = canon === "English" || s.includes("english") || s.includes("angrezi") || s.includes("अंग्रेजी");
+
+  // Classes 1-8 (the school's own papers, e.g. Rajya Shiksha Kendra M.P.): the unit titles name what those
+  // papers actually ask. The senior titles list note making, narration, clauses, रस and छंद, and the AI uses the
+  // title as the topic, so a Class 6 grammar item would come out at board level.
+  if (Number.isFinite(level) && level >= 1 && level <= 8) {
+    if (isHindi) {
+      return [
+        { domain: "reading", title: "अपठित गद्यांश (Unseen Passage)" },
+        { domain: "writing", title: "रचनात्मक लेखन: पत्र लेखन, निबंध, अनुच्छेद (Writing Skills)" },
+        { domain: "grammar", title: "व्याकरण: संधि, उपसर्ग-प्रत्यय, पर्यायवाची, विलोम, अनेकार्थी शब्द, वर्तनी, अलंकार, मुहावरे (Grammar)" },
+      ];
+    }
+    if (canon === "Sanskrit" || s.includes("sanskrit") || s.includes("संस्कृत")) {
+      return [
+        { domain: "reading", title: "अपठित गद्यांश (Unseen Passage)" },
+        { domain: "writing", title: "रचनात्मक कार्यम्: पत्र-लेखनम्, अनुच्छेद-लेखनम् (Writing Skills)" },
+        { domain: "grammar", title: "व्याकरणम्: लकार, शब्दरूप, धातुरूप, प्रत्यय, समास, सन्धि, अव्यय, संख्या (Grammar)" },
+      ];
+    }
+    if (isEnglish) {
+      return [
+        { domain: "reading", title: "Reading Skills: Unseen Passage" },
+        { domain: "writing", title: "Writing Skills: Application, Letter, Paragraph, Story, Notice" },
+        { domain: "grammar", title: "Grammar: Parts of Speech, Tenses, Verb Forms, Modals, Articles, Prepositions, Sentence Making" },
+      ];
+    }
+  }
 
   if (canon === "Hindi" || s.includes("hindi") || s.includes("हिंदी") || s.includes("हिन्दी")) {
     return [
@@ -271,7 +301,7 @@ export function ensureLanguageNonChapterUnits(
     return { chapters: chapters || [], addedUnits: [] };
   }
 
-  const defaultUnits = getLanguageNonChapterUnits(subject);
+  const defaultUnits = getLanguageNonChapterUnits(subject, className);
   const updatedChapters = [...chapters];
   const addedUnits: string[] = [];
 

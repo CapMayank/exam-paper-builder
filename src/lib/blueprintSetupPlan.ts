@@ -4,10 +4,10 @@
 import { EXAM_TYPE_LABEL, type ExamType } from "./constants";
 import { isSchoolPattern, type BlueprintPreset } from "./presets";
 import { isSubjectMatching } from "./schoolCurriculum";
-import { distributeSlotMarks, slotMarksOf } from "./schoolPatterns";
+import { distributeMarksByRole } from "./roleMarks";
 import { defaultAllowedTypes } from "./sectionTypes";
 
-export type SetupBook = { id: string; className: string; subject: string; chapters: Array<{ id: string }> };
+export type SetupBook = { id: string; className: string; subject: string; chapters: Array<{ id: string; title?: string }> };
 
 export type SetupExam = { examType: ExamType; academicSession: string; durationMin?: number | null };
 
@@ -65,7 +65,11 @@ export function suggestPreset(presets: BlueprintPreset[], book: Pick<SetupBook, 
   const board = offered
     .filter((p) => !isSchoolPattern(p))
     .sort((x, y) => subjectCloseness(y, book.subject) - subjectCloseness(x, book.subject));
-  return board[0] ?? offered[0] ?? null;
+  // among the school's patterns, one made for this subject (English, Hindi) comes before the general one
+  const school = offered
+    .filter((p) => isSchoolPattern(p))
+    .sort((x, y) => Number(Boolean(y.subjectName)) - Number(Boolean(x.subjectName)));
+  return board[0] ?? school[0] ?? offered[0] ?? null;
 }
 
 export function presetTotals(p: Pick<BlueprintPreset, "sections">) {
@@ -99,12 +103,24 @@ export function presetSections(preset: BlueprintPreset, subject: string): SetupS
         orChoiceMode,
         orAlternativeCount: qt.orAlternativeCount ?? (orChoiceMode === "REQUIRED" ? 1 : orChoiceMode === "NOT_REQUIRED" ? 0 : 1),
         orSlotsJson: Array.isArray(qt.orSlots) ? JSON.stringify(qt.orSlots) : "[]",
-        allowedTypesJson: school ? JSON.stringify(defaultAllowedTypes(qt.type, qt.marksEach, subject)) : "[]",
+        allowedTypesJson: school ? JSON.stringify(schoolAllowedTypes(qt.type, qt.marksEach, subject, qt.role)) : "[]",
         role: (ROLES.includes(qt.role ?? "") ? qt.role : "STANDARD") as SetupSection["role"],
         groupKey: qt.groupKey ?? "",
       };
     }),
   );
+}
+
+/**
+ * Forms a school-pattern slot accepts. A slot with its own role takes only forms of that kind; when a pattern has
+ * such rows, its lesson rows stop offering passage, writing and grammar forms, so those marks stay where they belong.
+ */
+export function schoolAllowedTypes(type: string, marksEach: number, subject: string, role?: string | null): string[] {
+  if (role === "PASSAGE") return ["UNSEEN_PASSAGE"];
+  if (role === "WRITING") return Array.from(new Set([type, "WRITING_SKILL", "LONG"]));
+  if (role === "GRAMMAR") return Array.from(new Set([type, "GRAMMAR"]));
+  const all = defaultAllowedTypes(type, marksEach, subject);
+  return role === "LITERATURE" ? all.filter((t) => t === type || !["UNSEEN_PASSAGE", "WRITING_SKILL", "GRAMMAR"].includes(t)) : all;
 }
 
 export function setupBlueprintName(book: Pick<SetupBook, "className" | "subject">, examType: ExamType): string {
@@ -118,7 +134,8 @@ export function setupBlueprintName(book: Pick<SetupBook, "className" | "subject"
  */
 export function buildSetupInput(preset: BlueprintPreset, book: SetupBook, exam: SetupExam) {
   const sections = presetSections(preset, book.subject);
-  const marks = distributeSlotMarks(slotMarksOf(sections), book.chapters.map((c) => c.id));
+  const slots = sections.flatMap((s) => Array.from({ length: Math.max(0, s.count) }, () => ({ marks: s.marksEach, role: s.role })));
+  const marks = distributeMarksByRole(slots, book.chapters.map((c) => ({ id: c.id, title: c.title ?? "" })), book.subject);
   return {
     name: setupBlueprintName(book, exam.examType),
     bookId: book.id,

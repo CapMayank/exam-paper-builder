@@ -247,7 +247,11 @@ export function BlueprintStartPicker({
                       <p className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-500">
                         <ShieldCheck size={13} className="text-slate-400" />
                         {t.subjectName ? `School pattern for ${t.targetClasses} ${t.subjectName}` : `School pattern for ${t.targetClasses}`}
-                        {hasBook ? "; chapter marks are spread over the book's chapters" : "; add the textbook under Books & syllabus first"}
+                        {!hasBook
+                          ? "; add the textbook under Books & syllabus first"
+                          : t.sections.some((g) => g.questionTypes.some((q) => q.role === "PASSAGE" || q.role === "WRITING" || q.role === "GRAMMAR"))
+                          ? "; the unseen passage, writing and grammar marks get their own rows, the rest go to the lessons"
+                          : "; chapter marks are spread over the book's chapters"}
                       </p>
                     </div>
                     <div className="mt-auto flex flex-wrap gap-2">
