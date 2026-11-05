@@ -9,6 +9,7 @@ import {
 import { assertCanManageScope, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import {
+  importedQuestionUnits,
   matchQuestionToBlueprintSection,
   normalizeQuestionType,
   resolveQuestionChapter,
@@ -106,10 +107,7 @@ export const POST = route(async (req, _params, user) => {
           allocatedCounts
         ) || bpSections[0];
 
-      const units =
-        Array.isArray(q.subparts) && q.subparts.length > 0 && bpSec.count >= q.subparts.length
-          ? q.subparts.length
-          : 1;
+      const units = importedQuestionUnits(q, bpSec);
       allocatedCounts.set(bpSec.id, (allocatedCounts.get(bpSec.id) ?? 0) + units);
       const pos = sectionPositions.get(bpSec.id) ?? 0;
       sectionPositions.set(bpSec.id, pos + 1);

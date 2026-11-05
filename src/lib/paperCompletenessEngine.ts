@@ -100,6 +100,15 @@ export function validatePaperCompleteness(
   input: PaperCompletenessInput,
 ): PaperCompletenessResult {
   const { blueprint, items } = input;
+  // A combined Match the Columns question fills one slot per pair, so slots filled is not the item count.
+  const sectionById = new Map(blueprint.sections.map((s) => [s.id, s]));
+  const unitsOf = (it: PaperCompletenessInput["items"][number]) => {
+    const sec = sectionById.get(it.sectionId);
+    return sec ? questionSlotMarks(sec, it.question as never).units : 1;
+  };
+  const filledUnits = (sectionId: string) =>
+    items.filter((it) => it.sectionId === sectionId).reduce((sum, it) => sum + unitsOf(it), 0);
+  const totalFilledUnits = items.reduce((sum, it) => sum + unitsOf(it), 0);
   const expectedTotalMarks = blueprint.totalMarks || 0;
 
   // -----------------------------------------------------------------
@@ -155,15 +164,15 @@ export function validatePaperCompleteness(
 
   for (const sec of blueprint.sections) {
     totalExpectedQuestions += sec.count;
-    const secItems = items.filter((it) => it.sectionId === sec.id);
-    if (secItems.length < sec.count) {
+    const filled = filledUnits(sec.id);
+    if (filled < sec.count) {
       structuralIssues.push(
-        `Section "${sec.title}" is incomplete: Expected ${sec.count} question(s), found ${secItems.length}.`,
+        `Section "${sec.title}" is incomplete: Expected ${sec.count} question(s), found ${filled}.`,
       );
     }
   }
 
-  const missingQuestionsCount = Math.max(0, totalExpectedQuestions - items.length);
+  const missingQuestionsCount = Math.max(0, totalExpectedQuestions - totalFilledUnits);
 
   // Check question numbering (if itemNumber is provided)
   const numbersSeen = new Set<number>();
@@ -218,7 +227,7 @@ export function validatePaperCompleteness(
   // -----------------------------------------------------------------
   const bpIssues: string[] = [];
   const unfulfilledSections = blueprint.sections
-    .filter((sec) => items.filter((it) => it.sectionId === sec.id).length < sec.count)
+    .filter((sec) => filledUnits(sec.id) < sec.count)
     .map((s) => s.title);
 
   const internalChoiceViolations: string[] = [];
@@ -318,7 +327,7 @@ export function validatePaperCompleteness(
     structuralCompleteness: {
       passed: structuralPassed,
       totalExpectedQuestions,
-      totalActualQuestions: items.length,
+      totalActualQuestions: totalFilledUnits,
       missingQuestionsCount,
       numberingIssues,
       danglingReferences,

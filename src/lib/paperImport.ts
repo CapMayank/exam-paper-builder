@@ -1,6 +1,7 @@
 import {
   EXAM_TYPES,
   inferExamTypeFromText,
+  parseMatchColumnPairs,
   QUESTION_TYPES,
   type ExamType,
   type QuestionType,
@@ -384,6 +385,16 @@ function importedDifficulty(raw: unknown): "EASY" | "MEDIUM" | "HARD" {
   return v === "EASY" || v === "HARD" ? v : "MEDIUM";
 }
 
+/** Marks as a chat AI writes them: 6, "6", "6 marks", "6m", "[6]". 0 when there is no usable number. */
+function importedMarks(v: unknown): number {
+  if (typeof v === "number") return v > 0 ? v : 0;
+  if (typeof v === "string") {
+    const m = v.match(/\d+(?:\.\d+)?/);
+    return m ? Number(m[0]) : 0;
+  }
+  return 0;
+}
+
 export function parsePaperJson(jsonStr: string): PaperImportResult {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -466,7 +477,7 @@ export function parsePaperJson(jsonStr: string): PaperImportResult {
         continue;
       }
 
-      const qMarks = Number(q.marks) > 0 ? Number(q.marks) : 1;
+      const qMarks = importedMarks(q.marks) || 1;
       const rawType =
         typeof q.type === "string" && q.type.trim()
           ? q.type.trim()
@@ -491,7 +502,7 @@ export function parsePaperJson(jsonStr: string): PaperImportResult {
           orQuestion = {
             text: orObj.text.trim(),
             type: typeof orObj.type === "string" && orObj.type.trim() ? normalizeQuestionType(orObj.type.trim()) : undefined,
-            marks: Number(orObj.marks) || qMarks,
+            marks: importedMarks(orObj.marks) || qMarks,
             chapterNumber:
               orObj.chapterNumber !== undefined && !isNaN(Number(orObj.chapterNumber))
                 ? Number(orObj.chapterNumber)
@@ -505,7 +516,7 @@ export function parsePaperJson(jsonStr: string): PaperImportResult {
               ? orObj.subparts.map((sp: Record<string, unknown>, spIdx: number) => ({
                   label: typeof sp.label === "string" && sp.label.trim() ? sp.label.trim() : `(${spIdx + 1})`,
                   text: typeof sp.text === "string" ? sp.text.trim() : "",
-                  marks: Number(sp.marks) || 1,
+                  marks: importedMarks(sp.marks) || 1,
                   answer: typeof sp.answer === "string" ? sp.answer.trim() : undefined,
                   options: Array.isArray(sp.options) ? sp.options.map((opt) => String(opt).trim()) : undefined,
                 }))
@@ -520,7 +531,7 @@ export function parsePaperJson(jsonStr: string): PaperImportResult {
         subparts = q.subparts.map((sp: Record<string, unknown>, spIdx: number) => ({
           label: typeof sp.label === "string" && sp.label.trim() ? sp.label.trim() : `(${spIdx + 1})`,
           text: typeof sp.text === "string" ? sp.text.trim() : "",
-          marks: Number(sp.marks) || 1,
+          marks: importedMarks(sp.marks) || 1,
           answer: typeof sp.answer === "string" ? sp.answer.trim() : undefined,
           options: Array.isArray(sp.options) ? sp.options.map((opt) => String(opt).trim()) : undefined,
         }));
@@ -529,6 +540,17 @@ export function parsePaperJson(jsonStr: string): PaperImportResult {
       const hasSubpartsWithOptions = Boolean(subparts && subparts.some((sp) => sp.options && sp.options.length >= 2));
       if (qType === "MCQ" && (!options || options.length < 2) && !hasSubpartsWithOptions) {
         warnings.push(`${secTitle} Question ${qIdx + 1}: MCQ requires at least 2 options.`);
+      }
+
+      if (qType === "MATCH_COLUMN") {
+        const pairs = parseMatchColumnPairs(options ?? [], qText, null);
+        const left = pairs.filter((p) => p.left && !/^Item \d+$/.test(p.left)).length;
+        const right = pairs.filter((p) => p.right).length;
+        if (pairs.length === 0) {
+          warnings.push(`${secTitle} Question ${qIdx + 1}: Match the Columns needs Column I items (A), (B)... in "text" and Column II items in "options".`);
+        } else if (left !== right) {
+          warnings.push(`${secTitle} Question ${qIdx + 1}: Column I has ${left} item(s) but Column II has ${right}; they should be equal.`);
+        }
       }
 
       secQuestions.push({
@@ -945,6 +967,40 @@ export function parsePaperImport(
 // Blueprint Verification & Matching Engine
 // -----------------------------------------------------------------------------
 
+/**
+ * How many blueprint slots one imported question fills.
+ *
+ * A "Match the Columns" section of N pairs is ONE combined question carrying all N pairs (its marks are the
+ * section total), and a compound question with sub-questions fills one slot per sub-question. Counting those as a
+ * single slot made a correct paper read "1 of 6 provided, 5 missing".
+ */
+export function importedQuestionUnits(
+  q: Pick<ImportedPaperQuestion, "type" | "text" | "marks" | "options" | "subparts">,
+  sec: { type: string; count: number; marksEach: number },
+): number {
+  if (normalizeQuestionType(q.type) === "MATCH_COLUMN" && sec.type === "MATCH_COLUMN" && sec.count > 1) {
+    const pairs = parseMatchColumnPairs(q.options ?? [], q.text, null).filter((p) => p.left || p.right).length;
+    // no readable columns: marks say how many slots it covers; a plain one-mark question is just one slot
+    const byMarks = q.marks > sec.marksEach && sec.marksEach > 0 ? Math.round(q.marks / sec.marksEach) : 1;
+    return Math.max(1, Math.min(pairs > 0 ? pairs : byMarks, sec.count));
+  }
+  if (Array.isArray(q.subparts) && q.subparts.length > 0 && sec.count >= q.subparts.length) {
+    return q.subparts.length;
+  }
+  return 1;
+}
+
+/** The marks an imported question carries once placed in `sec`; a per-pair mark on a combined match question is scaled up. */
+export function importedQuestionMarks(
+  q: Pick<ImportedPaperQuestion, "type" | "text" | "marks" | "options" | "subparts">,
+  sec: { type: string; count: number; marksEach: number } | null,
+): number {
+  if (!sec) return q.marks;
+  const units = importedQuestionUnits(q, sec);
+  const isCombinedMatch = normalizeQuestionType(q.type) === "MATCH_COLUMN" && sec.type === "MATCH_COLUMN" && sec.count > 1;
+  return isCombinedMatch && units > 1 && q.marks === sec.marksEach ? units * sec.marksEach : q.marks;
+}
+
 export interface BlueprintSectionCandidate {
   id: string;
   title: string;
@@ -1007,7 +1063,9 @@ export function matchQuestionToBlueprintSection(
       (s.count === q.subparts!.length || s.count * s.marksEach === qMarks) &&
       s.marksEach === subpartMarksEach;
 
-    if (s.marksEach === qMarks || isCompoundMatch) {
+    // a combined Match the Columns question carries the whole section's marks (or one mark per pair)
+    const isCombinedMatch = normQType === "MATCH_COLUMN" && s.type === "MATCH_COLUMN" && s.count > 1;
+    if (s.marksEach === qMarks || isCompoundMatch || isCombinedMatch) {
       score += 65;
     } else {
       score -= Math.abs(s.marksEach - (hasSubparts ? subpartMarksEach : qMarks)) * 25;
@@ -1308,8 +1366,6 @@ export function verifyPaperAgainstBlueprint(
   for (let sIdx = 0; sIdx < imported.sections.length; sIdx++) {
     const impSec = imported.sections[sIdx];
     for (const q of impSec.questions) {
-      totalImportedMarks += q.marks;
-      totalImportedQuestions++;
 
       const bpSec = matchQuestionToBlueprintSection(
         q,
@@ -1319,11 +1375,12 @@ export function verifyPaperAgainstBlueprint(
         allocatedCounts
       );
 
+      const effMarks = importedQuestionMarks(q, bpSec);
+      totalImportedMarks += effMarks;
+      totalImportedQuestions++;
+
       if (bpSec) {
-        const units =
-          Array.isArray(q.subparts) && q.subparts.length > 0 && bpSec.count >= q.subparts.length
-            ? q.subparts.length
-            : 1;
+        const units = importedQuestionUnits(q, bpSec);
         allocatedCounts.set(bpSec.id, (allocatedCounts.get(bpSec.id) ?? 0) + units);
         assignedQuestionsBySection.get(bpSec.id)!.push(q);
       } else {
@@ -1335,7 +1392,7 @@ export function verifyPaperAgainstBlueprint(
 
       if (matchedCh) {
         const cur = chapterMarksAccumulated.get(matchedCh.id) ?? 0;
-        chapterMarksAccumulated.set(matchedCh.id, cur + q.marks);
+        chapterMarksAccumulated.set(matchedCh.id, cur + effMarks);
       } else {
         unmappedQuestions++;
       }
@@ -1347,17 +1404,14 @@ export function verifyPaperAgainstBlueprint(
 
   for (const bpSec of bpSections) {
     const assigned = assignedQuestionsBySection.get(bpSec.id) ?? [];
-    const effectiveUnits = assigned.reduce((sum, q) => {
-      if (Array.isArray(q.subparts) && q.subparts.length > 0 && bpSec.count >= q.subparts.length) {
-        return sum + q.subparts.length;
-      }
-      return sum + 1;
-    }, 0);
+    const effectiveUnits = assigned.reduce((sum, q) => sum + importedQuestionUnits(q, bpSec), 0);
     const impCount = assigned.length;
     let status: SectionVerificationResult["status"] = "MATCH";
     let message =
       impCount === 1 && effectiveUnits > 1
-        ? `Compound question with ${effectiveUnits} sub-questions fulfills section quota (${bpSec.type}, ${bpSec.marksEach}m each).`
+        ? bpSec.type === "MATCH_COLUMN"
+          ? `One Match the Columns question with ${effectiveUnits} pairs fulfills the section (${effectiveUnits * bpSec.marksEach}m in total).`
+          : `Compound question with ${effectiveUnits} sub-questions fulfills section quota (${bpSec.type}, ${bpSec.marksEach}m each).`
         : `All ${impCount} question(s) match blueprint specifications (${bpSec.type}, ${bpSec.marksEach}m).`;
 
     if (effectiveUnits === 0 && bpSec.count > 0) {
@@ -1393,6 +1447,7 @@ export function verifyPaperAgainstBlueprint(
 
       const marksMismatches = assigned.filter((q) => {
         if (q.marks === bpSec.marksEach) return false;
+        if (importedQuestionMarks(q, bpSec) === importedQuestionUnits(q, bpSec) * bpSec.marksEach && importedQuestionUnits(q, bpSec) > 1 && bpSec.type === "MATCH_COLUMN") return false;
         if (Array.isArray(q.subparts) && q.subparts.length > 0 && bpSec.count >= q.subparts.length) {
           const spMarks = q.subparts[0].marks || Math.round(q.marks / q.subparts.length);
           return spMarks !== bpSec.marksEach;
@@ -1532,8 +1587,9 @@ export function normalizeQuestionType(raw: string): string {
   if (upper.includes("MCQ") || upper.includes("CHOICE")) return "MCQ";
   if (upper.includes("CASE")) return "CASE_STUDY";
   if (upper.includes("VERY_SHORT") || upper.includes("VSA") || upper.includes("ONE_WORD") || upper.includes("ONEWORD") || upper.includes("ONE_LINE")) return "VERY_SHORT";
-  if (upper.includes("LONG") || upper.includes("LA")) return "LONG";
+  // "Fill in the blanks" contains "LA": test the blank/fill words first and match "LA" only as a whole word
   if (upper.includes("BLANK") || upper.includes("FILL") || upper.includes("RIKT")) return "FILL_BLANK";
+  if (upper.includes("LONG") || /(^|_)LA(_|$)/.test(upper)) return "LONG";
   if (upper.includes("TRUE") || upper.includes("FALSE") || upper.includes("SATYA") || upper.includes("ASATYA")) return "TRUE_FALSE";
   if (upper.includes("DRAW") || upper.includes("DIAGRAM")) return "DRAW";
   return "SHORT";

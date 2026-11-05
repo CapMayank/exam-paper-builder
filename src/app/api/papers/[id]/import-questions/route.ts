@@ -4,6 +4,7 @@ import { recordAudit } from "@/lib/audit";
 import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import {
+  importedQuestionUnits,
   matchQuestionToBlueprintSection,
   normalizeQuestionType,
   resolveQuestionChapter,
@@ -101,7 +102,7 @@ export const POST = route(async (req, { id }, user) => {
           allocatedCounts
         ) || bpSections[0];
 
-      allocatedCounts.set(bpSec.id, (allocatedCounts.get(bpSec.id) ?? 0) + 1);
+      allocatedCounts.set(bpSec.id, (allocatedCounts.get(bpSec.id) ?? 0) + importedQuestionUnits(q, bpSec));
       const pos = sectionPositions.get(bpSec.id) ?? 0;
       sectionPositions.set(bpSec.id, pos + 1);
 
