@@ -114,6 +114,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
       ? imageUrl(paper.logoPath)
       : paper.schoolLogo || DEFAULT_SCHOOL_LOGO;
   const logoBoxSize = isA5 ? "12mm" : "15.5mm";
+  const sideColW = isA5 ? "24mm" : "30mm";
   const isPrePrimary = isPrePrimaryClass(blueprint.book.className);
 
   if (isPrePrimary) {
@@ -140,45 +141,6 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
       keepWithNext: false,
       node: (
         <div style={{ paddingBottom: g(isA5 ? 2 : 3) }}>
-          {/* Top Board Meta Bar: Question Count, Set Box, Subject Code */}
-          <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: g(isA5 ? 1.5 : 2),
-            fontSize: isA5 ? "7.5pt" : "8.5pt",
-            borderBottom: "1px solid #cbd5e1",
-            paddingBottom: "1.5mm",
-          }}
-        >
-          <div>
-            <span style={{ fontWeight: 600 }}>{locale.header.totalQuestions} </span>
-            <strong>{numbering.totalDisplayedQuestions}</strong>
-          </div>
-          {paper.paperSet && (
-            <div
-              style={{
-                border: "2px solid #000",
-                padding: isA5 ? "0.5px 6px" : "1px 8px",
-                fontWeight: 800,
-                fontSize: isA5 ? "8.5pt" : "9.5pt",
-                letterSpacing: "0.05em",
-              }}
-            >
-              {paper.paperSet.toUpperCase().startsWith("SET")
-                ? `${locale.header.set} ${paper.paperSet.toUpperCase().replace(/^SET\s*/i, "")}`
-                : `${locale.header.set} ${paper.paperSet.toUpperCase()}`}
-            </div>
-          )}
-          {effectiveSubjectCode && (
-            <div>
-              <span style={{ fontWeight: 600 }}>{locale.header.subjectCode} </span>
-              <strong>{effectiveSubjectCode}</strong>
-            </div>
-          )}
-        </div>
-
         {/* School Emblem + Centered School Name & Exam Title Header */}
         <div
           style={{
@@ -188,16 +150,18 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
             gap: "2.5mm",
           }}
         >
-          {resolvedLogoSrc ? (
-            <div style={{ width: logoBoxSize, height: logoBoxSize, flexShrink: 0 }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={resolvedLogoSrc}
-                alt="School Emblem"
-                style={{ width: "100%", height: "100%", objectFit: "contain" }}
-              />
-            </div>
-          ) : null}
+          <div style={{ width: sideColW, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "flex-start" }}>
+            {resolvedLogoSrc ? (
+              <div style={{ width: logoBoxSize, height: logoBoxSize }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={resolvedLogoSrc}
+                  alt="School Emblem"
+                  style={{ width: "100%", height: "100%", objectFit: "contain" }}
+                />
+              </div>
+            ) : null}
+          </div>
 
           <div style={{ flex: 1, textAlign: "center", minWidth: 0 }}>
             <div
@@ -220,7 +184,42 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
             </div>
           </div>
 
-          {resolvedLogoSrc ? <div style={{ width: logoBoxSize, flexShrink: 0 }} aria-hidden /> : null}
+          {/* Right column mirrors the logo column, so the title stays centred; it carries the paper set and subject code. */}
+          <div
+            style={{
+              width: sideColW,
+              flexShrink: 0,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-end",
+              gap: "0.8mm",
+              fontSize: isA5 ? "7pt" : "7.5pt",
+              lineHeight: 1.15,
+            }}
+          >
+            {paper.paperSet && (
+              <div
+                style={{
+                  border: "1.6px solid #000",
+                  padding: isA5 ? "0.3mm 2mm" : "0.5mm 2.5mm",
+                  fontWeight: 800,
+                  fontSize: isA5 ? "9pt" : "10pt",
+                  letterSpacing: "0.05em",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {paper.paperSet.toUpperCase().startsWith("SET")
+                  ? `${locale.header.set} ${paper.paperSet.toUpperCase().replace(/^SET\s*/i, "")}`
+                  : `${locale.header.set} ${paper.paperSet.toUpperCase()}`}
+              </div>
+            )}
+            {effectiveSubjectCode && (
+              <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                <span style={{ fontWeight: 600 }}>{locale.header.subjectCode} </span>
+                <strong>{effectiveSubjectCode}</strong>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Time and Maximum Marks Bar */}
@@ -239,6 +238,9 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
           <span>
             {locale.header.timeAllowed} {locale.header.timeFormat(blueprint.durationMin)}
           </span>
+          <span style={{ fontWeight: 600 }}>
+            {locale.header.totalQuestions} <strong>{numbering.totalDisplayedQuestions}</strong>
+          </span>
           <span>
             {locale.header.maxMarks} {total}
           </span>
@@ -256,74 +258,29 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
               fontSize: isA5 ? "8pt" : "8.5pt",
             }}
           >
-            {isA5 ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: "1.2mm" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div style={{ display: "flex", alignItems: "center", flex: 1, minWidth: 0, marginRight: "3mm" }}>
-                    <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>{locale.header.studentName}&nbsp;</span>
-                    <span style={{ display: "inline-block", flex: 1, borderBottom: "1px solid #000" }}>&nbsp;</span>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "1.5mm", flexShrink: 0 }}>
-                    <span style={{ fontWeight: 700 }}>{locale.header.rollNo}</span>
-                    <span style={{ display: "inline-flex", gap: "1px" }}>
-                      {[0, 1, 2, 3, 4, 5, 6].map((i) => (
-                        <span
-                          key={i}
-                          style={{
-                            width: "3.5mm",
-                            height: "4.2mm",
-                            border: "1px solid #000",
-                            display: "inline-block",
-                            backgroundColor: "#fff",
-                          }}
-                        />
-                      ))}
-                    </span>
-                  </div>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div style={{ display: "flex", alignItems: "center", flex: 1, minWidth: 0, marginRight: "3mm" }}>
-                    <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>
-                      {locale.header.classAndSec}&nbsp;
-                    </span>
-                    <span style={{ display: "inline-block", width: "24mm", borderBottom: "1px solid #000" }}>&nbsp;</span>
-                  </div>
-                  {effectiveShowSignatures && (
-                    <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
-                      <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>
-                        {locale.header.invigilatorSign}&nbsp;
-                      </span>
-                      <span style={{ display: "inline-block", width: "24mm", borderBottom: "1px solid #000" }}>&nbsp;</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1.5mm" }}>
-                <div style={{ display: "flex", alignItems: "center", flex: "1 1 50mm" }}>
-                  <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>
-                    {locale.header.studentName}&nbsp;
-                  </span>
+            <div style={{ display: "flex", flexDirection: "column", gap: isA5 ? "1.2mm" : "1.6mm" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "3mm" }}>
+                <div style={{ display: "flex", alignItems: "center", flex: 1, minWidth: 0 }}>
+                  <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>{locale.header.studentName}&nbsp;</span>
                   <span style={{ display: "inline-block", flex: 1, borderBottom: "1px solid #000" }}>&nbsp;</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
-                  <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>
-                    {locale.header.classAndSec}&nbsp;
-                  </span>
-                  <span style={{ display: "inline-block", width: "16mm", borderBottom: "1px solid #000" }}>&nbsp;</span>
+                  <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>{locale.header.classAndSec}&nbsp;</span>
+                  <span style={{ display: "inline-block", width: isA5 ? "22mm" : "28mm", borderBottom: "1px solid #000" }}>&nbsp;</span>
                 </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "3mm" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "1.5mm", flexShrink: 0 }}>
-                  <span style={{ fontWeight: 700 }}>
-                    {locale.header.rollNo}
-                  </span>
-                  <span style={{ display: "inline-flex", gap: "1.5px" }}>
-                    {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+                  <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>{locale.header.rollNo}</span>
+                  {/* Ten boxes: one digit each. */}
+                  <span style={{ display: "inline-flex", gap: isA5 ? "0.8px" : "1px" }}>
+                    {Array.from({ length: 10 }, (_, i) => (
                       <span
                         key={i}
                         style={{
-                          width: "4.5mm",
-                          height: "5.2mm",
-                          border: "1.2px solid #000",
+                          width: isA5 ? "4.2mm" : "5.2mm",
+                          height: isA5 ? "4.8mm" : "5.6mm",
+                          border: isA5 ? "1px solid #000" : "1.2px solid #000",
                           display: "inline-block",
                           backgroundColor: "#fff",
                         }}
@@ -332,15 +289,13 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
                   </span>
                 </div>
                 {effectiveShowSignatures && (
-                  <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
-                    <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>
-                      {locale.header.invigilatorSign}&nbsp;
-                    </span>
-                    <span style={{ display: "inline-block", width: "20mm", borderBottom: "1px solid #000" }}>&nbsp;</span>
+                  <div style={{ display: "flex", alignItems: "center", flex: 1, minWidth: 0, justifyContent: "flex-end" }}>
+                    <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>{locale.header.invigilatorSign}&nbsp;</span>
+                    <span style={{ display: "inline-block", width: isA5 ? "18mm" : "26mm", borderBottom: "1px solid #000" }}>&nbsp;</span>
                   </div>
                 )}
               </div>
-            )}
+            </div>
           </div>
         )}
 
@@ -885,7 +840,8 @@ function BlankPage({ showTemplate = true, isA5 }: { showTemplate?: boolean; isA5
   );
 }
 
-export type SheetsInfo = { pages: number; sheets: number; isTwoUpCut?: boolean; fit?: FitStatus };
+/** `pages` is what gets printed; `contentPages` is the paper's own page count (a 2-up sheet prints it twice). */
+export type SheetsInfo = { pages: number; contentPages: number; sheets: number; isTwoUpCut?: boolean; fit?: FitStatus };
 
 /**
  * Lays the paper out on real A4 or A5 pages (measured in the browser), then stacks them (PAGE),
@@ -1009,7 +965,7 @@ export function PaperSheets({
       const totalPages = isBookletPrint
         ? sheets.length * 4
         : pageCount + (includeRoughWork ? 1 : 0);
-      onInfo?.({ pages: totalPages, sheets: sheets.length, isTwoUpCut: isEffectiveTwoUp, fit: fitStatus });
+      onInfo?.({ pages: totalPages, contentPages: pageCount, sheets: sheets.length, isTwoUpCut: isEffectiveTwoUp, fit: fitStatus });
     }
   }, [pageCount, sheets.length, isBookletPrint, includeRoughWork, isEffectiveTwoUp, fitStatus, onInfo]);
 
@@ -1073,7 +1029,8 @@ export function PaperSheets({
     pages &&
     sheets.flatMap((s, k) =>
       (["front", "back"] as const)
-        .filter((side) => s[side][0] !== null || s[side][1] !== null)
+        // A one-page paper printed two-up has an empty back: use it for rough work when asked.
+        .filter((side) => s[side][0] !== null || s[side][1] !== null || (includeRoughWork && isEffectiveTwoUp))
         .map((side) => (
           <div key={`${k}-${side}`} className="page-frame shadow-md relative">
             <div className="no-print mb-1 text-center text-xs font-semibold text-slate-500">

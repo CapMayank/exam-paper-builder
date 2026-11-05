@@ -149,6 +149,11 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isFirstRender = useRef(true);
   const [error, setError] = useState<string | null>(null);
+  // The error banner sits at the top of a long page; an action far down (move, swap, replace) would fail silently
+  // off-screen. Also raise it as a toast, which is visible wherever the teacher is scrolled to.
+  useEffect(() => {
+    if (error) toast.error(error);
+  }, [error]);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [autofilling, setAutofilling] = useState(false);
   const [reconciling, setReconciling] = useState(false);
@@ -557,6 +562,10 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   const final = paper.status === "FINAL";
   const isAdmin = currentUser?.role === "ADMIN" || currentUser?.role === "SUPER_ADMIN";
   const canEditPaper = !final && canModifyPaper(currentUser, paper);
+  // A fresh or half-built paper only has unfilled slots/quotas: that is progress, not a blueprint change.
+  const onlyProgressGaps = (paper.implications ?? []).every(
+    (i) => i.code === "SECTION_UNDERFILLED" || i.code === "CHAPTER_DEFICIT",
+  );
   const resolvedExamType = resolvePaperExamType(paper);
   const pickerSection = blueprint.sections.find((s) => s.id === pickerSectionId) ?? null;
 
@@ -1561,7 +1570,9 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                 <div className="flex items-center gap-2 text-amber-950 font-bold text-sm">
                   <Sparkles className="text-amber-600" size={18} />
                   <span>
-                    Blueprint Synchronization Notice ({paper.implications.length} adjustment{paper.implications.length > 1 ? "s" : ""} required)
+                    {onlyProgressGaps
+                      ? `Paper not complete yet (${paper.implications.length} thing${paper.implications.length > 1 ? "s" : ""} left to place)`
+                      : `Blueprint Synchronization Notice (${paper.implications.length} adjustment${paper.implications.length > 1 ? "s" : ""} required)`}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1614,7 +1625,9 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                 </div>
               </div>
               <p className="text-xs text-amber-900 leading-relaxed">
-                The blueprint linked to this paper was modified. Below is a breakdown of what needs adjustment to maintain examination standards:
+                {onlyProgressGaps
+                  ? "Nothing is wrong, these slots and chapter quotas are simply not filled yet:"
+                  : "The blueprint linked to this paper was modified. Below is a breakdown of what needs adjustment to maintain examination standards:"}
               </p>
               <div className="grid gap-2.5 sm:grid-cols-2">
                 {paper.implications.map((imp, idx) => (
@@ -2444,10 +2457,10 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                         setPickerSectionId(s.id);
                                       }}
                                       className="btn btn-sm btn-primary shadow-2xs flex items-center gap-1.5 text-xs font-semibold"
-                                      title="Pick from question bank"
+                                      title="Write a new question, pick one from the bank, paste several, or generate with AI"
                                     >
                                       <Plus size={13} />
-                                      <span>Pick from Bank</span>
+                                      <span>Add question</span>
                                     </button>
                                   </div>
                                 </div>

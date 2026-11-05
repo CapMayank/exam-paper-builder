@@ -196,6 +196,22 @@ export function QuestionForm({
     return plugin ? plugin.defaultConfig(book?.subject) : null;
   });
   const [answer, setAnswer] = useState(initial?.answer ?? "");
+  // The Math Assistant is three rows tall; teachers writing plain-text questions can hide it (remembered).
+  const [mathBarOpen, setMathBarOpen] = useState<boolean>(() => {
+    try {
+      return typeof window === "undefined" || window.localStorage.getItem("paperbuilder.mathbar") !== "hidden";
+    } catch {
+      return true;
+    }
+  });
+  const toggleMathBar = (open: boolean) => {
+    setMathBarOpen(open);
+    try {
+      window.localStorage.setItem("paperbuilder.mathbar", open ? "shown" : "hidden");
+    } catch {
+      /* ignore */
+    }
+  };
   const [difficulty, setDifficulty] = useState(initial?.difficulty ?? "MEDIUM");
   const [skill, setSkill] = useState<string>(skillOf(initial?.cognitiveLevel) ?? "");
   // A new question gets its chapter, difficulty and skill filled in from its text until the teacher picks them.
@@ -629,7 +645,28 @@ export function QuestionForm({
           {/* Visual Math & Science Equation Editor Toolbar: stays in view while the form scrolls (tall windows only),
               so the teacher can reach it from the match rows, options and subparts without scrolling back up. */}
           <div className="z-20 -mx-5 bg-white/95 px-5 py-1.5 backdrop-blur-xs [@media(min-height:720px)]:sticky [@media(min-height:720px)]:top-0">
-            <MathToolbar onInsert={handleInsertSnippet} onNewFormula={handleNewFormula} />
+            {mathBarOpen ? (
+              <div className="relative">
+                <MathToolbar onInsert={handleInsertSnippet} onNewFormula={handleNewFormula} />
+                <button
+                  type="button"
+                  onClick={() => toggleMathBar(false)}
+                  className="absolute right-1 top-1 rounded px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                  title="Hide the Math Assistant to give the question more room"
+                >
+                  Hide
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => toggleMathBar(true)}
+                className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+              >
+                <span>Math Assistant (formulas and symbols)</span>
+                <span className="text-indigo-700">Show</span>
+              </button>
+            )}
           </div>
 
       <div>

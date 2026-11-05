@@ -28,6 +28,9 @@ import { MathText } from "./MathText";
 import { QuestionContent } from "./QuestionContent";
 import type { GeneratedQuestionItem } from "@/lib/gemini";
 
+type PickerTab = "bank" | "new" | "paste" | "ai";
+const PICKER_TAB_KEY = "paperbuilder.picker.tab";
+
 /**
  * Adds questions to one blueprint section, either from the bank (smartly ordered) or by writing a new one,
  * which is saved to the bank first so it's reusable later.
@@ -54,7 +57,25 @@ export function QuestionPicker({
   const activeItemId = replacingItemId ?? alternateTargetItemId;
   const activeItem = activeItemId ? paper.items.find((i) => i.id === activeItemId) : null;
 
-  const [tab, setTab] = useState<"bank" | "new" | "paste" | "ai">("bank");
+  // Opens on the tab the teacher used last (composing a new question the first time), not always the bank.
+  const [tab, setTabState] = useState<PickerTab>(() => {
+    let saved: string | null = null;
+    try {
+      saved = typeof window === "undefined" ? null : window.localStorage.getItem(PICKER_TAB_KEY);
+    } catch {
+      /* storage blocked: fall back to the default */
+    }
+    const allowed: PickerTab[] = isReplacing || isAlternate ? ["bank", "new", "ai"] : ["bank", "new", "paste", "ai"];
+    return allowed.includes(saved as PickerTab) ? (saved as PickerTab) : "new";
+  });
+  const setTab = (next: PickerTab) => {
+    setTabState(next);
+    try {
+      window.localStorage.setItem(PICKER_TAB_KEY, next);
+    } catch {
+      /* ignore */
+    }
+  };
   const [bank, setBank] = useState<QuestionDto[]>([]);
   const [filters, setFilters] = useState({
     chapterId: isAlternate && activeItem ? activeItem.question.chapterId : "",
@@ -188,8 +209,9 @@ export function QuestionPicker({
       .sort((a, b) => Number(!!a.why) - Number(!!b.why) || (a.q.timesUsed ?? 0) - (b.q.timesUsed ?? 0));
   }, [bank, placed, def, section.id, isAlternate, activeItem, paper.items, section.type, targetSlotMarks, isMultiUnitMatch, replacingItemId]);
 
-  async function add(questionId: string, orQuestionId?: string | null) {
-    if (addingQuestionId) return;
+  /** Resolves true when the question was placed; false when it was refused (the error is shown in the banner). */
+  async function add(questionId: string, orQuestionId?: string | null): Promise<boolean> {
+    if (addingQuestionId) return false;
     setAddingQuestionId(questionId);
     setError(null);
     const targetQ = bank.find((q) => q.id === questionId);
@@ -221,12 +243,14 @@ export function QuestionPicker({
         const s = updated.progress.sections.find((x) => x.id === section.id)!;
         if (s.filled >= s.needed) onClose();
       }
+      return true;
     } catch (e) {
       // Revert optimistic removal on failure so the question remains available in the bank
       if (targetQ && !isAlternate && !isReplacing) {
         setBank((b) => (b.some((q) => q.id === questionId) ? b : [targetQ, ...b]));
       }
       setError((e as Error).message);
+      return false;
     } finally {
       setAddingQuestionId(null);
     }
@@ -498,10 +522,12 @@ export function QuestionPicker({
       title={modalTitle}
       subtitle={
         isAlternate
-          ? "Select an internal choice alternate question for students (does not consume blueprint chapter marks)."
+          ? "Add an internal choice alternate for students (does not consume blueprint chapter marks)."
           : isReplacing
-          ? "Select a question to replace the current slot. Chapter mark quotas will adjust automatically."
-          : `Select a question for ${section.title} (${sectionStatus.filled} of ${sectionStatus.needed} slots filled).`
+          ? "Replace the current slot. Chapter mark quotas will adjust automatically."
+          : `${section.title}: ${sectionStatus.filled} of ${sectionStatus.needed} slots filled. ${
+              tab === "bank" ? "Pick from the bank." : tab === "new" ? "Write a new question; it is saved to the bank too." : tab === "paste" ? "Paste several at once." : "Generate with AI."
+            }`
       }
       onClose={onClose}
       wide
@@ -831,8 +857,11 @@ export function QuestionPicker({
                 onClose();
               }}
               onSaved={async (q) => {
-                setInitialForEdit(undefined);
-                await add(q.id);
+                // The question is already in the bank. Clear the form only once it is on the paper; if the paper
+                // refused it, keep the text on screen so the teacher can fix the marks/chapter instead of retyping.
+                // Reopen it as an edit of the saved question so the next try updates it instead of saving a duplicate.
+                const placedOk = await add(q.id);
+                setInitialForEdit(placedOk ? undefined : q);
                 setFormKey((k) => k + 1);
               }}
             />

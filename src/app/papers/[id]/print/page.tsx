@@ -30,13 +30,14 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
   const { id } = use(params);
   const [paper, setPaper] = useState<PaperData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<"reading" | "sheets">(() => {
+  const [chosenView, setChosenView] = useState<"reading" | "sheets" | null>(() => {
     if (typeof window !== "undefined") {
       const urlView = new URLSearchParams(window.location.search).get("view");
       if (urlView === "sheets" || urlView === "reading") return urlView;
     }
-    return "reading";
+    return null;
   });
+  const setView = setChosenView;
   const [zoom, setZoom] = useState<number | null>(() => {
     if (typeof window !== "undefined") {
       try {
@@ -107,10 +108,11 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
     (i: SheetsInfo) => {
       setInfo(i);
       if (!paper || paper.status === "FINAL") return;
-      if (i.pages > 0 && paper.targetPages !== i.pages) {
+      // targetPages is the paper's own length, not the sheet count (a 2-up sheet carries the paper twice).
+      if (i.contentPages > 0 && paper.targetPages !== i.contentPages) {
         api(`/api/papers/${paper.id}`, {
           method: "PATCH",
-          json: { targetPages: i.pages },
+          json: { targetPages: i.contentPages },
         }).catch(() => undefined);
       }
     },
@@ -131,6 +133,10 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
 
   const booklet = isBookletLayout(paper.layout);
   const isA5 = paper.layout === "BOOKLET_A4";
+  // A short A5 paper (one or two pages) is printed two-up by default: two copies per A4 sheet, cut down the middle.
+  // That layout only exists in the sheets view, so open it unless the teacher already chose a view.
+  const shortA5 = isA5 && (info?.contentPages ?? 0) > 0 && (info?.contentPages ?? 0) <= 2;
+  const view: "reading" | "sheets" = chosenView ?? (shortA5 && twoUpCutMode ? "sheets" : "reading");
   const isWorksheet = paper.blueprint.curriculumMode === "KG_WORKSHEET";
   const defaultZoom = booklet && view === "sheets" ? 0.6 : 0.85;
   const effectiveZoom = zoom ?? defaultZoom;
@@ -238,7 +244,7 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
                     ? "bg-white text-indigo-700 shadow-xs"
                     : "text-slate-600 hover:text-slate-900"
                 }`}
-                title="Toggle rough work page on or off"
+                title={info?.isTwoUpCut && info.contentPages > 1 ? "A two-page paper printed two-up uses both sides of the sheet, so there is no room for a rough work page. Turn 2-Up off to add one." : "Toggle rough work page on or off"}
               >
                 <PenLine size={13} />
                 <span>Rough Work: {includeRoughWork ? "ON" : "OFF"}</span>
@@ -261,7 +267,7 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
             </div>
 
             {/* 2-Up Cut-in-Half Mode (For 1-2 page short papers) */}
-            {isA5 && (info?.pages ?? 0) <= 2 && (
+            {isA5 && (info?.contentPages ?? 0) > 0 && (info?.contentPages ?? 0) <= 2 && (
               <div className="flex items-center gap-1 rounded-lg border border-purple-200 bg-purple-50 p-0.5 text-xs font-semibold">
                 <button
                   type="button"
@@ -356,8 +362,11 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
           <div className="flex items-center gap-2">
             {info && (
               <span className="hidden sm:inline-block rounded bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 border border-slate-200">
-                {info.pages} page{info.pages === 1 ? "" : "s"}
-                {booklet && view === "sheets" && ` (${info.sheets} ${isA5 ? "A4" : "A3"} sheet${info.sheets === 1 ? "" : "s"})`}
+                {info.isTwoUpCut && view === "sheets"
+                  ? `${info.contentPages} page${info.contentPages === 1 ? "" : "s"} · 2 copies on ${info.sheets} A4 sheet${info.sheets === 1 ? "" : "s"}`
+                  : `${info.pages} page${info.pages === 1 ? "" : "s"}${
+                      booklet && view === "sheets" ? ` (${info.sheets} ${isA5 ? "A4" : "A3"} sheet${info.sheets === 1 ? "" : "s"})` : ""
+                    }`}
               </span>
             )}
 
