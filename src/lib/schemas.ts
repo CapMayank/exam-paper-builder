@@ -339,6 +339,8 @@ export const replaceItemSchema = z.object({
 });
 export const editPaperItemSchema = z.object({
   mode: z.enum(["UPDATE_MASTER", "FORK_COPY"]),
+  /** Which question of the slot is edited: the main one, or its internal-choice alternative (OR / अथवा). */
+  target: z.enum(["primary", "or"]).default("primary"),
   question: questionSchema,
 });
 

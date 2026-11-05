@@ -8,6 +8,7 @@ import { parseComponents } from "@/lib/languageComponents";
 import { prisma } from "@/lib/prisma";
 import { editPaperItemSchema, moveItemSchema, replaceItemSchema } from "@/lib/schemas";
 import { parseSubparts, parseSubpartsPayload, subpartsTotalMarks, validateSubPartsSum } from "@/lib/types";
+import type { z } from "zod";
 
 async function editableItem(paperId: string, itemId: string, user: SessionUser) {
   const item = await prisma.paperQuestion.findUnique({
@@ -16,7 +17,7 @@ async function editableItem(paperId: string, itemId: string, user: SessionUser) 
       paper: { select: { status: true, createdById: true, blueprint: { select: { book: { select: { className: true, subject: true } } } } } },
       question: { include: { chapter: true, book: { select: { className: true, subject: true } } } },
       section: true,
-      orQuestion: { include: { chapter: true } },
+      orQuestion: { include: { chapter: true, book: { select: { className: true, subject: true } } } },
     },
   });
   if (!item || item.paperId !== paperId) throw new HttpError(404, "Item not found");
@@ -255,10 +256,65 @@ export const PATCH = route(async (req, { id, itemId }, user) => {
   return loadPaperView(id);
 });
 
+type EditableItem = Awaited<ReturnType<typeof editableItem>>;
+type EditedQuestion = z.infer<typeof editPaperItemSchema>["question"];
+
+/**
+ * Edits the slot's alternate (OR) question in place, under the same rules as linking one (PATCH orQuestionId):
+ * same chapter as the main question, a type the section accepts, subparts adding up to the slot's marks, and not
+ * the main question itself. An OR does not use up chapter marks, so there is no quota check.
+ */
+async function editOrQuestion(item: EditableItem, mode: "UPDATE_MASTER" | "FORK_COPY", qInput: EditedQuestion, user: SessionUser, paperId: string) {
+  const or = item.orQuestion;
+  if (!item.orQuestionId || !or) throw new HttpError(400, "This slot has no alternate (OR) question to edit.");
+  if (qInput.chapterId !== item.question.chapterId) {
+    const ch = item.question.chapter;
+    throw new HttpError(
+      400,
+      `Board Guardrail Violation: Alternate (OR) choice must match primary question chapter (Chapter ${ch.number}: ${ch.title}).`,
+    );
+  }
+  if (!isTypeAllowed(item.section, qInput.type)) {
+    const allowed = allowedTypesFor(item.section);
+    throw new HttpError(400, allowed.length === 1 ? `Alternate question must be of type ${allowed[0]}` : `Alternate question must be one of: ${allowed.join(", ")}`);
+  }
+  const subparts = qInput.subparts ?? [];
+  if (subparts.length > 0 && !validateSubPartsSum(subparts, item.section.marksEach, qInput.attemptCount)) {
+    const total = qInput.attemptCount ? qInput.attemptCount * (subparts[0]?.marks || 1) : subpartsTotalMarks(subparts);
+    throw new HttpError(
+      400,
+      `Board Guardrail Violation: Alternate (OR) choice total marks (${total}) must match section marks (${item.section.marksEach}).`,
+    );
+  }
+  if (qInput.text.trim() === item.question.text.trim()) {
+    throw new HttpError(400, "Alternate question cannot be identical to the primary question");
+  }
+
+  const { options, subparts: subpartList, ...rest } = qInput;
+  const data = { ...rest, optionsJson: JSON.stringify(options), subpartsJson: JSON.stringify(subpartList ?? []) };
+
+  if (mode === "UPDATE_MASTER") {
+    assertCanModifyQuestion(user, or);
+    const inFinalPapers = await prisma.paperQuestion.count({
+      where: {
+        OR: [{ questionId: or.id }, { orQuestionId: or.id }],
+        paper: { status: "FINAL", id: { not: paperId } },
+      },
+    });
+    if (inFinalPapers > 0) {
+      throw new HttpError(409, "This question is part of another finalised paper. Choose 'Save as copy for this paper only' instead.");
+    }
+    await prisma.question.update({ where: { id: or.id }, data });
+    return;
+  }
+  const forked = await prisma.question.create({ data: { ...data, createdById: user.id } });
+  await prisma.paperQuestion.update({ where: { id: item.id }, data: { orQuestionId: forked.id } });
+}
+
 /** Edit in place: either update master in bank, or fork a new copy for this paper only */
 export const PUT = route(async (req, { id, itemId }, user) => {
   const item = await editableItem(id, itemId, user);
-  const { mode, question: qInput } = await body(req, editPaperItemSchema);
+  const { mode, target, question: qInput } = await body(req, editPaperItemSchema);
 
   const paper = await loadPaperView(id);
   if (!paper) throw new HttpError(404, "Paper not found");
@@ -266,6 +322,12 @@ export const PUT = route(async (req, { id, itemId }, user) => {
   const chapter = await prisma.chapter.findUnique({ where: { id: qInput.chapterId } });
   if (!chapter || chapter.bookId !== paper.blueprint.bookId) {
     throw new HttpError(400, "Chapter does not belong to this paper's book");
+  }
+
+  if (target === "or") {
+    await editOrQuestion(item, mode, qInput, user, id);
+    await prisma.paper.update({ where: { id }, data: { updatedAt: new Date() } });
+    return loadPaperView(id);
   }
 
   // Validate that the updated/forked question still conforms to this section and chapter quota

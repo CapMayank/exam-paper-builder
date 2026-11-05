@@ -116,7 +116,8 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   const [paper, setPaper] = useState<PaperData | null>(null);
   const [books, setBooks] = useState<Book[]>([]);
   const [pickerSectionId, setPickerSectionId] = useState<string | null>(null);
-  const [editingItem, setEditingItem] = useState<{ item: PaperItem; section: Section } | null>(null);
+  // target: which question of the slot the Edit modal is changing (the main one or its OR alternative)
+  const [editingItem, setEditingItem] = useState<{ item: PaperItem; section: Section; target: "primary" | "or" } | null>(null);
   const [replacingItem, setReplacingItem] = useState<{ item: PaperItem; section: Section } | null>(null);
   const [alternateItem, setAlternateItem] = useState<{ item: PaperItem; section: Section } | null>(null);
   const [diagramModalItem, setDiagramModalItem] = useState<{ item: PaperItem; section: Section } | null>(null);
@@ -2153,6 +2154,13 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                         </span>
                                       )}
                                       <button
+                                        className="btn btn-sm border-purple-200 bg-white text-purple-700 hover:bg-purple-50 font-medium"
+                                        title="Edit the alternate (OR) question's text, options or answer"
+                                        onClick={() => setEditingItem({ item: it, section: s, target: "or" })}
+                                      >
+                                        <Pencil size={12} className="text-purple-500" /> Edit OR
+                                      </button>
+                                      <button
                                         className="btn btn-sm border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 font-medium"
                                         title="Change alternate question"
                                         onClick={() => setAlternateItem({ item: it, section: s })}
@@ -2253,7 +2261,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                   <button
                                     className="btn btn-sm border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-2xs font-medium"
                                     title="Edit question text or options"
-                                    onClick={() => setEditingItem({ item: it, section: s })}
+                                    onClick={() => setEditingItem({ item: it, section: s, target: "primary" })}
                                   >
                                     <Pencil size={12} className="text-slate-500" /> Edit
                                   </button>
@@ -2603,34 +2611,68 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
         />
       )}
 
-      {editingItem && (
-        <Modal
-          title={`Edit Question in ${editingItem.section.title} — ${
-            QUESTION_TYPE_LABEL[editingItem.section.type as keyof typeof QUESTION_TYPE_LABEL]
-          }`}
-          onClose={() => setEditingItem(null)}
-          wide
-        >
-          <QuestionForm
-            books={books}
-            initial={editingItem.item.question}
-            fixedBookId={paper.blueprint.bookId}
-            fixedType={editingItem.section.type}
-            targetMarks={editingItem.section.marksEach}
-            showPaperEditModes={true}
-            submitLabel="Save Changes"
-            onCancel={() => setEditingItem(null)}
-            customSaveHandler={async (payload, mode) => {
-              const updated = await api<PaperData>(`/api/papers/${id}/questions/${editingItem.item.id}`, {
-                method: "PUT",
-                json: { mode, question: payload },
-              });
-              adopt(updated);
-              setEditingItem(null);
-            }}
-          />
-        </Modal>
-      )}
+      {editingItem && (() => {
+        const { item: editItem, section: editSection } = editingItem;
+        const orQ = editItem.orQuestion ?? null;
+        const target = editingItem.target === "or" && orQ ? "or" : "primary";
+        const editing = target === "or" && orQ ? orQ : editItem.question;
+        return (
+          <Modal
+            title={`Edit ${target === "or" ? "OR (alternate) question" : "Question"} in ${editSection.title} — ${
+              QUESTION_TYPE_LABEL[editSection.type as keyof typeof QUESTION_TYPE_LABEL]
+            }`}
+            onClose={() => setEditingItem(null)}
+            wide
+          >
+            {orQ && (
+              <div className="mb-3 space-y-1.5">
+                <div className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-0.5 text-xs font-semibold" role="tablist" aria-label="Question of this slot">
+                  {(["primary", "or"] as const).map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      role="tab"
+                      aria-selected={target === t}
+                      className={`rounded-md px-3 py-1.5 transition ${
+                        target === t ? (t === "or" ? "bg-white text-purple-700 shadow-xs" : "bg-white text-indigo-700 shadow-xs") : "text-slate-600 hover:text-slate-900"
+                      }`}
+                      onClick={() => setEditingItem({ ...editingItem, target: t })}
+                    >
+                      {t === "primary" ? "Main question" : "OR question (alternative)"}
+                    </button>
+                  ))}
+                </div>
+                {target === "or" && (
+                  <p className="text-[11px] text-slate-500">
+                    The OR question must stay in the main question&apos;s chapter (Ch {editItem.question.chapter?.number}) and carry the same {editSection.marksEach} mark(s).
+                  </p>
+                )}
+              </div>
+            )}
+            <QuestionForm
+              // remount when switching between the main and the OR question, so the form shows the right one
+              key={`${editItem.id}-${target}-${editing.id}`}
+              books={books}
+              initial={editing}
+              fixedBookId={paper.blueprint.bookId}
+              fixedType={editSection.type}
+              targetMarks={editSection.marksEach}
+              allowedChapterIds={target === "or" ? [editItem.question.chapterId] : undefined}
+              showPaperEditModes={true}
+              submitLabel={target === "or" ? "Save OR Question" : "Save Changes"}
+              onCancel={() => setEditingItem(null)}
+              customSaveHandler={async (payload, mode) => {
+                const updated = await api<PaperData>(`/api/papers/${id}/questions/${editItem.id}`, {
+                  method: "PUT",
+                  json: { mode, target, question: payload },
+                });
+                adopt(updated);
+                setEditingItem(null);
+              }}
+            />
+          </Modal>
+        );
+      })()}
 
       {replacingItem && (
         <QuestionPicker
