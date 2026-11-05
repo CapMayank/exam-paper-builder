@@ -1,6 +1,6 @@
 import { route } from "@/lib/api";
 import { canManageAiSettings } from "@/lib/permissions";
-import { getGeminiApiKey } from "@/lib/gemini";
+import { DEFAULT_GENERATION_MODEL, getGeminiApiKey } from "@/lib/gemini";
 import { configuredKeys, poolStatus } from "@/lib/geminiPool";
 
 export const GET = route(async (_req, _ctx, user) => {
@@ -8,7 +8,8 @@ export const GET = route(async (_req, _ctx, user) => {
   const privileged = canManageAiSettings(user);
   return {
     hasEnvApiKey: Boolean(getGeminiApiKey()),
-    model: process.env.GEMINI_MODEL || "gemini-flash-lite-latest",
+    // the model question generation starts with (GEMINI_MODEL is only a fallback after it)
+    model: DEFAULT_GENERATION_MODEL,
     keyCount: keys,
     freeQuotaInfo:
       keys > 1

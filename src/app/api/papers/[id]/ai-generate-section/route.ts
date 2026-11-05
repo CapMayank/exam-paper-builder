@@ -1,6 +1,12 @@
 import { HttpError, route } from "@/lib/api";
-import { generatePaperSectionWithGemini, getGeminiApiKey, quotaErrorText, type GeneratePaperSectionSlot } from "@/lib/gemini";
-import { resolveInternalChoiceRequirement } from "@/lib/internalChoiceRules";
+import {
+  DEFAULT_GENERATION_MODEL,
+  generatePaperSectionWithGemini,
+  getGeminiApiKey,
+  quotaErrorText,
+  type GeneratePaperSectionSlot,
+} from "@/lib/gemini";
+import { isParaphraseOrDuplicateChoice, resolveInternalChoiceRequirement } from "@/lib/internalChoiceRules";
 import { detectPaperLanguage, type PaperLanguage } from "@/lib/localization";
 import { DEFAULT_DIFFICULTY_PROFILE } from "@/lib/difficultyProfiles";
 import { slotRowRole, slotTaskDirective } from "@/lib/paperAutogen";
@@ -24,12 +30,14 @@ export const POST = route(async (req, { id }, user) => {
     marksEach,
     language = "en",
     difficulty = DEFAULT_DIFFICULTY_PROFILE,
-    model = "gemini-pro-latest",
+    model = DEFAULT_GENERATION_MODEL,
     teacherFocus = "",
     generateDiagrams = true,
     slots = [],
     customKey,
     answerMode = "separate",
+    /** Paper item whose main question the generated one will be the internal-choice alternative (OR) of. */
+    alternateForItemId,
   } = body;
 
   if (!Array.isArray(slots) || slots.length === 0) {
@@ -59,6 +67,24 @@ export const POST = route(async (req, { id }, user) => {
   }
   const effectiveInstructions = sectionInstructions ?? matchedSection?.instructions ?? null;
 
+  const alternateFor = alternateForItemId ? paper.items.find((i) => i.id === alternateForItemId) : null;
+  if (alternateForItemId && !alternateFor) throw new HttpError(404, "The question to write an alternative (OR) for is not in this paper.");
+  if (alternateFor && matchedSection && alternateFor.sectionId !== matchedSection.id) {
+    throw new HttpError(422, "The alternative (OR) must be generated in the main question's own section.");
+  }
+  if (alternateFor && slots.length !== 1) throw new HttpError(400, "An alternative (OR) question is generated one at a time.");
+  if (alternateFor && (slots as GeneratePaperSectionSlot[])[0].chapterId !== alternateFor.question.chapterId) {
+    const ch = alternateFor.question.chapter;
+    throw new HttpError(
+      422,
+      `Board Guardrail Violation: Alternate (OR) choice must match primary question chapter (Chapter ${ch?.number}: ${ch?.title}).`,
+    );
+  }
+  // the model sees the main question, so it writes an equivalent alternative instead of guessing (or paraphrasing)
+  const alternateDirective = alternateFor
+    ? `This question will be printed as the internal-choice alternative (OR) to the main question below. Write an equivalent question: same chapter, same marks and marking depth, same difficulty, but testing a different subtopic, method or example. It must NOT be a paraphrase or a reworded copy of the main question, and must not reuse its numbers or scenario. Main question: """${alternateFor.question.text.slice(0, 1500)}"""`
+    : "";
+
   const validBookChapterIds = new Set(paper.blueprint.chapters.map((c) => c.chapterId));
   const existingQuestionTexts = paper.items.flatMap((i) =>
     [i.question.text, i.orQuestion?.text].filter((t): t is string => Boolean(t && t.trim())),
@@ -86,6 +112,8 @@ export const POST = route(async (req, { id }, user) => {
       });
       reqChoice = choiceRule.required;
     }
+    // an alternative is itself the OR: it never carries an OR of its own
+    if (alternateFor) reqChoice = false;
     const slotId = slot.slotId || (matchedSection ? `slot_${matchedSection.id}_${slotIdx}` : `slot_${slotIdx}`);
     const cTitle = (slot as { componentTitle?: string }).componentTitle;
     const subjectName = paper.blueprint.book.subject;
@@ -96,7 +124,7 @@ export const POST = route(async (req, { id }, user) => {
       matchedSection?.marksEach ?? (Number(marksEach) || 1),
       subjectName,
     );
-    const focus = [cTitle ? `Syllabus component: ${cTitle}. Keep the question inside this component.` : "", task]
+    const focus = [cTitle ? `Syllabus component: ${cTitle}. Keep the question inside this component.` : "", task, alternateDirective]
       .filter(Boolean)
       .join(" ");
     return {
@@ -145,7 +173,7 @@ export const POST = route(async (req, { id }, user) => {
 
   // A configured model that still failed after retries must not silently hand back template text.
   if (res.isMock && getGeminiApiKey(customKey || req.headers.get("x-gemini-api-key"))) {
-    const quota = quotaErrorText();
+    const quota = quotaErrorText(model);
     if (quota) throw new HttpError(429, quota);
     console.warn(`ai-generate-section "${sectionTitle ?? matchedSection?.title}" fell back to templates: ${res.error ?? "no reason recorded"}`);
     throw new HttpError(
@@ -162,10 +190,18 @@ export const POST = route(async (req, { id }, user) => {
   const keyBySlot = new Map<number, string>(
     (slots as Array<{ slotIndex?: number; componentKey?: string }>).map((sl, i) => [sl.slotIndex ?? i, sl.componentKey ?? ""] as [number, string]),
   );
-  const labelled = (res.data ?? []).map((q, i) => ({
+  let labelled = (res.data ?? []).map((q, i) => ({
     ...q,
     componentKey: keyBySlot.get(typeof q.slotIndex === "number" ? q.slotIndex : i) || undefined,
   }));
+
+  if (alternateFor) {
+    labelled = labelled.map((q) => ({ ...q, requiresInternalChoice: false, orQuestion: undefined }));
+    const copy = labelled.find((q) => isParaphraseOrDuplicateChoice(alternateFor.question.text, q.text).isDuplicateOrParaphrase);
+    if (copy) {
+      throw new HttpError(502, "The AI wrote a near copy of the main question instead of an alternative. Nothing was added; please try again.");
+    }
+  }
 
   return {
     success: true,

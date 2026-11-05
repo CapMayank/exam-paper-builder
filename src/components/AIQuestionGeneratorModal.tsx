@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { Modal, Spinner, useToast } from "@/components/ui";
 import { cleanOptionText, type PaperLanguage } from "@/lib/constants";
-import { api } from "@/lib/client";
+import { api, retryTransient } from "@/lib/client";
 import { MathText } from "./MathText";
 import type { Book, Chapter } from "@/lib/types";
 
@@ -159,7 +159,7 @@ export function AIQuestionGeneratorModal({
         headers["x-gemini-api-key"] = customKey;
       }
 
-      const res = await api<{
+      const res = await retryTransient(() => api<{
         success: boolean;
         isMock: boolean;
         data: GeneratedQuestionPayload[];
@@ -168,6 +168,10 @@ export function AIQuestionGeneratorModal({
         method: "POST",
         headers,
         json: {
+          // with the ids the server uses the paper pipeline: the chapter's bank questions as "do not repeat",
+          // verification and repair, and an honest error instead of template text
+          bookId: selectedBook?.id,
+          chapterId: selectedChapter.id,
           chapter: `${selectedChapter.number}. ${selectedChapter.title}`,
           className: selectedBook?.className || "Class 10",
           subject: selectedBook?.subject || "Science",
@@ -179,7 +183,7 @@ export function AIQuestionGeneratorModal({
           count: 1,
           topicContext: topicContext.trim() || undefined,
         },
-      });
+      }));
 
       if (!res.success && res.error) {
         setError(res.error);

@@ -9,7 +9,7 @@ import { QuestionView } from "@/components/QuestionView";
 import { ErrorBanner, Modal, Spinner } from "@/components/ui";
 import { toPlacedItems, whyCannotAdd, type BlueprintDef } from "@/lib/blueprint";
 import { allowedTypesFor, isTypeAllowed } from "@/lib/sectionTypes";
-import { api } from "@/lib/client";
+import { api, retryTransient } from "@/lib/client";
 import {
   cleanMatchItem,
   cleanOptionText,
@@ -27,7 +27,7 @@ import { type Book, type PaperData, type QuestionDto, type Section, subpartsTota
 import { resolveInternalChoiceRequirement } from "@/lib/internalChoiceRules";
 import { MathText } from "./MathText";
 import { QuestionContent } from "./QuestionContent";
-import type { GeneratedQuestionItem } from "@/lib/gemini";
+import type { GeneratedPaperQuestion, GeneratedQuestionItem } from "@/lib/gemini";
 
 type PickerTab = "bank" | "new" | "paste" | "ai";
 const PICKER_TAB_KEY = "paperbuilder.picker.tab";
@@ -303,19 +303,6 @@ export function QuestionPicker({
       return;
     }
 
-    const choiceReq = resolveInternalChoiceRequirement({
-      schoolName: paper.schoolName,
-      blueprintName: paper.blueprint.name,
-      className: paper.blueprint.book.className,
-      academicSession: paper.academicSession || paper.blueprint.academicSession,
-      subject: paper.blueprint.book.subject,
-      subjectCode: paper.subjectCode || paper.blueprint.subjectCode,
-      questionType: section.type,
-      marksEach: section.marksEach,
-      sectionTitle: section.title,
-      sectionInstructions: section.instructions,
-    });
-
     setAiBusy(true);
     setAiError(null);
     try {
@@ -327,43 +314,60 @@ export function QuestionPicker({
       const headers: Record<string, string> = {};
       if (customKey) headers["x-gemini-api-key"] = customKey;
 
-      const res = await api<{
-        success: boolean;
-        isMock: boolean;
-        data: GeneratedQuestionItem[];
-        error?: string;
-      }>("/api/ai/generate-questions", {
-        method: "POST",
-        headers,
-        json: {
-          chapter: `Chapter ${selectedChapter.number}: ${selectedChapter.title}`,
-          className: paper.blueprint.book.className,
-          subject: paper.blueprint.book.subject,
-          type: pickType,
-          marks: marksToGenerate,
-          difficulty: aiDifficulty,
-          cognitiveLevel: aiCognitiveLevel,
-          language: aiLanguage,
-          count: 1,
-          topicContext: aiTopicContext.trim(),
-          academicSession: paper.academicSession || paper.blueprint.academicSession,
-          subjectCode: paper.subjectCode || paper.blueprint.subjectCode,
-          sectionInstructions: section.instructions,
-          requiresInternalChoice: !isAlternate && choiceReq.required,
-        },
-      });
+      // The slot this question fills: the replaced one, or the next empty one. The section's OR rules depend on it.
+      const sectionItems = paper.items.filter((i) => i.sectionId === section.id).sort((a, b) => a.position - b.position);
+      const slotPos = activeItem ? sectionItems.findIndex((i) => i.id === activeItem.id) : sectionItems.length;
 
-      if (!res.success && res.error) {
-        setAiError(res.error);
+      // Same pipeline as full-paper generation: curriculum contract, the paper's other questions as "do not repeat",
+      // per-question verification and repair, validation retries, and the section's internal-choice (OR) rules.
+      const res = await retryTransient(() =>
+        api<{ success: boolean; isMock: boolean; questions: GeneratedPaperQuestion[] }>(
+          `/api/papers/${paper.id}/ai-generate-section`,
+          {
+            method: "POST",
+            headers,
+            json: {
+              sectionId: section.id,
+              sectionTitle: section.title,
+              sectionType: pickType,
+              sectionInstructions: section.instructions,
+              marksEach: marksToGenerate,
+              language: aiLanguage,
+              difficulty: aiDifficulty,
+              teacherFocus: [
+                aiTopicContext.trim(),
+                `Cognitive level for this question: ${aiCognitiveLevel}.`,
+                isReplacing && activeItem ? "This question replaces one the teacher removed from the paper; write a different question, not a variant of it." : "",
+              ]
+                .filter(Boolean)
+                .join(" "),
+              generateDiagrams: false,
+              // a single question is reviewed right away, so it comes with its full model answer
+              answerMode: "together",
+              customKey: customKey || undefined,
+              alternateForItemId: isAlternate ? alternateTargetItemId : undefined,
+              slots: [
+                {
+                  slotIndex: Math.max(0, slotPos),
+                  chapterId: aiChapterId,
+                  chapterNumber: selectedChapter.number,
+                  chapterTitle: selectedChapter.title,
+                  marks: marksToGenerate,
+                  targetDifficulty: aiDifficulty,
+                },
+              ],
+            },
+          },
+        ),
+      );
+
+      const q = res.questions?.[0];
+      if (!q || !q.text?.trim()) {
+        setAiError("No question was generated. Please try again.");
         return;
       }
-
-      if (res.data && res.data.length > 0) {
-        setAiGenerated(res.data[0]);
-        setAiIsMock(res.isMock);
-      } else {
-        setAiError("No question was generated. Please try again.");
-      }
+      setAiGenerated({ ...q, marks: marksToGenerate } as unknown as GeneratedQuestionItem);
+      setAiIsMock(res.isMock);
     } catch (e) {
       setAiError((e as Error).message || "Generation failed.");
     } finally {
