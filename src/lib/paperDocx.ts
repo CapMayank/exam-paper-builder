@@ -1,3 +1,4 @@
+import { questionInstruction } from "./sectionTypes";
 import { questionSlotMarks } from "@/lib/blueprint";
 import fs from "node:fs";
 import path from "node:path";
@@ -721,13 +722,24 @@ export async function buildPaperDocx(
       }
       const qTotalMarks = questionSlotMarks(section, { ...q, subparts: parsedSubparts, subpartsJson: null, attemptCount } as never).marks;
       const qText = baseQText;
+      const instructionLine = questionInstruction(section, q.type, (item as { instruction?: string }).instruction);
+      if (instructionLine) {
+        paragraphs.push(
+          new Paragraph({
+            pageBreakBefore: Boolean((item as { pageBreakBefore?: boolean }).pageBreakBefore),
+            keepNext: true,
+            spacing: { before: 60, after: 20 },
+            children: [new TextRun({ text: instructionLine, italics: true })],
+          }),
+        );
+      }
 
       renderQuestionTextWithTable(
         qLabel,
         qText,
         item.orQuestion ? undefined : qTotalMarks,
         isMatch,
-        Boolean((item as any).pageBreakBefore),
+        Boolean((item as any).pageBreakBefore) && !instructionLine,
         paragraphs,
         paperLang,
         Boolean(item.orQuestion),

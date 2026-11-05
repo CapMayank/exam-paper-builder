@@ -8,6 +8,7 @@ import { isExhaustedUsage, QuestionFreshnessAlert, QuestionUsagePills } from "@/
 import { QuestionView } from "@/components/QuestionView";
 import { ErrorBanner, Modal, Spinner } from "@/components/ui";
 import { toPlacedItems, whyCannotAdd, type BlueprintDef } from "@/lib/blueprint";
+import { allowedTypesFor, isTypeAllowed } from "@/lib/sectionTypes";
 import { api } from "@/lib/client";
 import {
   cleanMatchItem,
@@ -76,6 +77,9 @@ export function QuestionPicker({
       /* ignore */
     }
   };
+  // A slot is a marks contract; the teacher picks which of its allowed forms to fill it with.
+  const allowedTypes = useMemo(() => allowedTypesFor(section), [section]);
+  const [pickType, setPickType] = useState<string>(section.type);
   const [bank, setBank] = useState<QuestionDto[]>([]);
   const [filters, setFilters] = useState({
     chapterId: isAlternate && activeItem ? activeItem.question.chapterId : "",
@@ -145,7 +149,7 @@ export function QuestionPicker({
       });
 
   useEffect(() => {
-    const sp = new URLSearchParams({ bookId: paper.blueprint.bookId, type: section.type, excludePaperId: paper.id });
+    const sp = new URLSearchParams({ bookId: paper.blueprint.bookId, type: pickType, excludePaperId: paper.id });
     Object.entries(filters).forEach(([k, v]) => v && sp.set(k, v));
     if (isAlternate && activeItem) {
       sp.set("chapterId", activeItem.question.chapterId);
@@ -157,7 +161,7 @@ export function QuestionPicker({
         .finally(() => setLoading(false));
     }, 150);
     return () => clearTimeout(t);
-  }, [paper.id, paper.blueprint.bookId, section.type, filters, isAlternate, activeItem]);
+  }, [paper.id, paper.blueprint.bookId, pickType, filters, isAlternate, activeItem]);
 
   // Smart assist: questions that fit the blueprint come first, then least-used, then newest.
   const ranked = useMemo(() => {
@@ -169,8 +173,8 @@ export function QuestionPicker({
             why = "Cannot pick the same question as primary.";
           } else if (paper.items.some((i) => i.question.id === q.id || i.orQuestion?.id === q.id)) {
             why = "Already used in this paper.";
-          } else if (q.type !== section.type) {
-            why = `Must match section question type (${section.type}).`;
+          } else if (!isTypeAllowed(section, q.type)) {
+            why = `Must be a type this section accepts (${allowedTypes.join(", ")}).`;
           } else if (activeItem && q.chapterId !== activeItem.question.chapterId) {
             why = `Must match primary question chapter (Ch ${activeItem.question.chapter?.number}).`;
           } else if (q.subparts && q.subparts.length > 0 && subpartsTotalMarks(q.subparts) !== targetSlotMarks) {
@@ -207,7 +211,7 @@ export function QuestionPicker({
         return { q, why };
       })
       .sort((a, b) => Number(!!a.why) - Number(!!b.why) || (a.q.timesUsed ?? 0) - (b.q.timesUsed ?? 0));
-  }, [bank, placed, def, section.id, isAlternate, activeItem, paper.items, section.type, targetSlotMarks, isMultiUnitMatch, replacingItemId]);
+  }, [bank, placed, def, section.id, isAlternate, activeItem, paper.items, pickType, targetSlotMarks, isMultiUnitMatch, replacingItemId]);
 
   /** Resolves true when the question was placed; false when it was refused (the error is shown in the banner). */
   async function add(questionId: string, orQuestionId?: string | null): Promise<boolean> {
@@ -335,7 +339,7 @@ export function QuestionPicker({
           chapter: `Chapter ${selectedChapter.number}: ${selectedChapter.title}`,
           className: paper.blueprint.book.className,
           subject: paper.blueprint.book.subject,
-          type: section.type,
+          type: pickType,
           marks: marksToGenerate,
           difficulty: aiDifficulty,
           cognitiveLevel: aiCognitiveLevel,
@@ -390,7 +394,7 @@ export function QuestionPicker({
         sectionInstructions: section.instructions,
       });
 
-      const isMatch = section.type === "MATCH_COLUMN";
+      const isMatch = pickType === "MATCH_COLUMN";
       let processedOptions = aiGenerated.options || [];
       if (isMatch) {
         const pairs = parseMatchColumnPairs(aiGenerated.options || [], aiGenerated.text, aiGenerated.explanation);
@@ -411,13 +415,13 @@ export function QuestionPicker({
       const payload = {
         bookId: paper.blueprint.bookId,
         chapterId: aiChapterId,
-        type: section.type,
+        type: pickType,
         text: aiGenerated.text,
         options: processedOptions,
         subparts: normalizedSubparts,
         answer: aiGenerated.answer || "",
         difficulty: aiDifficulty,
-        spaceMm: section.type === "LONG" ? 60 : section.type === "SHORT" ? 20 : 0,
+        spaceMm: pickType === "LONG" ? 60 : pickType === "SHORT" ? 20 : 0,
         showGrid: false,
       };
 
@@ -440,13 +444,13 @@ export function QuestionPicker({
         const orPayload = {
           bookId: paper.blueprint.bookId,
           chapterId: aiChapterId,
-          type: aiGenerated.orQuestion.type || section.type,
+          type: aiGenerated.orQuestion.type || pickType,
           text: aiGenerated.orQuestion.text,
           options: orProcessedOptions,
           subparts: orNormalizedSubparts,
           answer: aiGenerated.orQuestion.answer || "",
           difficulty: aiGenerated.orQuestion.difficulty || aiDifficulty,
-          spaceMm: section.type === "LONG" ? 60 : section.type === "SHORT" ? 20 : 0,
+          spaceMm: pickType === "LONG" ? 60 : pickType === "SHORT" ? 20 : 0,
           showGrid: false,
         };
         const createdOr = await api<QuestionDto>("/api/questions", {
@@ -467,7 +471,7 @@ export function QuestionPicker({
   function handleEditAiQuestion() {
     if (!aiGenerated) return;
     const selectedChapter = paper.blueprint.chapters.find((c) => c.chapterId === aiChapterId)?.chapter;
-    const isMatch = section.type === "MATCH_COLUMN";
+    const isMatch = pickType === "MATCH_COLUMN";
     let processedOptions = aiGenerated.options || [];
     if (isMatch) {
       const pairs = parseMatchColumnPairs(aiGenerated.options || [], aiGenerated.text, aiGenerated.explanation);
@@ -489,14 +493,14 @@ export function QuestionPicker({
       id: "",
       bookId: paper.blueprint.bookId,
       chapterId: aiChapterId,
-      type: section.type,
+      type: pickType,
       text: aiGenerated.text,
       options: processedOptions,
       subparts: normalizedSubparts,
       answer: aiGenerated.answer || "",
       difficulty: aiDifficulty,
       imagePath: null,
-      spaceMm: section.type === "LONG" ? 60 : section.type === "SHORT" ? 20 : 0,
+      spaceMm: pickType === "LONG" ? 60 : pickType === "SHORT" ? 20 : 0,
       showGrid: false,
       createdAt: new Date().toISOString(),
       chapter: selectedChapter
@@ -514,8 +518,8 @@ export function QuestionPicker({
   const modalTitle = isAlternate
     ? `Select Alternate Choice (OR) in ${section.title} — (${marksToGenerate}m)`
     : isReplacing
-    ? `Replace Question in ${section.title} — ${QUESTION_TYPE_LABEL[section.type as keyof typeof QUESTION_TYPE_LABEL]} (${marksToGenerate}m)`
-    : `Add to ${section.title} — ${QUESTION_TYPE_LABEL[section.type as keyof typeof QUESTION_TYPE_LABEL]} · ${marksToGenerate} mark(s)`;
+    ? `Replace Question in ${section.title} — ${QUESTION_TYPE_LABEL[pickType as keyof typeof QUESTION_TYPE_LABEL]} (${marksToGenerate}m)`
+    : `Add to ${section.title} — ${QUESTION_TYPE_LABEL[pickType as keyof typeof QUESTION_TYPE_LABEL]} · ${marksToGenerate} mark(s)`;
 
   return (
     <Modal
@@ -589,6 +593,28 @@ export function QuestionPicker({
         {isAlternate && (
           <div className="rounded-lg border border-purple-200 bg-purple-50 p-3 text-xs text-purple-900 font-medium flex items-center gap-2">
             <span className="font-bold">Board Guardrail:</span> Alternate (OR) choices must match the primary question&apos;s chapter and mark value.
+          </div>
+        )}
+
+        {allowedTypes.length > 1 && (
+          <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Question type">
+            <span className="text-xs font-medium text-slate-500">Question type:</span>
+            {allowedTypes.map((t) => (
+              <button
+                key={t}
+                type="button"
+                aria-pressed={pickType === t}
+                onClick={() => {
+                  setPickType(t);
+                  setAiGenerated(null);
+                  setFormKey((k) => k + 1);
+                }}
+                className={`rounded-full border px-2.5 py-0.5 text-xs ${pickType === t ? "border-indigo-500 bg-indigo-50 font-semibold text-indigo-700" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"}`}
+              >
+                {QUESTION_TYPE_LABEL[t as keyof typeof QUESTION_TYPE_LABEL] ?? t}
+                {t === section.type ? " (default)" : ""}
+              </button>
+            ))}
           </div>
         )}
 
@@ -745,7 +771,7 @@ export function QuestionPicker({
               ))}
               {!loading && ranked.length === 0 && (
                 <li className="p-8 text-center text-sm text-slate-500">
-                  No matching {QUESTION_TYPE_LABEL[section.type as keyof typeof QUESTION_TYPE_LABEL]} questions found.
+                  No matching {QUESTION_TYPE_LABEL[pickType as keyof typeof QUESTION_TYPE_LABEL]} questions found.
                   Switch to the other tab to write a new one.
                 </li>
               )}
@@ -836,7 +862,7 @@ export function QuestionPicker({
               books={books}
               initial={initialForEdit}
               fixedBookId={paper.blueprint.bookId}
-              fixedType={section.type}
+              fixedType={pickType}
               targetMarks={section.marksEach}
               allowedChapterIds={openChapters.map((c) => c.chapterId)}
               openMarks={Object.fromEntries(
@@ -910,7 +936,7 @@ export function QuestionPicker({
                       {paper.blueprint.book.className} · {paper.blueprint.book.subject}
                     </span>
                     <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 font-bold text-indigo-800 text-[11px]">
-                      {QUESTION_TYPE_LABEL[section.type as keyof typeof QUESTION_TYPE_LABEL]} · {targetSlotMarks} Mark{targetSlotMarks > 1 ? "s" : ""}
+                      {QUESTION_TYPE_LABEL[pickType as keyof typeof QUESTION_TYPE_LABEL]} · {targetSlotMarks} Mark{targetSlotMarks > 1 ? "s" : ""}
                     </span>
                   </div>
                 </div>
@@ -1049,7 +1075,7 @@ export function QuestionPicker({
                   <div className="text-slate-900 text-sm leading-relaxed font-medium">
                     <QuestionContent
                       text={
-                        section.type === "MATCH_COLUMN"
+                        pickType === "MATCH_COLUMN"
                             ? getMatchColumnInstruction(aiGenerated.text)
                             : aiGenerated.text
                       }
@@ -1057,7 +1083,7 @@ export function QuestionPicker({
                   </div>
 
                   {/* MCQ Options */}
-                  {section.type === "MCQ" && aiGenerated.options && aiGenerated.options.length > 0 && (
+                  {pickType === "MCQ" && aiGenerated.options && aiGenerated.options.length > 0 && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                       {aiGenerated.options.map((opt, idx) => {
                         const letter = String.fromCharCode(65 + idx);
@@ -1097,7 +1123,7 @@ export function QuestionPicker({
                   )}
 
                   {/* Match the Columns Preview */}
-                  {section.type === "MATCH_COLUMN" && (() => {
+                  {pickType === "MATCH_COLUMN" && (() => {
                     const pairs = parseMatchColumnPairs(aiGenerated.options || [], aiGenerated.text, aiGenerated.explanation);
                     const letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
                     const romans = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
@@ -1151,7 +1177,7 @@ export function QuestionPicker({
                   })()}
 
                   {/* Multi-part Subparts (Case Study, Unseen Passage, Reference to Context) */}
-                  {(section.type === "CASE_STUDY" || isSubpartQuestionType(section.type) || (aiGenerated.subparts && aiGenerated.subparts.length > 0)) &&
+                  {(pickType === "CASE_STUDY" || isSubpartQuestionType(pickType) || (aiGenerated.subparts && aiGenerated.subparts.length > 0)) &&
                     aiGenerated.subparts &&
                     aiGenerated.subparts.length > 0 && (
                     <div className="space-y-2.5 rounded-lg border border-purple-100 bg-purple-50/30 p-3">
@@ -1201,7 +1227,7 @@ export function QuestionPicker({
                   )}
 
                   {/* Model Answer / Solution */}
-                  {aiGenerated.answer && section.type !== "MCQ" && (
+                  {aiGenerated.answer && pickType !== "MCQ" && (
                     <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-3 text-xs space-y-1">
                       <span className="font-bold text-emerald-900 block text-[11px] uppercase tracking-wider">
                         Model Answer / Marking Scheme:

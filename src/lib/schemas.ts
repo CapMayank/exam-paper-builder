@@ -232,6 +232,7 @@ export const blueprintSchema = z.object({
         orChoiceMode: z.enum(["BOARD_DEFAULT", "REQUIRED", "NOT_REQUIRED"]).default("BOARD_DEFAULT"),
         orAlternativeCount: z.number().int().min(0).max(5).default(1),
         orSlotsJson: z.string().default("[]"),
+        allowedTypesJson: z.string().max(2000).default("[]"),
         role: z.enum(["STANDARD", "PASSAGE", "GRAMMAR", "WRITING", "LITERATURE"]).default("STANDARD"),
         groupKey: z.string().trim().max(100).default(""),
       }),

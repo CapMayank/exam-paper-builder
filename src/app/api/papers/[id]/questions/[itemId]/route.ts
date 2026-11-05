@@ -1,3 +1,4 @@
+import { allowedTypesFor, isTypeAllowed } from "@/lib/sectionTypes";
 import { body, HttpError, route, type SessionUser } from "@/lib/api";
 import { whyCannotAdd } from "@/lib/blueprint";
 import { parseMatchColumnPairs } from "@/lib/constants";
@@ -42,6 +43,13 @@ export const PATCH = route(async (req, { id, itemId }, user) => {
       where: { id: itemId },
       data: { pageBreakBefore },
     });
+    await prisma.paper.update({ where: { id }, data: { updatedAt: new Date() } });
+    return loadPaperView(id);
+  }
+
+  if ("instruction" in raw) {
+    const instruction = String(raw.instruction ?? "").trim().slice(0, 300);
+    await prisma.paperQuestion.update({ where: { id: itemId }, data: { instruction } });
     await prisma.paper.update({ where: { id }, data: { updatedAt: new Date() } });
     return loadPaperView(id);
   }
@@ -195,8 +203,9 @@ export const PATCH = route(async (req, { id, itemId }, user) => {
     if (!candidate) throw new HttpError(404, "Alternate question not found");
     if (candidate.bookId !== paper.blueprint.bookId) throw new HttpError(400, "Alternate question is from a different book");
     if (candidate.id === item.questionId) throw new HttpError(400, "Alternate question cannot be identical to the primary question");
-    if (candidate.type !== item.section.type) {
-      throw new HttpError(400, `Alternate question must be of type ${item.section.type}`);
+    if (!isTypeAllowed(item.section, candidate.type)) {
+      const allowed = allowedTypesFor(item.section);
+      throw new HttpError(400, allowed.length === 1 ? `Alternate question must be of type ${allowed[0]}` : `Alternate question must be one of: ${allowed.join(", ")}`);
     }
     if (candidate.chapterId !== item.question.chapterId) {
       const primaryCh = item.question.chapter;

@@ -91,6 +91,7 @@ export const POST = route(
             orChoiceMode: s.orChoiceMode || "BOARD_DEFAULT",
             orAlternativeCount: s.orAlternativeCount ?? 1,
             orSlotsJson: s.orSlotsJson || "[]",
+            allowedTypesJson: s.allowedTypesJson || "[]",
             role: s.role,
             groupKey: s.groupKey,
           })),

@@ -345,6 +345,7 @@ export default function BlueprintsPage() {
             orChoiceMode: s.orChoiceMode || "BOARD_DEFAULT",
             orAlternativeCount: s.orAlternativeCount ?? 1,
             orSlotsJson: s.orSlotsJson || "[]",
+            allowedTypesJson: (s as { allowedTypesJson?: string }).allowedTypesJson || "[]",
           })),
           chapters: b.chapters.map((c) => ({
             chapterId: c.chapterId,

@@ -36,6 +36,7 @@ import { DEFAULT_SCHOOL_NAME, EXAM_TYPES, EXAM_TYPE_LABEL, KINDERGARTEN_QUESTION
 import { BlueprintStartPicker } from "@/components/blueprints/BlueprintStartPicker";
 import { isSubjectMatching } from "@/lib/schoolCurriculum";
 import { distributeSlotMarks, slotMarksOf } from "@/lib/schoolPatterns";
+import { allowedTypesFor, defaultAllowedTypes } from "@/lib/sectionTypes";
 import type { AcademicClassDto, Blueprint, Book, PaperData } from "@/lib/types";
 
 let qtSeq = 0;
@@ -605,7 +606,7 @@ function BlueprintEditor({ params, searchParams }: PageProps<"/blueprints/[id]">
   /** Classes 1–8: the school's 50 / 60-mark pattern on the class + subject book, chapter marks spread over its chapters. */
   function applySchoolPattern(template: BlueprintTemplate, pick: { className: string; subject: string }) {
     startBlank(pick);
-    applyStarterTemplate(template);
+    applyStarterTemplate(template, pick.subject);
     setName(`${pick.className} ${pick.subject} – ${template.title}`);
     const target = books.find((b) => b.className === pick.className && isSubjectMatching(b.subject, pick.subject));
     if (target && target.chapters.length > 0) {
@@ -614,7 +615,8 @@ function BlueprintEditor({ params, searchParams }: PageProps<"/blueprints/[id]">
     }
   }
 
-  function applyStarterTemplate(template: BlueprintTemplate) {
+  /** `subject` given: each slot also accepts that subject's other forms at the same marks (school patterns). */
+  function applyStarterTemplate(template: BlueprintTemplate, subject?: string) {
     setExamType(template.examType);
     setDurationMin(template.durationMin);
     const newGroups: SectionGroup[] = template.sections.map((sec, idx) => ({
@@ -629,6 +631,9 @@ function BlueprintEditor({ params, searchParams }: PageProps<"/blueprints/[id]">
         orChoiceMode: (qt as any).orChoiceMode ?? "BOARD_DEFAULT",
         orAlternativeCount: (qt as any).orAlternativeCount ?? null,
         orSlotsJson: (qt as any).orSlotsJson ?? null,
+        allowedTypesJson: subject
+          ? JSON.stringify(defaultAllowedTypes(qt.type, qt.marksEach, subject))
+          : ((qt as { allowedTypesJson?: string }).allowedTypesJson ?? "[]"),
         role: (qt as any).role ?? "STANDARD",
         groupKey: (qt as any).groupKey ?? "",
       })),
@@ -666,6 +671,7 @@ function BlueprintEditor({ params, searchParams }: PageProps<"/blueprints/[id]">
         orChoiceMode: (qt as any).orChoiceMode ?? "BOARD_DEFAULT",
         orAlternativeCount: (qt as any).orAlternativeCount ?? null,
         orSlotsJson: (qt as any).orSlotsJson ?? null,
+        allowedTypesJson: (qt as { allowedTypesJson?: string }).allowedTypesJson ?? "[]",
         role: (qt as any).role ?? "STANDARD",
         groupKey: (qt as any).groupKey ?? "",
       })),
@@ -819,6 +825,7 @@ function BlueprintEditor({ params, searchParams }: PageProps<"/blueprints/[id]">
           orChoiceMode: (s as any).orChoiceMode ?? "BOARD_DEFAULT",
           orAlternativeCount: (s as any).orAlternativeCount ?? null,
           orSlotsJson: (s as any).orSlotsJson ?? null,
+          allowedTypesJson: s.allowedTypesJson ?? "[]",
           role: (s as any).role ?? "STANDARD",
           groupKey: (s as any).groupKey ?? "",
         })),
@@ -1419,6 +1426,41 @@ function BlueprintEditor({ params, searchParams }: PageProps<"/blueprints/[id]">
                                 = {qt.count * qt.marksEach} marks
                               </div>
                             </div>
+
+                            {/* Other forms this slot may take at the same marks (e.g. grammar in an English 3-mark section) */}
+                            {(() => {
+                              const accepted = allowedTypesFor(qt);
+                              const pool = (isPrePrimary ? [...KINDERGARTEN_QUESTION_TYPES, ...STANDARD_QUESTION_TYPES] : STANDARD_QUESTION_TYPES).filter((t) => t !== qt.type);
+                              const toggle = (t: string) => {
+                                const next = accepted.includes(t) ? accepted.filter((x) => x !== t) : [...accepted, t];
+                                patchQuestionType(grp.key, qt.key, { allowedTypesJson: JSON.stringify(next) });
+                              };
+                              return (
+                                <div className="pt-2 border-t border-slate-200/80 space-y-1.5">
+                                  <div className="text-[11px] font-semibold text-slate-700">
+                                    Also accepts, at {qt.marksEach} mark{qt.marksEach > 1 ? "s" : ""}:
+                                    <span className="ml-1 font-normal text-slate-500">teachers can use these forms instead of {QUESTION_TYPE_LABEL[qt.type as keyof typeof QUESTION_TYPE_LABEL] ?? qt.type}</span>
+                                  </div>
+                                  <div className="flex flex-wrap gap-1" role="group" aria-label="Also accepts">
+                                    {pool.map((t) => {
+                                      const on = accepted.includes(t);
+                                      return (
+                                        <button
+                                          key={t}
+                                          type="button"
+                                          disabled={isReadOnly}
+                                          aria-pressed={on}
+                                          onClick={() => toggle(t)}
+                                          className={`rounded-full border px-2 py-0.5 text-[10.5px] ${on ? "border-indigo-400 bg-indigo-50 font-semibold text-indigo-800" : "border-slate-200 bg-white text-slate-500 hover:border-slate-300"}`}
+                                        >
+                                          {QUESTION_TYPE_LABEL[t as keyof typeof QUESTION_TYPE_LABEL] ?? t}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              );
+                            })()}
 
                             {/* Internal Choice (OR / अथवा) Configuration */}
                             <div className="pt-2 border-t border-slate-200/80 space-y-2">

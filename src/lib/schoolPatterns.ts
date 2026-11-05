@@ -4,6 +4,9 @@
  *   Classes 1–4, 50 marks: MCQ 5×1, Fill in the blanks 5×1, VSA 6×2, SA 6×3, LA 2×5  (24 questions)
  *   Classes 5–8, 60 marks: MCQ 5×1, Fill in the blanks 5×1, VSA 6×2, SA 6×3, LA 4×5  (26 questions)
  *
+ * Section titles name the marks, not the form: each slot also accepts other forms at the same marks (grammar or a
+ * passage in English, a map in SST; see sectionTypes.defaultAllowedTypes), so a form-named title would mislead.
+ *
  * Every question of the school's blueprint grid also names its content (chapter), difficulty (Easy / Average /
  * Difficult) and skill (Knowledge / Understanding / Applying / HOTS); those are carried by the questions.
  */
@@ -22,11 +25,11 @@ function schoolPattern(range: [number, number], totalMarks: number, longCount: n
     targetClasses: `Class ${from}–${to}`,
     archetype: "SCHOOL",
     sections: [
-      { title: "Section A – Multiple Choice Questions", instructions: "Choose the correct option.", questionTypes: [{ type: "MCQ", count: 5, marksEach: 1, orChoiceMode: "NOT_REQUIRED" }] },
-      { title: "Section B – Fill in the Blanks", instructions: "Fill in the blanks.", questionTypes: [{ type: "FILL_BLANK", count: 5, marksEach: 1, orChoiceMode: "NOT_REQUIRED" }] },
-      { title: "Section C – Very Short Answer Questions", instructions: "Answer in one or two sentences.", questionTypes: [{ type: "VERY_SHORT", count: 6, marksEach: 2, orChoiceMode: "NOT_REQUIRED" }] },
-      { title: "Section D – Short Answer Questions", instructions: "Answer in 30–40 words.", questionTypes: [{ type: "SHORT", count: 6, marksEach: 3, orChoiceMode: "NOT_REQUIRED" }] },
-      { title: "Section E – Long Answer Questions", instructions: "Answer in detail.", questionTypes: [{ type: "LONG", count: longCount, marksEach: 5, orChoiceMode: "NOT_REQUIRED" }] },
+      { title: "Section A – Objective Questions", instructions: "Choose the correct option.", questionTypes: [{ type: "MCQ", count: 5, marksEach: 1, orChoiceMode: "NOT_REQUIRED" }] },
+      { title: "Section B – One-Mark Questions", instructions: "Fill in the blanks.", questionTypes: [{ type: "FILL_BLANK", count: 5, marksEach: 1, orChoiceMode: "NOT_REQUIRED" }] },
+      { title: "Section C – Two-Mark Questions", instructions: "Answer in one or two sentences.", questionTypes: [{ type: "VERY_SHORT", count: 6, marksEach: 2, orChoiceMode: "NOT_REQUIRED" }] },
+      { title: "Section D – Three-Mark Questions", instructions: "Answer in 30–40 words.", questionTypes: [{ type: "SHORT", count: 6, marksEach: 3, orChoiceMode: "NOT_REQUIRED" }] },
+      { title: "Section E – Five-Mark Questions", instructions: "Answer in detail.", questionTypes: [{ type: "LONG", count: longCount, marksEach: 5, orChoiceMode: "NOT_REQUIRED" }] },
     ],
   };
 }

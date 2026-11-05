@@ -100,6 +100,7 @@ export async function mapCurriculumTemplateToBlueprintInput(
     orChoiceMode?: string | null;
     orAlternativeCount?: number | null;
     orSlotsJson?: string | null;
+    allowedTypesJson?: string | null;
     choicePolicy?: { policyType: string };
     role?: string | null;
     groupKey?: string | null;
@@ -150,6 +151,7 @@ export async function mapCurriculumTemplateToBlueprintInput(
       orChoiceMode: choiceMode,
       orAlternativeCount: s.orAlternativeCount ?? (choiceMode === "REQUIRED" ? 1 : 0),
       orSlotsJson: s.orSlotsJson || "[]",
+      allowedTypesJson: s.allowedTypesJson || "[]",
       role: (["PASSAGE", "GRAMMAR", "WRITING", "LITERATURE"].includes(s.role ?? "") ? s.role : "STANDARD") as "STANDARD" | "PASSAGE" | "GRAMMAR" | "WRITING" | "LITERATURE",
       groupKey: s.groupKey || "",
     };

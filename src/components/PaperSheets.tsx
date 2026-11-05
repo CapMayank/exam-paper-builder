@@ -1,5 +1,6 @@
 "use client";
 import { questionSlotMarks } from "@/lib/blueprint";
+import { questionInstruction } from "@/lib/sectionTypes";
 import { BOOKLET_MAX_PAGES, describeFit, FIT_LEVELS, fitMm, getFit, MIN_QUESTION_GAP_MM, nextFitLevel, WORKSHEET_FIT_LEVELS, WORKSHEET_MAX_PAGES, type FitStatus, type PrintFit } from "@/lib/printFit";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -587,13 +588,27 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
           : [];
         const canDecompose = !isPrePrimary && !it.orQuestion && subparts && subparts.length > 1;
         const totalQuestionMarks = questionSlotMarks(s, { ...it.question, subparts } as never).marks;
+        // A question in a different form from its section's (e.g. grammar in a short-answer section) gets its own line.
+        const instructionLine = questionInstruction(s, it.question.type, it.instruction);
+        if (instructionLine) {
+          blocks.push({
+            key: `${it.id}-instr`,
+            keepWithNext: true,
+            forceBreakBefore: Boolean(it.pageBreakBefore),
+            groupId: it.id,
+            render: () => (
+              <div style={{ fontStyle: "italic", fontWeight: 500, paddingBottom: g(isA5 ? 0.75 : 1) }}>{instructionLine}</div>
+            ),
+          });
+        }
+        const breakBeforeQuestion = Boolean(it.pageBreakBefore) && !instructionLine;
 
         if (canDecompose) {
           // Passage stem keepWithNext: true ensures stems are never detached from first subpart
           blocks.push({
             key: `${it.id}-stem`,
             keepWithNext: true,
-            forceBreakBefore: Boolean(it.pageBreakBefore),
+            forceBreakBefore: breakBeforeQuestion,
             groupId: it.id,
             render: () => (
               <div style={{ paddingBottom: g(isA5 ? 1.5 : 2.5) }}>
@@ -644,7 +659,7 @@ function buildBlocks(paper: PaperData, compact?: boolean, isA5?: boolean, showSi
           blocks.push({
             key: it.id,
             keepWithNext: false,
-            forceBreakBefore: Boolean(it.pageBreakBefore),
+            forceBreakBefore: breakBeforeQuestion,
             groupId: it.id,
             render: () => (
               <div style={{ paddingBottom: questionBottomPadding }}>

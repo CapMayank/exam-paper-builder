@@ -1,3 +1,4 @@
+import { isTypeAllowed } from "@/lib/sectionTypes";
 import { body, HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { toQuestionDto } from "@/lib/dto";
@@ -64,8 +65,8 @@ export const PUT = route(async (req, { id }, user) => {
     where: { id },
     include: {
       book: { select: { className: true, subject: true } },
-      paperQuestions: { select: { paper: { select: { status: true } }, section: { select: { type: true } } } },
-      orPaperQuestions: { select: { paper: { select: { status: true } }, section: { select: { type: true } } } },
+      paperQuestions: { select: { paper: { select: { status: true } }, section: { select: { type: true, marksEach: true, allowedTypesJson: true } } } },
+      orPaperQuestions: { select: { paper: { select: { status: true } }, section: { select: { type: true, marksEach: true, allowedTypesJson: true } } } },
     },
   });
   if (!existing) throw new HttpError(404, "Question not found");
@@ -78,8 +79,8 @@ export const PUT = route(async (req, { id }, user) => {
   }
   // A question already placed in a section must keep a type that section accepts.
   if (
-    existing.paperQuestions.some((p) => p.section.type !== input.type) ||
-    existing.orPaperQuestions.some((p) => p.section.type !== input.type)
+    existing.paperQuestions.some((p) => !isTypeAllowed(p.section, input.type)) ||
+    existing.orPaperQuestions.some((p) => !isTypeAllowed(p.section, input.type))
   ) {
     throw new HttpError(409, "This question is used in a paper section that needs its current type.");
   }

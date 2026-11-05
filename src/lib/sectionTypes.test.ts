@@ -1,0 +1,131 @@
+import { describe, expect, it } from "vitest";
+import { autoFillPaper } from "./autofill";
+import { whyCannotAdd, type BlueprintDef } from "./blueprint";
+import {
+  allowedTypesFor,
+  defaultAllowedTypes,
+  isTypeAllowed,
+  questionInstruction,
+  subjectFamily,
+  toleratesType,
+  typeRejection,
+} from "./sectionTypes";
+
+const sec = (type: string, marksEach: number, allowed?: string[]) => ({
+  id: `s-${type}-${marksEach}`,
+  title: `Section ${type}`,
+  type,
+  count: 2,
+  marksEach,
+  allowedTypesJson: allowed ? JSON.stringify(allowed) : "[]",
+});
+
+describe("allowed types of a blueprint slot", () => {
+  it("a section with no stored list places only its own type", () => {
+    expect(allowedTypesFor(sec("SHORT", 3))).toEqual(["SHORT"]);
+    expect(isTypeAllowed(sec("SHORT", 3), "LONG")).toBe(false);
+  });
+
+  it("an already-placed question keeps the old tolerance, so no new warnings appear", () => {
+    expect(toleratesType(sec("SHORT", 3), "LONG")).toBe(true);
+    expect(toleratesType(sec("SHORT", 2), "LONG")).toBe(false);
+    expect(toleratesType(sec("MCQ", 1), "TRUE_FALSE")).toBe(true);
+    expect(toleratesType(sec("MCQ", 2), "TRUE_FALSE")).toBe(false);
+    expect(toleratesType(sec("SHORT", 3, ["GRAMMAR"]), "GRAMMAR")).toBe(true);
+  });
+
+  it("uses the stored list, always with the default type first", () => {
+    const s = sec("SHORT", 3, ["GRAMMAR", "UNSEEN_PASSAGE"]);
+    expect(allowedTypesFor(s)).toEqual(["SHORT", "GRAMMAR", "UNSEEN_PASSAGE"]);
+    expect(isTypeAllowed(s, "GRAMMAR")).toBe(true);
+    expect(isTypeAllowed(s, "LONG")).toBe(false);
+  });
+
+  it("a stored list of only the default type locks the section", () => {
+    expect(allowedTypesFor(sec("MCQ", 1, ["MCQ"]))).toEqual(["MCQ"]);
+  });
+
+  it("an allowed form must carry exactly the slot's marks", () => {
+    const s = sec("SHORT", 3, ["GRAMMAR"]);
+    expect(typeRejection(s, "GRAMMAR", 3)).toBeNull();
+    expect(typeRejection(s, "GRAMMAR", 4)).toMatch(/3-mark/);
+    expect(typeRejection(s, "MAP_WORK", 3)).toMatch(/only accepts/);
+  });
+});
+
+describe("school pattern defaults by subject", () => {
+  it("recognises the subject family", () => {
+    expect(subjectFamily("English")).toBe("LANGUAGE");
+    expect(subjectFamily("हिंदी")).toBe("LANGUAGE");
+    expect(subjectFamily("Social Science")).toBe("SST");
+    expect(subjectFamily("Science")).toBe("SCIENCE");
+    expect(subjectFamily("Mathematics")).toBe("MATHS");
+  });
+
+  it("gives English grammar, passage and writing at the right marks", () => {
+    expect(defaultAllowedTypes("MCQ", 1, "English")).toContain("GRAMMAR");
+    expect(defaultAllowedTypes("SHORT", 3, "English")).toEqual(["SHORT", "LONG", "GRAMMAR", "REFERENCE_CONTEXT", "UNSEEN_PASSAGE"]);
+    expect(defaultAllowedTypes("LONG", 5, "English")).toEqual(["LONG", "SHORT", "WRITING_SKILL", "UNSEEN_PASSAGE"]);
+  });
+
+  it("gives SST maps, Science diagrams and Maths case studies, not grammar", () => {
+    expect(defaultAllowedTypes("SHORT", 3, "Social Science")).toContain("MAP_WORK");
+    expect(defaultAllowedTypes("VERY_SHORT", 2, "Science")).toContain("DRAW");
+    expect(defaultAllowedTypes("LONG", 5, "Mathematics")).toContain("CASE_STUDY");
+    expect(defaultAllowedTypes("SHORT", 3, "Mathematics")).not.toContain("GRAMMAR");
+  });
+});
+
+describe("printed instruction line", () => {
+  const english = sec("SHORT", 3, ["GRAMMAR"]);
+  it("is automatic only for a form the section explicitly allows", () => {
+    expect(questionInstruction(english, "SHORT")).toBe("");
+    expect(questionInstruction(english, "GRAMMAR")).toBe("Do as directed.");
+    expect(questionInstruction(english, "GRAMMAR", "Change into passive voice.")).toBe("Change into passive voice.");
+    // an older paper's tolerated SHORT↔LONG swap prints exactly as before
+    expect(questionInstruction(sec("SHORT", 3), "LONG")).toBe("");
+  });
+});
+
+describe("placing a mixed-form question", () => {
+  const bp: BlueprintDef = {
+    sections: [sec("SHORT", 3, ["GRAMMAR"])],
+    chapters: [{ chapterId: "c1", marks: 6 }],
+  };
+  const id = bp.sections[0].id;
+
+  it("accepts an allowed form at the slot's marks", () => {
+    expect(whyCannotAdd(bp, [], { sectionId: id, chapterId: "c1", type: "GRAMMAR", marks: 3 })).toBeNull();
+  });
+
+  it("refuses a form the section does not list", () => {
+    expect(whyCannotAdd(bp, [], { sectionId: id, chapterId: "c1", type: "LONG", marks: 3 })).toMatch(/only accepts/);
+  });
+});
+
+describe("autofill with allowed forms", () => {
+  const bp: BlueprintDef = {
+    sections: [sec("SHORT", 3, ["GRAMMAR"])],
+    chapters: [{ chapterId: "c1", marks: 6 }],
+  };
+
+  it("fills with the default form first", () => {
+    const res = autoFillPaper(bp, [], [
+      { id: "g1", chapterId: "c1", type: "GRAMMAR" },
+      { id: "s1", chapterId: "c1", type: "SHORT" },
+      { id: "s2", chapterId: "c1", type: "SHORT" },
+    ]);
+    expect(res.complete).toBe(true);
+    expect(res.added.map((a) => a.questionId).sort()).toEqual(["s1", "s2"]);
+  });
+
+  it("falls back to another allowed form when the bank runs short", () => {
+    const res = autoFillPaper(bp, [], [
+      { id: "s1", chapterId: "c1", type: "SHORT" },
+      { id: "g1", chapterId: "c1", type: "GRAMMAR" },
+      { id: "l1", chapterId: "c1", type: "LONG" },
+    ]);
+    expect(res.complete).toBe(true);
+    expect(res.added.map((a) => a.questionId).sort()).toEqual(["g1", "s1"]);
+  });
+});

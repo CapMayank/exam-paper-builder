@@ -86,6 +86,7 @@ export const POST = route(async (req, _params, user) => {
           orChoiceMode: s.orChoiceMode || "BOARD_DEFAULT",
           orAlternativeCount: s.orAlternativeCount ?? 1,
           orSlotsJson: s.orSlotsJson || "[]",
+          allowedTypesJson: s.allowedTypesJson || "[]",
           role: s.role || "STANDARD",
           groupKey: s.groupKey || "",
           position,

@@ -1,4 +1,5 @@
 import { quotaRepresentatives, type BlueprintDef, type PlacedItem } from "./blueprint";
+import { allowedTypesFor } from "./sectionTypes";
 
 export type CandidateQuestion = {
   id: string;
@@ -38,6 +39,8 @@ type Slot = {
   title: string;
   type: string;
   poolKey: string;
+  /** Pools of the section's other allowed forms, tried only after the default type's pool. */
+  fallbackKeys: string[];
   marksEach: number;
   /** Slots consumed (a multi-pair match question fills several) and the marks it carries. */
   units: number;
@@ -195,6 +198,7 @@ export function autoFillPaper(
         title: sec.title,
         type: sec.type,
         poolKey: poolKey(sec.type, false),
+        fallbackKeys: [],
         marksEach: sec.marksEach,
         units: needed,
         cost: needed * sec.marksEach,
@@ -220,6 +224,9 @@ export function autoFillPaper(
         title: sec.title,
         type: sec.type,
         poolKey: poolKey(sec.type, sec.role === "PASSAGE"),
+        fallbackKeys: allowedTypesFor(sec)
+          .filter((t) => t !== sec.type && t !== "MATCH_COLUMN")
+          .map((t) => poolKey(t, sec.role === "PASSAGE")),
         marksEach: sec.marksEach,
         units: 1,
         cost: sec.marksEach,
@@ -275,8 +282,16 @@ export function autoFillPaper(
     if (slot.needsPairs !== undefined) return (c.matchPairs ?? 0) >= slot.needsPairs;
     return c.subpartsMarks === undefined || c.subpartsMarks === slot.marksEach;
   };
-  const firstFit = (slot: Slot, ch: string) =>
-    (buckets.get(`${slot.poolKey}#${ch}`) ?? []).find((c) => fits(c, slot));
+  const slotKeys = (slot: Slot) => [slot.poolKey, ...slot.fallbackKeys];
+  // default form first; another allowed form only when this chapter has none left
+  const firstFit = (slot: Slot, ch: string) => {
+    for (const key of slotKeys(slot)) {
+      const hit = (buckets.get(`${key}#${ch}`) ?? []).find((c) => fits(c, slot));
+      if (hit) return hit;
+    }
+    return undefined;
+  };
+  const isFallback = (c: CandidateQuestion, slot: Slot) => (c.type === slot.type ? 0 : 1);
 
   let steps = 0;
   const maxSteps = 200000;
@@ -293,11 +308,11 @@ export function autoFillPaper(
       .filter((ch) => ((chapterRemaining.get(rep(ch)) ?? 0)) >= slot.cost)
       .map((ch) => ({ ch, cand: firstFit(slot, ch) }))
       .filter((o): o is { ch: string; cand: CandidateQuestion } => Boolean(o.cand))
-      .sort((x, y) => difficultyRank(x.cand) - difficultyRank(y.cand) || ((chapterRemaining.get(rep(y.ch)) ?? 0)) - ((chapterRemaining.get(rep(x.ch)) ?? 0)));
+      .sort((x, y) => isFallback(x.cand, slot) - isFallback(y.cand, slot) || difficultyRank(x.cand) - difficultyRank(y.cand) || ((chapterRemaining.get(rep(y.ch)) ?? 0)) - ((chapterRemaining.get(rep(x.ch)) ?? 0)));
     const triedRemaining = new Set<string>();
     for (const { ch, cand } of options) {
       // chapters with identical remaining quota and nothing else different are interchangeable for feasibility
-      const sig = `${chapterRemaining.get(rep(ch))}|${(buckets.get(`${slot.poolKey}#${ch}`) ?? []).filter((c) => !chosenQuestionIds.has(c.id)).length}`;
+      const sig = `${chapterRemaining.get(rep(ch))}|${cand.type}|${slotKeys(slot).reduce((n, key) => n + (buckets.get(`${key}#${ch}`) ?? []).filter((c) => !chosenQuestionIds.has(c.id)).length, 0)}`;
       if (triedRemaining.has(sig)) continue;
       triedRemaining.add(sig);
       chosen.set(slot.order, cand);
@@ -336,7 +351,7 @@ export function autoFillPaper(
     }
 
     for (const slot of sortedSlots) {
-      const pool = candidatesByType.get(slot.poolKey) ?? [];
+      const pool = slotKeys(slot).flatMap((key) => candidatesByType.get(key) ?? []);
       const valid = pool
         .filter((c) => {
           if (chosenQuestionIds.has(c.id)) return false;
@@ -345,7 +360,7 @@ export function autoFillPaper(
           } else if (c.subpartsMarks !== undefined && c.subpartsMarks !== slot.marksEach) return false;
           return ((chapterRemaining.get(rep(c.chapterId)) ?? 0)) >= slot.cost;
         })
-        .sort((a, b) => ((chapterRemaining.get(rep(b.chapterId)) ?? 0)) - ((chapterRemaining.get(rep(a.chapterId)) ?? 0)));
+        .sort((a, b) => isFallback(a, slot) - isFallback(b, slot) || ((chapterRemaining.get(rep(b.chapterId)) ?? 0)) - ((chapterRemaining.get(rep(a.chapterId)) ?? 0)));
 
       if (valid.length > 0) {
         const cand = valid[0];
@@ -366,7 +381,8 @@ export function autoFillPaper(
     if (q) {
       let orQuestionId: string | null = null;
       if (slot.requiresInternalChoice) {
-        const pool = candidatesByType.get(slot.poolKey) ?? [];
+        // the OR alternative prefers the primary's own form, then any other form the slot accepts
+        const pool = [poolKey(q.type, Boolean(q.passageGroupId)), ...slotKeys(slot)].flatMap((key) => candidatesByType.get(key) ?? []);
         const orCand = pool.find(
           (c) =>
             c.id !== q.id &&

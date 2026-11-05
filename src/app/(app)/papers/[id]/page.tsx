@@ -47,6 +47,7 @@ import { SubjectWorkspaceDrawer } from "@/components/subject-workspace/SubjectWo
 import { SectionAiModal } from "@/components/SectionAiModal";
 import { QuestionForm } from "@/components/QuestionForm";
 import { QuestionPicker } from "@/components/QuestionPicker";
+import { questionInstruction, toleratesType } from "@/lib/sectionTypes";
 import { isExhaustedUsage, QuestionFreshnessAlert, QuestionUsagePills } from "@/components/QuestionUsageHistory";
 import { QuestionView } from "@/components/QuestionView";
 import { ErrorBanner, Field, Modal, Spinner, useConfirm, useToast } from "@/components/ui";
@@ -345,6 +346,19 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
       const res = await api<{ assigned: number; paper: PaperData }>(`/api/papers/${id}/suggest-components`, { method: "POST", json: {} });
       adopt(res.paper);
       toast.success(`Suggested a component for ${res.assigned} question(s). You can change any of them.`);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
+  async function handleSetInstruction(itemId: string, instruction: string) {
+    cancelAutosave();
+    try {
+      const updated = await api<PaperData>(`/api/papers/${id}/questions/${itemId}`, {
+        method: "PATCH",
+        json: { instruction },
+      });
+      adopt(updated);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -1964,15 +1978,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                           secLetter,
                           idx
                         );
-                        const isSubjectiveCompat =
-                          (it.question.type === "SHORT" || it.question.type === "LONG") &&
-                          (s.type === "SHORT" || s.type === "LONG") &&
-                          s.marksEach >= 3;
-                        const isObjectiveCompat =
-                          ["MCQ", "FILL_BLANK", "TRUE_FALSE", "MATCH_COLUMN", "ONE_WORD"].includes(it.question.type) &&
-                          ["MCQ", "FILL_BLANK", "TRUE_FALSE", "MATCH_COLUMN", "ONE_WORD"].includes(s.type) &&
-                          s.marksEach === 1;
-                        const isTypeMismatch = it.question.type !== s.type && !isSubjectiveCompat && !isObjectiveCompat;
+                        const isTypeMismatch = !toleratesType(s, it.question.type);
                         const isExcess = idx >= s.count || effectiveUnits > s.count;
 
                         const isMatchQ = it.question.type === "MATCH_COLUMN" || s.type === "MATCH_COLUMN";
@@ -2044,6 +2050,27 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                     </option>
                                   ))}
                                 </select>
+                              </label>
+                            )}
+
+                            {(it.question.type !== s.type || (it.instruction ?? "") !== "") && (
+                              <label className="mb-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600">
+                                <span className="font-semibold">Printed instruction:</span>
+                                <input
+                                  key={`${it.id}:${it.instruction ?? ""}`}
+                                  className="input !py-0.5 !text-[11px] min-w-0 flex-1 italic"
+                                  defaultValue={questionInstruction(s, it.question.type, it.instruction)}
+                                  placeholder="Line printed above this question"
+                                  disabled={!canEditPaper || final}
+                                  aria-label="Printed instruction"
+                                  maxLength={300}
+                                  onBlur={(e) => {
+                                    const v = e.target.value.trim();
+                                    const auto = questionInstruction(s, it.question.type, "");
+                                    const next = v === auto ? "" : v;
+                                    if (next !== (it.instruction ?? "")) void handleSetInstruction(it.id, next);
+                                  }}
+                                />
                               </label>
                             )}
 

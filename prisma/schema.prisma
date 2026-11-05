@@ -147,6 +147,7 @@ model BlueprintSection {
   orSlotsJson        String          @default("[]") // JSON array of booleans per slot e.g. [true, false]
   role               String          @default("STANDARD") // STANDARD | PASSAGE | GRAMMAR | WRITING | LITERATURE
   groupKey           String          @default("") // stable blueprint group id, e.g. "reading.unseen-prose"
+  allowedTypesJson   String          @default("[]") // other question types a slot may take at the same marks; "[]" = legacy rule (see sectionTypes.ts)
   blueprint          Blueprint       @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
   paperQuestions PaperQuestion[]
 }
@@ -227,6 +228,7 @@ model PaperQuestion {
   position     Int
   pageBreakBefore Boolean      @default(false)
   componentKey String          @default("") // blueprint component this question counts toward
+  instruction  String          @default("") // printed above the question; "" = automatic line when its type differs from the section's
   paper        Paper            @relation(fields: [paperId], references: [id], onDelete: Cascade)
   section      BlueprintSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   question     Question         @relation("PrimaryQuestion", fields: [questionId], references: [id], onDelete: Restrict)

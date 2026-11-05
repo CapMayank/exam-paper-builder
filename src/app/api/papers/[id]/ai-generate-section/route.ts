@@ -5,6 +5,7 @@ import { detectPaperLanguage, type PaperLanguage } from "@/lib/localization";
 import { DEFAULT_DIFFICULTY_PROFILE } from "@/lib/difficultyProfiles";
 import { slotRowRole, slotTaskDirective } from "@/lib/paperAutogen";
 import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
+import { allowedTypesFor, isTypeAllowed } from "@/lib/sectionTypes";
 
 export const POST = route(async (req, { id }, user) => {
   const paper = await loadPaperView(id);
@@ -38,10 +39,18 @@ export const POST = route(async (req, { id }, user) => {
   const matchedSection = paper.blueprint.sections.find(
     (s) => (sectionId && s.id === sectionId) || s.title === sectionTitle,
   );
+  // the teacher may generate any form the section accepts; the slot's marks never change
+  if (matchedSection && sectionType && !isTypeAllowed(matchedSection, String(sectionType))) {
+    throw new HttpError(
+      422,
+      `"${matchedSection.title}" does not accept ${sectionType} questions (allowed: ${allowedTypesFor(matchedSection).join(", ")}).`,
+    );
+  }
+  const effectiveType = String(sectionType || matchedSection?.type || "MCQ");
   if (
     matchedSection &&
     (matchedSection as { role?: string }).role === "PASSAGE" &&
-    !["UNSEEN_PASSAGE", "CASE_STUDY", "REFERENCE_CONTEXT"].includes(matchedSection.type)
+    !["UNSEEN_PASSAGE", "CASE_STUDY", "REFERENCE_CONTEXT"].includes(effectiveType)
   ) {
     throw new HttpError(
       422,
@@ -83,7 +92,7 @@ export const POST = route(async (req, { id }, user) => {
     const task = slotTaskDirective(
       slotRowRole(slot.chapterTitle, subjectName, (matchedSection as { role?: string } | undefined)?.role),
       slot.chapterTitle,
-      matchedSection?.type || String(sectionType || ""),
+      effectiveType,
       matchedSection?.marksEach ?? (Number(marksEach) || 1),
       subjectName,
     );
@@ -108,7 +117,7 @@ export const POST = route(async (req, { id }, user) => {
     className: paper.blueprint.book.className,
     subject: paper.blueprint.book.subject,
     sectionTitle: sectionTitle || matchedSection?.title || "Section",
-    sectionType: sectionType || matchedSection?.type || "MCQ",
+    sectionType: effectiveType,
     sectionInstructions: effectiveInstructions,
     marksEach: Number(marksEach) || matchedSection?.marksEach || 1,
     language: resolvedLanguage,
@@ -130,7 +139,7 @@ export const POST = route(async (req, { id }, user) => {
     answerMode: answerMode === "together" ? "together" : "separate",
   });
 
-  if (res.isMock && ["UNSEEN_PASSAGE", "REFERENCE_CONTEXT"].includes(String(sectionType || matchedSection?.type))) {
+  if (res.isMock && ["UNSEEN_PASSAGE", "REFERENCE_CONTEXT"].includes(effectiveType)) {
     throw new HttpError(422, "Offline templates cannot write a real unseen passage. Connect a Gemini API key, or add the passage and its questions manually.");
   }
 

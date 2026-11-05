@@ -2,6 +2,7 @@
 
 import { isSubpartQuestionType, parseMatchColumnPairs } from "./constants";
 import { parseSubparts, parseSubpartsPayload, subpartsTotalMarks } from "./types";
+import { toleratesType, typeRejection } from "./sectionTypes";
 
 export type SectionDef = {
   id: string;
@@ -13,6 +14,8 @@ export type SectionDef = {
   orChoiceMode?: "BOARD_DEFAULT" | "REQUIRED" | "NOT_REQUIRED" | string | null;
   orAlternativeCount?: number | null;
   orSlotsJson?: string | null;
+  /** Other question types this slot accepts at the same marks (see sectionTypes.ts). */
+  allowedTypesJson?: string | null;
   /** Examination purpose of the slot; placement honours it, not just type + marks. */
   role?: SectionRole | string | null;
   groupKey?: string | null;
@@ -87,6 +90,7 @@ export type QuestionTypeItem = {
   orChoiceMode?: "BOARD_DEFAULT" | "REQUIRED" | "NOT_REQUIRED";
   orAlternativeCount?: number;
   orSlotsJson?: string;
+  allowedTypesJson?: string;
   role?: string;
   groupKey?: string;
 };
@@ -137,6 +141,7 @@ export function groupSectionsFromFlat(
     orChoiceMode?: string | null;
     orAlternativeCount?: number | null;
     orSlotsJson?: string | null;
+    allowedTypesJson?: string | null;
     role?: string | null;
     groupKey?: string | null;
   }[]
@@ -148,6 +153,7 @@ export function groupSectionsFromFlat(
     const orChoiceMode = (s.orChoiceMode as any) || "BOARD_DEFAULT";
     const orAlternativeCount = s.orAlternativeCount ?? 1;
     const orSlotsJson = s.orSlotsJson || "[]";
+    const allowedTypesJson = s.allowedTypesJson || "[]";
     const role = s.role || "STANDARD";
     const groupKey = s.groupKey || "";
     if (last && last.title.trim().toLowerCase() === s.title.trim().toLowerCase()) {
@@ -160,6 +166,7 @@ export function groupSectionsFromFlat(
         orChoiceMode,
         orAlternativeCount,
         orSlotsJson,
+        allowedTypesJson,
         role,
         groupKey,
       });
@@ -181,6 +188,7 @@ export function groupSectionsFromFlat(
             orChoiceMode,
             orAlternativeCount,
             orSlotsJson,
+            allowedTypesJson,
             role,
             groupKey,
           },
@@ -213,6 +221,7 @@ export function flattenSectionGroups(groups: SectionGroup[]): {
   orChoiceMode: "BOARD_DEFAULT" | "REQUIRED" | "NOT_REQUIRED";
   orAlternativeCount: number;
   orSlotsJson: string;
+  allowedTypesJson: string;
   role: string;
   groupKey: string;
 }[] {
@@ -227,6 +236,7 @@ export function flattenSectionGroups(groups: SectionGroup[]): {
       orChoiceMode: (qt.orChoiceMode as any) || "BOARD_DEFAULT",
       orAlternativeCount: qt.orAlternativeCount ?? 1,
       orSlotsJson: qt.orSlotsJson || "[]",
+      allowedTypesJson: qt.allowedTypesJson || "[]",
       role: qt.role || "STANDARD",
       groupKey: qt.groupKey || "",
     }))
@@ -516,7 +526,8 @@ export function whyCannotAdd(
 ): string | null {
   const section = bp.sections.find((s) => s.id === candidate.sectionId);
   if (!section) return "That section is not part of this paper's blueprint.";
-  if (candidate.type !== section.type) return `${section.title} only accepts ${section.type} questions.`;
+  const typeReason = typeRejection(section, candidate.type, candidate.marks);
+  if (typeReason) return typeReason;
   const roleReason = roleMismatchReason(section, candidate);
   if (roleReason) return roleReason;
   const status = paperStatus(bp, items);
@@ -667,18 +678,7 @@ export function diagnosePaperImplications(
     // Check type mismatches within section
     for (const item of placed) {
       if (item.type && item.type !== s.type) {
-        // Tolerant compatibility: SHORT vs LONG for 3m/4m questions
-        const isSubjectiveCompat =
-          (item.type === "SHORT" || item.type === "LONG") &&
-          (s.type === "SHORT" || s.type === "LONG") &&
-          s.marksEach >= 3;
-        // Objective types compatibility if section has objective/MCQ
-        const isObjectiveCompat =
-          ["MCQ", "FILL_BLANK", "TRUE_FALSE", "MATCH_COLUMN", "ONE_WORD"].includes(item.type) &&
-          ["MCQ", "FILL_BLANK", "TRUE_FALSE", "MATCH_COLUMN", "ONE_WORD"].includes(s.type) &&
-          s.marksEach === 1;
-
-        if (!isSubjectiveCompat && !isObjectiveCompat) {
+        if (!toleratesType(s, item.type)) {
           implications.push({
             code: "TYPE_MISMATCH",
             severity: "error",

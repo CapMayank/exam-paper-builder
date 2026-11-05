@@ -51,6 +51,7 @@ export type Section = {
   orChoiceMode?: "BOARD_DEFAULT" | "REQUIRED" | "NOT_REQUIRED";
   orAlternativeCount?: number;
   orSlotsJson?: string;
+  allowedTypesJson?: string;
   role?: "STANDARD" | "PASSAGE" | "GRAMMAR" | "WRITING" | "LITERATURE";
   groupKey?: string;
 };
@@ -105,6 +106,8 @@ export type PaperItem = {
   position: number;
   pageBreakBefore?: boolean;
   componentKey?: string;
+  /** Teacher's line printed above the question; "" = automatic when its type differs from the section's. */
+  instruction?: string;
   question: QuestionDto;
   orQuestion?: QuestionDto | null;
 };

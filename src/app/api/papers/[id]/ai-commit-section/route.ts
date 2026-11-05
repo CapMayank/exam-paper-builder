@@ -1,3 +1,4 @@
+import { allowedTypesFor, isTypeAllowed } from "@/lib/sectionTypes";
 import { HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { canonicalMcqAnswer, isSubpartQuestionType, parseMatchColumnPairs, serializeMatchColumnPair } from "@/lib/constants";
@@ -121,8 +122,8 @@ export const POST = route(async (req, { id }, user) => {
 
   for (let i = 0; i < questions.length; i++) {
     const q = questions[i];
-    if (q.type && q.type !== section.type) {
-      throw new HttpError(422, `Question ${i + 1} is ${q.type} but section "${section.title}" only accepts ${section.type}.`);
+    if (q.type && !isTypeAllowed(section, q.type)) {
+      throw new HttpError(422, `Question ${i + 1} is ${q.type} but section "${section.title}" only accepts ${allowedTypesFor(section).join(", ")}.`);
     }
     if (choiceForbidden && q.orQuestion) {
       q.orQuestion = undefined;

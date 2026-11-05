@@ -31,6 +31,7 @@ import {
 } from "@/lib/constants";
 import type { GeneratedPaperQuestion } from "@/lib/gemini";
 import { planPaperSlotAssignments } from "@/lib/paperAutogen";
+import { allowedTypesFor } from "@/lib/sectionTypes";
 import { type PaperData, type Section, subpartsTotalMarks, normalizeSubpartMarks } from "@/lib/types";
 
 interface SectionAiModalProps {
@@ -55,6 +56,14 @@ export function SectionAiModal({
   const [questionCount, setQuestionCount] = useState<number>(1);
   const [teacherFocus, setTeacherFocus] = useState<string>("");
   const [generateDiagrams, setGenerateDiagrams] = useState<boolean>(true);
+  // which of the section's allowed forms to generate; the default type unless the teacher picks another
+  const [aiChoice, setAiChoice] = useState<{ sectionId: string; type: string } | null>(null);
+  const allowedTypes = section ? allowedTypesFor(section) : [];
+  const aiType =
+    aiChoice && section && aiChoice.sectionId === section.id && allowedTypes.includes(aiChoice.type)
+      ? aiChoice.type
+      : section?.type ?? "";
+  const setAiType = (type: string) => section && setAiChoice({ sectionId: section.id, type });
 
   const [loading, setLoading] = useState<boolean>(false);
   const [committing, setCommitting] = useState<boolean>(false);
@@ -211,7 +220,7 @@ export function SectionAiModal({
         body: JSON.stringify({
           sectionId: section.id,
           sectionTitle: section.title,
-          sectionType: section.type,
+          sectionType: aiType || section.type,
           sectionInstructions: section.instructions,
           marksEach: targetSlotMarks,
           language,
@@ -269,6 +278,7 @@ export function SectionAiModal({
         }
         return {
           ...q,
+          type: q.type || aiType || section!.type,
           options: opts,
           subparts: updatedSubparts,
           orQuestion: updatedOr,
@@ -500,6 +510,28 @@ export function SectionAiModal({
                   </div>
                 )}
               </div>
+
+              {allowedTypes.length > 1 && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1" htmlFor="section-ai-type">
+                    Question type
+                  </label>
+                  <select
+                    id="section-ai-type"
+                    value={aiType}
+                    onChange={(e) => setAiType(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium focus:border-indigo-500 focus:outline-hidden"
+                  >
+                    {allowedTypes.map((t) => (
+                      <option key={t} value={t}>
+                        {QUESTION_TYPE_LABEL[t as keyof typeof QUESTION_TYPE_LABEL] ?? t}
+                        {t === section.type ? " (default)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-[11px] text-slate-500">Each question still carries {section.marksEach} mark{section.marksEach > 1 ? "s" : ""}.</p>
+                </div>
+              )}
 
               {/* Language & Diagram Options */}
               <div className="grid grid-cols-2 gap-4">

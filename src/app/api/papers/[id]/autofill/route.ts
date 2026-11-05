@@ -1,3 +1,4 @@
+import { isTypeAllowed } from "@/lib/sectionTypes";
 import { HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { autoFillPaper } from "@/lib/autofill";
@@ -409,7 +410,7 @@ export const POST = route(async (req, { id }, user) => {
       (q) =>
         !usedIds.has(q.id) &&
         q.chapterId === params.chapterId &&
-        q.type === sec.type &&
+        isTypeAllowed(sec, q.type) &&
         !isParaphraseOrDuplicateChoice(params.primaryQuestionText, q.text).isDuplicateOrParaphrase,
     );
     if (bankMatch) {

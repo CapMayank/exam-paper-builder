@@ -185,6 +185,7 @@ export async function loadPaperView(id: string) {
     position: i.position,
     pageBreakBefore: Boolean(i.pageBreakBefore),
     componentKey: i.componentKey || "",
+    instruction: i.instruction || "",
     question: toQuestionDto(i.question),
     orQuestion: i.orQuestion ? toQuestionDto(i.orQuestion) : null,
   }));
