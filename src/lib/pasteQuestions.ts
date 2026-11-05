@@ -91,14 +91,14 @@ export function assignChapters(
   chapters: ChapterLite[],
   openMarks: Record<string, number>,
   marksEach: number,
-): Array<{ chapterId: string; reason: "title" | "quota" } | null> {
+): Array<{ chapterId: string; reason: "title" | "bank" | "quota" } | null> {
   const left = { ...openMarks };
   return texts.map((text) => {
     const roomy = chapters.filter((c) => (left[c.id] ?? 0) >= marksEach);
     if (roomy.length === 0) return null;
     const byTitle = suggestChapter(text, roomy);
     const pick =
-      byTitle?.reason === "title"
+      byTitle && byTitle.reason !== "quota"
         ? byTitle
         : { chapterId: [...roomy].sort((a, b) => (left[b.id] ?? 0) - (left[a.id] ?? 0) || a.number - b.number)[0].id, reason: "quota" as const };
     left[pick.chapterId] = (left[pick.chapterId] ?? 0) - marksEach;

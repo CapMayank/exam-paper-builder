@@ -865,7 +865,7 @@ export default function QuestionsPage() {
               ? "Add New Question to Bank"
               : "Edit Question"
           }
-          subtitle="Define question text, options, answers, and space requirements."
+          subtitle="Write the question and its answer. Chapter, difficulty and skill fill in as you type."
           onClose={() => setEditing(null)}
           wide
         >

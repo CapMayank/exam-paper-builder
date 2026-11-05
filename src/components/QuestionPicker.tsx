@@ -425,7 +425,7 @@ export function QuestionPicker({
         subparts: normalizedSubparts,
         answer: aiGenerated.answer || "",
         difficulty: aiDifficulty,
-        spaceMm: pickType === "LONG" ? 60 : pickType === "SHORT" ? 20 : 0,
+        spaceMm: 0, // classes 1–12 answer in a separate copy
         showGrid: false,
       };
 
@@ -454,7 +454,7 @@ export function QuestionPicker({
           subparts: orNormalizedSubparts,
           answer: aiGenerated.orQuestion.answer || "",
           difficulty: aiGenerated.orQuestion.difficulty || aiDifficulty,
-          spaceMm: pickType === "LONG" ? 60 : pickType === "SHORT" ? 20 : 0,
+          spaceMm: 0, // classes 1–12 answer in a separate copy
           showGrid: false,
         };
         const createdOr = await api<QuestionDto>("/api/questions", {
@@ -504,7 +504,7 @@ export function QuestionPicker({
       answer: aiGenerated.answer || "",
       difficulty: aiDifficulty,
       imagePath: null,
-      spaceMm: pickType === "LONG" ? 60 : pickType === "SHORT" ? 20 : 0,
+      spaceMm: 0, // classes 1–12 answer in a separate copy
       showGrid: false,
       createdAt: new Date().toISOString(),
       chapter: selectedChapter

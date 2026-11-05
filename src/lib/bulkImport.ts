@@ -10,7 +10,8 @@ export interface ParsedQuestionItem {
   showGrid: boolean;
 }
 
-const DEFAULT_SPACE: Record<string, number> = { SHORT: 20, LONG: 60, DRAW: 70, MCQ: 0, TRUE_FALSE: 0, FILL_BLANK: 0 };
+// Answers go in a separate copy: only a drawing box takes room on the paper unless a line asks for space.
+const DEFAULT_SPACE: Record<string, number> = { DRAW: 70, MAP_WORK: 70 };
 const LETTERS = "ABCDEF";
 
 /**

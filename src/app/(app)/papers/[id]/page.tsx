@@ -163,6 +163,24 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [autofilling, setAutofilling] = useState(false);
   const [reconciling, setReconciling] = useState(false);
+  // The "paper not complete" notice stays a one-line bar until the teacher opens it (remembered per browser).
+  // (the notice only renders once the paper has loaded in the browser, so reading storage here cannot mismatch SSR)
+  const [noticeOpen, setNoticeOpen] = useState(() => {
+    try {
+      return typeof window !== "undefined" && window.localStorage.getItem("paperbuilder.paperNotice") === "open";
+    } catch {
+      return false; // storage blocked: stay collapsed
+    }
+  });
+  const toggleNotice = () =>
+    setNoticeOpen((open) => {
+      try {
+        window.localStorage.setItem("paperbuilder.paperNotice", open ? "closed" : "open");
+      } catch {
+        /* ignore */
+      }
+      return !open;
+    });
   const [duplicatingSet, setDuplicatingSet] = useState(false);
   const [duplicateForm, setDuplicateForm] = useState({
     targetSet: "SET B",
@@ -1617,16 +1635,30 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
         <div className="space-y-5">
           {/* Smart Blueprint Reconciliation Notice */}
           {paper.implications && paper.implications.length > 0 && (
-            <div className="rounded-2xl border border-amber-300 bg-amber-50/95 p-5 shadow-sm space-y-3.5">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200/80 pb-2.5">
-                <div className="flex items-center gap-2 text-amber-950 font-bold text-sm">
-                  <Sparkles className="text-amber-600" size={18} />
+            <div
+              className={`rounded-2xl border border-amber-300 bg-amber-50/95 shadow-sm ${noticeOpen ? "p-5 space-y-3.5" : "px-4 py-2.5"}`}
+            >
+              <div
+                className={`flex flex-wrap items-center justify-between gap-2 ${noticeOpen ? "border-b border-amber-200/80 pb-2.5" : ""}`}
+              >
+                <button
+                  type="button"
+                  onClick={toggleNotice}
+                  aria-expanded={noticeOpen}
+                  aria-controls="paper-notice-details"
+                  className="flex min-h-9 items-center gap-2 rounded-lg text-left text-sm font-bold text-amber-950 hover:text-amber-800 focus-visible:outline-2 focus-visible:outline-amber-500"
+                >
+                  <Sparkles className="shrink-0 text-amber-600" size={16} aria-hidden />
                   <span>
                     {onlyProgressGaps
                       ? `Paper not complete yet (${paper.implications.length} thing${paper.implications.length > 1 ? "s" : ""} left to place)`
                       : `Blueprint Synchronization Notice (${paper.implications.length} adjustment${paper.implications.length > 1 ? "s" : ""} required)`}
                   </span>
-                </div>
+                  <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-amber-700">
+                    {noticeOpen ? "Hide" : "Details"}
+                    {noticeOpen ? <ChevronUp size={14} aria-hidden /> : <ChevronDown size={14} aria-hidden />}
+                  </span>
+                </button>
                 <div className="flex items-center gap-2">
                   {canEditPaper && (
                     <>
@@ -1676,6 +1708,8 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                   )}
                 </div>
               </div>
+              {noticeOpen && (
+              <div id="paper-notice-details" className="space-y-3.5">
               <p className="text-xs text-amber-900 leading-relaxed">
                 {onlyProgressGaps
                   ? "Nothing is wrong, these slots and chapter quotas are simply not filled yet:"
@@ -1704,6 +1738,8 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                   </div>
                 ))}
               </div>
+              </div>
+              )}
             </div>
           )}
 

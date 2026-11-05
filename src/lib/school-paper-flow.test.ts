@@ -101,6 +101,34 @@ describe("filling in chapter, difficulty and skill", () => {
     expect(suggestChapter("Why should we save water?", chapters)?.chapterId).toBe("c4"); // ignores the [part] prefix
   });
 
+  it("weighs rare title words over shared ones and ignores look-alike words", () => {
+    const sci = [
+      { id: "e1", number: 1, title: "Electricity and Circuits" },
+      { id: "e2", number: 2, title: "The Electron and the Atom" },
+      { id: "e3", number: 3, title: "Light, Shadows and Reflections" },
+    ];
+    expect(suggestChapter("What is an electric circuit?", sci)?.chapterId).toBe("e1");
+    expect(suggestChapter("Who discovered the electron?", sci)?.chapterId).toBe("e2");
+    expect(suggestChapter("Explain the reflection of light from a mirror.", sci)?.chapterId).toBe("e3");
+  });
+
+  it("follows a stated chapter number", () => {
+    expect(suggestChapter("Ch. 3 – Draw a neat diagram.", chapters)).toEqual({ chapterId: "c3", reason: "title" });
+    expect(suggestChapter("अध्याय 2 से प्रश्न", chapters)?.chapterId).toBe("c2");
+  });
+
+  it("learns from questions already filed under each chapter", () => {
+    const bank = {
+      c1: ["Which animals give us milk?", "Name two plant parts we eat."],
+      c3: ["What is chlorophyll?", "Why are leaves green? Explain chlorophyll."],
+      c4: ["How can we harvest rainwater?", "What is a well?"],
+    };
+    expect(suggestChapter("Where is chlorophyll found in a leaf?", chapters, undefined, bank)).toEqual({ chapterId: "c3", reason: "bank" });
+    expect(suggestChapter("Describe rainwater harvesting at home.", chapters, undefined, bank)?.chapterId).toBe("c4");
+    // nothing telling: the quota decides
+    expect(suggestChapter("Draw a neat diagram.", chapters, { c1: 2, c2: 7, c3: 0, c4: 5 }, bank)?.reason).toBe("quota");
+  });
+
   it("falls back to the chapter with the most marks left, or nothing", () => {
     expect(suggestChapter("Draw a neat diagram.", chapters, { c1: 2, c2: 7, c3: 0, c4: 5 })).toEqual({ chapterId: "c2", reason: "quota" });
     expect(suggestChapter("Draw a neat diagram.", chapters)).toBeNull();

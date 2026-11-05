@@ -1,7 +1,21 @@
 "use client";
 
-import { ArrowDown, ArrowUp, ImagePlus, PencilRuler, Plus, Printer, RefreshCw, Shuffle, Sparkles, X } from "lucide-react";
-import { useRef, useState } from "react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronDown,
+  ImagePlus,
+  Library,
+  PencilRuler,
+  Plus,
+  RefreshCw,
+  Shuffle,
+  Sigma,
+  Sparkles,
+  Wand2,
+  X,
+} from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, imageUrl, uploadImage } from "@/lib/client";
 import {
   canHaveSubparts,
@@ -26,7 +40,15 @@ import {
   serializeKindergartenConfig,
 } from "@/lib/kindergarten/registry";
 import { type Book, type QuestionDto, type SubPart, subpartsTotalMarks } from "@/lib/types";
-import { DIFFICULTY_LABEL, SKILLS, skillOf, suggestChapter, suggestDifficulty, suggestSkill } from "@/lib/questionTagging";
+import {
+  type ChapterBank,
+  DIFFICULTY_LABEL,
+  SKILLS,
+  skillOf,
+  suggestChapter,
+  suggestDifficulty,
+  suggestSkill,
+} from "@/lib/questionTagging";
 import { MathRichEditor, type MathRichEditorHandle } from "./MathRichEditor";
 import { MathToolbar } from "./MathToolbar";
 import { DiagramSearchModal } from "./DiagramSearchModal";
@@ -34,15 +56,21 @@ import { FigureStudio } from "./figure-studio";
 import { AIQuestionImproverModal } from "./AIQuestionImproverModal";
 import { ErrorBanner, Field } from "./ui";
 
-const DEFAULT_SPACE: Record<string, number> = {
+/** Pre-primary worksheets are written on: they keep blank answer space under each question. */
+const PRE_PRIMARY_SPACE: Record<string, number> = {
   VERY_SHORT: 10,
   SHORT: 20,
   LONG: 60,
   WRITING_SKILL: 70,
   GRAMMAR: 15,
-  DRAW: 70,
-  MAP_WORK: 70,
 };
+const DRAWING_SPACE: Record<string, number> = { DRAW: 70, MAP_WORK: 70 };
+const isDrawingType = (t: string) => t === "DRAW" || t === "MAP_WORK";
+
+/** Classes 1 to 12 answer in a separate copy, so only a drawing or map box takes room on their paper. */
+function defaultSpaceMm(type: string, className?: string): number {
+  return DRAWING_SPACE[type] ?? (isPrePrimaryClass(className) ? (PRE_PRIMARY_SPACE[type] ?? 0) : 0);
+}
 const LETTERS = "ABCDEF";
 const ROMAN_LABELS = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)"];
 
@@ -144,7 +172,12 @@ export function QuestionForm({
   const [paperEditMode, setPaperEditMode] = useState<"UPDATE_MASTER" | "FORK_COPY">("FORK_COPY");
   const [bookId, setBookId] = useState(initial?.bookId ?? fixedBookId ?? books[0]?.id ?? "");
   const book = books.find((b) => b.id === bookId);
-  const chapters = (book?.chapters ?? []).filter((c) => !allowedChapterIds || allowedChapterIds.includes(c.id));
+  const allowedKey = allowedChapterIds?.join(",");
+  const chapters = useMemo(
+    () => (book?.chapters ?? []).filter((c) => !allowedChapterIds || allowedChapterIds.includes(c.id)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [book, allowedKey],
+  );
   const initialChapterBelongs = chapters.some((c) => c.id === initial?.chapterId);
   const [chapterId, setChapterId] = useState(
     initialChapterBelongs ? initial!.chapterId : (chapters[0]?.id ?? "")
@@ -196,10 +229,10 @@ export function QuestionForm({
     return plugin ? plugin.defaultConfig(book?.subject) : null;
   });
   const [answer, setAnswer] = useState(initial?.answer ?? "");
-  // The Math Assistant is three rows tall; teachers writing plain-text questions can hide it (remembered).
+  // The Math Assistant is three rows tall: it opens on demand and stays open for teachers who use it (remembered).
   const [mathBarOpen, setMathBarOpen] = useState<boolean>(() => {
     try {
-      return typeof window === "undefined" || window.localStorage.getItem("paperbuilder.mathbar") !== "hidden";
+      return typeof window !== "undefined" && window.localStorage.getItem("paperbuilder.mathbar") === "shown";
     } catch {
       return true;
     }
@@ -217,12 +250,28 @@ export function QuestionForm({
   // A new question gets its chapter, difficulty and skill filled in from its text until the teacher picks them.
   const autoTag = !initial;
   const [touched, setTouched] = useState({ chapter: false, difficulty: false, skill: false });
+  // How this book's questions were filed before: lets the chapter suggestion go beyond chapter titles.
+  const [bankOf, setBankOf] = useState<{ bookId: string; bank: ChapterBank } | null>(null);
+  const chapterBank = bankOf?.bookId === bookId ? bankOf.bank : undefined;
+  useEffect(() => {
+    if (!autoTag || !bookId) return;
+    let live = true;
+    api<ChapterBank>(`/api/books/${bookId}/chapter-hints`)
+      .then((bank) => {
+        if (live) setBankOf({ bookId, bank });
+      })
+      .catch(() => {
+        /* titles alone still work */
+      });
+    return () => {
+      live = false;
+    };
+  }, [autoTag, bookId]);
   const [imagePath, setImagePath] = useState<string | null>(initial?.imagePath ?? null);
-  const [spaceMm, setSpaceMm] = useState(initial?.spaceMm ?? DEFAULT_SPACE[resolvedInitialType] ?? 0);
+  const [spaceMm, setSpaceMm] = useState(initial?.spaceMm ?? defaultSpaceMm(resolvedInitialType, book?.className));
   const [showGrid, setShowGrid] = useState(initial?.showGrid ?? false);
   const [passageGroupId, setPassageGroupId] = useState(initial?.passageGroupId ?? "");
   const [secondaryText, setSecondaryText] = useState("");
-  const [bloomsLevel, setBloomsLevel] = useState("");
   const [sketching, setSketching] = useState(false);
   const [diagramSearchOpen, setDiagramSearchOpen] = useState(false);
   const [aiImproverOpen, setAiImproverOpen] = useState(false);
@@ -296,7 +345,7 @@ export function QuestionForm({
 
   const tagMarks = targetMarks ?? (subparts.length > 0 ? subpartsTotalMarks(subparts) : undefined);
   const hasText = text.replace(/<[^>]+>/g, "").trim().length > 0;
-  const chapterSuggestion = autoTag && !touched.chapter ? suggestChapter(text, chapters, openMarks) : null;
+  const chapterSuggestion = autoTag && !touched.chapter ? suggestChapter(text, chapters, openMarks, chapterBank) : null;
   const effChapterId = chapterSuggestion?.chapterId ?? chapterId;
   const difficultySuggested = autoTag && !touched.difficulty && hasText;
   const effDifficulty = difficultySuggested ? suggestDifficulty(text, type, tagMarks) : difficulty;
@@ -422,92 +471,84 @@ export function QuestionForm({
   }
 
   const typeLocked = !!fixedType || (!!initial && (initial.timesUsed ?? 0) > 0);
+  const bookLocked = !!fixedBookId || (!!initial && (initial.timesUsed ?? 0) > 0);
   const isMcq = isMcqLikeType(type);
   const usesSubparts = isSubpartQuestionType(type) || (subparts && subparts.length > 0);
+  const prePrimary = isPrePrimaryClass(book?.className);
+  // Answer space is a worksheet setting: shown for pre-primary, or to clear space an older question still has.
+  const showAnswerSpace = !isDrawingType(type) && (prePrimary || (initial?.spaceMm ?? 0) > 0);
+
+  function changeType(newType: string) {
+    setType(newType);
+    if (!initial) setSpaceMm(defaultSpaceMm(newType, book?.className));
+    if (isKindergartenType(newType)) {
+      const plugin = getKindergartenActivity(newType);
+      if (plugin) {
+        const defCfg = plugin.defaultConfig(book?.subject);
+        setKdgConfig(defCfg);
+        if (!text.trim() || isKindergartenType(type)) {
+          setText(defCfg.instruction);
+        }
+      }
+    } else if (newType === "ASSERTION_REASON") {
+      setOptions([...DEFAULT_ASSERTION_OPTIONS_EN]);
+      if (!text.trim()) {
+        setText(
+          "Assertion (A): [Enter statement here]\nReason (R): [Enter reason here]\n\nDirection: In the following question, a statement of Assertion (A) is followed by a statement of Reason (R). Choose the correct option."
+        );
+      }
+      if (!answer) setAnswer("A");
+    } else if (newType === "MATCH_COLUMN") {
+      if (!text.trim()) {
+        setText("Match Column A with Column B and choose the correct match: / सही जोड़ी मिलाइए (स्तम्भ 'अ' को स्तम्भ 'ब' से सुमेलित कीजिए):");
+      }
+    } else if (isSubpartQuestionType(newType)) {
+      if (subparts.length === 0) {
+        setSubparts(getDefaultSubpartsForType(newType, targetMarks));
+      }
+    } else if (!canHaveSubparts(newType)) {
+      setSubparts([]);
+    }
+  }
+
+  const templates = templatesFor(type, targetMarks, { setText, setOptions, setAnswer, setSubparts, setMatchPairs });
+  const chapterNote = chapterSuggestion
+    ? chapterSuggestion.reason === "title"
+      ? "Picked for you: the question matches this chapter"
+      : chapterSuggestion.reason === "bank"
+      ? "Picked for you: like questions already in this chapter"
+      : "Picked for you: the chapter with the most marks left"
+    : null;
 
   return (
-    <form onSubmit={submit} className="space-y-3">
+    <form onSubmit={submit} className="space-y-4">
       <ErrorBanner message={error} />
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Book">
-          <select
-            className="input"
-            value={bookId}
-            disabled={!!fixedBookId || (!!initial && (initial.timesUsed ?? 0) > 0)}
-            onChange={(e) => {
-              setBookId(e.target.value);
-              setChapterId(books.find((b) => b.id === e.target.value)?.chapters[0]?.id ?? "");
-            }}
-          >
-            {books.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.className} · {b.subject} · {b.title}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Chapter">
-          <select
-            className="input"
-            value={effChapterId}
-            required
-            onChange={(e) => {
-              setChapterId(e.target.value);
-              setTouched((t) => ({ ...t, chapter: true }));
-            }}
-          >
-            {chapters.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.number}. {c.title}
-              </option>
-            ))}
-          </select>
-          {chapterSuggestion && (
-            <SuggestedNote>
-              {chapterSuggestion.reason === "title" ? "Suggested: matches the chapter title" : "Suggested: chapter with the most marks left"}
-            </SuggestedNote>
-          )}
-        </Field>
-        <Field label="Type">
-          <select
-            className="input"
-            value={type}
-            disabled={typeLocked}
-            onChange={(e) => {
-              const newType = e.target.value;
-              setType(newType);
-              if (!initial) setSpaceMm(DEFAULT_SPACE[newType] ?? 0);
-              if (isKindergartenType(newType)) {
-                const plugin = getKindergartenActivity(newType);
-                if (plugin) {
-                  const defCfg = plugin.defaultConfig(book?.subject);
-                  setKdgConfig(defCfg);
-                  if (!text.trim() || isKindergartenType(type)) {
-                    setText(defCfg.instruction);
-                  }
-                }
-              } else if (newType === "ASSERTION_REASON") {
-                setOptions([...DEFAULT_ASSERTION_OPTIONS_EN]);
-                if (!text.trim()) {
-                  setText(
-                    "Assertion (A): [Enter statement here]\nReason (R): [Enter reason here]\n\nDirection: In the following question, a statement of Assertion (A) is followed by a statement of Reason (R). Choose the correct option."
-                  );
-                }
-                if (!answer) setAnswer("A");
-              } else if (newType === "MATCH_COLUMN") {
-                if (!text.trim()) {
-                  setText("Match Column A with Column B and choose the correct match: / सही जोड़ी मिलाइए (स्तम्भ 'अ' को स्तम्भ 'ब' से सुमेलित कीजिए):");
-                }
-              } else if (isSubpartQuestionType(newType)) {
-                if (subparts.length === 0) {
-                  setSubparts(getDefaultSubpartsForType(newType, targetMarks));
-                }
-              } else if (!canHaveSubparts(newType)) {
-                setSubparts([]);
-              }
-            }}
-          >
-            {isPrePrimaryClass(book?.className) ? (
+
+      {/* 1. Where the question goes */}
+      <div className={`grid gap-3 ${bookLocked ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
+        {!bookLocked && (
+          <Field label="Book">
+            <select
+              className="input"
+              value={bookId}
+              onChange={(e) => {
+                const next = books.find((b) => b.id === e.target.value);
+                setBookId(e.target.value);
+                setChapterId(next?.chapters[0]?.id ?? "");
+                if (!initial) setSpaceMm(defaultSpaceMm(type, next?.className));
+              }}
+            >
+              {books.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.className} · {b.subject} · {b.title}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
+        <Field label="Question type">
+          <select className="input" value={type} disabled={typeLocked} onChange={(e) => changeType(e.target.value)}>
+            {prePrimary ? (
               <>
                 <optgroup label="Kindergarten & Pre-Primary Activities">
                   {getAllKindergartenActivities().map((act) => (
@@ -533,40 +574,23 @@ export function QuestionForm({
             )}
           </select>
         </Field>
-        <Field label="Difficulty">
+        <Field label="Chapter">
           <select
             className="input"
-            value={effDifficulty}
+            value={effChapterId}
+            required
             onChange={(e) => {
-              setDifficulty(e.target.value);
-              setTouched((t) => ({ ...t, difficulty: true }));
+              setChapterId(e.target.value);
+              setTouched((t) => ({ ...t, chapter: true }));
             }}
           >
-            {DIFFICULTIES.map((d) => (
-              <option key={d} value={d}>
-                {DIFFICULTY_LABEL[d]}
+            {chapters.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.number}. {c.title}
               </option>
             ))}
           </select>
-          {difficultySuggested && <SuggestedNote>Suggested from the marks and the question</SuggestedNote>}
-        </Field>
-        <Field label="Skill">
-          <select
-            className="input"
-            value={effSkill}
-            onChange={(e) => {
-              setSkill(e.target.value);
-              setTouched((t) => ({ ...t, skill: true }));
-            }}
-          >
-            <option value="">Not set</option>
-            {SKILLS.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-          {skillSuggested && <SuggestedNote>Suggested from the asking word (define, explain, solve, justify…)</SuggestedNote>}
+          {chapterNote && <SuggestedNote>{chapterNote}</SuggestedNote>}
         </Field>
       </div>
 
@@ -642,262 +666,104 @@ export function QuestionForm({
         </div>
       ) : (
         <>
-          {/* Visual Math & Science Equation Editor Toolbar: stays in view while the form scrolls (tall windows only),
-              so the teacher can reach it from the match rows, options and subparts without scrolling back up. */}
-          <div className="z-20 -mx-5 bg-white/95 px-5 py-1.5 backdrop-blur-xs [@media(min-height:720px)]:sticky [@media(min-height:720px)]:top-0">
-            {mathBarOpen ? (
-              <div className="relative">
-                <MathToolbar onInsert={handleInsertSnippet} onNewFormula={handleNewFormula} />
+          {/* 2. The question itself */}
+          <div className="space-y-1.5">
+            <div className="flex flex-wrap items-end justify-between gap-2">
+              <span className="label !mb-0">
+                {type === "FILL_BLANK"
+                  ? "Question (type ______ for the blank)"
+                  : type === "CASE_STUDY"
+                  ? "Case / scenario"
+                  : type === "UNSEEN_PASSAGE"
+                  ? "Passage or poem (अपठित गद्यांश / काव्यांश)"
+                  : type === "REFERENCE_CONTEXT"
+                  ? "Extract (गद्यांश / पद्यांश / श्लोक)"
+                  : type === "MATCH_COLUMN"
+                  ? "Instruction (e.g. Match the following / सही जोड़ी बनाइए)"
+                  : "Question"}
+              </span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {templates.length > 0 && (
+                  <label className="relative inline-flex">
+                    <span className="sr-only">Start from a template</span>
+                    <select
+                      className="h-8 cursor-pointer appearance-none rounded-lg border border-slate-200 bg-white pl-7 pr-7 text-xs font-medium text-slate-700 hover:border-slate-300 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                      value=""
+                      onChange={(e) => {
+                        templates[Number(e.target.value)]?.apply();
+                      }}
+                    >
+                      <option value="" disabled>
+                        Use a template…
+                      </option>
+                      {templates.map((t, i) => (
+                        <option key={t.label} value={i}>
+                          {t.label}
+                        </option>
+                      ))}
+                    </select>
+                    <Wand2 size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" aria-hidden />
+                    <ChevronDown size={13} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden />
+                  </label>
+                )}
                 <button
                   type="button"
-                  onClick={() => toggleMathBar(false)}
-                  className="absolute right-1 top-1 rounded px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-800"
-                  title="Hide the Math Assistant to give the question more room"
+                  onClick={() => toggleMathBar(!mathBarOpen)}
+                  aria-pressed={mathBarOpen}
+                  className={`inline-flex h-8 items-center gap-1 rounded-lg border px-2.5 text-xs font-medium transition ${
+                    mathBarOpen
+                      ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+                      : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                  }`}
+                  title="Symbols and formulas, inserted where the cursor is"
                 >
-                  Hide
+                  <Sigma size={13} aria-hidden /> Maths
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAiImproverOpen(true)}
+                  className="inline-flex h-8 items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100"
+                  title="Let AI tidy the wording, write options, add Hindi or a marking scheme"
+                >
+                  <Sparkles size={13} aria-hidden /> Improve with AI
                 </button>
               </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => toggleMathBar(true)}
-                className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
-              >
-                <span>Math Assistant (formulas and symbols)</span>
-                <span className="text-indigo-700">Show</span>
-              </button>
-            )}
-          </div>
+            </div>
 
-      <div>
-        <div className="flex flex-wrap items-center justify-between gap-1 mb-1">
-          <span className="label !mb-0">
-            {type === "FILL_BLANK"
-              ? "Question (use ______ for the blank / रिक्त स्थान हेतु ______ का प्रयोग करें)"
-              : type === "CASE_STUDY"
-              ? "Case narrative / Context scenario"
-              : type === "UNSEEN_PASSAGE"
-              ? "Unseen Passage / Poem text (अपठित गद्यांश अथवा काव्यांश यहाँ लिखें)"
-              : type === "REFERENCE_CONTEXT"
-              ? "Extract / Gadyansh-Padyansh (सन्दर्भ-प्रसंग व्याख्या हेतु गद्यांश / पद्यांश / श्लोक)"
-              : type === "MATCH_COLUMN"
-              ? "Question heading / instruction (e.g. Match the following / सही जोड़ी बनाइए)"
-              : "Question text"}
-          </span>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => setAiImproverOpen(true)}
-              className="inline-flex items-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition shadow-2xs"
-              title="AI Polish: Refine to CBSE standards, generate distractors, add Hindi, or write marking scheme"
-            >
-              <Sparkles size={12} className="text-indigo-600" />
-              <span>AI Polish &amp; Rewriter</span>
-            </button>
-            {(type === "MCQ" || type === "ASSERTION_REASON") && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setText(
-                      "Assertion (A): [Enter your statement here]\nReason (R): [Enter your reason here]\n\nDirection: In the following question, a statement of Assertion (A) is followed by a statement of Reason (R). Choose the correct option."
-                    );
-                    setOptions([...DEFAULT_ASSERTION_OPTIONS_EN]);
-                    setAnswer("A");
-                  }}
-                  className="rounded border border-purple-200 bg-purple-50 px-2 py-0.5 text-xs font-semibold text-purple-700 hover:bg-purple-100 transition"
-                  title="Pre-fill English Assertion & Reason question structure"
-                >
-                  + Preset: Assertion-Reason (EN)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setText(
-                      "अभिकथन (A): [यहाँ अपना कथन लिखें]\nकारण (R): [यहाँ कारण लिखें]\n\nनिर्देश: नीचे दो कथन दिए गए हैं—एक को अभिकथन (A) और दूसरे को कारण (R) कहा गया है। सही विकल्प का चयन कीजिए।"
-                    );
-                    setOptions([...DEFAULT_ASSERTION_OPTIONS_HI]);
-                    setAnswer("A");
-                  }}
-                  className="rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 transition"
-                  title="Pre-fill Hindi अभिकथन एवं कारण question structure"
-                >
-                  + Preset: अभिकथन एवं कारण (Hindi)
-                </button>
-              </>
+            {/* Maths toolbar: stays in view while the form scrolls (tall windows only), so it reaches options and subparts too. */}
+            {mathBarOpen && (
+              <div className="z-20 -mx-5 bg-white/95 px-5 py-1.5 backdrop-blur-xs [@media(min-height:720px)]:sticky [@media(min-height:720px)]:top-0">
+                <MathToolbar onInsert={handleInsertSnippet} onNewFormula={handleNewFormula} />
+              </div>
             )}
-            {type === "REFERENCE_CONTEXT" && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setText(
-                      "निम्नलिखित पद्यांश/गद्यांश की सन्दर्भ एवं प्रसंग सहित व्याख्या कीजिए तथा उसका काव्य-सौन्दर्य (विशेष) भी स्पष्ट कीजिए:\n\n\"[यहाँ गद्यांश अथवा पद्यांश की पंक्तियाँ लिखें...]\""
-                    );
-                    setSubparts(getDefaultSubpartsForType("REFERENCE_CONTEXT", targetMarks ?? 5));
-                  }}
-                  className="rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 transition"
-                >
-                  + Preset: सन्दर्भ-प्रसंग सहित व्याख्या (Hindi)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setText(
-                      "Read the following extract carefully and answer the questions that follow with reference to the context:\n\n\"[Paste stanza or prose extract here...]\""
-                    );
-                    const total = targetMarks && targetMarks >= 2 ? targetMarks : 4;
-                    setSubparts([
-                      { label: "(i)", text: "Name the chapter/poem and its author/poet.", marks: 1, answer: "" },
-                      { label: "(ii)", text: "Explain the context of the above lines.", marks: 1, answer: "" },
-                      { label: "(iii)", text: "What literary device / central idea is highlighted in this extract?", marks: Math.max(1, total - 2), answer: "" },
-                    ]);
-                  }}
-                  className="rounded border border-purple-200 bg-purple-50 px-2 py-0.5 text-xs font-semibold text-purple-700 hover:bg-purple-100 transition"
-                >
-                  + Preset: English Reference to Context
-                </button>
-              </>
-            )}
-            {type === "UNSEEN_PASSAGE" && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setText(
-                      "निम्नलिखित अपठित गद्यांश/काव्यांश को ध्यानपूर्वक पढ़कर नीचे दिए गए प्रश्नों के उत्तर लिखिए:\n\n[यहाँ अपठित गद्यांश अथवा काव्यांश का मूल पाठ लिखें...]"
-                    );
-                    const total = targetMarks && targetMarks >= 3 ? targetMarks : 5;
-                    if (total === 5) {
-                      setSubparts([
-                        { label: "(क)", text: "उपर्युक्त गद्यांश का उपयुक्त शीर्षक लिखिए।", marks: 1, answer: "" },
-                        { label: "(ख)", text: "लेखक ने गद्यांश में किस मुख्य विषय पर प्रकाश डाला है?", marks: 1, answer: "" },
-                        { label: "(ग)", text: "प्रस्तुत गद्यांश से हमें क्या प्रेरणा मिलती है?", marks: 1, answer: "" },
-                        { label: "(घ)", text: "रेखांकित अंश का भाव स्पष्ट कीजिए तथा एक शब्द का विलोम/पर्यायवाची लिखिए।", marks: 2, answer: "" },
-                      ]);
-                    } else {
-                      setSubparts(getDefaultSubpartsForType("UNSEEN_PASSAGE", total));
-                    }
-                  }}
-                  className="rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 transition"
-                >
-                  + Preset: अपठित गद्यांश/काव्यांश (Hindi)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setText(
-                      "Read the following unseen passage carefully and answer the questions that follow:\n\n[Paste the unseen comprehension passage here...]"
-                    );
-                    setSubparts(getDefaultSubpartsForType("UNSEEN_PASSAGE", targetMarks ?? 5));
-                  }}
-                  className="rounded border border-purple-200 bg-purple-50 px-2 py-0.5 text-xs font-semibold text-purple-700 hover:bg-purple-100 transition"
-                >
-                  + Preset: English Unseen Passage
-                </button>
-              </>
-            )}
-            {type === "WRITING_SKILL" && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setText(
-                      "अपने विद्यालय के प्राचार्य महोदय को शुल्क-मुक्ति / तीन दिन के अवकाश हेतु एक प्रार्थना-पत्र लिखिए।"
-                    );
-                    setAnswer("प्रारूप (प्रेषक/सेवा में, विषय, संबोधन) - 1 अंक, विषय-वस्तु - 2 अंक, भाषा एवं समापन - 1 अंक।");
-                  }}
-                  className="rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 transition"
-                >
-                  + Preset: हिंदी पत्र-लेखन
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setText(
-                      "निम्नलिखित में से किसी एक विषय पर लगभग 120-150 शब्दों में रूपरेखा सहित सारगर्भित निबंध लिखिए:\n(क) पर्यावरण प्रदूषण: कारण एवं निवारण\n(ख) विज्ञान: वरदान या अभिशाप\n(ग) विद्यार्थी जीवन और अनुशासन"
-                    );
-                    setAnswer("रूपरेखा/प्रस्तावना - 1 अंक, विषय-विस्तार - 3 अंक, उपसंहार एवं भाषा-शैली - 1 अंक।");
-                  }}
-                  className="rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 transition"
-                >
-                  + Preset: हिंदी निबंध (रूपरेखा सहित)
-                </button>
-              </>
-            )}
-            {type === "GRAMMAR" && (
-              <button
-                type="button"
-                onClick={() => {
-                  setText(
-                    "निर्देशानुसार उत्तर दीजिए (Do as directed):\n(i) 'विद्यालय' शब्द का संधि-विच्छेद कर संधि का नाम लिखिए।\n(ii) 'नीलकमल' में कौन-सा समास है? समास-विग्रह कीजिए।\n(iii) 'आँखों का तारा होना' मुहावरे का अर्थ लिखकर वाक्य में प्रयोग कीजिए।"
-                  );
-                }}
-                className="rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 transition"
-              >
-                + Preset: हिंदी व्याकरण (संधि/समास/मुहावरे)
-              </button>
-            )}
-            {type === "CASE_STUDY" && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSubparts(getDefaultSubpartsForType("CASE_STUDY", targetMarks ?? 4));
-                }}
-                className="rounded border border-purple-200 bg-purple-50 px-2 py-0.5 text-xs font-semibold text-purple-700 hover:bg-purple-100 transition inline-flex items-center gap-1"
-                title="Pre-fill standard CBSE Section E Case Study structure"
-              >
-                <Sparkles size={12} /> + Preset: CBSE Case Study
-              </button>
-            )}
+
+            <MathRichEditor
+              multiline
+              value={text}
+              onChange={setText}
+              onActivate={activate({ type: "text" })}
+              placeholder="Type the question here."
+            />
           </div>
-        </div>
-        <MathRichEditor
-          multiline
-          value={text}
-          onChange={setText}
-          onActivate={activate({ type: "text" })}
-          placeholder="Type the question here. Use the Math Assistant above (or the Formula button) to add maths — formulas appear exactly as they will print, and you edit them right there."
-        />
-      </div>
 
       {/* Match the Column Pair Editor */}
       {type === "MATCH_COLUMN" && (
-        <div className="space-y-3 rounded-xl border border-teal-200 bg-teal-50/30 p-3.5">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-teal-100 pb-2">
+        <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2">
             <div>
-              <span className="font-bold text-sm text-slate-800">
-                Match the Column Rows (स्तम्भ &apos;अ&apos; ↔ स्तम्भ &apos;ब&apos;)
-              </span>
+              <span className="font-semibold text-sm text-slate-800">Rows to match</span>
               <p className="text-[11px] text-slate-500">
-                Enter items for Column A and Column B. Tip: Enter matching pairs in order, then click &ldquo;Shuffle Column B &amp; Generate Key&rdquo;!
-                For maths, click a box and pick a symbol or formula from the Math Assistant above; no code is needed.
+                Type each matching pair on one row, then shuffle Column B: the answer key is written for you.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
               <button
                 type="button"
-                onClick={() => {
-                  setText("सही जोड़ी बनाइए (स्तम्भ 'अ' को स्तम्भ 'ब' से सुमेलित कीजिए):");
-                  setMatchPairs([
-                    { left: "कामायनी", right: "हरिवंशराय बच्चन" },
-                    { left: "गोदान", right: "जयशंकर प्रसाद" },
-                    { left: "रामचरितमानस", right: "मुंशी प्रेमचंद" },
-                    { left: "मधुशाला", right: "गोस्वामी तुलसीदास" },
-                  ]);
-                  setAnswer("(A) → (ii), (B) → (iii), (C) → (iv), (D) → (i)");
-                }}
-                className="btn btn-xs border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 font-medium"
-              >
-                + Hindi साहित्य जोड़ी Preset
-              </button>
-              <button
-                type="button"
                 onClick={shuffleMatchColumnB}
-                className="btn btn-xs border-teal-300 bg-white text-teal-800 hover:bg-teal-50 font-medium"
+                className="btn btn-xs bg-white font-medium"
                 title="Randomly shuffle Column B items and automatically write the matching Answer Key below"
               >
-                <Shuffle size={12} /> Shuffle Column B &amp; Generate Key
+                <Shuffle size={12} /> Shuffle B &amp; write key
               </button>
               {matchPairs.length < MAX_OPTIONS && (
                 <button
@@ -962,27 +828,21 @@ export function QuestionForm({
 
       {/* Multi-part Sub-questions Editor (Case Study, Unseen Passage, Reference to Context) */}
       {usesSubparts && (
-        <div className="space-y-3 rounded-xl border border-purple-200 bg-purple-50/30 p-3.5">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-purple-100 pb-2">
+        <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2">
             <div className="flex items-center gap-2">
-              <span className="font-bold text-sm text-slate-800">
-                {type === "REFERENCE_CONTEXT"
-                  ? "सन्दर्भ-प्रसंग-व्याख्या अंग / Extract Sub-parts"
-                  : type === "UNSEEN_PASSAGE"
-                  ? "गद्यांश/काव्यांश प्रश्नोत्तर / Comprehension Sub-questions"
-                  : "Case Study Sub-questions"}
-              </span>
+              <span className="font-semibold text-sm text-slate-800">Parts of the question</span>
               {(() => {
                 const total = subpartsTotalMarks(subparts);
                 const expected = targetMarks ?? 4;
                 const isBalanced = total === expected;
                 return isBalanced ? (
                   <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800 border border-emerald-300">
-                    ✓ {total}/{expected} Marks Balanced
+                    ✓ {total}/{expected} marks
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800 border border-amber-300">
-                    ⚠️ Total Marks: {total} / {expected} ({total > expected ? `Exceeds by ${total - expected}m` : `Short by ${expected - total}m`})
+                    {total}/{expected} marks · {total > expected ? `${total - expected} too many` : `${expected - total} short`}
                   </span>
                 );
               })()}
@@ -993,9 +853,9 @@ export function QuestionForm({
                 onClick={() => {
                   setSubparts(getDefaultSubpartsForType(type, targetMarks));
                 }}
-                className="btn btn-xs border-purple-300 bg-white text-purple-700 hover:bg-purple-50 font-medium"
+                className="btn btn-xs bg-white font-medium"
               >
-                Reset Default Parts
+                Reset parts
               </button>
               <button
                 type="button"
@@ -1007,7 +867,7 @@ export function QuestionForm({
                 }}
                 className="btn btn-xs btn-primary font-medium"
               >
-                <Plus size={12} /> Add Subpart
+                <Plus size={12} /> Add part
               </button>
             </div>
           </div>
@@ -1020,7 +880,7 @@ export function QuestionForm({
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-slate-700">Subpart #{i + 1}</span>
+                    <span className="text-xs font-semibold text-slate-700">Part</span>
                     <input
                       className="input !py-0.5 !px-1.5 w-16 text-xs font-semibold text-center"
                       value={sp.label}
@@ -1143,7 +1003,7 @@ export function QuestionForm({
 
       {isMcq && !usesSubparts && (
         <div className="space-y-2.5">
-          <span className="label">Options (select the correct one)</span>
+          <span className="label">Options <span className="font-normal text-slate-500">· tick the correct one</span></span>
           {options.map((o, i) => (
             <div key={i} className="space-y-1">
               <div className="flex items-center gap-2">
@@ -1189,10 +1049,10 @@ export function QuestionForm({
         <Field
           label={
             type === "TRUE_FALSE"
-              ? "Correct answer (True / False — सही / गलत)"
+              ? "Answer (True / False — सही / गलत)"
               : type === "MATCH_COLUMN"
-              ? "Correct matching key (e.g. (i)→(b), (ii)→(a), (iii)→(d), (iv)→(c) — printed on Answer Key only)"
-              : "Model answer / Marking rubric (optional, never printed on the question paper)"
+              ? "Answer key (only on the answer key)"
+              : "Answer (optional · only on the answer key)"
           }
         >
           <MathRichEditor
@@ -1203,53 +1063,40 @@ export function QuestionForm({
             placeholder={
               type === "MATCH_COLUMN"
                 ? "(i) → (b), (ii) → (d), (iii) → (a), (iv) → (c)"
-                : "Enter model answer or solution step. Use the Math Assistant above to add formulas."
+                : "Model answer or marking points"
             }
           />
         </Field>
       )}
 
+      {/* 3. Figure */}
       <div>
-        <span className="label">Figure / diagram</span>
+        <span className="label">
+          Figure <span className="font-normal text-slate-500">· optional</span>
+        </span>
         {imagePath ? (
-          <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <div className="flex flex-wrap items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={imageUrl(imagePath)} alt="Figure" className="max-h-36 max-w-xs rounded-lg border border-slate-200 bg-white object-contain shadow-2xs" />
             <div className="flex flex-col gap-2">
-              <button
-                type="button"
-                className="btn btn-sm btn-primary"
-                onClick={() => setSketching(true)}
-              >
-                <PencilRuler size={14} /> Edit in Figure Studio
+              <button type="button" className="btn btn-sm" onClick={() => setSketching(true)}>
+                <PencilRuler size={14} aria-hidden /> Edit
               </button>
-              <button
-                type="button"
-                className="btn btn-sm border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                onClick={() => setDiagramSearchOpen(true)}
-              >
-                <RefreshCw size={14} className="text-slate-500" /> Swap Diagram
+              <button type="button" className="btn btn-sm" onClick={() => setDiagramSearchOpen(true)}>
+                <RefreshCw size={14} aria-hidden /> Replace
               </button>
-              <button
-                type="button"
-                className="btn btn-sm btn-danger"
-                onClick={() => setImagePath(null)}
-              >
-                <X size={14} /> Remove figure
+              <button type="button" className="btn btn-sm btn-danger" onClick={() => setImagePath(null)}>
+                <X size={14} aria-hidden /> Remove
               </button>
             </div>
           </div>
         ) : (
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              className="btn btn-sm bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100 font-semibold"
-              onClick={() => setDiagramSearchOpen(true)}
-            >
-              <Printer size={14} /> Search Diagram Library
+            <button type="button" className="btn btn-sm" onClick={() => setDiagramSearchOpen(true)}>
+              <Library size={14} aria-hidden /> From library
             </button>
             <label className="btn btn-sm cursor-pointer">
-              <ImagePlus size={14} /> Upload image
+              <ImagePlus size={14} aria-hidden /> Upload
               <input
                 type="file"
                 accept="image/png,image/jpeg,image/webp,image/gif"
@@ -1261,120 +1108,137 @@ export function QuestionForm({
                 }}
               />
             </label>
-            <button
-              type="button"
-              className="btn btn-sm border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-              onClick={() => setSketching(true)}
-            >
-              <PencilRuler size={14} /> Draw in Figure Studio
+            <button type="button" className="btn btn-sm" onClick={() => setSketching(true)}>
+              <PencilRuler size={14} aria-hidden /> Draw
             </button>
           </div>
         )}
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label={type === "DRAW" ? "Drawing box height (mm)" : "Blank answer space (mm)"}>
-          <input
-            type="number"
-            min={0}
-            max={250}
-            className="input"
-            value={spaceMm}
-            onChange={(e) => setSpaceMm(Math.max(0, Math.min(250, Number(e.target.value) || 0)))}
-          />
-        </Field>
-        {type === "DRAW" && (
-          <label className="flex items-center gap-2 pt-5 text-sm">
-            <input type="checkbox" checked={showGrid} onChange={(e) => setShowGrid(e.target.checked)} />
-            Print graph-paper grid in the box
-          </label>
-        )}
-      </div>
-      <Field label="Passage group (optional)">
-        <input
-          className="input"
-          maxLength={64}
-          placeholder="e.g. unseen-1: same value for every question of one passage"
-          value={passageGroupId}
-          onChange={(e) => setPassageGroupId(e.target.value)}
-        />
-        <p className="mt-1 text-[11px] text-slate-500">
-          Questions that share a value belong to one passage. They can only be placed in a passage section, never in a general objective section.
-        </p>
-      </Field>
+      {isDrawingType(type) && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label={type === "DRAW" ? "Drawing box height (mm)" : "Map box height (mm)"}>
+            <input
+              type="number"
+              min={0}
+              max={250}
+              className="input"
+              value={spaceMm}
+              onChange={(e) => setSpaceMm(Math.max(0, Math.min(250, Number(e.target.value) || 0)))}
+            />
+          </Field>
+          {type === "DRAW" && (
+            <label className="flex items-center gap-2 pt-5 text-sm">
+              <input type="checkbox" checked={showGrid} onChange={(e) => setShowGrid(e.target.checked)} />
+              Print graph-paper grid in the box
+            </label>
+          )}
+        </div>
+      )}
       </>
       )}
 
-      {/* Optional Advanced Board & Bilingual Options (Collapsed by default) */}
-      <details className="group rounded-xl border border-slate-200/90 bg-slate-50/50 p-3.5 transition">
-        <summary className="flex cursor-pointer items-center justify-between text-xs font-semibold text-slate-700 select-none">
-          <div className="flex items-center gap-1.5">
-            <span className="text-slate-500">⚙️</span>
-            <span>Advanced Board &amp; Language Options (Optional)</span>
-          </div>
-          <span className="text-[11px] text-slate-400 font-normal group-open:rotate-180 transition-transform">
-            ▼
-          </span>
-        </summary>
+      {/* 4. Tags: filled in from the question, one click to change */}
+      <div className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-2">
+        <PillGroup
+          label="Difficulty"
+          auto={difficultySuggested}
+          value={effDifficulty}
+          options={DIFFICULTIES.map((d) => ({ value: d, label: DIFFICULTY_LABEL[d] }))}
+          onChange={(v) => {
+            setDifficulty(v);
+            setTouched((t) => ({ ...t, difficulty: true }));
+          }}
+        />
+        <PillGroup
+          label="Skill"
+          auto={skillSuggested}
+          value={effSkill}
+          options={SKILLS.map((s) => ({ value: s.value, label: s.label }))}
+          onChange={(v) => {
+            setSkill(v);
+            setTouched((t) => ({ ...t, skill: true }));
+          }}
+        />
+      </div>
 
-        <div className="mt-3.5 pt-3 border-t border-slate-200/60 space-y-3.5 text-xs">
-          {/* Optional Bilingual Hindi/Secondary Translation Input */}
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="font-semibold text-slate-700">
-                Hindi / Regional Translation (Optional)
-              </label>
-              <button
-                type="button"
-                className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800"
-                onClick={() => {
-                  if (secondaryText.trim()) {
-                    setText((prev) => prev + (prev.includes(" / ") ? "" : " / ") + secondaryText.trim());
-                    setSecondaryText("");
-                  }
-                }}
+      {/* 5. Rarely needed settings */}
+      {!isKindergartenType(type) && (
+        <details className="group rounded-xl border border-slate-200 bg-white">
+          <summary className="flex min-h-11 cursor-pointer select-none items-center justify-between gap-2 rounded-xl px-3.5 text-sm font-medium text-slate-700 hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
+            <span>
+              More options{" "}
+              <span className="font-normal text-slate-500">
+                · {showAnswerSpace ? "answer space, " : ""}passage group, Hindi translation
+              </span>
+            </span>
+            <ChevronDown size={16} className="shrink-0 text-slate-400 transition-transform group-open:rotate-180" aria-hidden />
+          </summary>
+          <div className="space-y-4 border-t border-slate-200 px-3.5 py-3.5">
+            {showAnswerSpace && (
+              <Field
+                label="Blank answer space (mm)"
+                helper={
+                  prePrimary
+                    ? "Room left under the question for the child to write."
+                    : "Classes 1 to 12 answer in a separate copy: set 0 to leave no space."
+                }
               >
-                + Append to question text
-              </button>
-            </div>
-            <MathRichEditor
-              multiline
-              className="!min-h-14 text-xs leading-relaxed"
-              placeholder="e.g. प्रकाश संश्लेषण को परिभाषित कीजिए और इसका रासायनिक समीकरण लिखिए।"
-              value={secondaryText}
-              onActivate={activate({ type: "secondary" })}
-              onChange={setSecondaryText}
-            />
-            <p className="mt-1 text-[11px] text-slate-500">
-              For bilingual papers. You can append this secondary language text directly or keep it formatted.
-            </p>
-          </div>
-
-          {/* Optional Bloom's Taxonomy Cognitive Level */}
-          <div>
-            <label className="font-semibold text-slate-700 block mb-1">
-              Cognitive Level / Bloom&apos;s Taxonomy (Optional)
-            </label>
-            <select
-              className="input text-xs font-medium"
-              value={bloomsLevel}
-              onChange={(e) => setBloomsLevel(e.target.value)}
+                <input
+                  type="number"
+                  min={0}
+                  max={250}
+                  className="input sm:max-w-40"
+                  value={spaceMm}
+                  onChange={(e) => setSpaceMm(Math.max(0, Math.min(250, Number(e.target.value) || 0)))}
+                />
+              </Field>
+            )}
+            <Field
+              label="Passage group"
+              helper="Questions with the same value belong to one passage and are placed together in a passage section."
             >
-              <option value="">None / Standard</option>
-              <option value="REMEMBER">Remembering (Recall, definitions, facts)</option>
-              <option value="UNDERSTAND">Understanding (Explanation, interpretation)</option>
-              <option value="APPLY">Applying (Problem solving, calculations)</option>
-              <option value="ANALYZE">Analyzing (Comparison, distinguishing, logic)</option>
-              <option value="EVALUATE">Evaluating (Judgment, critique, verification)</option>
-              <option value="CREATE">Creating (Design, synthesis, formulation)</option>
-            </select>
+              <input
+                className="input"
+                maxLength={64}
+                placeholder="e.g. unseen-1"
+                value={passageGroupId}
+                onChange={(e) => setPassageGroupId(e.target.value)}
+              />
+            </Field>
+            <div>
+              <div className="mb-1.5 flex items-center justify-between gap-2">
+                <span className="label !mb-0">Hindi / regional translation</span>
+                <button
+                  type="button"
+                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 disabled:opacity-40"
+                  disabled={!secondaryText.trim()}
+                  onClick={() => {
+                    if (secondaryText.trim()) {
+                      setText((prev) => prev + (prev.includes(" / ") ? "" : " / ") + secondaryText.trim());
+                      setSecondaryText("");
+                    }
+                  }}
+                >
+                  + Add to question
+                </button>
+              </div>
+              <MathRichEditor
+                multiline
+                className="!min-h-14 text-sm leading-relaxed"
+                placeholder="e.g. प्रकाश संश्लेषण को परिभाषित कीजिए।"
+                value={secondaryText}
+                onActivate={activate({ type: "secondary" })}
+                onChange={setSecondaryText}
+              />
+            </div>
           </div>
-        </div>
-      </details>
+        </details>
+      )}
 
       {showPaperEditModes && (
         <div className="rounded-md border border-indigo-200 bg-indigo-50/60 p-3 space-y-1.5 text-xs text-slate-700">
-          <div className="font-semibold text-slate-800">Save Destination:</div>
+          <div className="font-semibold text-slate-800">Save changes to</div>
           <label className="flex items-start gap-2 cursor-pointer">
             <input
               type="radio"
@@ -1385,7 +1249,7 @@ export function QuestionForm({
               onChange={() => setPaperEditMode("FORK_COPY")}
             />
             <div>
-              <span className="font-medium text-slate-900">Tailored copy for this paper only</span> (Recommended: leaves the original in the bank untouched)
+              <span className="font-medium text-slate-900">This paper only</span> <span className="text-slate-500">(recommended: the bank&apos;s copy stays as it is)</span>
             </div>
           </label>
           <label className="flex items-start gap-2 cursor-pointer">
@@ -1398,7 +1262,7 @@ export function QuestionForm({
               onChange={() => setPaperEditMode("UPDATE_MASTER")}
             />
             <div>
-              <span className="font-medium text-slate-900">Update master in question bank</span> (Applies changes to the question bank and all papers using it)
+              <span className="font-medium text-slate-900">The question bank</span> <span className="text-slate-500">(every paper using this question changes too)</span>
             </div>
           </label>
         </div>
@@ -1465,4 +1329,195 @@ export function QuestionForm({
 
 function SuggestedNote({ children }: { children: React.ReactNode }) {
   return <span className="mt-1 block text-[11px] text-indigo-700">{children}</span>;
+}
+
+type TemplateSetters = {
+  setText: (v: string) => void;
+  setOptions: (v: string[]) => void;
+  setAnswer: (v: string) => void;
+  setSubparts: (v: SubPart[]) => void;
+  setMatchPairs: (v: MatchColumnPair[]) => void;
+};
+
+/** Ready-made starting points for a question type, offered in one "Use a template" menu. */
+function templatesFor(type: string, targetMarks: number | undefined, f: TemplateSetters): { label: string; apply: () => void }[] {
+  switch (type) {
+    case "MCQ":
+    case "ASSERTION_REASON":
+      return [
+        {
+          label: "Assertion–Reason (English)",
+          apply: () => {
+            f.setText(
+              "Assertion (A): [Enter your statement here]\nReason (R): [Enter your reason here]\n\nDirection: In the following question, a statement of Assertion (A) is followed by a statement of Reason (R). Choose the correct option."
+            );
+            f.setOptions([...DEFAULT_ASSERTION_OPTIONS_EN]);
+            f.setAnswer("A");
+          },
+        },
+        {
+          label: "अभिकथन एवं कारण (Hindi)",
+          apply: () => {
+            f.setText(
+              "अभिकथन (A): [यहाँ अपना कथन लिखें]\nकारण (R): [यहाँ कारण लिखें]\n\nनिर्देश: नीचे दो कथन दिए गए हैं—एक को अभिकथन (A) और दूसरे को कारण (R) कहा गया है। सही विकल्प का चयन कीजिए।"
+            );
+            f.setOptions([...DEFAULT_ASSERTION_OPTIONS_HI]);
+            f.setAnswer("A");
+          },
+        },
+      ];
+    case "REFERENCE_CONTEXT":
+      return [
+        {
+          label: "सन्दर्भ-प्रसंग सहित व्याख्या (Hindi)",
+          apply: () => {
+            f.setText(
+              "निम्नलिखित पद्यांश/गद्यांश की सन्दर्भ एवं प्रसंग सहित व्याख्या कीजिए तथा उसका काव्य-सौन्दर्य (विशेष) भी स्पष्ट कीजिए:\n\n\"[यहाँ गद्यांश अथवा पद्यांश की पंक्तियाँ लिखें...]\""
+            );
+            f.setSubparts(getDefaultSubpartsForType("REFERENCE_CONTEXT", targetMarks ?? 5));
+          },
+        },
+        {
+          label: "Reference to context (English)",
+          apply: () => {
+            f.setText(
+              "Read the following extract carefully and answer the questions that follow with reference to the context:\n\n\"[Paste stanza or prose extract here...]\""
+            );
+            const total = targetMarks && targetMarks >= 2 ? targetMarks : 4;
+            f.setSubparts([
+              { label: "(i)", text: "Name the chapter/poem and its author/poet.", marks: 1, answer: "" },
+              { label: "(ii)", text: "Explain the context of the above lines.", marks: 1, answer: "" },
+              { label: "(iii)", text: "What literary device / central idea is highlighted in this extract?", marks: Math.max(1, total - 2), answer: "" },
+            ]);
+          },
+        },
+      ];
+    case "UNSEEN_PASSAGE":
+      return [
+        {
+          label: "अपठित गद्यांश / काव्यांश (Hindi)",
+          apply: () => {
+            f.setText(
+              "निम्नलिखित अपठित गद्यांश/काव्यांश को ध्यानपूर्वक पढ़कर नीचे दिए गए प्रश्नों के उत्तर लिखिए:\n\n[यहाँ अपठित गद्यांश अथवा काव्यांश का मूल पाठ लिखें...]"
+            );
+            const total = targetMarks && targetMarks >= 3 ? targetMarks : 5;
+            f.setSubparts(
+              total === 5
+                ? [
+                    { label: "(क)", text: "उपर्युक्त गद्यांश का उपयुक्त शीर्षक लिखिए।", marks: 1, answer: "" },
+                    { label: "(ख)", text: "लेखक ने गद्यांश में किस मुख्य विषय पर प्रकाश डाला है?", marks: 1, answer: "" },
+                    { label: "(ग)", text: "प्रस्तुत गद्यांश से हमें क्या प्रेरणा मिलती है?", marks: 1, answer: "" },
+                    { label: "(घ)", text: "रेखांकित अंश का भाव स्पष्ट कीजिए तथा एक शब्द का विलोम/पर्यायवाची लिखिए।", marks: 2, answer: "" },
+                  ]
+                : getDefaultSubpartsForType("UNSEEN_PASSAGE", total)
+            );
+          },
+        },
+        {
+          label: "Unseen passage (English)",
+          apply: () => {
+            f.setText("Read the following unseen passage carefully and answer the questions that follow:\n\n[Paste the unseen comprehension passage here...]");
+            f.setSubparts(getDefaultSubpartsForType("UNSEEN_PASSAGE", targetMarks ?? 5));
+          },
+        },
+      ];
+    case "WRITING_SKILL":
+      return [
+        {
+          label: "हिंदी पत्र-लेखन",
+          apply: () => {
+            f.setText("अपने विद्यालय के प्राचार्य महोदय को शुल्क-मुक्ति / तीन दिन के अवकाश हेतु एक प्रार्थना-पत्र लिखिए।");
+            f.setAnswer("प्रारूप (प्रेषक/सेवा में, विषय, संबोधन) - 1 अंक, विषय-वस्तु - 2 अंक, भाषा एवं समापन - 1 अंक।");
+          },
+        },
+        {
+          label: "हिंदी निबंध (रूपरेखा सहित)",
+          apply: () => {
+            f.setText(
+              "निम्नलिखित में से किसी एक विषय पर लगभग 120-150 शब्दों में रूपरेखा सहित सारगर्भित निबंध लिखिए:\n(क) पर्यावरण प्रदूषण: कारण एवं निवारण\n(ख) विज्ञान: वरदान या अभिशाप\n(ग) विद्यार्थी जीवन और अनुशासन"
+            );
+            f.setAnswer("रूपरेखा/प्रस्तावना - 1 अंक, विषय-विस्तार - 3 अंक, उपसंहार एवं भाषा-शैली - 1 अंक।");
+          },
+        },
+      ];
+    case "GRAMMAR":
+      return [
+        {
+          label: "हिंदी व्याकरण (संधि / समास / मुहावरे)",
+          apply: () =>
+            f.setText(
+              "निर्देशानुसार उत्तर दीजिए (Do as directed):\n(i) 'विद्यालय' शब्द का संधि-विच्छेद कर संधि का नाम लिखिए।\n(ii) 'नीलकमल' में कौन-सा समास है? समास-विग्रह कीजिए।\n(iii) 'आँखों का तारा होना' मुहावरे का अर्थ लिखकर वाक्य में प्रयोग कीजिए।"
+            ),
+        },
+      ];
+    case "CASE_STUDY":
+      return [{ label: "CBSE case study parts", apply: () => f.setSubparts(getDefaultSubpartsForType("CASE_STUDY", targetMarks ?? 4)) }];
+    case "MATCH_COLUMN":
+      return [
+        {
+          label: "हिंदी साहित्य: रचना और रचनाकार",
+          apply: () => {
+            f.setText("सही जोड़ी बनाइए (स्तम्भ 'अ' को स्तम्भ 'ब' से सुमेलित कीजिए):");
+            f.setMatchPairs([
+              { left: "कामायनी", right: "हरिवंशराय बच्चन" },
+              { left: "गोदान", right: "जयशंकर प्रसाद" },
+              { left: "रामचरितमानस", right: "मुंशी प्रेमचंद" },
+              { left: "मधुशाला", right: "गोस्वामी तुलसीदास" },
+            ]);
+            f.setAnswer("(A) → (ii), (B) → (iii), (C) → (iv), (D) → (i)");
+          },
+        },
+      ];
+    default:
+      return [];
+  }
+}
+
+/** A short single choice shown as buttons: one click instead of opening a dropdown. */
+function PillGroup({
+  label,
+  value,
+  options,
+  auto,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  auto?: boolean;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div role="radiogroup" aria-label={label}>
+      <div className="mb-1.5 flex items-center gap-1.5">
+        <span className="text-[13px] font-medium text-slate-700">{label}</span>
+        {auto && (
+          <span className="rounded-full bg-indigo-100 px-1.5 py-px text-[10px] font-semibold text-indigo-700" title="Filled in from the question; click to change">
+            auto
+          </span>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {options.map((o) => {
+          const on = o.value === value;
+          return (
+            <button
+              key={o.value}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              onClick={() => onChange(o.value)}
+              className={`min-h-8 rounded-full border px-3 text-xs font-medium transition focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-indigo-500 ${
+                on
+                  ? "border-indigo-600 bg-indigo-600 text-white"
+                  : "border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50"
+              }`}
+            >
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }

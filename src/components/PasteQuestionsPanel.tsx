@@ -12,7 +12,8 @@ import type { PaperData, QuestionDto, Section } from "@/lib/types";
 /** Section types whose questions are a plain text (plus options for MCQ) and can be pasted in a list. */
 export const PASTEABLE_TYPES = new Set(["MCQ", "TRUE_FALSE", "FILL_BLANK", "VERY_SHORT", "SHORT", "LONG"]);
 
-const SPACE: Record<string, number> = { VERY_SHORT: 10, SHORT: 20, LONG: 60 };
+// Classes 1–12 answer in a separate copy: only drawing and map questions take room on the paper.
+const SPACE: Record<string, number> = { DRAW: 70, MAP_WORK: 70 };
 
 type Override = { chapterId?: string; difficulty?: string; skill?: string; skip?: boolean };
 

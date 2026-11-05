@@ -3,8 +3,9 @@
  * to correct them, not choose them. Everything here is a suggestion shown in the form; the teacher's own choice
  * always wins.
  *
- *   Chapter    – the chapter whose title shares the most words with the question; otherwise the chapter with
- *                the most marks still open in the blueprint (so the paper's quotas fill evenly).
+ *   Chapter    – a stated chapter number, else the chapter whose title (then whose banked questions) share the
+ *                most telling words with the question; otherwise the chapter with the most marks still open in
+ *                the blueprint (so the paper's quotas fill evenly).
  *   Difficulty – from the marks and the asking verb: recall of 1 mark is Easy, explain/compare is Average,
  *                justify/analyse or 5 marks is Difficult.
  *   Skill      – the school grid's Knowledge / Understanding / Applying / HOTS, from the asking verb.
@@ -35,39 +36,143 @@ const STOP = new Set(
     " ",
   ),
 );
+/** Words that say nothing about which chapter a question is from: book furniture and the asking words of Hindi papers. */
+const GENERIC = new Set(
+  "chapter chapters lesson unit part book class page exercise activity introduction answers given short long brief notes explain describe define state list draw diagram neat label two three four five one some many".split(" ").concat(
+    "लिखिए कीजिए दीजिए बताइए समझाइए क्या किसे कहते होता होती होते अथवा तथा इसका उसका किसी किन्हीं निम्नलिखित प्रश्न उत्तर अध्याय पाठ".split(" "),
+  ),
+);
 
-function words(s: string): string[] {
-  return (s.toLowerCase().replace(/<[^>]+>/g, " ").replace(/\\[a-z]+/g, " ").replace(/^\s*\[[^\]]*\]\s*/, "").match(/[\p{L}\p{M}]+/gu) ?? []).filter(
-    (w) => w.length >= 3 && !STOP.has(w),
-  );
+/** "plants" → "plant", "studies" → "study", "boiling" → "boil": enough for matching, not a real stemmer. */
+function stem(w: string): string {
+  if (!/^[a-z]+$/.test(w)) return w;
+  for (const [suf, rep] of [["ies", "y"], ["ing", ""], ["ed", ""], ["es", ""], ["s", ""]] as const) {
+    if (w.length - suf.length >= 4 && w.endsWith(suf) && !w.endsWith("ss")) return w.slice(0, -suf.length) + rep;
+  }
+  return w;
 }
 
-/** Matches "photosynthesis" with "photosynthetic", "plants" with "plant": a shared stem of 5+ letters, or equal words. */
+function words(s: string): string[] {
+  const raw = s.toLowerCase().replace(/<[^>]+>/g, " ").replace(/\\[a-z]+/g, " ").replace(/^\s*\[[^\]]*\]\s*/, "").match(/[\p{L}\p{M}]+/gu) ?? [];
+  return [...new Set(raw.filter((w) => w.length >= 3 && !STOP.has(w) && !GENERIC.has(w)).map(stem))];
+}
+
+/**
+ * Matches "photosynthesis" with "photosynthetic", "resource" with "resourc(es)": equal stems, or a shared start
+ * of 6+ letters that covers most of the shorter word ("electric" and "electron" stay apart).
+ */
 function sameWord(a: string, b: string): boolean {
   if (a === b) return true;
   const n = Math.min(a.length, b.length);
-  if (n < 5) return false;
+  if (n < 6) return false;
   let i = 0;
   while (i < n && a[i] === b[i]) i++;
-  return i >= 5;
+  return i >= 6 && i >= 0.8 * n;
 }
 
 export type ChapterLite = { id: string; number: number; title: string };
 
-export type ChapterSuggestion = { chapterId: string; reason: "title" | "quota" } | null;
+/** Texts of questions already in the bank, per chapter: how the teacher has tagged before. */
+export type ChapterBank = Record<string, string[]>;
 
-export function suggestChapter(text: string, chapters: ChapterLite[], openMarks?: Record<string, number>): ChapterSuggestion {
-  if (chapters.length === 0) return null;
-  const q = words(text);
-  let best: { id: string; score: number } | null = null;
-  if (q.length > 0) {
+export type ChapterSuggestion = { chapterId: string; reason: "title" | "bank" | "quota" } | null;
+
+const CHAPTER_NUMBER = /\b(?:ch(?:apter)?|lesson|unit)\.?\s*(\d{1,2})\b|(?:अध्याय|पाठ)\s*[-–:]?\s*(\d{1,2})(?!\d)/i;
+
+type ChapterIndex = {
+  chapters: ChapterLite[];
+  titles: Map<string, string[]>;
+  titleDf: Map<string, number>;
+  /** per chapter: stem → share of its bank questions that use it */
+  bank: Map<string, Map<string, number>>;
+  bankDf: Map<string, number>;
+};
+
+const indexCache = new WeakMap<object, { chapters: ChapterLite[]; index: ChapterIndex }>();
+
+function buildIndex(chapters: ChapterLite[], bank?: ChapterBank): ChapterIndex {
+  const titles = new Map(chapters.map((c) => [c.id, words(c.title)]));
+  const titleDf = new Map<string, number>();
+  for (const t of titles.values()) for (const w of t) titleDf.set(w, (titleDf.get(w) ?? 0) + 1);
+  const bankMap = new Map<string, Map<string, number>>();
+  const bankDf = new Map<string, number>();
+  if (bank) {
     for (const c of chapters) {
-      const t = words(c.title);
-      const score = t.filter((w) => q.some((x) => sameWord(w, x))).length;
-      if (score > 0 && (!best || score > best.score)) best = { id: c.id, score };
+      const texts = bank[c.id] ?? [];
+      if (texts.length === 0) continue;
+      const counts = new Map<string, number>();
+      for (const t of texts) for (const w of words(t)) counts.set(w, (counts.get(w) ?? 0) + 1);
+      const shares = new Map<string, number>();
+      for (const [w, n] of counts) {
+        shares.set(w, n / texts.length);
+        bankDf.set(w, (bankDf.get(w) ?? 0) + 1);
+      }
+      bankMap.set(c.id, shares);
     }
   }
-  if (best) return { chapterId: best.id, reason: "title" };
+  return { chapters, titles, titleDf, bank: bankMap, bankDf };
+}
+
+function indexFor(chapters: ChapterLite[], bank?: ChapterBank): ChapterIndex {
+  if (!bank) return buildIndex(chapters);
+  const hit = indexCache.get(bank);
+  if (hit && hit.chapters === chapters) return hit.index;
+  const index = buildIndex(chapters, bank);
+  indexCache.set(bank, { chapters, index });
+  return index;
+}
+
+/**
+ * The chapter a question most likely belongs to, scored on
+ *   1. a stated chapter number ("Ch. 3", "अध्याय 3"),
+ *   2. words shared with the chapter title, rare title words counting more than ones many titles share,
+ *   3. words shared with questions already filed under the chapter in the bank,
+ * and only when nothing matches, the chapter with the most marks still open in the blueprint. Ties go to the
+ * chapter with more marks open, so a paper's quotas fill evenly.
+ */
+export function suggestChapter(
+  text: string,
+  chapters: ChapterLite[],
+  openMarks?: Record<string, number>,
+  bank?: ChapterBank,
+): ChapterSuggestion {
+  if (chapters.length === 0) return null;
+  const plain = text.replace(/<[^>]+>/g, " ");
+  const num = plain.match(CHAPTER_NUMBER);
+  if (num) {
+    const byNumber = chapters.find((c) => c.number === Number(num[1] ?? num[2]));
+    if (byNumber) return { chapterId: byNumber.id, reason: "title" };
+  }
+
+  const q = words(plain);
+  if (q.length > 0) {
+    const ix = indexFor(chapters, bank);
+    const n = chapters.length;
+    const scored = chapters.map((c) => {
+      let title = 0;
+      for (const t of ix.titles.get(c.id) ?? []) {
+        if (q.some((x) => sameWord(t, x))) title += Math.log(1 + n / (ix.titleDf.get(t) ?? 1));
+      }
+      let fromBank = 0;
+      const shares = ix.bank.get(c.id);
+      if (shares) {
+        const banked = ix.bank.size;
+        for (const x of q) {
+          const share = shares.get(x);
+          // a word every chapter's questions use tells nothing
+          if (share) fromBank += Math.log(banked / (ix.bankDf.get(x) ?? 1) + 0.25) * Math.min(1, 3 * share);
+        }
+      }
+      return { c, title, fromBank, total: 2 * title + fromBank, open: openMarks?.[c.id] ?? 0 };
+    });
+    scored.sort((a, b) => b.total - a.total || b.open - a.open || a.c.number - b.c.number);
+    const [best, second] = scored;
+    if (best.title > 0) return { chapterId: best.c.id, reason: "title" };
+    // a bank-only match must be clear, not two words that happen to recur somewhere
+    if (best.fromBank >= 1 && (!second || best.fromBank >= 1.25 * second.fromBank)) {
+      return { chapterId: best.c.id, reason: "bank" };
+    }
+  }
   if (openMarks) {
     const roomiest = [...chapters].sort((a, b) => (openMarks[b.id] ?? 0) - (openMarks[a.id] ?? 0) || a.number - b.number)[0];
     if ((openMarks[roomiest.id] ?? 0) > 0) return { chapterId: roomiest.id, reason: "quota" };
