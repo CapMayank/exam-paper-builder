@@ -2429,6 +2429,51 @@ Return JSON exactly in this shape, one entry per question id:
   });
 }
 
+/**
+ * Labels every question of a paper with the chapter it tests, in ONE request, for the coverage check.
+ * The model sees short keys ("C1", "C2"...) for chapters, not database ids, and only those keys are accepted back.
+ * There is no offline fallback: without a usable key or quota the result says so and the caller shows that.
+ */
+export async function classifyPaperChaptersWithGemini(params: {
+  className: string;
+  subject: string;
+  chapters: Array<{ id: string; number: number; title: string }>;
+  questions: Array<{ number: number; text: string; marks: number }>;
+  apiKey?: string | null;
+}): Promise<GeminiCallResult<{ rows: Array<{ number: number; chapterId: string; confidence: "HIGH" | "MEDIUM" | "LOW" }> }>> {
+  const { className, subject, chapters, questions, apiKey } = params;
+  const idByKey = new Map(chapters.map((c, i) => [`C${i + 1}`, c.id]));
+
+  const systemPrompt = `You are an experienced ${className} ${subject} teacher checking which chapter of the textbook each exam question tests.`;
+  const userPrompt = `Chapters (use the key, e.g. "C3"):
+${chapters.map((c, i) => `C${i + 1}: Chapter ${c.number}. ${c.title}`).join("\n")}
+
+Questions:
+${questions
+  .map((q) => `Q${q.number} [${q.marks} mark${q.marks === 1 ? "" : "s"}]: ${q.text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 700)}`)
+  .join("\n")}
+
+For EVERY question give the one chapter it mainly tests, and how sure you are (HIGH, MEDIUM or LOW). If a question could belong to two chapters, pick the closer one and say MEDIUM or LOW.
+
+Return JSON exactly in this shape, one entry per question:
+{ "rows": [ { "number": 1, "chapter": "C2", "confidence": "HIGH" } ] }`;
+
+  const res = await callGeminiApi<{ rows?: Array<{ number?: unknown; chapter?: unknown; confidence?: unknown }> }>(userPrompt, systemPrompt, {
+    json: true,
+    apiKey,
+  });
+  const raw = Array.isArray(res.data?.rows) ? res.data.rows : [];
+  const rows: Array<{ number: number; chapterId: string; confidence: "HIGH" | "MEDIUM" | "LOW" }> = [];
+  for (const r of raw) {
+    const number = typeof r?.number === "number" ? r.number : Number(r?.number);
+    const chapterId = idByKey.get(String(r?.chapter ?? "").trim().toUpperCase());
+    if (!Number.isInteger(number) || !chapterId) continue;
+    const c = String(r?.confidence ?? "").toUpperCase();
+    rows.push({ number, chapterId, confidence: c === "HIGH" || c === "MEDIUM" ? c : "LOW" });
+  }
+  return { ...res, data: { rows } };
+}
+
 /* ------------------------------------------------------------------ */
 /* 3. Exam Paper Auditor & Bloom's Taxonomy Checker                   */
 /* ------------------------------------------------------------------ */
@@ -2463,7 +2508,6 @@ export interface PaperAuditReport {
     suggestedFix: string;
     fixedText?: string;
     fixedOptions?: string[];
-    canReconcileBlueprint?: boolean;
   }>;
   overallVerdict: string;
 }

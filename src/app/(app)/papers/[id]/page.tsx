@@ -41,6 +41,7 @@ import { DiagramSearchModal } from "@/components/DiagramSearchModal";
 import { FigureStudio } from "@/components/figure-studio";
 import { PaperImportModal } from "@/components/PaperImportModal";
 import { PaperPreflightModal } from "@/components/PaperPreflightModal";
+import { AICoverageModal } from "@/components/AICoverageModal";
 import { PaperSheets } from "@/components/PaperSheets";
 import { PaperSnapshotDrawer } from "@/components/PaperSnapshotDrawer";
 import { SubjectWorkspaceDrawer } from "@/components/subject-workspace/SubjectWorkspaceDrawer";
@@ -82,6 +83,7 @@ import {
   type PaperLanguage,
 } from "@/lib/constants";
 import { questionSlotMarks } from "@/lib/blueprint";
+import { coverageRows } from "@/lib/coverage";
 import { componentCoverage, parseComponents } from "@/lib/languageComponents";
 import { formatQuestionNumber, computeDisplayedPaperNumbering } from "@/lib/layout";
 import { nextSetIdentifier } from "@/lib/multiset";
@@ -151,6 +153,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   const [sectionAutofilling, setSectionAutofilling] = useState<string | null>(null);
   const [sectionAiModalSection, setSectionAiModalSection] = useState<Section | null>(null);
   const [preflightOpen, setPreflightOpen] = useState(false);
+  const [coverageOpen, setCoverageOpen] = useState(false);
   const [autosaveStatus, setAutosaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isFirstRender = useRef(true);
@@ -162,7 +165,6 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   }, [error]);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [autofilling, setAutofilling] = useState(false);
-  const [reconciling, setReconciling] = useState(false);
   // The "paper not complete" notice stays a one-line bar until the teacher opens it (remembered per browser).
   // (the notice only renders once the paper has loaded in the browser, so reading storage here cannot mismatch SSR)
   const [noticeOpen, setNoticeOpen] = useState(() => {
@@ -485,28 +487,6 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
     }
   }
 
-  async function handleReconcileBlueprint() {
-    cancelAutosave();
-    setError(null);
-    setInfoMessage(null);
-    setReconciling(true);
-    try {
-      const res = await api<{
-        success: boolean;
-        reassignmentsCount: number;
-        isBalanced: boolean;
-        summary: string;
-        paper: PaperData;
-      }>(`/api/papers/${id}/reconcile-blueprint`, { method: "POST" });
-      if (res.paper) adopt(res.paper);
-      setInfoMessage(res.summary);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setReconciling(false);
-    }
-  }
-
   async function handleDuplicateSet(e: React.FormEvent) {
     e.preventDefault();
     setDuplicatingBusy(true);
@@ -599,10 +579,13 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   const final = paper.status === "FINAL";
   const isAdmin = currentUser?.role === "ADMIN" || currentUser?.role === "SUPER_ADMIN";
   const canEditPaper = !final && canModifyPaper(currentUser, paper);
-  // A fresh or half-built paper only has unfilled slots/quotas: that is progress, not a blueprint change.
-  const onlyProgressGaps = (paper.implications ?? []).every(
-    (i) => i.code === "SECTION_UNDERFILLED" || i.code === "CHAPTER_DEFICIT",
+  // Chapter weightage is a guide shown in the coverage panel, so chapter differences never raise the notice.
+  const noticeItems = (paper.implications ?? []).filter(
+    (i) => i.code !== "CHAPTER_EXCESS" && i.code !== "CHAPTER_DEFICIT" && i.code !== "CHAPTER_OUTSIDE_BLUEPRINT",
   );
+  // A fresh or half-built paper only has unfilled slots: that is progress, not a blueprint change.
+  const onlyProgressGaps = noticeItems.every((i) => i.code === "SECTION_UNDERFILLED");
+  const coverage = coverageRows(paper);
   const resolvedExamType = resolvePaperExamType(paper);
   const pickerSection = blueprint.sections.find((s) => s.id === pickerSectionId) ?? null;
 
@@ -1162,85 +1145,61 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
               </div>
             </section>
 
-            {/* Chapter Weightage Quotas */}
+            {/* Chapter coverage: weightage is a guide, nothing here blocks the paper */}
             <section className="card space-y-2.5 p-4 shadow-xs">
               <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-slate-800">Chapter weightage</h2>
-                <span className="text-[11px] text-slate-400 font-medium">Marks used / quota</span>
+                <h2 className="text-sm font-semibold text-slate-800">Chapter coverage (estimate)</h2>
+                <span className="text-[11px] text-slate-400 font-medium">Marks placed of target</span>
               </div>
               {(() => {
-                // Lessons that share a unit share one quota, and progress reports that group's total for each
-                // of them. Show one row per quota group so a unit is never compared with a single lesson's share.
-                const rows: Array<{ key: string; title: string; unitTitle: string; lessons: number; target: number; used: number }> = [];
-                const seen = new Map<string, number>();
-                for (const c of blueprint.chapters) {
-                  const key = c.unitKey ? `u:${c.unitKey}` : `c:${c.chapterId}`;
-                  const prog = progress.chapters.find((p) => p.chapterId === c.chapterId);
-                  const at = seen.get(key);
-                  if (at !== undefined) {
-                    rows[at].lessons += 1;
-                    continue;
-                  }
-                  seen.set(key, rows.length);
-                  rows.push({
-                    key,
-                    title: c.chapter.title.replace(/^\[[^\]]+\]\s*/, ""),
-                    unitTitle: c.unitKey && c.unitTitle ? c.unitTitle : "",
-                    lessons: 1,
-                    target: prog?.target ?? c.marks,
-                    used: prog?.used ?? 0,
-                  });
-                }
-                // a unit of several lessons is named after the unit; a single row keeps its own name
-                for (const r of rows) if (r.lessons > 1 && r.unitTitle) r.title = r.unitTitle;
-                const visibleRows = rows.filter((r) => r.target > 0 || r.used > 0);
-                const shown = showAllChapters || visibleRows.length <= 6 ? visibleRows : visibleRows.slice(0, 6);
+                const shown = showAllChapters || coverage.rows.length <= 6 ? coverage.rows : coverage.rows.slice(0, 6);
                 return (
                   <>
                     <div className="space-y-2.5 pt-1">
-                      {shown.map((r) => {
-                        const isMatched = r.used === r.target;
-                        const isOver = r.used > r.target;
-                        return (
-                          <div key={r.key} className="space-y-1">
-                            <div className="flex items-center justify-between text-xs">
-                              <span className="truncate pr-2 font-medium text-slate-700" title={r.title}>
-                                {r.title}
-                                {r.lessons > 1 && <span className="font-normal text-slate-400"> · {r.lessons} lessons</span>}
-                              </span>
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                {isMatched ? (
-                                  <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.2 bg-emerald-50 text-[10px] font-bold text-emerald-700 border border-emerald-200">
-                                    ✓ {r.used}/{r.target}m
-                                  </span>
-                                ) : isOver ? (
-                                  <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.2 bg-red-50 text-[10px] font-bold text-red-700 border border-red-200">
-                                    ⚠ {r.used}/{r.target}m
-                                  </span>
-                                ) : (
-                                  <span className="text-[11px] font-medium text-slate-500">
-                                    {r.used}/{r.target}m <span className="text-amber-700 font-normal">({r.target - r.used}m left)</span>
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            <Bar used={r.used} target={r.target} />
+                      {shown.map((r) => (
+                        <div key={r.key} className="space-y-1">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="truncate pr-2 font-medium text-slate-700" title={r.title}>
+                              {r.title} · {r.used} of {r.target}
+                              {r.lessons > 1 && <span className="font-normal text-slate-400"> · {r.lessons} lessons</span>}
+                            </span>
                           </div>
-                        );
-                      })}
+                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+                            <div
+                              className={`h-full rounded-full transition-all duration-300 ${r.off ? "bg-amber-500" : "bg-indigo-600"}`}
+                              style={{ width: `${r.target === 0 ? 100 : Math.min(100, (r.used / r.target) * 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    {visibleRows.length > 6 && (
+                    {coverage.rows.length > 6 && (
                       <button
                         type="button"
                         onClick={() => setShowAllChapters((v) => !v)}
                         className="w-full text-center text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 pt-1.5 border-t border-slate-100 transition"
                       >
-                        {showAllChapters ? "Show fewer ▴" : `Show all ${visibleRows.length} (${visibleRows.length - 6} more) ▾`}
+                        {showAllChapters ? "Show fewer ▴" : `Show all ${coverage.rows.length} (${coverage.rows.length - 6} more) ▾`}
                       </button>
+                    )}
+                    {coverage.outsideCount > 0 && (
+                      <p className="text-[11px] text-slate-500">
+                        {coverage.outsideCount} question{coverage.outsideCount === 1 ? " is" : "s are"} from chapters outside this blueprint.
+                      </p>
                     )}
                   </>
                 );
               })()}
+              {paper.items.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setCoverageOpen(true)}
+                  className="btn btn-sm w-full justify-center text-xs"
+                  title="Ask the AI which chapter each question tests (one request)"
+                >
+                  <Sparkles size={12} className="text-amber-500" /> Check coverage with AI
+                </button>
+              )}
             </section>
           </div>
 
@@ -1634,7 +1593,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
         {/* Right Column: Sections & Question Slot Workbench */}
         <div className="space-y-5">
           {/* Smart Blueprint Reconciliation Notice */}
-          {paper.implications && paper.implications.length > 0 && (
+          {noticeItems.length > 0 && (
             <div
               className={`rounded-2xl border border-amber-300 bg-amber-50/95 shadow-sm ${noticeOpen ? "p-5 space-y-3.5" : "px-4 py-2.5"}`}
             >
@@ -1651,8 +1610,8 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                   <Sparkles className="shrink-0 text-amber-600" size={16} aria-hidden />
                   <span>
                     {onlyProgressGaps
-                      ? `Paper not complete yet (${paper.implications.length} thing${paper.implications.length > 1 ? "s" : ""} left to place)`
-                      : `Blueprint Synchronization Notice (${paper.implications.length} adjustment${paper.implications.length > 1 ? "s" : ""} required)`}
+                      ? `Paper not complete yet (${noticeItems.length} thing${noticeItems.length > 1 ? "s" : ""} left to place)`
+                      : `Blueprint Synchronization Notice (${noticeItems.length} adjustment${noticeItems.length > 1 ? "s" : ""} required)`}
                   </span>
                   <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-amber-700">
                     {noticeOpen ? "Hide" : "Details"}
@@ -1662,23 +1621,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                 <div className="flex items-center gap-2">
                   {canEditPaper && (
                     <>
-                      {paper.implications.some(
-                        (i) => i.code === "CHAPTER_EXCESS" || i.code === "CHAPTER_DEFICIT",
-                      ) && (
-                        <button
-                          type="button"
-                          className="btn btn-xs !bg-amber-600 !text-white hover:!bg-amber-700 shadow-2xs font-semibold"
-                          disabled={reconciling}
-                          onClick={handleReconcileBlueprint}
-                          title="Automatically realign question chapter allocations to match blueprint chapter quotas"
-                        >
-                          <Sparkles size={12} className={reconciling ? "animate-spin" : ""} />
-                          <span>{reconciling ? "Rebalancing..." : "Auto-Rebalance Chapter Quotas"}</span>
-                        </button>
-                      )}
-                      {paper.implications.some(
-                        (i) => i.code === "SECTION_UNDERFILLED" || i.code === "CHAPTER_DEFICIT",
-                      ) && (
+                      {noticeItems.some((i) => i.code === "SECTION_UNDERFILLED") && (
                         <button
                           type="button"
                           className="btn btn-xs !bg-indigo-600 !text-white hover:!bg-indigo-700 shadow-2xs font-semibold"
@@ -1690,7 +1633,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                           <span>{autofilling ? "Auto-Filling..." : "Auto-Fill Missing Slots"}</span>
                         </button>
                       )}
-                      {paper.implications.some(
+                      {noticeItems.some(
                         (i) => i.code === "MISSING_INTERNAL_CHOICE" || i.code === "FORBIDDEN_INTERNAL_CHOICE",
                       ) && (
                         <button
@@ -1712,11 +1655,11 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
               <div id="paper-notice-details" className="space-y-3.5">
               <p className="text-xs text-amber-900 leading-relaxed">
                 {onlyProgressGaps
-                  ? "Nothing is wrong, these slots and chapter quotas are simply not filled yet:"
+                  ? "Nothing is wrong, these slots are simply not filled yet:"
                   : "The blueprint linked to this paper was modified. Below is a breakdown of what needs adjustment to maintain examination standards:"}
               </p>
               <div className="grid gap-2.5 sm:grid-cols-2">
-                {paper.implications.map((imp, idx) => (
+                {noticeItems.map((imp, idx) => (
                   <div
                     key={idx}
                     className={`min-w-0 rounded-xl border p-3 text-xs flex flex-col items-start gap-1.5 transition ${
@@ -1847,22 +1790,6 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
             const isMarksMismatch = isSectionFull && placedSectionMarks !== targetSectionMarks;
             const emptySlots = Math.max(0, s.count - effectiveUnits);
             const isCollapsed = !!collapsedSections[s.id];
-
-            const openChaptersForSection = (blueprint.chapters || [])
-              .map((bc) => {
-                // used and target are the quota group's totals (lessons of one unit share a budget)
-                const prog = progress.chapters.find((p) => p.chapterId === bc.chapterId);
-                const used = prog?.used ?? 0;
-                const rem = (prog?.target ?? bc.marks) - used;
-                return {
-                  id: bc.chapterId,
-                  number: bc.chapter?.number ?? 0,
-                  title: bc.chapter?.title ?? "General",
-                  remainingMarks: rem,
-                };
-              })
-              .filter((c) => c.remainingMarks > 0)
-              .sort((a, b) => b.remainingMarks - a.remainingMarks);
 
             // the same rule the server audits with, including the blueprint's own "OR required / no OR" setting
             const secChoiceReq = paperSectionChoiceRequirement(paper, s);
@@ -2496,7 +2423,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                         const targetMarksForSlot = s.type === "MATCH_COLUMN" && s.count > 1 && s.marksEach === 1
                           ? s.count * s.marksEach
                           : s.marksEach;
-                        const topChapters = openChaptersForSection.slice(0, 3);
+                        const topChapters = coverage.underCovered.slice(0, 3);
 
                         return (
                           <li key={`empty-${i}`}>
@@ -2518,24 +2445,20 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                       </span>
                                     </div>
 
-                                    {/* Smart Chapter Deficit Suggestions */}
-                                    <div className="text-[11px] text-slate-500 flex items-center gap-1.5 flex-wrap">
-                                      <span className="font-medium text-slate-600">Open Quotas:</span>
-                                      {topChapters.length > 0 ? (
-                                        topChapters.map((tc) => (
+                                    {/* Chapters still below their targets, as a hint for what to pick */}
+                                    {topChapters.length > 0 && (
+                                      <div className="text-[11px] text-slate-500 flex items-center gap-1.5 flex-wrap">
+                                        <span className="font-medium text-slate-600">Under-covered:</span>
+                                        {topChapters.map((tc) => (
                                           <span
-                                            key={tc.id}
-                                            className="inline-flex items-center gap-1 rounded bg-white px-1.5 py-0.2 border border-slate-200 text-slate-700 text-[10px]"
-                                            title={`Chapter ${tc.number}: ${tc.title} (${tc.remainingMarks}m remaining)`}
+                                            key={tc.chapterId}
+                                            className="inline-flex items-center rounded bg-white px-1.5 py-0.2 border border-slate-200 text-[10px] font-semibold text-indigo-600"
                                           >
-                                            <span className="font-semibold text-indigo-600">Ch {tc.number}</span>
-                                            <span className="text-slate-400 font-mono">({tc.remainingMarks}m left)</span>
+                                            Ch {tc.number}
                                           </span>
-                                        ))
-                                      ) : (
-                                        <span className="text-slate-400 italic">All chapter quotas allocated</span>
-                                      )}
-                                    </div>
+                                        ))}
+                                      </div>
+                                    )}
                                   </div>
 
                                   <div className="flex items-center gap-2 ml-auto">
@@ -2918,6 +2841,14 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
       )}
 
       {/* Pre-Finalization Quality Preflight Modal */}
+      {coverageOpen && paper && (
+        <AICoverageModal
+          paper={paper}
+          canApply={canEditPaper}
+          onClose={() => setCoverageOpen(false)}
+          onApplied={(p) => adopt(p)}
+        />
+      )}
       {preflightOpen && paper && (
         <PaperPreflightModal
           isOpen={preflightOpen}

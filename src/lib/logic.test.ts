@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkBlueprintFeasibility, diagnosePaperImplications, paperStatus, validateBlueprint, whyCannotAdd, type BlueprintDef } from "./blueprint";
+import { diagnosePaperImplications, paperStatus, validateBlueprint, whyCannotAdd, type BlueprintDef } from "./blueprint";
 import { formatQuestionNumber } from "./constants";
 import { bookletPageCount, imposeBooklet, paginate } from "./layout";
 import { autoFillPaper, type CandidateQuestion } from "./autofill";
@@ -15,7 +15,7 @@ const bp: BlueprintDef = {
   ],
 };
 
-describe("validateBlueprint & checkBlueprintFeasibility", () => {
+describe("validateBlueprint", () => {
   it("accepts matching totals", () => {
     expect(validateBlueprint(bp)).toEqual([]);
   });
@@ -25,31 +25,6 @@ describe("validateBlueprint & checkBlueprintFeasibility", () => {
   });
   it("rejects empty sections", () => {
     expect(validateBlueprint({ sections: [], chapters: bp.chapters }).length).toBeGreaterThan(0);
-  });
-  it("flags impossible chapter quota below minimum section denomination", () => {
-    const warnings = checkBlueprintFeasibility({
-      sections: [{ count: 5, marksEach: 3 }],
-      chapters: [{ chapterId: "c1", title: "Acids and Bases", marks: 2 }, { chapterId: "c2", marks: 13 }],
-    });
-    expect(warnings.length).toBeGreaterThan(0);
-    expect(warnings[0]).toMatch(/Chapter "Acids and Bases"/);
-    expect(warnings[0]).toMatch(/smallest/);
-  });
-  it("flags chapter quota unreachable by denomination combination", () => {
-    const warnings = checkBlueprintFeasibility({
-      sections: [{ count: 2, marksEach: 2 }, { count: 2, marksEach: 4 }],
-      chapters: [{ chapterId: "c1", title: "Metals", marks: 3 }, { chapterId: "c2", marks: 9 }],
-    });
-    expect(warnings.length).toBeGreaterThan(0);
-    expect(warnings[0]).toMatch(/Chapter "Metals"/);
-    expect(warnings[0]).toMatch(/cannot be formed/);
-  });
-  it("passes when denominations can form chapter marks", () => {
-    const warnings = checkBlueprintFeasibility({
-      sections: [{ count: 5, marksEach: 2 }, { count: 5, marksEach: 3 }],
-      chapters: [{ chapterId: "c1", marks: 5 }, { chapterId: "c2", marks: 7 }],
-    });
-    expect(warnings).toEqual([]);
   });
 });
 
@@ -64,17 +39,17 @@ describe("whyCannotAdd / paperStatus", () => {
     ];
     expect(whyCannotAdd(bp, items, { sectionId: "A", chapterId: "c1", type: "MCQ" })).toMatch(/full/);
   });
-  it("rejects when chapter quota would be exceeded", () => {
+  it("allows a question that takes its chapter past its target (weightage is a guide)", () => {
     const items = [{ sectionId: "B", chapterId: "c1" }]; // 2 of 3 used
-    expect(whyCannotAdd(bp, items, { sectionId: "B", chapterId: "c1", type: "SHORT" })).toMatch(/only 3 marks/);
+    expect(whyCannotAdd(bp, items, { sectionId: "B", chapterId: "c1", type: "SHORT" })).toBeNull();
   });
-  it("rejects chapters not in blueprint", () => {
-    expect(whyCannotAdd(bp, [], { sectionId: "A", chapterId: "zz", type: "MCQ" })).toMatch(/not in the blueprint/);
+  it("allows a chapter that is not in the blueprint", () => {
+    expect(whyCannotAdd(bp, [], { sectionId: "A", chapterId: "zz", type: "MCQ" })).toBeNull();
   });
   it("allows a valid question", () => {
     expect(whyCannotAdd(bp, [], { sectionId: "A", chapterId: "c1", type: "MCQ" })).toBeNull();
   });
-  it("is complete only when every section and chapter is exactly filled", () => {
+  it("is complete when every section is filled, and chapters only inform", () => {
     const items = [
       { sectionId: "A", chapterId: "c1" },
       { sectionId: "A", chapterId: "c2" },
@@ -83,17 +58,11 @@ describe("whyCannotAdd / paperStatus", () => {
     ];
     expect(paperStatus(bp, items.slice(0, 3)).complete).toBe(false);
     expect(paperStatus(bp, items).complete).toBe(true);
+    const lopsided = items.map((i) => ({ ...i, chapterId: "c1" }));
+    expect(paperStatus(bp, lopsided).complete).toBe(true);
   });
-  it("rejects candidate when subpart marks exceed remaining chapter quota", () => {
-    // c1 target is 3. Section A marksEach is 1. If candidate has 4 marks via subparts, it should reject even in 1-mark section.
-    expect(
-      whyCannotAdd(bp, [], {
-        sectionId: "A",
-        chapterId: "c1",
-        type: "MCQ",
-        marks: 4,
-      })
-    ).toMatch(/allows only 3 marks/);
+  it("allows a candidate whose marks exceed its chapter's remaining target", () => {
+    expect(whyCannotAdd(bp, [], { sectionId: "A", chapterId: "c1", type: "MCQ", marks: 4 })).toBeNull();
   });
   it("diagnoses SECTION_OVERFILLED when section count is reduced below subparts count", () => {
     const implications = diagnosePaperImplications(

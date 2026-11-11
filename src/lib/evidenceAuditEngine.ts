@@ -28,7 +28,6 @@ export interface EvidenceAuditFinding {
   fixedOptions?: string[];
   isObjectivelyVerified: boolean;
   confidence: "HIGH" | "MEDIUM" | "LOW";
-  canReconcileBlueprint?: boolean;
 }
 
 export interface EvidenceAuditReport {

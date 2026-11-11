@@ -276,163 +276,6 @@ export function validateBlueprint(bp: {
   return errors;
 }
 
-/**
- * Verifies whether section question denomination capacities can be partitioned
- * to satisfy all chapter quotas simultaneously (Level 3 Global Bounded Capacity Check).
- */
-function checkBoundedPartitionFeasible(
-  denominations: number[],
-  capacities: number[],
-  chapterQuotas: number[]
-): boolean {
-  function getSolutions(target: number): number[][] {
-    const sols: number[][] = [];
-    function solve(dIdx: number, curSum: number, curSol: number[]) {
-      if (dIdx === denominations.length) {
-        if (curSum === target) sols.push([...curSol]);
-        return;
-      }
-      const d = denominations[dIdx];
-      const maxQ = Math.min(capacities[dIdx], Math.floor((target - curSum) / d));
-      for (let q = 0; q <= maxQ; q++) {
-        curSol.push(q);
-        solve(dIdx + 1, curSum + q * d, curSol);
-        curSol.pop();
-      }
-    }
-    solve(0, 0, []);
-    return sols;
-  }
-
-  const allSolutions: number[][][] = [];
-  for (const q of chapterQuotas) {
-    const sols = getSolutions(q);
-    if (sols.length === 0) return false;
-    allSolutions.push(sols);
-  }
-
-  const order = allSolutions.map((s, idx) => ({ idx, count: s.length })).sort((a, b) => a.count - b.count);
-  const remaining = [...capacities];
-  const memo = new Set<string>();
-
-  function search(step: number): boolean {
-    if (step === order.length) {
-      return remaining.every((r) => r === 0);
-    }
-    const stateKey = `${step}:${remaining.join(",")}`;
-    if (memo.has(stateKey)) return false;
-
-    const chIdx = order[step].idx;
-    for (const sol of allSolutions[chIdx]) {
-      let fits = true;
-      for (let k = 0; k < denominations.length; k++) {
-        if (sol[k] > remaining[k]) {
-          fits = false;
-          break;
-        }
-      }
-      if (!fits) continue;
-
-      for (let k = 0; k < denominations.length; k++) remaining[k] -= sol[k];
-      if (search(step + 1)) return true;
-      for (let k = 0; k < denominations.length; k++) remaining[k] += sol[k];
-    }
-
-    memo.add(stateKey);
-    return false;
-  }
-
-  return search(0);
-}
-
-/** Arithmetic feasibility checks for chapter mark allocations against section denominations. */
-export function checkBlueprintFeasibility(bp: {
-  sections: Pick<SectionDef, "count" | "marksEach">[];
-  chapters: ChapterQuota[];
-  enforceMarksConservation?: boolean;
-}): string[] {
-  const warnings: string[] = [];
-  if (bp.sections.length === 0 || bp.chapters.length === 0) return warnings;
-
-  // Level 1: Optional strict total marks conservation check
-  const totalSectionMarks = blueprintTotalMarks(bp.sections);
-  const totalChapterMarks = bp.chapters.reduce((s, c) => s + c.marks, 0);
-  if (bp.enforceMarksConservation && totalSectionMarks !== totalChapterMarks) {
-    warnings.push(
-      `Sections total ${totalSectionMarks} marks but chapter weightage totals ${totalChapterMarks}. They must match.`
-    );
-    return warnings;
-  }
-
-  // Denominations and bounded capacities
-  const denomCapacities = new Map<number, number>();
-  for (const s of bp.sections) {
-    denomCapacities.set(s.marksEach, (denomCapacities.get(s.marksEach) || 0) + s.count);
-  }
-  const denominations = Array.from(denomCapacities.keys()).sort((a, b) => a - b);
-  if (denominations.length === 0) return warnings;
-
-  const minDenom = denominations[0];
-
-  // Level 2: Single-chapter minimum denomination and coin-change reachability
-  for (const c of bp.chapters) {
-    const chapterLabel = c.title
-      ? `Chapter "${c.title}"`
-      : c.number != null
-      ? `Chapter ${c.number}`
-      : "A chapter";
-
-    if (c.marks > 0 && c.marks < minDenom) {
-      warnings.push(
-        `${chapterLabel} is assigned ${c.marks} mark(s), but the smallest section question is ${minDenom} marks.`
-      );
-    }
-  }
-
-  for (const c of bp.chapters) {
-    if (c.marks <= 0) continue;
-    const chapterLabel = c.title
-      ? `Chapter "${c.title}"`
-      : c.number != null
-      ? `Chapter ${c.number}`
-      : "Chapter";
-
-    const reachable = new Uint8Array(c.marks + 1);
-    reachable[0] = 1;
-    for (let i = 0; i <= c.marks; i++) {
-      if (!reachable[i]) continue;
-      for (const d of denominations) {
-        if (i + d <= c.marks) reachable[i + d] = 1;
-      }
-    }
-    if (!reachable[c.marks]) {
-      warnings.push(
-        `${chapterLabel} quota (${c.marks}m) cannot be formed by any combination of section question denominations (${denominations.join("m, ")}m).`
-      );
-    }
-  }
-
-  // Level 3: Global bounded capacity partitioning check (when totals match and no reachability errors)
-  const activeChapters = bp.chapters.filter((c) => c.marks > 0);
-  if (
-    warnings.length === 0 &&
-    totalSectionMarks === totalChapterMarks &&
-    activeChapters.length > 0 &&
-    activeChapters.length <= 30
-  ) {
-    const capacities = denominations.map((d) => denomCapacities.get(d) || 0);
-    const quotas = activeChapters.map((c) => c.marks);
-    const isGloballyFeasible = checkBoundedPartitionFeasible(denominations, capacities, quotas);
-    if (!isGloballyFeasible) {
-      warnings.push(
-        `Denomination capacity conflict: Section question counts cannot be partitioned to satisfy all chapter quotas simultaneously.`
-      );
-    }
-  }
-
-  return warnings;
-}
-
 export type PaperStatus = {
   sections: { id: string; needed: number; filled: number }[];
   chapters: { chapterId: string; target: number; used: number }[];
@@ -520,14 +363,16 @@ export function paperStatus(bp: BlueprintDef, items: PlacedItem[]): PaperStatus 
     const sec = sectionById.get(i.sectionId);
     return sum + getItemMarks(i, sec?.marksEach ?? 1);
   }, 0);
-  const complete =
-    sections.every((s) => s.filled === s.needed) &&
-    chapters.every((c) => c.used === c.target) &&
-    items.every((i) => bp.chapters.some((c) => c.chapterId === i.chapterId));
+  // chapter weightage is a guide (see `chapters`), so only the sections decide whether a paper is complete
+  const complete = sections.every((s) => s.filled === s.needed);
   return { sections, chapters, totalMarks: blueprintTotalMarks(bp.sections), usedMarks, complete };
 }
 
-/** Why `candidate` may NOT be added to a paper built on `bp`; null if it may. */
+/**
+ * Why `candidate` may NOT be added to a paper built on `bp`; null if it may. Only the section decides: its
+ * place in the blueprint, the type and marks it takes, its role and its free slots. Chapter weightage is a
+ * guide and never refuses a question.
+ */
 export function whyCannotAdd(
   bp: BlueprintDef,
   items: PlacedItem[],
@@ -549,61 +394,7 @@ export function whyCannotAdd(
   if (sec.filled + candidateUnits > sec.needed) {
     return `${section.title} does not have enough slots available (${sec.filled}/${sec.needed} filled).`;
   }
-  const chapter = status.chapters.find((c) => c.chapterId === candidate.chapterId);
-  if (!chapter) return "This question's chapter is not in the blueprint.";
-  const candidateMarks = candidate.marks && candidate.marks > 0
-    ? candidate.marks
-    : (isMultiUnitMatch && candidate.subpartsCount && candidate.subpartsCount > 1
-        ? candidate.subpartsCount * section.marksEach
-        : section.marksEach);
-  // A match question's overflow is not owed by any one chapter: it may be absorbed by whichever chapters stay short.
-  // Judge the candidate against its chapter's own usage, then check the overflow can still be absorbed somewhere.
-  const { targetOf, rawUsedOf, overflow, rep } = rawQuotaUsage(bp, items);
-  const key = rep.get(candidate.chapterId) ?? candidate.chapterId;
-  const target = targetOf.get(key) ?? 0;
-  const ownUsed = rawUsedOf.get(key) ?? 0;
-  const capped = Math.min(ownUsed, target);
-  const isMatchCandidate = section.type === "MATCH_COLUMN";
-  // a combined match question may overshoot its own chapter (its pairs span chapters); the slack check below covers it
-  if (!isMatchCandidate && capped + candidateMarks > target) {
-    return `The blueprint allows only ${target} marks from this chapter; ${capped} are already used.`;
-  }
-  if (isMatchCandidate && ownUsed >= target && target > 0) {
-    return `The blueprint allows only ${target} marks from this chapter; ${capped} are already used.`;
-  }
-  let slack = 0;
-  for (const [k, t] of targetOf) {
-    const used = (rawUsedOf.get(k) ?? 0) + (k === key ? candidateMarks : 0);
-    slack += Math.max(0, t - used);
-  }
-  const overflowAfter = overflow + (isMatchCandidate ? Math.max(0, ownUsed + candidateMarks - target) : 0);
-  if (slack < overflowAfter) {
-    return `The blueprint allows only ${chapter.target} marks from this chapter; ${chapter.used} are already used.`;
-  }
   return null;
-}
-
-/** Each quota group's target and its own usage, plus the match-question marks that exceed their own group. */
-function rawQuotaUsage(bp: BlueprintDef, items: PlacedItem[]) {
-  const sectionById = new Map(bp.sections.map((s) => [s.id, s]));
-  const rep = quotaRepresentatives(bp.chapters);
-  const targetOf = new Map<string, number>();
-  for (const c of bp.chapters) {
-    const k = rep.get(c.chapterId)!;
-    targetOf.set(k, (targetOf.get(k) ?? 0) + c.marks);
-  }
-  const rawUsedOf = new Map<string, number>();
-  const matchOf = new Map<string, number>();
-  for (const i of items) {
-    const k = rep.get(i.chapterId) ?? i.chapterId;
-    const sec = sectionById.get(i.sectionId);
-    const m = getItemMarks(i, sec?.marksEach ?? 1);
-    rawUsedOf.set(k, (rawUsedOf.get(k) ?? 0) + m);
-    if (sec?.type === "MATCH_COLUMN") matchOf.set(k, (matchOf.get(k) ?? 0) + m);
-  }
-  let overflow = 0;
-  for (const [k, m] of matchOf) overflow += Math.min(m, Math.max(0, (rawUsedOf.get(k) ?? 0) - (targetOf.get(k) ?? 0)));
-  return { targetOf, rawUsedOf, overflow, rep };
 }
 
 export type PaperImplication = {
@@ -613,6 +404,7 @@ export type PaperImplication = {
     | "TYPE_MISMATCH"
     | "CHAPTER_EXCESS"
     | "CHAPTER_DEFICIT"
+    | "CHAPTER_OUTSIDE_BLUEPRINT"
     | "ORPHANED_SECTION"
     | "MISSING_INTERNAL_CHOICE"
     | "FORBIDDEN_INTERNAL_CHOICE"
@@ -739,13 +531,22 @@ export function diagnosePaperImplications(
       .filter((i) => i.type === "MATCH_COLUMN" && (i.subpartsCount ?? 0) > 1)
       .map((i) => ({ key: rep.get(i.chapterId) ?? i.chapterId, marks: i.marks ?? 0 })),
   );
+  const outside = items.filter((i) => !groups.has(rep.get(i.chapterId) ?? i.chapterId));
+  if (outside.length > 0) {
+    implications.push({
+      code: "CHAPTER_OUTSIDE_BLUEPRINT",
+      severity: "warning",
+      message: `${outside.length} question(s) are from chapters outside this blueprint.`,
+      details: { count: outside.length, itemIds: outside.map((i) => i.id) },
+    });
+  }
   for (const g of groups.values()) {
     const chapterName = g.title ? g.title : `Chapter ${g.chapterId}`;
     if (g.used > g.target) {
       const excess = g.used - g.target;
       implications.push({
         code: "CHAPTER_EXCESS",
-        severity: "error",
+        severity: "warning",
         chapterId: g.chapterId,
         chapterTitle: g.title,
         message: `${chapterName} has ${g.used} marks placed, exceeding updated blueprint quota of ${g.target} marks (+${excess}m excess).`,

@@ -11,13 +11,11 @@ import { BlueprintTemplateModal } from "@/components/BlueprintTemplateModal";
 import { MPBSE_BLUEPRINT_TEMPLATES, STANDARD_BLUEPRINT_TEMPLATES, type BlueprintTemplate, type ExaminationTerm, adaptChaptersHamiltonHare } from "@/lib/curriculumTemplates";
 import { StandardMpbseConfigurator } from "@/components/blueprints/StandardMpbseConfigurator";
 import { CustomSchoolTermConfigurator } from "@/components/blueprints/CustomSchoolTermConfigurator";
-import { FeasibilityStatusAlert } from "@/components/blueprints/FeasibilityStatusAlert";
 import { SANSKRIT_COMPETENCY_TAXONOMY } from "@/lib/curriculumContract";
 import { downloadBlueprintJson, type BlueprintWithExportRelations } from "@/lib/blueprintExport";
 import { useAcademicSession } from "@/lib/academicSession";
 import {
   blueprintTotalMarks,
-  checkBlueprintFeasibility,
   flattenSectionGroups,
   groupSectionsFromFlat,
   reletterTitle,
@@ -239,7 +237,6 @@ function BlueprintEditor({ params, searchParams }: PageProps<"/blueprints/[id]">
   const total = blueprintTotalMarks(sections);
   const chapterTotal = chapterQuotas.reduce((s, c) => s + c.marks, 0);
   const problems = validateBlueprint({ sections, chapters: chapterQuotas });
-  const feasibilityWarnings = checkBlueprintFeasibility({ sections, chapters: chapterQuotas });
 
   const { totalLogicalQuestions, totalAlternativeQuestions } = useMemo(() => {
     let logical = 0;
@@ -1057,12 +1054,6 @@ function BlueprintEditor({ params, searchParams }: PageProps<"/blueprints/[id]">
           isReadOnly={isReadOnly}
         />
       )}
-
-      <FeasibilityStatusAlert
-        warnings={feasibilityWarnings}
-        totalSectionMarks={total}
-        totalChapterMarks={chapterTotal}
-      />
 
       <fieldset disabled={isReadOnly} className="space-y-4">
         <section className="card grid gap-3 sm:grid-cols-4">

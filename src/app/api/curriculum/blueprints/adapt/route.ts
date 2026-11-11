@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { body, route } from "@/lib/api";
 import { adaptCustomSchoolBlueprint } from "@/lib/blueprints";
-import { checkBlueprintFeasibility } from "@/lib/blueprint";
 
 const adaptRequestSchema = z.object({
   baseTemplateId: z.string().min(1),
@@ -19,16 +18,9 @@ export const POST = route(async (req) => {
     input.activeChapterIds
   );
 
-  const warnings = checkBlueprintFeasibility({
-    sections: adapted.sections,
-    chapters: adapted.chapters,
-  });
-
   return {
     blueprint: adapted,
-    feasibility: {
-      isFeasible: warnings.length === 0,
-      warnings,
-    },
+    // kept for older clients: chapter marks no longer have to be formable from the question sizes
+    feasibility: { isFeasible: true, warnings: [] as string[] },
   };
 });

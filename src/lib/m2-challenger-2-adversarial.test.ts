@@ -11,7 +11,6 @@ import {
   adaptCustomSchoolBlueprint,
   mapCurriculumTemplateToBlueprintInput,
 } from "./blueprints";
-import { validateBlueprint, checkBlueprintFeasibility } from "./blueprint";
 
 // Session Mocking for RBAC on API route handlers
 let mockSessionUserId: string | null = null;

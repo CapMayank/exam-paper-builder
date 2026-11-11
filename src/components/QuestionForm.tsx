@@ -58,6 +58,7 @@ import {
   DIFFICULTY_LABEL,
   SKILLS,
   skillOf,
+  assignChapter,
   suggestChapter,
   suggestDifficulty,
   suggestSkill,
@@ -207,6 +208,7 @@ export function QuestionForm({
   fixedType,
   targetMarks,
   allowedChapterIds,
+  hideChapter,
   openMarks,
   submitLabel = "Save question",
   showPaperEditModes,
@@ -220,6 +222,8 @@ export function QuestionForm({
   fixedType?: string;
   targetMarks?: number;
   allowedChapterIds?: string[];
+  /** Do not ask for a chapter: a new question gets the one `assignChapter` picks (an edited one keeps its own). */
+  hideChapter?: boolean;
   /** Marks still open per chapter in the paper's blueprint; a new question's chapter is suggested from these. */
   openMarks?: Record<string, number>;
   submitLabel?: string;
@@ -408,8 +412,9 @@ export function QuestionForm({
 
   const tagMarks = targetMarks ?? (subparts.length > 0 ? attemptedSubpartsMarks(subparts, attemptCount) : undefined);
   const hasText = text.replace(/<[^>]+>/g, "").trim().length > 0;
-  const chapterSuggestion = autoTag && !touched.chapter ? suggestChapter(text, chapters, openMarks, chapterBank) : null;
-  const effChapterId = chapterSuggestion?.chapterId ?? chapterId;
+  const chapterSuggestion = autoTag && !touched.chapter && !hideChapter ? suggestChapter(text, chapters, openMarks, chapterBank) : null;
+  const autoChapterId = hideChapter && autoTag && chapters.length > 0 ? assignChapter(text, chapters, openMarks ?? {}, chapterBank) : null;
+  const effChapterId = autoChapterId ?? chapterSuggestion?.chapterId ?? chapterId;
   const difficultySuggested = autoTag && !touched.difficulty && hasText;
   const effDifficulty = difficultySuggested ? suggestDifficulty(text, type, tagMarks) : difficulty;
   const skillSuggested = autoTag && !touched.skill && hasText;
@@ -687,7 +692,7 @@ export function QuestionForm({
       <ErrorBanner message={error} />
 
       {/* 1. Where the question goes */}
-      <div className={`grid gap-3 ${bookLocked ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
+      <div className={`grid gap-3 ${(bookLocked ? 2 : 3) - (hideChapter ? 1 : 0) === 1 ? "sm:grid-cols-1" : (bookLocked ? 2 : 3) - (hideChapter ? 1 : 0) === 2 ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
         {!bookLocked && (
           <Field label="Book">
             <select
@@ -736,6 +741,7 @@ export function QuestionForm({
             )}
           </select>
         </Field>
+        {!hideChapter && (
         <Field label="Chapter">
           <select
             className="input"
@@ -754,6 +760,7 @@ export function QuestionForm({
           </select>
           {chapterNote && <SuggestedNote>{chapterNote}</SuggestedNote>}
         </Field>
+        )}
       </div>
 
       {isPrePrimaryClass(book?.className) && (

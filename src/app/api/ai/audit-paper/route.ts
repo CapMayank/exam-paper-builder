@@ -158,28 +158,7 @@ export const POST = route(async (req, _ctx, user) => {
       }
     }
 
-    // Attach chapter quota implications if any
-    if (paper.implications && paper.implications.length > 0) {
-      const quotaIssues = paper.implications
-        .filter((imp) => imp.code === "CHAPTER_EXCESS" || imp.code === "CHAPTER_DEFICIT")
-        .map((imp) => ({
-          questionNumber: 0,
-          sectionTitle: "Blueprint Weightage",
-          type: "BLUEPRINT_MISMATCH" as const,
-          severity: (imp.severity === "error" ? "HIGH" : "MEDIUM") as "HIGH" | "MEDIUM",
-          issue: imp.message,
-          evidence: imp.message,
-          whyItIsAnIssue: "Chapter weightages deviate from prescribed curriculum blueprint quotas.",
-          recommendedCorrection: "Rebalance question chapter assignments to align with official blueprint quotas.",
-          description: imp.message,
-          suggestedFix: "Rebalance question chapter assignments to align with official blueprint quotas.",
-          isObjectivelyVerified: true,
-          confidence: "HIGH" as const,
-          canReconcileBlueprint: true,
-        }));
-
-      extraFindings.push(...quotaIssues);
-    }
+    // Chapter weightage is a guide shown in the coverage panel; it is not an audit finding.
 
     // Attach Circular 465 violations if any
     if (!mpbseCompliance.circular465Compliant) {

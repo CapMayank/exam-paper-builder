@@ -162,10 +162,13 @@ async function updateImpact(bp: ExistingBlueprint, input: BlueprintInput, user: 
       def,
       kept.map((i) => ({ id: i.id, sectionId: absorbed.get(i.sectionId) ?? i.sectionId, chapterId: i.question.chapterId, type: i.question.type, text: i.question.text })),
     );
-    // a slot or chapter still to fill is unfinished work, not something the change broke
-    const problems = implications.filter((x) => x.code !== "SECTION_UNDERFILLED" && x.code !== "CHAPTER_DEFICIT");
+    // chapter weightage is a guide: a chapter above, below or outside its target never counts against a paper
+    const chapterGuide = new Set(["CHAPTER_EXCESS", "CHAPTER_DEFICIT", "CHAPTER_OUTSIDE_BLUEPRINT"]);
+    const binding = implications.filter((x) => !chapterGuide.has(x.code));
+    // a slot still to fill is unfinished work, not something the change broke
+    const problems = binding.filter((x) => x.code !== "SECTION_UNDERFILLED");
     if (problems.length > 0 || own.length !== kept.length) impact.papersNeedingReview++;
-    if (p.status === "FINAL" && implications.length > 0) impact.revertToDraft++;
+    if (p.status === "FINAL" && binding.length > 0) impact.revertToDraft++;
   }
   return impact;
 }

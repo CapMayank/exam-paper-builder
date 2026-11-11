@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { autoFillPaper } from "./autofill";
-import { blueprintTotalMarks, checkBlueprintFeasibility } from "./blueprint";
+import { blueprintTotalMarks } from "./blueprint";
 import { assignChapters, splitPastedQuestions } from "./pasteQuestions";
 import { skillOf, suggestChapter, suggestDifficulty, suggestSkill } from "./questionTagging";
 import { distributeSlotMarks, schoolPatternsForLevel, slotMarksOf } from "./schoolPatterns";
@@ -77,7 +77,6 @@ describe("school blueprint patterns", () => {
         sections: sections.map((sec, i) => ({ id: `s${i}`, title: `S${i}`, ...sec })),
         chapters: ids.map((id) => ({ chapterId: id, marks: marks[id] })),
       };
-      expect(checkBlueprintFeasibility({ ...bp, enforceMarksConservation: true })).toEqual([]);
       // a bank with plenty of questions of every type in every chapter
       const pool = bp.sections.flatMap((sec) => ids.flatMap((ch) => Array.from({ length: 6 }, (_, k) => ({ id: `${sec.type}-${ch}-${k}`, chapterId: ch, type: sec.type }))));
       const res = autoFillPaper(bp, [], pool);
@@ -193,7 +192,7 @@ describe("pasting several questions into a section", () => {
     expect(splitPastedQuestions("1. Define soil.\nAns: The top layer of the earth.", false)[0].answer).toBe("The top layer of the earth.");
   });
 
-  it("hands out chapters within the open marks, title match first", () => {
+  it("hands out chapters title match first, then by need, and never refuses a question", () => {
     const got = assignChapters(
       ["Explain photosynthesis.", "Name two food components.", "Draw a cell.", "Draw a leaf.", "Draw a root."],
       chapters,
@@ -204,8 +203,8 @@ describe("pasting several questions into a section", () => {
       { chapterId: "c3", reason: "title" },
       { chapterId: "c2", reason: "title" },
       { chapterId: "c1", reason: "quota" },
-      null, // all quotas used up
-      null,
+      { chapterId: "c1", reason: "quota" }, // every target is met: the lowest-numbered chapter takes the extra
+      { chapterId: "c2", reason: "quota" },
     ]);
   });
 });

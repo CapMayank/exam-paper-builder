@@ -7,7 +7,6 @@ import {
   validateCircular465Blueprint,
   TERM_CONFIGS,
 } from "./curriculumTemplates";
-import { checkBlueprintFeasibility, validateBlueprint } from "./blueprint";
 import { blueprintSchema } from "./schemas";
 
 describe("Forensic Adversarial Audit: Milestone 2 Deliverables", () => {
@@ -96,108 +95,6 @@ describe("Forensic Adversarial Audit: Milestone 2 Deliverables", () => {
   // ===========================================================================
   // 2. DYNAMIC PROGRAMMING FEASIBILITY ALGORITHM STRESS-TESTING
   // ===========================================================================
-  describe("DP Feasibility Engine: Stress & Boundary Testing", () => {
-    it("handles empty blueprint gracefully without crashing", () => {
-      const warnings = checkBlueprintFeasibility({ sections: [], chapters: [] });
-      expect(warnings).toEqual([]);
-    });
-
-    it("flags when all section denominations are even and a chapter quota is odd", () => {
-      const warnings = checkBlueprintFeasibility({
-        sections: [
-          { count: 10, marksEach: 2 },
-          { count: 5, marksEach: 4 },
-        ],
-        chapters: [
-          { chapterId: "ch1", title: "Kinematics", marks: 7 }, // Impossible with 2m and 4m
-          { chapterId: "ch2", title: "Dynamics", marks: 10 },
-        ],
-      });
-      expect(warnings.length).toBeGreaterThan(0);
-      expect(warnings[0]).toContain("Kinematics");
-      expect(warnings[0]).toContain("cannot be formed");
-    });
-
-    it("flags when chapter quota is positive but less than minimum denomination", () => {
-      const warnings = checkBlueprintFeasibility({
-        sections: [{ count: 10, marksEach: 5 }],
-        chapters: [{ chapterId: "ch1", title: "Microbes", marks: 3 }],
-      });
-      expect(warnings.length).toBe(2);
-      expect(warnings[0]).toContain("smallest section question is 5 marks");
-      expect(warnings[1]).toContain("cannot be formed by any combination");
-    });
-
-    it("evaluates bounded partition backtracking conflict (pigeonhole denomination exhaustion)", () => {
-      // 3 questions of 3 marks (total 9m), 1 question of 2 marks (total 2m). Total = 11m.
-      // Chapters: Ch1 = 6m, Ch2 = 5m. Total = 11m.
-      // Single chapter DP:
-      // Ch1 (6m): can be 3+3 (takes 2x3m) or 2+2+2 (requires 3x2m - exceeds capacity, but 3+3 works!)
-      // Ch2 (5m): can be 3+2 (takes 1x3m, 1x2m)
-      // Combined:
-      // Ch1 takes 2x3m. Remaining capacities: 1x3m, 1x2m.
-      // Ch2 needs 5m -> takes 1x3m + 1x2m. Remaining capacities: 0x3m, 0x2m.
-      // This should PASS!
-      const passResult = checkBlueprintFeasibility({
-        sections: [
-          { count: 3, marksEach: 3 },
-          { count: 1, marksEach: 2 },
-        ],
-        chapters: [
-          { chapterId: "ch1", marks: 6 },
-          { chapterId: "ch2", marks: 5 },
-        ],
-      });
-      expect(passResult).toEqual([]);
-
-      // Now create an UNSOLVABLE combination where total marks match:
-      // Sections: 3 questions of 4 marks (12m), 1 question of 2 marks (2m). Total = 14m.
-      // Chapters: Ch1 = 6m, Ch2 = 8m. Total = 14m.
-      // Ch1 (6m): only possible combination is 4+2 (requires 1x4m, 1x2m).
-      // Ch2 (8m): requires 4+4 (takes 2x4m) OR 4+2+2 (requires two 2m, only one exists).
-      // If Ch1 takes 4+2, remaining is 2x4m and 0x2m.
-      // Ch2 takes 4+4 = 8m. That works!
-      //
-      // What about:
-      // Sections: 1x2m, 2x3m (Total 8m).
-      // Chapters: Ch1 = 4m, Ch2 = 4m (Total 8m).
-      // Ch1 can only be 2+2 (needs two 2m). But capacity of 2m is only 1!
-      // Neither chapter can be formed, Level 3 detects capacity exhaustion!
-      const failResult = checkBlueprintFeasibility({
-        sections: [
-          { count: 2, marksEach: 3 },
-          { count: 1, marksEach: 2 },
-        ],
-        chapters: [
-          { chapterId: "ch1", marks: 4 },
-          { chapterId: "ch2", marks: 4 },
-        ],
-      });
-      expect(failResult.length).toBe(1);
-      expect(failResult[0]).toContain("Denomination capacity conflict");
-    });
-
-    it("executes efficiently for 25 chapters without call stack overflow or lag", () => {
-      const startTime = performance.now();
-      const sections = [
-        { count: 25, marksEach: 1 },
-        { count: 15, marksEach: 2 },
-        { count: 5, marksEach: 3 },
-        { count: 2, marksEach: 5 },
-      ]; // Total: 25 + 30 + 15 + 10 = 80 marks
-      const chapters = Array.from({ length: 20 }, (_, i) => ({
-        chapterId: `ch-${i}`,
-        marks: 4, // 20 * 4 = 80 marks
-      }));
-
-      const warnings = checkBlueprintFeasibility({ sections, chapters });
-      const duration = performance.now() - startTime;
-
-      expect(duration).toBeLessThan(100); // Must resolve in < 100ms
-      expect(Array.isArray(warnings)).toBe(true);
-    });
-  });
-
   // ===========================================================================
   // 3. HAMILTON-HARE PROPORTIONAL ADAPTATION ALGORITHM
   // ===========================================================================
