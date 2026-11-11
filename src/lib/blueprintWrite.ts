@@ -4,8 +4,8 @@ import "server-only";
 
 import { recordAudit } from "@/lib/audit";
 import type { SessionUser } from "@/lib/api";
-import { diagnosePaperImplications } from "@/lib/blueprint";
-import { loadBlueprint, type BlueprintInput } from "@/lib/blueprints";
+import { type BlueprintInput } from "@/lib/blueprints";
+import { finaliseBlocker, loadPaperView } from "@/lib/papers";
 import { absorbingRows } from "@/lib/blueprintSetupPlan";
 import { DEFAULT_ACADEMIC_SESSION } from "@/lib/constants";
 import { prisma } from "@/lib/prisma";
@@ -177,31 +177,20 @@ export async function updateBlueprintWithPapers(id: string, input: BlueprintInpu
 
   let revertedToDraft = 0;
   if (existing.papers.length > 0) {
-    const updated = await loadBlueprint(id);
-    if (updated) {
-      for (const p of existing.papers) {
-        if (p.status !== "FINAL") continue;
-        const items = await prisma.paperQuestion.findMany({
-          where: { paperId: p.id },
-          include: { question: { select: { id: true, chapterId: true, type: true, text: true } } },
-        });
-        const implications = diagnosePaperImplications(
-          {
-            sections: updated.sections,
-            chapters: updated.chapters.map((c) => ({ chapterId: c.chapterId, title: c.chapter.title, marks: c.marks })),
-          },
-          items.map((i) => ({ id: i.id, sectionId: i.sectionId, chapterId: i.question.chapterId, type: i.question.type, text: i.question.text })),
-        );
-        if (implications.length === 0) continue;
-        await prisma.paper.update({ where: { id: p.id }, data: { status: "DRAFT" } });
-        revertedToDraft++;
-        await recordAudit(user, "PAPER_STATUS_CHANGE", "PAPER", p.id, {
-          title: p.title,
-          from: "FINAL",
-          to: "DRAFT",
-          reason: `Reverted to DRAFT because blueprint '${input.name}' was modified (${implications.length} reconciliation item(s)).`,
-        });
-      }
+    for (const p of existing.papers) {
+      if (p.status !== "FINAL") continue;
+      // judged exactly as finalising judges it: a paper that would still be allowed to finalise stays final
+      const view = await loadPaperView(p.id);
+      const blocker = view ? finaliseBlocker(view) : null;
+      if (!blocker) continue;
+      await prisma.paper.update({ where: { id: p.id }, data: { status: "DRAFT" } });
+      revertedToDraft++;
+      await recordAudit(user, "PAPER_STATUS_CHANGE", "PAPER", p.id, {
+        title: p.title,
+        from: "FINAL",
+        to: "DRAFT",
+        reason: `Reverted to DRAFT because blueprint '${input.name}' was modified. ${blocker}`,
+      });
     }
     await recordAudit(user, "PAPER_UPDATE", "BLUEPRINT", id, {
       title: input.name,

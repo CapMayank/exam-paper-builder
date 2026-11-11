@@ -1,6 +1,7 @@
 import { cleanOptionText, isMcqLikeType } from "./constants";
 import { evaluatePaperInternalChoiceCompliance } from "./internalChoiceRules";
-import { validateSubPartsSum, subpartsTotalMarks, type PaperData } from "./types";
+import { computeDisplayedPaperNumbering } from "./layout";
+import { attemptedSubpartsMarks, validateSubPartsSum, type PaperData } from "./types";
 
 export type PreflightIssue = {
   code: string;
@@ -55,10 +56,17 @@ export function validatePaperPreflight(paper: PaperData): PreflightReport {
 
   // 4. Duplicate Question Text within Paper
   const seenTexts = new Map<string, number>();
-  let globalQNum = 1;
+  // numbered as on the printed paper: section by section, not by raw position
+  const numbering = computeDisplayedPaperNumbering(paper.blueprint.sections, paper.items, paper.numberingStyle || "CONTINUOUS");
+  const sectionOrder = new Map(paper.blueprint.sections.map((s, i) => [s.id, i]));
+  const orderedItems = [...paper.items].sort(
+    (a, b) => (sectionOrder.get(a.sectionId) ?? 999) - (sectionOrder.get(b.sectionId) ?? 999) || a.position - b.position,
+  );
+  let fallbackNum = 0;
 
-  for (const item of paper.items) {
-    const qNum = globalQNum++;
+  for (const item of orderedItems) {
+    fallbackNum++;
+    const qNum = numbering.itemNumbers[item.id]?.questionNumber || fallbackNum;
     const q = item.question;
     const normText = q.text.trim().toLowerCase().replace(/\s+/g, " ");
 
@@ -91,12 +99,10 @@ export function validatePaperPreflight(paper: PaperData): PreflightReport {
     // 6. Subparts Marks Verification
     if (q.subparts && q.subparts.length > 0) {
       const sec = paper.blueprint.sections.find((s) => s.id === item.sectionId);
-      const attemptCount = (q as any).attemptCount;
+      const attemptCount = q.attemptCount;
       const isValid = validateSubPartsSum(q.subparts, sec?.marksEach ?? 1, attemptCount);
       if (sec && !isValid) {
-        const sum = attemptCount
-          ? attemptCount * (q.subparts[0]?.marks || 1)
-          : subpartsTotalMarks(q.subparts);
+        const sum = attemptedSubpartsMarks(q.subparts, attemptCount);
         issues.push({
           code: "SUBPARTS_MARKS_MISMATCH",
           severity: "warning",
@@ -156,8 +162,12 @@ export function validatePaperPreflight(paper: PaperData): PreflightReport {
       count: s.count,
       marksEach: s.marksEach,
       instructions: s.instructions,
+      // the blueprint's own "OR required / no OR" setting, as the server's audit reads it
+      orChoiceMode: s.orChoiceMode,
+      orAlternativeCount: s.orAlternativeCount,
+      orSlotsJson: s.orSlotsJson,
     })),
-    items: paper.items.map((i) => ({
+    items: orderedItems.map((i) => ({
       id: i.id,
       sectionId: i.sectionId,
       question: {

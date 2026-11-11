@@ -3535,6 +3535,9 @@ export function buildAndValidateGenerationContract(params: {
   subjectCode?: string | null;
   sectionTitle?: string | null;
   sectionInstructions?: string | null;
+  /** The blueprint section's own internal-choice setting; without it the board default applies. */
+  orChoiceMode?: string | null;
+  orSlotsJson?: string | null;
   questionType?: string | null;
   sectionType?: string | null;
   marksEach?: number | null;
@@ -3665,6 +3668,7 @@ export function buildAndValidateGenerationContract(params: {
     examType: params.examType,
     sectionTitle: params.sectionTitle,
     sectionInstructions: params.sectionInstructions,
+    orChoiceMode: params.orChoiceMode,
     questionType: qTypeRaw,
     marksEach,
   });
@@ -3687,6 +3691,9 @@ export function buildAndValidateGenerationContract(params: {
       examType: params.examType,
       sectionTitle: params.sectionTitle,
       sectionInstructions: params.sectionInstructions,
+      orChoiceMode: params.orChoiceMode,
+      orSlotsJson: params.orSlotsJson,
+      slotIndex: typeof s.slotIndex === "number" ? s.slotIndex : idx,
       questionType: qTypeRaw,
       marksEach: slotMarks,
     });

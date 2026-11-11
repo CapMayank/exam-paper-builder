@@ -1,9 +1,10 @@
 import { HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
-import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
+import { quotaRepresentatives } from "@/lib/blueprint";
+import { assertCanModifyPaper, loadPaperView, toPlacedItems } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { reconcileBlueprintQuestions } from "@/lib/reconcileBlueprint";
-import { parseSubparts } from "@/lib/types";
+import { questionCopyData, variantSubpartsColumn } from "@/lib/questionWrite";
 
 export const POST = route(async (_req, { id }, user) => {
   const paper = await loadPaperView(id);
@@ -13,11 +14,17 @@ export const POST = route(async (_req, { id }, user) => {
     throw new HttpError(409, "This paper is finalised. Reopen it to make adjustments.");
   }
 
-  const blueprintChapters = paper.blueprint.chapters.map((c) => ({
-    chapterId: c.chapterId,
-    title: c.chapter?.title || `Chapter ${c.chapterId}`,
-    marks: c.marks,
-  }));
+  // Marks are owed by quota group: the lessons of one unit share a budget, so a question is only ever moved
+  // between groups, never between two lessons of the same unit.
+  const rep = quotaRepresentatives(paper.blueprint.chapters);
+  const groups = new Map<string, { chapterId: string; title: string; marks: number }>();
+  for (const c of paper.blueprint.chapters) {
+    const key = rep.get(c.chapterId)!;
+    const g = groups.get(key) ?? { chapterId: key, title: c.unitTitle || c.chapter?.title || `Chapter ${c.chapterId}`, marks: 0 };
+    g.marks += c.marks;
+    groups.set(key, g);
+  }
+  const blueprintChapters = [...groups.values()];
 
   const blueprintSections = paper.blueprint.sections.map((s) => ({
     id: s.id,
@@ -27,15 +34,18 @@ export const POST = route(async (_req, { id }, user) => {
     marksEach: s.marksEach,
   }));
 
-  const items = paper.items.map((i) => ({
+  const placed = toPlacedItems(paper.blueprint.sections, paper.items);
+  const items = paper.items.map((i, idx) => ({
     paperItemId: i.id,
     questionId: i.question.id,
     sectionId: i.sectionId,
-    chapterId: i.question.chapterId,
+    chapterId: rep.get(i.question.chapterId) ?? i.question.chapterId,
     type: i.question.type,
     text: i.question.text,
     optionsJson: JSON.stringify(i.question.options || []),
-    subpartsJson: JSON.stringify(i.question.subparts || []),
+    subpartsJson: i.question.subpartsJson ?? JSON.stringify(i.question.subparts || []),
+    // counted exactly as the paper's progress counts it
+    marks: placed[idx]?.marks,
   }));
 
   const reconciliation = reconcileBlueprintQuestions({
@@ -49,26 +59,11 @@ export const POST = route(async (_req, { id }, user) => {
       for (const r of reconciliation.reassignments) {
         // Always fork a paper-specific question variant with the adjusted chapter so the master bank remains uncorrupted
         const orig = await tx.question.findUniqueOrThrow({ where: { id: r.questionId } });
-        const origSubparts = parseSubparts(orig.subpartsJson);
-        const forkedSubparts = {
-          items: origSubparts,
-          _forkedFrom: orig.id,
-          _reconciledToChapter: r.toChapterId,
-        };
-
         const forked = await tx.question.create({
           data: {
-            bookId: orig.bookId,
+            ...questionCopyData(orig),
             chapterId: r.toChapterId,
-            type: orig.type,
-            text: orig.text,
-            optionsJson: orig.optionsJson,
-            subpartsJson: JSON.stringify(forkedSubparts),
-            answer: orig.answer,
-            difficulty: orig.difficulty,
-            imagePath: orig.imagePath,
-            spaceMm: orig.spaceMm,
-            showGrid: orig.showGrid,
+            subpartsJson: variantSubpartsColumn(orig.subpartsJson, { forkedFrom: orig.id, paperId: id, reconciledToChapter: r.toChapterId }),
             createdById: user.id,
           },
         });
@@ -78,21 +73,16 @@ export const POST = route(async (_req, { id }, user) => {
           select: { orQuestionId: true },
         });
 
+        // the OR alternative follows its main question to the new chapter
         let updatedOrId = pq?.orQuestionId ?? null;
         if (pq?.orQuestionId) {
           const origOr = await tx.question.findUnique({ where: { id: pq.orQuestionId } });
           if (origOr) {
             const forkedOr = await tx.question.create({
               data: {
-                bookId: origOr.bookId,
+                ...questionCopyData(origOr),
                 chapterId: r.toChapterId,
-                type: origOr.type,
-                text: origOr.text,
-                optionsJson: origOr.optionsJson,
-                subpartsJson: origOr.subpartsJson,
-                answer: origOr.answer,
-                difficulty: origOr.difficulty,
-                imagePath: origOr.imagePath,
+                subpartsJson: variantSubpartsColumn(origOr.subpartsJson, { forkedFrom: origOr.id, paperId: id, reconciledToChapter: r.toChapterId }),
                 createdById: user.id,
               },
             });

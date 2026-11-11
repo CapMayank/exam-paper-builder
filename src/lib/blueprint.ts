@@ -1,7 +1,7 @@
 // Pure blueprint rules. Used by the API (to reject) and the UI (to explain). No I/O here.
 
-import { isSubpartQuestionType, parseMatchColumnPairs } from "./constants";
-import { parseSubparts, parseSubpartsPayload, subpartsTotalMarks } from "./types";
+import { parseMatchColumnPairs } from "./constants";
+import { attemptedSubpartsMarks, parseSubpartsPayload, validateSubPartsSum } from "./types";
 import { toleratesType, typeRejection } from "./sectionTypes";
 
 export type SectionDef = {
@@ -812,11 +812,41 @@ export function questionSlotMarks(
   // "attempt k of n" only means something when there are sub-questions to choose from; a stray attemptCount on
   // a question without sub-parts (some models echo the schema example) must not shrink its marks
   const attemptCount = subparts.length > 0 ? q.attemptCount || payload.attemptCount : undefined;
-  const submarks = attemptCount
-    ? attemptCount * (subparts[0]?.marks || 1)
-    : subpartsTotalMarks(subparts as never);
+  const submarks = attemptedSubpartsMarks(subparts as never, attemptCount);
   const marks = submarks > 0 ? (secMarksEach > 0 ? Math.min(submarks, secMarksEach) : submarks) : secMarksEach;
   return { marks, units: 1 };
+}
+
+type PlaceableQuestion = Parameters<typeof questionSlotMarks>[1];
+
+/**
+ * How one question counts in a section: the marks it carries and, for a combined match question in a
+ * one-mark-per-pair match section, how many slots it fills. Every path that places, replaces or edits a
+ * question asks here, so a question is never counted one way when added and another way when edited.
+ */
+export function slotPlacement(
+  section: { type?: string; count: number; marksEach: number },
+  q: PlaceableQuestion,
+): { marks: number; subpartsCount?: number } {
+  const { marks, units } = questionSlotMarks(section, q);
+  const isMultiUnitMatch = q.type === "MATCH_COLUMN" && section.type === "MATCH_COLUMN" && section.count > 1;
+  return { marks, subpartsCount: isMultiUnitMatch ? units : undefined };
+}
+
+/**
+ * Why a question's parts do not fit a slot of `marksEach` marks; null when they do (or it has none).
+ * "Answer any N of" counts the N attempted parts.
+ */
+export function subpartsMarksProblem(
+  section: { marksEach: number },
+  q: { subparts?: Array<{ marks: number }> | null; subpartsJson?: string | null; attemptCount?: number | null },
+): string | null {
+  const payload = parseSubpartsPayload(q.subpartsJson);
+  const subparts = Array.isArray(q.subparts) && q.subparts.length > 0 ? q.subparts : payload.subparts;
+  if (subparts.length === 0) return null;
+  const attemptCount = q.attemptCount || payload.attemptCount;
+  if (validateSubPartsSum(subparts as never, section.marksEach, attemptCount)) return null;
+  return `total subpart marks (${attemptedSubpartsMarks(subparts as never, attemptCount)}) must match section marks (${section.marksEach}).`;
 }
 
 /** Map raw paper items or DTO items to normalized PlacedItem representation for blueprint calculation */
@@ -844,18 +874,16 @@ export function toPlacedItems(
     : blueprintOrSections?.sections || [];
   return items.map((i) => {
     const sec = sections.find((x) => x.id === i.sectionId) ?? { count: 1, marksEach: 1 };
-    const { marks, units } = questionSlotMarks(sec, {
+    const { marks, subpartsCount } = slotPlacement(sec, {
       ...i.question,
       explanation: (i.question as { explanation?: string | null }).explanation,
       attemptCount: (i.question as { attemptCount?: number | null }).attemptCount,
     });
-    const isMultiUnitMatch =
-      i.question.type === "MATCH_COLUMN" && (sec as { type?: string }).type === "MATCH_COLUMN" && sec.count > 1;
     return {
       sectionId: i.sectionId,
       chapterId: i.question.chapterId,
       marks,
-      subpartsCount: isMultiUnitMatch ? units : undefined,
+      subpartsCount,
       questionId: i.questionId || i.question.id || undefined,
     };
   });

@@ -55,136 +55,142 @@ export const POST = route(async (req, { id }, user) => {
   }
   const fallbackChapterId = bookChapters[0]?.id || "";
 
-  // If mode === "replace", remove existing placed questions
-  if (mode === "replace") {
-    await prisma.paperQuestion.deleteMany({
-      where: { paperId: id },
-    });
-  }
-
+  // All or nothing: a failure part-way must not leave the paper emptied or half-imported.
   let importedCount = 0;
-  const bpSections = [...blueprint.sections].sort((a, b) => a.position - b.position);
-  const allocatedCounts = new Map<string, number>();
-  const sectionPositions = new Map<string, number>();
-
-  for (const s of bpSections) {
-    if (mode === "append") {
-      const existingInSec = await prisma.paperQuestion.findMany({
-        where: { paperId: id, sectionId: s.id },
-        orderBy: { position: "desc" },
-        take: 1,
+  await prisma.$transaction(
+    async (tx) => {
+    // If mode === "replace", remove existing placed questions
+    if (mode === "replace") {
+      await tx.paperQuestion.deleteMany({
+        where: { paperId: id },
       });
-      sectionPositions.set(s.id, existingInSec.length > 0 ? existingInSec[0].position + 1 : 0);
-      const existingCount = await prisma.paperQuestion.count({
-        where: { paperId: id, sectionId: s.id },
-      });
-      allocatedCounts.set(s.id, existingCount);
-    } else {
-      sectionPositions.set(s.id, 0);
-      allocatedCounts.set(s.id, 0);
     }
-  }
 
-  for (let sIdx = 0; sIdx < paperData.sections.length; sIdx++) {
-    const impSec = paperData.sections[sIdx];
+    const bpSections = [...blueprint.sections].sort((a, b) => a.position - b.position);
+    const allocatedCounts = new Map<string, number>();
+    const sectionPositions = new Map<string, number>();
 
-    for (let qIdx = 0; qIdx < impSec.questions.length; qIdx++) {
-      const q = impSec.questions[qIdx];
-      if (!q.text?.trim()) continue;
+    for (const s of bpSections) {
+      if (mode === "append") {
+        const existingInSec = await tx.paperQuestion.findMany({
+          where: { paperId: id, sectionId: s.id },
+          orderBy: { position: "desc" },
+          take: 1,
+        });
+        sectionPositions.set(s.id, existingInSec.length > 0 ? existingInSec[0].position + 1 : 0);
+        const existingCount = await tx.paperQuestion.count({
+          where: { paperId: id, sectionId: s.id },
+        });
+        allocatedCounts.set(s.id, existingCount);
+      } else {
+        sectionPositions.set(s.id, 0);
+        allocatedCounts.set(s.id, 0);
+      }
+    }
 
-      // Smart match to best blueprint section slot
-      const bpSec =
-        matchQuestionToBlueprintSection(
-          q,
-          impSec.title,
-          sIdx,
-          bpSections,
-          allocatedCounts
-        ) || bpSections[0];
+    for (let sIdx = 0; sIdx < paperData.sections.length; sIdx++) {
+      const impSec = paperData.sections[sIdx];
 
-      allocatedCounts.set(bpSec.id, (allocatedCounts.get(bpSec.id) ?? 0) + importedQuestionUnits(q, bpSec));
-      const pos = sectionPositions.get(bpSec.id) ?? 0;
-      sectionPositions.set(bpSec.id, pos + 1);
+      for (let qIdx = 0; qIdx < impSec.questions.length; qIdx++) {
+        const q = impSec.questions[qIdx];
+        if (!q.text?.trim()) continue;
 
-      const resolvedChapter = resolveQuestionChapter(q, impSec.title, bookChapters);
-      // no stated chapter: the chapter whose title matches the question, before falling back to the first one
-      const chapterId = resolvedChapter?.id || suggestChapter(q.text ?? "", bookChapters)?.chapterId || fallbackChapterId;
+        // Smart match to best blueprint section slot
+        const bpSec =
+          matchQuestionToBlueprintSection(
+            q,
+            impSec.title,
+            sIdx,
+            bpSections,
+            allocatedCounts
+          ) || bpSections[0];
 
-      let orQuestionId: string | null = null;
-      if (q.orQuestion && q.orQuestion.text?.trim()) {
-        let orChapterId = chapterId;
-        const resolvedOrCh = resolveQuestionChapter(q.orQuestion, impSec.title, bookChapters);
-        if (resolvedOrCh) {
-          orChapterId = resolvedOrCh.id;
+        allocatedCounts.set(bpSec.id, (allocatedCounts.get(bpSec.id) ?? 0) + importedQuestionUnits(q, bpSec));
+        const pos = sectionPositions.get(bpSec.id) ?? 0;
+        sectionPositions.set(bpSec.id, pos + 1);
+
+        const resolvedChapter = resolveQuestionChapter(q, impSec.title, bookChapters);
+        // no stated chapter: the chapter whose title matches the question, before falling back to the first one
+        const chapterId = resolvedChapter?.id || suggestChapter(q.text ?? "", bookChapters)?.chapterId || fallbackChapterId;
+
+        let orQuestionId: string | null = null;
+        if (q.orQuestion && q.orQuestion.text?.trim()) {
+          let orChapterId = chapterId;
+          const resolvedOrCh = resolveQuestionChapter(q.orQuestion, impSec.title, bookChapters);
+          if (resolvedOrCh) {
+            orChapterId = resolvedOrCh.id;
+          }
+
+          let orType = normalizeQuestionType(q.orQuestion.type || bpSec.type);
+          if (
+            (bpSec.type === "VERY_SHORT" && orType === "SHORT") ||
+            (bpSec.type === "SHORT" && orType === "VERY_SHORT" && bpSec.marksEach > 1)
+          ) {
+            orType = bpSec.type;
+          }
+
+          const createdOr = await tx.question.create({
+            data: {
+              bookId: blueprint.bookId,
+              chapterId: orChapterId,
+              type: orType,
+              text: q.orQuestion.text.trim(),
+              optionsJson: JSON.stringify(q.orQuestion.options ?? []),
+              subpartsJson: subpartsColumn(q.orQuestion.subparts, q.orQuestion.attemptCount),
+              answer: q.orQuestion.answer?.trim() || "",
+              difficulty: q.orQuestion.difficulty || "MEDIUM",
+              createdById: user.id,
+            },
+          });
+          orQuestionId = createdOr.id;
         }
 
-        let orType = normalizeQuestionType(q.orQuestion.type || bpSec.type);
+        let finalType = normalizeQuestionType(q.type || bpSec.type);
         if (
-          (bpSec.type === "VERY_SHORT" && orType === "SHORT") ||
-          (bpSec.type === "SHORT" && orType === "VERY_SHORT" && bpSec.marksEach > 1)
+          (bpSec.type === "VERY_SHORT" && finalType === "SHORT") ||
+          (bpSec.type === "SHORT" && finalType === "VERY_SHORT" && bpSec.marksEach > 1)
         ) {
-          orType = bpSec.type;
+          finalType = bpSec.type;
         }
-
-        const createdOr = await prisma.question.create({
+        const createdQ = await tx.question.create({
           data: {
             bookId: blueprint.bookId,
-            chapterId: orChapterId,
-            type: orType,
-            text: q.orQuestion.text.trim(),
-            optionsJson: JSON.stringify(q.orQuestion.options ?? []),
-            subpartsJson: subpartsColumn(q.orQuestion.subparts, q.orQuestion.attemptCount),
-            answer: q.orQuestion.answer?.trim() || "",
-            difficulty: q.orQuestion.difficulty || "MEDIUM",
+            chapterId,
+            type: finalType,
+            text: q.text.trim(),
+            optionsJson: JSON.stringify(q.options ?? []),
+            subpartsJson: subpartsColumn(q.subparts, q.attemptCount),
+            answer: q.answer?.trim() || "",
+            difficulty: q.difficulty || "MEDIUM",
             createdById: user.id,
           },
         });
-        orQuestionId = createdOr.id;
+
+        await tx.paperQuestion.create({
+          data: {
+            paperId: id,
+            sectionId: bpSec.id,
+            questionId: createdQ.id,
+            orQuestionId,
+            position: pos,
+          },
+        });
+
+        importedCount++;
       }
-
-      let finalType = normalizeQuestionType(q.type || bpSec.type);
-      if (
-        (bpSec.type === "VERY_SHORT" && finalType === "SHORT") ||
-        (bpSec.type === "SHORT" && finalType === "VERY_SHORT" && bpSec.marksEach > 1)
-      ) {
-        finalType = bpSec.type;
-      }
-      const createdQ = await prisma.question.create({
-        data: {
-          bookId: blueprint.bookId,
-          chapterId,
-          type: finalType,
-          text: q.text.trim(),
-          optionsJson: JSON.stringify(q.options ?? []),
-          subpartsJson: subpartsColumn(q.subparts, q.attemptCount),
-          answer: q.answer?.trim() || "",
-          difficulty: q.difficulty || "MEDIUM",
-          createdById: user.id,
-        },
-      });
-
-      await prisma.paperQuestion.create({
-        data: {
-          paperId: id,
-          sectionId: bpSec.id,
-          questionId: createdQ.id,
-          orQuestionId,
-          position: pos,
-        },
-      });
-
-      importedCount++;
     }
-  }
 
-  await prisma.paper.update({
-    where: { id },
-    data: {
-      updatedAt: new Date(),
-      ...(paperData.examType ? { examType: paperData.examType } : {}),
-      ...(paperData.academicSession ? { academicSession: paperData.academicSession } : {}),
+    await tx.paper.update({
+      where: { id },
+      data: {
+        updatedAt: new Date(),
+        ...(paperData.examType ? { examType: paperData.examType } : {}),
+        ...(paperData.academicSession ? { academicSession: paperData.academicSession } : {}),
+      },
+    });
     },
-  });
+    { timeout: 60000 },
+  );
 
   await recordAudit(user, "PAPER_UPDATE", "PAPER", id, {
     action: "PAPER_QUESTIONS_IMPORT",

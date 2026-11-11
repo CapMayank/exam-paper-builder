@@ -39,7 +39,7 @@ import {
   parseKindergartenConfig,
   serializeKindergartenConfig,
 } from "@/lib/kindergarten/registry";
-import { type Book, type QuestionDto, type SubPart, subpartsTotalMarks } from "@/lib/types";
+import { type Book, type QuestionDto, type SubPart, attemptedSubpartsMarks, validateSubPartsSum } from "@/lib/types";
 import {
   type ChapterBank,
   DIFFICULTY_LABEL,
@@ -220,6 +220,9 @@ export function QuestionForm({
     }
     return getDefaultSubpartsForType(resolvedInitialType, targetMarks);
   });
+  // "Answer any N of these parts"; undefined = every part is answered
+  const [attemptCountRaw, setAttemptCount] = useState<number | undefined>(initial?.attemptCount);
+  const attemptCount = attemptCountRaw && attemptCountRaw > 0 && attemptCountRaw < subparts.length ? attemptCountRaw : undefined;
   const [kdgConfig, setKdgConfig] = useState<any>(() => {
     if (isKindergartenType(resolvedInitialType)) {
       const raw = initial?.options?.[0] ? initial.options[0] : JSON.stringify(initial?.options || []);
@@ -343,7 +346,7 @@ export function QuestionForm({
     }
   }
 
-  const tagMarks = targetMarks ?? (subparts.length > 0 ? subpartsTotalMarks(subparts) : undefined);
+  const tagMarks = targetMarks ?? (subparts.length > 0 ? attemptedSubpartsMarks(subparts, attemptCount) : undefined);
   const hasText = text.replace(/<[^>]+>/g, "").trim().length > 0;
   const chapterSuggestion = autoTag && !touched.chapter ? suggestChapter(text, chapters, openMarks, chapterBank) : null;
   const effChapterId = chapterSuggestion?.chapterId ?? chapterId;
@@ -382,11 +385,16 @@ export function QuestionForm({
       if (subparts.some((sp) => !sp.marks || sp.marks <= 0)) {
         return setError("Every subpart must have at least 1 mark allocated.");
       }
-      const totalSubMarks = subpartsTotalMarks(subparts);
-      if (targetMarks !== undefined && totalSubMarks !== targetMarks) {
+      const totalSubMarks = attemptedSubpartsMarks(subparts, attemptCount);
+      if (targetMarks !== undefined && !validateSubPartsSum(subparts, targetMarks, attemptCount)) {
         return setError(
-          `Subpart marks sum (${totalSubMarks}m) must equal section question marks (${targetMarks}m). Adjust individual subparts to balance.`
+          attemptCount
+            ? `Any ${attemptCount} of these parts add up to ${totalSubMarks}m, but the question must be worth ${targetMarks}m. Adjust the parts or how many are answered.`
+            : `Subpart marks sum (${totalSubMarks}m) must equal section question marks (${targetMarks}m). Adjust individual subparts to balance.`
         );
+      }
+      if (attemptCount && subparts.some((sp) => sp.marks !== subparts[0].marks)) {
+        return setError("When students answer any few of the parts, every part must carry the same marks.");
       }
     }
 
@@ -429,6 +437,7 @@ export function QuestionForm({
               options: Array.isArray(sp.options) && sp.options.length > 0 ? sp.options.map((o) => o.trim()) : undefined,
             }))
           : [],
+        ...(usesSubparts && attemptCount ? { attemptCount } : {}),
       };
       if (customSaveHandler) {
         await customSaveHandler(payload, paperEditMode);
@@ -847,8 +856,8 @@ export function QuestionForm({
             <div className="flex items-center gap-2">
               <span className="font-semibold text-sm text-slate-800">Parts of the question</span>
               {(() => {
-                const total = subpartsTotalMarks(subparts);
-                const expected = targetMarks ?? 4;
+                const total = attemptedSubpartsMarks(subparts, attemptCount);
+                const expected = targetMarks ?? total;
                 const isBalanced = total === expected;
                 return isBalanced ? (
                   <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800 border border-emerald-300">
@@ -866,6 +875,7 @@ export function QuestionForm({
                 type="button"
                 onClick={() => {
                   setSubparts(getDefaultSubpartsForType(type, targetMarks));
+                  setAttemptCount(undefined);
                 }}
                 className="btn btn-xs bg-white font-medium"
               >
@@ -885,6 +895,25 @@ export function QuestionForm({
               </button>
             </div>
           </div>
+
+          {subparts.length > 1 && (
+            <label className="flex flex-wrap items-center gap-2 text-xs text-slate-700">
+              <span className="font-medium">Students answer</span>
+              <select
+                className="input !w-auto !py-1 text-xs"
+                value={attemptCount ?? 0}
+                onChange={(e) => setAttemptCount(Number(e.target.value) || undefined)}
+              >
+                <option value={0}>all {subparts.length} parts</option>
+                {Array.from({ length: subparts.length - 1 }, (_, n) => n + 1).map((n) => (
+                  <option key={n} value={n}>
+                    any {n} of the {subparts.length} parts
+                  </option>
+                ))}
+              </select>
+              {attemptCount && <span className="text-slate-500">Marks count the {attemptCount} answered.</span>}
+            </label>
+          )}
 
           <div className="space-y-3">
             {subparts.map((sp, i) => (

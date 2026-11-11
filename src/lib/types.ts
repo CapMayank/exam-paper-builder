@@ -309,6 +309,21 @@ export function subpartsTotalMarks(
 
 export const sumSubPartMarks = subpartsTotalMarks;
 
+/**
+ * What a question's parts are worth to the student: all of them, or `attemptCount` of them when the question
+ * says "answer any N". 0 when there are no parts.
+ */
+export function attemptedSubpartsMarks(
+  subparts: (Pick<SubPart, "marks" | "subparts"> | null | undefined)[] | null | undefined,
+  attemptCount?: number | null,
+): number {
+  if (!subparts || subparts.length === 0) return 0;
+  if (typeof attemptCount === "number" && attemptCount > 0 && attemptCount <= subparts.length) {
+    return attemptCount * (subparts[0]?.marks || 1);
+  }
+  return subpartsTotalMarks(subparts);
+}
+
 export function validateSubPartsSum(
   subparts: (Pick<SubPart, "marks" | "subparts"> | null | undefined)[] | null | undefined,
   expectedTotalMarks: number,

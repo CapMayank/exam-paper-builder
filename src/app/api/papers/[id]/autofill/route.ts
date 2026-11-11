@@ -8,15 +8,13 @@ import {
   buildAndValidateGenerationContract,
   generateCurriculumGroundedSectionQuestions,
 } from "@/lib/curriculumContract";
-import {
-  isParaphraseOrDuplicateChoice,
-  resolveInternalChoiceRequirement,
-} from "@/lib/internalChoiceRules";
+import { isParaphraseOrDuplicateChoice, paperSectionChoiceRequirement } from "@/lib/internalChoiceRules";
 import { assertCanModifyPaper, loadPaperView, toPlacedItems } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { devanagariShare, isQuestionContaminated, MIN_DEVANAGARI_SHARE } from "@/lib/questionValidator";
 import { parseMatchColumnPairs } from "@/lib/constants";
-import { parseSubparts, subpartsTotalMarks } from "@/lib/types";
+import { attemptedSubpartsMarks, parseSubpartsPayload } from "@/lib/types";
+import { isVariantCopy } from "@/lib/questionWrite";
 
 function safeJsonArray(json: string | null): string[] {
   try {
@@ -44,55 +42,35 @@ export const POST = route(async (req, { id }, user) => {
   const preferredDifficulty = typeof raw.difficulty === "string" ? raw.difficulty : undefined;
 
   const internalChoiceSectionIds = new Set<string>();
-  const forbiddenChoiceSectionIds = new Set<string>();
   for (const sec of paper.blueprint.sections) {
-    const reqRule = resolveInternalChoiceRequirement({
-      schoolName: paper.schoolName,
-      blueprintName: paper.blueprint.name,
-      className: paper.blueprint.book.className,
-      academicSession: paper.academicSession || paper.blueprint.academicSession,
-      subject: paper.blueprint.book.subject,
-      subjectCode: paper.subjectCode || paper.blueprint.subjectCode,
-      questionType: sec.type,
-      marksEach: sec.marksEach,
-      sectionTitle: sec.title,
-      sectionInstructions: sec.instructions,
-      orChoiceMode: (sec as any).orChoiceMode,
-      orAlternativeCount: (sec as any).orAlternativeCount,
-      orSlotsJson: (sec as any).orSlotsJson,
-    });
+    const reqRule = paperSectionChoiceRequirement(paper, sec);
     if (reqRule.required) internalChoiceSectionIds.add(sec.id);
-    if (reqRule.forbidden) forbiddenChoiceSectionIds.add(sec.id);
   }
 
   // Determine whether existing items in the target scope have internal choice violations
+  /** What to do with each item whose internal choice breaks its slot's rule: drop a forbidden OR, or add a missing one. */
+  const repairAction = new Map<string, "REMOVE" | "ADD">();
   const itemsToRepairChoice = paper.items.filter((item) => {
     if (targetSectionId && item.sectionId !== targetSectionId) return false;
     const sec = paper.blueprint.sections.find((s) => s.id === item.sectionId);
     if (!sec) return false;
     const secItems = paper.items.filter((i) => i.sectionId === item.sectionId);
     const slotIndex = secItems.indexOf(item);
-    const slotReq = resolveInternalChoiceRequirement({
-      schoolName: paper.schoolName,
-      blueprintName: paper.blueprint.name,
-      className: paper.blueprint.book.className,
-      academicSession: paper.academicSession || paper.blueprint.academicSession,
-      subject: paper.blueprint.book.subject,
-      subjectCode: paper.subjectCode || paper.blueprint.subjectCode,
-      questionType: sec.type,
-      marksEach: sec.marksEach,
-      sectionTitle: sec.title,
-      sectionInstructions: sec.instructions,
-      slotIndex: slotIndex >= 0 ? slotIndex : undefined,
-      orChoiceMode: (sec as any).orChoiceMode,
-      orAlternativeCount: (sec as any).orAlternativeCount,
-      orSlotsJson: (sec as any).orSlotsJson,
-    });
+    const slotReq = paperSectionChoiceRequirement(paper, sec, slotIndex >= 0 ? slotIndex : undefined);
 
-    if (slotReq.forbidden && item.orQuestion) return true;
+    if (slotReq.forbidden && item.orQuestion) {
+      repairAction.set(item.id, "REMOVE");
+      return true;
+    }
     if (slotReq.required) {
-      if (!item.orQuestion || !item.orQuestion.text?.trim()) return true;
-      if (isParaphraseOrDuplicateChoice(item.question.text, item.orQuestion.text).isDuplicateOrParaphrase) return true;
+      if (
+        !item.orQuestion ||
+        !item.orQuestion.text?.trim() ||
+        isParaphraseOrDuplicateChoice(item.question.text, item.orQuestion.text).isDuplicateOrParaphrase
+      ) {
+        repairAction.set(item.id, "ADD");
+        return true;
+      }
     }
     return false;
   });
@@ -140,6 +118,8 @@ export const POST = route(async (req, { id }, user) => {
 
   const validBankQuestions = bankQuestions.filter(
     (q) =>
+      // a shuffled or re-tagged copy belongs to the paper it was made for; its original is the bank question
+      !isVariantCopy(q.subpartsJson) &&
       !isQuestionContaminated(
         {
           text: q.text,
@@ -155,8 +135,8 @@ export const POST = route(async (req, { id }, user) => {
   const bankById = new Map(validBankQuestions.map((q) => [q.id, q]));
 
   const candidatePool = validBankQuestions.map((q) => {
-    const sps = parseSubparts(q.subpartsJson);
-    const subMarks = subpartsTotalMarks(sps);
+    const payload = parseSubpartsPayload(q.subpartsJson);
+    const subMarks = attemptedSubpartsMarks(payload.subparts, payload.attemptCount);
     return {
       id: q.id,
       chapterId: q.chapterId,
@@ -190,22 +170,7 @@ export const POST = route(async (req, { id }, user) => {
       isSlotChoiceRequired: (sectionId, slotIndex, defaultRequired) => {
         const sec = paper.blueprint.sections.find((s) => s.id === sectionId);
         if (!sec) return defaultRequired;
-        const slotReq = resolveInternalChoiceRequirement({
-          schoolName: paper.schoolName,
-          blueprintName: paper.blueprint.name,
-          className: paper.blueprint.book.className,
-          academicSession: paper.academicSession || paper.blueprint.academicSession,
-          subject: paper.blueprint.book.subject,
-          subjectCode: paper.subjectCode || paper.blueprint.subjectCode,
-          questionType: sec.type,
-          marksEach: sec.marksEach,
-          sectionTitle: sec.title,
-          sectionInstructions: sec.instructions,
-          slotIndex,
-          orChoiceMode: (sec as any).orChoiceMode,
-          orAlternativeCount: (sec as any).orAlternativeCount,
-          orSlotsJson: (sec as any).orSlotsJson,
-        });
+        const slotReq = paperSectionChoiceRequirement(paper, sec, slotIndex);
         return slotReq.required;
       },
     },
@@ -309,22 +274,7 @@ export const POST = route(async (req, { id }, user) => {
           result.added.filter((a) => a.sectionId === sec.id).length +
           synthesizedItems.filter((s) => s.sectionId === sec.id).length;
 
-        const slotReq = resolveInternalChoiceRequirement({
-          schoolName: paper.schoolName,
-          blueprintName: paper.blueprint.name,
-          className: paper.blueprint.book.className,
-          academicSession: paper.academicSession || paper.blueprint.academicSession,
-          subject: paper.blueprint.book.subject,
-          subjectCode: paper.subjectCode || paper.blueprint.subjectCode,
-          questionType: sec.type,
-          marksEach: sec.marksEach,
-          sectionTitle: sec.title,
-          sectionInstructions: sec.instructions,
-          slotIndex: currentPlacedInSection,
-          orChoiceMode: (sec as any).orChoiceMode,
-          orAlternativeCount: (sec as any).orAlternativeCount,
-          orSlotsJson: (sec as any).orSlotsJson,
-        });
+        const slotReq = paperSectionChoiceRequirement(paper, sec, currentPlacedInSection);
 
         const contractRes = buildAndValidateGenerationContract({
           schoolName: paper.schoolName,
@@ -337,6 +287,8 @@ export const POST = route(async (req, { id }, user) => {
           subjectCode: paper.subjectCode || paper.blueprint.subjectCode,
           sectionTitle: sec.title,
           sectionInstructions: sec.instructions,
+          orChoiceMode: sec.orChoiceMode,
+          orSlotsJson: sec.orSlotsJson,
           questionType: sec.type,
           marksEach: sec.marksEach,
           slots: [
@@ -432,6 +384,8 @@ export const POST = route(async (req, { id }, user) => {
       subjectCode: paper.subjectCode || paper.blueprint.subjectCode,
       sectionTitle: sec.title,
       sectionInstructions: sec.instructions,
+      orChoiceMode: sec.orChoiceMode,
+      orSlotsJson: sec.orSlotsJson,
       questionType: sec.type,
       marksEach: sec.marksEach,
       slots: [
@@ -492,13 +446,13 @@ export const POST = route(async (req, { id }, user) => {
   await prisma.$transaction(async (tx) => {
     // 1. Repair existing items with missing required OR or forbidden OR
     for (const existing of itemsToRepairChoice) {
-      if (forbiddenChoiceSectionIds.has(existing.sectionId) && existing.orQuestion) {
+      if (repairAction.get(existing.id) === "REMOVE") {
         await tx.paperQuestion.update({
           where: { id: existing.id },
           data: { orQuestionId: null },
         });
         repairedChoicesCount++;
-      } else if (internalChoiceSectionIds.has(existing.sectionId)) {
+      } else {
         const orQId = await pickOrSynthesizeOrQuestionId(tx, {
           sectionId: existing.sectionId,
           chapterId: existing.question.chapter?.id || (existing.question as any).chapterId,
@@ -522,7 +476,8 @@ export const POST = route(async (req, { id }, user) => {
       let orQuestionId = item.orQuestionId || null;
       const primaryBankQ = bankById.get(item.questionId);
       if (
-        internalChoiceSectionIds.has(item.sectionId) &&
+        // the solver already decided, slot by slot, whether this one needs an OR
+        (item.requiresInternalChoice ?? internalChoiceSectionIds.has(item.sectionId)) &&
         (!orQuestionId ||
           (primaryBankQ &&
             bankById.get(orQuestionId) &&

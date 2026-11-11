@@ -37,6 +37,12 @@ const nextConfig: NextConfig = {
         destination: "/papers",
         permanent: false,
       },
+      // the old compact view is the print view with the Compact density
+      {
+        source: "/papers/:id/compact",
+        destination: "/papers/:id/print",
+        permanent: false,
+      },
       {
         source: "/solutions",
         destination: "/papers",

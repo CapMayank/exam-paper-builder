@@ -1,5 +1,5 @@
 import { parseMatchColumnPairs } from "./constants";
-import { parseSubparts, parseSubpartsPayload, subpartsTotalMarks } from "./types";
+import { parseSubpartsPayload, subpartsTotalMarks } from "./types";
 
 export interface ReconcileItemInput {
   paperItemId: string;
@@ -10,6 +10,8 @@ export interface ReconcileItemInput {
   text: string;
   optionsJson?: string;
   subpartsJson?: string;
+  /** What the question counts for in its slot, when the caller already knows (see blueprint.slotPlacement). */
+  marks?: number;
 }
 
 export interface ReconcileChapterInput {
@@ -84,7 +86,7 @@ export function reconcileBlueprintQuestions(params: {
   // Working copy of items with calculated marks and mutable chapterId
   const workingItems = items.map((it) => {
     const sec = sectionById.get(it.sectionId);
-    const marks = getEffectiveQuestionMarks(it, sec?.marksEach ?? 1);
+    const marks = it.marks && it.marks > 0 ? it.marks : getEffectiveQuestionMarks(it, sec?.marksEach ?? 1);
     return {
       ...it,
       marks,

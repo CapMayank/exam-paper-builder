@@ -1,6 +1,6 @@
 import { HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
-import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
+import { assertCanModifyPaper, loadPaperView, snapshotItems } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import type { PaperLanguage, PaperSnapshotPayload } from "@/lib/types";
 
@@ -70,12 +70,7 @@ export const POST = route(async (req, params, user) => {
     marksStyle: (current.marksStyle as any) || "INLINE",
     showCandidateDetails: current.showCandidateDetails,
     showSignatures: current.showSignatures,
-    items: current.items.map((it) => ({
-      sectionId: it.sectionId,
-      position: it.position,
-      questionId: it.question.id,
-      orQuestionId: it.orQuestion?.id || null,
-    })),
+    items: snapshotItems(current.items),
     timestamp: now.toISOString(),
   };
 

@@ -2,6 +2,7 @@ import { HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { assertCanCopyPaper, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
+import { itemCopyData, paperCopyData } from "@/lib/questionWrite";
 
 /**
  * Duplicate a paper:
@@ -16,12 +17,7 @@ export const POST = route(async (req, params, user) => {
     where: { id },
     include: {
       blueprint: { select: { book: { select: { className: true, subject: true } } } },
-      items: {
-        include: {
-          question: true,
-          orQuestion: true,
-        },
-      },
+      items: true,
     },
   });
 
@@ -37,43 +33,19 @@ export const POST = route(async (req, params, user) => {
 
   const newPaper = await prisma.paper.create({
     data: {
+      ...paperCopyData(source),
       title: newTitle,
-      blueprintId: source.blueprintId,
-      examType: source.examType,
-      layout: source.layout,
-      schoolName: source.schoolName,
+      academicSession: targetSession,
       examDate: "",
       paperSet: "",
-      subjectCode: source.subjectCode,
-      language: source.language,
-      generalInstructions: source.generalInstructions,
-      academicSession: targetSession,
-      schoolLogo: source.schoolLogo,
-      logoPath: source.logoPath,
-      printDensity: source.printDensity,
-      twoColumn: source.twoColumn,
-      targetPages: source.targetPages,
-      numberingStyle: source.numberingStyle,
-      marksStyle: source.marksStyle,
-      showCandidateDetails: source.showCandidateDetails,
-      showSignatures: source.showSignatures,
       status: "DRAFT",
       createdById: user.id,
+      // the placements, with each question's own page break, instruction and syllabus component
+      items: {
+        create: source.items.map((it) => ({ ...itemCopyData(it), questionId: it.questionId, orQuestionId: it.orQuestionId })),
+      },
     },
   });
-
-  // Duplicate all question placements
-  for (const it of source.items) {
-    await prisma.paperQuestion.create({
-      data: {
-        paperId: newPaper.id,
-        sectionId: it.sectionId,
-        questionId: it.questionId,
-        orQuestionId: it.orQuestionId,
-        position: it.position,
-      },
-    });
-  }
 
   await recordAudit(user, "PAPER_CREATE", "PAPER", newPaper.id, {
     action: "PAPER_DUPLICATE",

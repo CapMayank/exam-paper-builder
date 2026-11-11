@@ -5,6 +5,8 @@ import { toQuestionDto } from "@/lib/dto";
 import { assertCanManageScope, assertCanModifyQuestion } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { questionPatchSchema, questionSchema } from "@/lib/schemas";
+import { questionColumns, subpartsColumn } from "@/lib/questionWrite";
+import { parseSubpartsPayload } from "@/lib/types";
 
 
 export const GET = route(async (_req, { id }) => {
@@ -37,12 +39,17 @@ export const PATCH = route(async (req, { id }, user) => {
   const data: Record<string, unknown> = {};
   if (input.text !== undefined) data.text = input.text;
   if (input.options !== undefined) data.optionsJson = JSON.stringify(input.options);
-  if (input.subparts !== undefined) data.subpartsJson = JSON.stringify(input.subparts);
+  // "answer any N of these" lives beside the parts: an edit of the parts alone keeps it
+  if (input.subparts !== undefined || input.attemptCount !== undefined) {
+    const current = parseSubpartsPayload(existing.subpartsJson);
+    data.subpartsJson = subpartsColumn(input.subparts ?? current.subparts, input.attemptCount ?? current.attemptCount);
+  }
   if (input.answer !== undefined) data.answer = input.answer;
   if (input.difficulty !== undefined) data.difficulty = input.difficulty;
   if (input.cognitiveLevel !== undefined) data.cognitiveLevel = input.cognitiveLevel;
   if (input.spaceMm !== undefined) data.spaceMm = input.spaceMm;
   if (input.showGrid !== undefined) data.showGrid = input.showGrid;
+  if (input.passageGroupId !== undefined) data.passageGroupId = input.passageGroupId;
 
   const updated = await prisma.question.update({
     where: { id },
@@ -91,14 +98,9 @@ export const PUT = route(async (req, { id }, user) => {
   if (totalPaperUses > 0 && (input.chapterId !== existing.chapterId || input.bookId !== existing.bookId)) {
     throw new HttpError(409, "This question is used in a paper, so its chapter can't change.");
   }
-  const { options, subparts, ...rest } = input;
   const updated = await prisma.question.update({
     where: { id },
-    data: {
-      ...rest,
-      optionsJson: JSON.stringify(options),
-      subpartsJson: JSON.stringify(subparts ?? []),
-    },
+    data: questionColumns(input),
     include: { chapter: true, _count: { select: { paperQuestions: true, orPaperQuestions: true } } },
   });
 

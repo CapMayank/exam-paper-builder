@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { questionColumns, VARIANT_MARKER } from "@/lib/questionWrite";
 import { keepActive, scopeFromRequest } from "@/lib/viewScope";
 import { body, HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
@@ -6,7 +7,7 @@ import { toQuestionDto } from "@/lib/dto";
 import { assertCanManageScope } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { questionSchema } from "@/lib/schemas";
-import { subpartsTotalMarks } from "@/lib/types";
+import { attemptedSubpartsMarks } from "@/lib/types";
 
 const include = {
   chapter: true,
@@ -97,7 +98,7 @@ export const GET = route(async (req) => {
   // Filter out internal shuffled variant clones from bank browsing by default
   if (sp.get("includeVariants") !== "true") {
     const notForked: Prisma.QuestionWhereInput = {
-      NOT: { subpartsJson: { contains: "_forkedFrom" } },
+      NOT: { subpartsJson: { contains: VARIANT_MARKER } },
     };
     if (where.AND) {
       where.AND = Array.isArray(where.AND) ? [...where.AND, notForked] : [where.AND, notForked];
@@ -125,7 +126,7 @@ export const GET = route(async (req) => {
     const targetMarks = Number(marksParam);
     dtos = dtos.filter((q) => {
       if (q.subparts && q.subparts.length > 0) {
-        return subpartsTotalMarks(q.subparts) === targetMarks;
+        return attemptedSubpartsMarks(q.subparts, q.attemptCount) === targetMarks;
       }
       if (targetMarks === 1) {
         return [
@@ -157,14 +158,8 @@ export const POST = route(async (req, _params, user) => {
   const chapter = await prisma.chapter.findUnique({ where: { id: input.chapterId }, include: { book: { select: { className: true, subject: true } } } });
   if (!chapter || chapter.bookId !== input.bookId) throw new HttpError(400, "Chapter does not belong to that book");
   assertCanManageScope(user, chapter.book);
-  const { options, subparts, ...rest } = input;
   const created = await prisma.question.create({
-    data: {
-      ...rest,
-      optionsJson: JSON.stringify(options),
-      subpartsJson: JSON.stringify(subparts ?? []),
-      createdById: user.id,
-    },
+    data: { ...questionColumns(input), createdById: user.id },
     include,
   });
 

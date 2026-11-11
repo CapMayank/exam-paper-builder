@@ -518,9 +518,28 @@ export function planPaperSlotAssignments(paper: PaperAutogenInput): PaperAutogen
       examType: paper.examType || blueprint.examType,
       sectionTitle: sec.title,
       sectionInstructions: sec.instructions,
+      orChoiceMode: (sec as { orChoiceMode?: string | null }).orChoiceMode,
       questionType: form,
       marksEach: sec.marksEach,
     });
+    /** The rule for one slot: a per-slot setting in the blueprint overrides the section's. */
+    const slotChoiceReq = (slotIndex: number) =>
+      resolveInternalChoiceRequirement({
+        schoolName: paper.schoolName,
+        blueprintName: blueprint.name,
+        academicSession: paper.academicSession || blueprint.academicSession,
+        className: blueprint.book?.className,
+        subject: blueprint.book?.subject,
+        subjectCode: paper.subjectCode || blueprint.subjectCode,
+        examType: paper.examType || blueprint.examType,
+        sectionTitle: sec.title,
+        sectionInstructions: sec.instructions,
+        orChoiceMode: (sec as { orChoiceMode?: string | null }).orChoiceMode,
+        orSlotsJson: (sec as { orSlotsJson?: string | null }).orSlotsJson,
+        slotIndex,
+        questionType: form,
+        marksEach: sec.marksEach,
+      });
 
     let sectionSlots: PaperAutogenSlot[] = [];
 
@@ -589,11 +608,12 @@ export function planPaperSlotAssignments(paper: PaperAutogenInput): PaperAutogen
         .map((s) => {
           const assignedChap = unitAssignments.get(s)!;
           const slotId = `slot_${sec.id}_${s.slotIndex}`;
+          const slotReq = slotChoiceReq(s.slotIndex);
           const choicePolicy = resolveChoicePolicyForSlot({
             marks: s.marksEach,
             questionType: form,
-            requiresChoice: choiceReq.required,
-            forbiddenChoice: choiceReq.forbidden,
+            requiresChoice: slotReq.required,
+            forbiddenChoice: slotReq.forbidden,
           });
           const currCtx = resolveChapterCurriculumContextSync({
             chapterNumber: assignedChap.chapterNumber,
@@ -628,7 +648,7 @@ export function planPaperSlotAssignments(paper: PaperAutogenInput): PaperAutogen
             chapterNumber: assignedChap.chapterNumber,
             chapterTitle: assignedChap.chapterTitle,
             marks: s.marksEach,
-            requiresInternalChoice: choiceReq.required,
+            requiresInternalChoice: slotReq.required,
             choicePolicy,
             curriculumPayload,
           };

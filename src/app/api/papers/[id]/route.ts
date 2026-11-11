@@ -1,6 +1,6 @@
 import { body, HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
-import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
+import { assertCanModifyPaper, finaliseBlocker, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { paperUpdateSchema } from "@/lib/schemas";
 
@@ -16,13 +16,9 @@ export const PATCH = route(async (req, { id }, user) => {
   if (!current) throw new HttpError(404, "Paper not found");
 
   assertCanModifyPaper(user, current);
-  if (input.status === "FINAL") {
-    if (!current.progress.complete) {
-      throw new HttpError(409, "The paper doesn't match its blueprint yet, so it can't be finalised.");
-    }
-    if (current.internalChoiceAudit && !current.internalChoiceAudit.compliant) {
-      throw new HttpError(409, "The paper does not comply with official internal choice rules. Please fix missing or forbidden choices before finalising.");
-    }
+  if (input.status === "FINAL" && current.status !== "FINAL") {
+    const blocker = finaliseBlocker(current);
+    if (blocker) throw new HttpError(409, blocker);
   }
   await prisma.paper.update({ where: { id }, data: input });
   // A worksheet's exam type lives on its hidden blueprint too (that is where it is read from).

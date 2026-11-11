@@ -727,6 +727,69 @@ function resolveInternalChoiceRequirementBase(
   };
 }
 
+/** The parts of a paper the internal-choice rule depends on. A paper view and a blueprint-with-book both fit. */
+export type ChoicePaperLike = {
+  schoolName?: string | null;
+  academicSession?: string | null;
+  subjectCode?: string | null;
+  examType?: string | null;
+  blueprint: {
+    name?: string | null;
+    academicSession?: string | null;
+    subjectCode?: string | null;
+    examType?: string | null;
+    book?: { className?: string | null; subject?: string | null } | null;
+  };
+};
+
+export type ChoiceSectionLike = {
+  title?: string | null;
+  instructions?: string | null;
+  type: string;
+  marksEach: number;
+  orChoiceMode?: string | null;
+  orAlternativeCount?: number | null;
+  orSlotsJson?: string | null;
+};
+
+/**
+ * Everything the internal-choice rule needs for one section of one paper, including what the blueprint itself
+ * says about the section ("OR required", "no OR", or per-slot). Build the context here rather than by hand: a
+ * caller that leaves out the blueprint's own setting gets the board default and disagrees with the paper's audit.
+ */
+export function paperSectionChoiceContext(
+  paper: ChoicePaperLike,
+  section: ChoiceSectionLike,
+  slotIndex?: number | null,
+): InternalChoiceResolutionContext {
+  return {
+    schoolName: paper.schoolName,
+    blueprintName: paper.blueprint.name,
+    className: paper.blueprint.book?.className,
+    academicSession: paper.academicSession || paper.blueprint.academicSession,
+    subject: paper.blueprint.book?.subject,
+    subjectCode: paper.subjectCode || paper.blueprint.subjectCode,
+    examType: paper.examType || paper.blueprint.examType,
+    questionType: section.type,
+    marksEach: section.marksEach,
+    sectionTitle: section.title,
+    sectionInstructions: section.instructions,
+    orChoiceMode: section.orChoiceMode,
+    orAlternativeCount: section.orAlternativeCount,
+    orSlotsJson: section.orSlotsJson,
+    slotIndex: slotIndex ?? undefined,
+  };
+}
+
+/** The internal-choice rule for a section of a paper (or one of its slots). */
+export function paperSectionChoiceRequirement(
+  paper: ChoicePaperLike,
+  section: ChoiceSectionLike,
+  slotIndex?: number | null,
+): InternalChoiceRequirement {
+  return resolveInternalChoiceRequirement(paperSectionChoiceContext(paper, section, slotIndex));
+}
+
 export function resolveInternalChoiceRequirement(
   ctx: InternalChoiceResolutionContext,
 ): InternalChoiceRequirement {

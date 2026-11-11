@@ -1,6 +1,7 @@
 import { HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
-import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
+import { assertCanModifyPaper, loadPaperView, snapshotItems } from "@/lib/papers";
+import { parseComponents } from "@/lib/languageComponents";
 import { prisma } from "@/lib/prisma";
 import type { PaperSnapshotPayload } from "@/lib/types";
 
@@ -51,9 +52,16 @@ export const POST = route(async (_req, params, user) => {
   const sectionIds = new Set(current.blueprint.sections.map((sec) => sec.id));
   const validItems = itemsList.filter((it) => existingSet.has(it.questionId) && sectionIds.has(it.sectionId));
   const skippedCount = itemsList.length - validItems.length;
+  const componentKeys = new Set(parseComponents((current.blueprint as { componentsJson?: string }).componentsJson).map((c) => c.key));
 
   if (itemsList.length > 0 && validItems.length === 0) {
-    throw new HttpError(409, "None of the questions in this snapshot exist in the question bank anymore.");
+    const sectionGone = itemsList.every((it) => !sectionIds.has(it.sectionId));
+    throw new HttpError(
+      409,
+      sectionGone
+        ? "This snapshot's questions belonged to a section that is no longer in the blueprint, so they cannot be put back. They are still in the question bank."
+        : "None of the questions in this snapshot exist in the question bank anymore.",
+    );
   }
 
   await prisma.$transaction(async (tx) => {
@@ -72,12 +80,7 @@ export const POST = route(async (_req, params, user) => {
           marksStyle: current.marksStyle,
           showCandidateDetails: current.showCandidateDetails,
           showSignatures: current.showSignatures,
-          items: current.items.map((it) => ({
-            sectionId: it.sectionId,
-            position: it.position,
-            questionId: it.question.id,
-            orQuestionId: it.orQuestion?.id || null,
-          })),
+          items: snapshotItems(current.items),
           timestamp: new Date().toISOString(),
         }),
         createdById: user.id,
@@ -99,6 +102,10 @@ export const POST = route(async (_req, params, user) => {
           questionId: it.questionId,
           orQuestionId: it.orQuestionId && existingSet.has(it.orQuestionId) ? it.orQuestionId : null,
           position: typeof it.position === "number" ? it.position : i,
+          // per-question settings; older snapshots do not carry them
+          pageBreakBefore: it.pageBreakBefore === true,
+          instruction: typeof it.instruction === "string" ? it.instruction.slice(0, 300) : "",
+          componentKey: typeof it.componentKey === "string" && componentKeys.has(it.componentKey) ? it.componentKey : "",
         },
       });
     }

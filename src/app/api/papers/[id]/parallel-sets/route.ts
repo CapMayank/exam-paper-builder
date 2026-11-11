@@ -1,15 +1,11 @@
 import { z } from "zod";
 import { body, HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
-import {
-  formatSetIdentifier,
-  permuteMcqOptions,
-  planMultiSetDistribution,
-} from "@/lib/multiset";
+import { permuteMcqOptions, planMultiSetDistribution } from "@/lib/multiset";
 import { assertCanCopyPaper, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { isQuestionContaminated } from "@/lib/questionValidator";
-import { parseSubparts } from "@/lib/types";
+import { isVariantCopy, paperCopyData, questionCopyData, variantSubpartsColumn } from "@/lib/questionWrite";
 
 const parallelSetsSchema = z.object({
   sets: z.array(z.string().trim().min(1)).min(1, "Specify at least one target set"),
@@ -52,26 +48,12 @@ export const POST = route(async (req, params, user) => {
     throw new HttpError(400, "Source paper has no questions placed. Place questions before generating parallel sets.");
   }
 
-  // 2. Fetch candidate questions from bank for this book (filtering out any contaminated legacy questions)
-  const rawBankQuestions = await prisma.question.findMany({
-    where: { bookId: source.blueprint.bookId },
-    select: {
-      id: true,
-      bookId: true,
-      chapterId: true,
-      type: true,
-      text: true,
-      difficulty: true,
-      subpartsJson: true,
-      optionsJson: true,
-      answer: true,
-      spaceMm: true,
-      showGrid: true,
-      imagePath: true,
-    },
-  });
+  // 2. Candidate questions from the bank for this book: no contaminated legacy questions, and none of the
+  //    shuffled or re-tagged copies that belong to another paper.
+  const rawBankQuestions = await prisma.question.findMany({ where: { bookId: source.blueprint.bookId } });
 
   const bankQuestions = rawBankQuestions.filter((q) => {
+    if (isVariantCopy(q.subpartsJson)) return false;
     let parsedOptions: string[] | undefined;
     if (q.optionsJson) {
       try {
@@ -87,7 +69,9 @@ export const POST = route(async (req, params, user) => {
     ).contaminated;
   });
 
-  const questionBankLookup = new Map(bankQuestions.map((q) => [q.id, q]));
+  // every question a set can end up with: the bank's, and the source paper's own (which may be copies)
+  const questionBankLookup = new Map(rawBankQuestions.map((q) => [q.id, q]));
+  const sourceItemById = new Map(source.items.map((it) => [it.id, it]));
 
   // 3. Run pure multi-set distribution planner
   const planResult = planMultiSetDistribution({
@@ -119,30 +103,33 @@ export const POST = route(async (req, params, user) => {
         const newTitle = input.prefixTitle ? `${baseTitle} (${formattedSet})` : `${source.title} - ${formattedSet}`;
 
         const createdPaper = await tx.paper.create({
-          data: {
-            title: newTitle,
-            blueprintId: source.blueprintId,
-            examType: source.examType,
-            layout: source.layout,
-            schoolName: source.schoolName,
-            examDate: source.examDate,
-            paperSet: formattedSet,
-            subjectCode: source.subjectCode,
-            generalInstructions: source.generalInstructions,
-            academicSession: source.academicSession,
-            schoolLogo: source.schoolLogo,
-            logoPath: source.logoPath,
-            printDensity: source.printDensity,
-            twoColumn: source.twoColumn,
-            targetPages: source.targetPages,
-            numberingStyle: source.numberingStyle,
-            marksStyle: source.marksStyle,
-            showCandidateDetails: source.showCandidateDetails,
-            showSignatures: source.showSignatures,
-            status: "DRAFT",
-            createdById: user.id,
-          },
+          data: { ...paperCopyData(source), title: newTitle, paperSet: formattedSet, status: "DRAFT", createdById: user.id },
         });
+
+        /** The set's own copy of an MCQ with its options mixed; the question itself when it cannot be shuffled. */
+        const shuffledCopy = async (questionId: string): Promise<string> => {
+          const q = questionBankLookup.get(questionId);
+          if (!input.shuffleMcqOptions || !q || q.type !== "MCQ") return questionId;
+          let options: string[];
+          try {
+            const parsed = JSON.parse(q.optionsJson);
+            if (!Array.isArray(parsed) || parsed.length < 2) return questionId;
+            options = parsed.map(String);
+          } catch {
+            return questionId;
+          }
+          const permuted = permuteMcqOptions(options, q.answer);
+          const forked = await tx.question.create({
+            data: {
+              ...questionCopyData(q),
+              optionsJson: JSON.stringify(permuted.options),
+              answer: permuted.answer,
+              subpartsJson: variantSubpartsColumn(q.subpartsJson, { forkedFrom: q.id, paperId: createdPaper.id, paperSet: formattedSet }),
+              createdById: user.id,
+            },
+          });
+          return forked.id;
+        };
 
         createdPaperIds.push(createdPaper.id);
 
@@ -158,85 +145,19 @@ export const POST = route(async (req, params, user) => {
 
         // Insert paper items
         for (const itemPlan of setPlan.items) {
-          let finalQuestionId = itemPlan.questionId;
-          let finalOrQuestionId = itemPlan.orQuestionId;
-
-          const q = questionBankLookup.get(itemPlan.questionId);
-
-          // Handle MCQ option permutation
-          if (input.shuffleMcqOptions && q && q.type === "MCQ") {
-            try {
-              const rawOptions = JSON.parse(q.optionsJson) as string[];
-              const permuted = permuteMcqOptions(rawOptions, q.answer);
-              const forked = await tx.question.create({
-                data: {
-                  bookId: q.bookId,
-                  chapterId: q.chapterId,
-                  type: q.type,
-                  text: q.text,
-                  optionsJson: JSON.stringify(permuted.options),
-                  answer: permuted.answer,
-                  difficulty: q.difficulty,
-                  imagePath: q.imagePath,
-                  spaceMm: q.spaceMm,
-                  showGrid: q.showGrid,
-                  subpartsJson: JSON.stringify({
-                    items: parseSubparts(q.subpartsJson),
-                    _forkedFrom: q.id,
-                    _paperSet: formattedSet,
-                    _paperId: createdPaper.id,
-                  }),
-                  createdById: user.id,
-                },
-              });
-              finalQuestionId = forked.id;
-            } catch {
-              finalQuestionId = itemPlan.questionId;
-            }
-          }
-
-          // Handle Alternate (OR) question MCQ permutation
-          if (input.shuffleMcqOptions && itemPlan.orQuestionId) {
-            const orQ = questionBankLookup.get(itemPlan.orQuestionId);
-            if (orQ && orQ.type === "MCQ") {
-              try {
-                const rawOptions = JSON.parse(orQ.optionsJson) as string[];
-                const permutedOr = permuteMcqOptions(rawOptions, orQ.answer);
-                const forkedOr = await tx.question.create({
-                  data: {
-                    bookId: orQ.bookId,
-                    chapterId: orQ.chapterId,
-                    type: orQ.type,
-                    text: orQ.text,
-                    optionsJson: JSON.stringify(permutedOr.options),
-                    answer: permutedOr.answer,
-                    difficulty: orQ.difficulty,
-                    imagePath: orQ.imagePath,
-                    spaceMm: orQ.spaceMm,
-                    showGrid: orQ.showGrid,
-                    subpartsJson: JSON.stringify({
-                      items: parseSubparts(orQ.subpartsJson),
-                      _forkedFrom: orQ.id,
-                      _paperSet: formattedSet,
-                      _paperId: createdPaper.id,
-                    }),
-                    createdById: user.id,
-                  },
-                });
-                finalOrQuestionId = forkedOr.id;
-              } catch {
-                finalOrQuestionId = itemPlan.orQuestionId;
-              }
-            }
-          }
-
+          const from = sourceItemById.get(itemPlan.sourceItemId);
           await tx.paperQuestion.create({
             data: {
               paperId: createdPaper.id,
               sectionId: itemPlan.sectionId,
-              questionId: finalQuestionId,
-              orQuestionId: finalOrQuestionId,
+              questionId: await shuffledCopy(itemPlan.questionId),
+              orQuestionId: itemPlan.orQuestionId ? await shuffledCopy(itemPlan.orQuestionId) : null,
               position: itemPlan.position,
+              componentKey: from?.componentKey ?? "",
+              // the instruction was written for the Set 1 question; a different question gets the automatic one
+              instruction: itemPlan.questionId === itemPlan.originalQuestionId ? from?.instruction ?? "" : "",
+              // a page break belongs to a place on the sheet, not to a question that has just moved
+              pageBreakBefore: input.shufflePositions ? false : Boolean(from?.pageBreakBefore),
             },
           });
         }

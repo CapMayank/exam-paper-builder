@@ -1,11 +1,12 @@
 import "server-only";
 import { HttpError, type SessionUser } from "./api";
-import { isSubpartQuestionType, parseMatchColumnPairs, resolvePaperExamType } from "./constants";
+import { resolvePaperExamType } from "./constants";
 import { toQuestionDto } from "./dto";
-import { diagnosePaperImplications, paperStatus, questionSlotMarks, toPlacedItems } from "./blueprint";
+import { diagnosePaperImplications, paperStatus, questionSlotMarks, subpartsMarksProblem, toPlacedItems } from "./blueprint";
+import { allowedTypesFor, isTypeAllowed } from "./sectionTypes";
 import { componentImplications, parseComponents } from "./languageComponents";
 import { blueprintInclude } from "./blueprints";
-import { evaluatePaperInternalChoiceCompliance } from "./internalChoiceRules";
+import { evaluatePaperInternalChoiceCompliance, paperSectionChoiceRequirement } from "./internalChoiceRules";
 import {
   bookScope,
   canManageScope,
@@ -16,7 +17,6 @@ import {
   type QuestionRef,
 } from "./permissions";
 import { prisma } from "./prisma";
-import { parseSubparts, parseSubpartsPayload, subpartsTotalMarks } from "./types";
 
 export { toPlacedItems };
 
@@ -258,3 +258,83 @@ export async function loadPaperView(id: string) {
 }
 
 export type PaperView = NonNullable<Awaited<ReturnType<typeof loadPaperView>>>;
+
+/** A paper's placed questions as a snapshot stores them: the slot, the questions, and the per-question settings. */
+export function snapshotItems(items: PaperView["items"]) {
+  return items.map((it) => ({
+    sectionId: it.sectionId,
+    position: it.position,
+    questionId: it.question.id,
+    orQuestionId: it.orQuestion?.id || null,
+    pageBreakBefore: it.pageBreakBefore,
+    componentKey: it.componentKey,
+    instruction: it.instruction,
+  }));
+}
+
+/**
+ * Why a paper cannot be (or stay) finalised; null when it matches its blueprint and the internal-choice rules.
+ * Finalising and the check after a blueprint edit both ask here, so they can never disagree.
+ */
+export function finaliseBlocker(view: Pick<PaperView, "progress" | "internalChoiceAudit" | "implications">): string | null {
+  if (!view.progress.complete) return "The paper doesn't match its blueprint yet, so it can't be finalised.";
+  if (view.implications.some((i) => i.code === "TYPE_MISMATCH" || i.code === "ORPHANED_SECTION" || i.code === "SECTION_OVERFILLED")) {
+    return "The paper has questions that no longer fit its blueprint, so it can't be finalised.";
+  }
+  if (view.internalChoiceAudit && !view.internalChoiceAudit.compliant) {
+    return "The paper does not comply with official internal choice rules. Please fix missing or forbidden choices before finalising.";
+  }
+  return null;
+}
+
+/** The internal-choice rule for the slot a placed question occupies (its place in the section's order). */
+export function itemChoiceRequirement(paper: PaperView, sectionId: string, itemId?: string | null) {
+  const section = paper.blueprint.sections.find((s) => s.id === sectionId);
+  if (!section) throw new HttpError(404, "Section not found");
+  const inSection = paper.items.filter((i) => i.sectionId === sectionId);
+  const at = itemId ? inSection.findIndex((i) => i.id === itemId) : -1;
+  // a question about to be added takes the next free slot
+  return paperSectionChoiceRequirement(paper, section, at >= 0 ? at : inSection.length);
+}
+
+/**
+ * Checks a question may be the internal-choice alternative (OR / अथवा) of `primary` in this slot and returns it.
+ * One rule for every path that links an OR: add, replace, "Change OR" and edit.
+ */
+export async function assertValidOrChoice(
+  paper: PaperView,
+  slot: { sectionId: string; itemId?: string | null },
+  primary: { id: string; chapterId: string },
+  orQuestionId: string,
+) {
+  const section = paper.blueprint.sections.find((s) => s.id === slot.sectionId);
+  if (!section) throw new HttpError(404, "Section not found");
+  const choiceReq = itemChoiceRequirement(paper, slot.sectionId, slot.itemId);
+  if (choiceReq.forbidden) {
+    throw new HttpError(
+      400,
+      `Board Guardrail Violation: Internal choices (OR / अथवा) are forbidden for this section (${choiceReq.rationale}).`,
+    );
+  }
+  const candidate = await prisma.question.findUnique({ where: { id: orQuestionId }, include: { chapter: true } });
+  if (!candidate) throw new HttpError(404, "Alternate question not found");
+  if (candidate.bookId !== paper.blueprint.bookId) throw new HttpError(400, "Alternate question is from a different book");
+  if (candidate.id === primary.id) throw new HttpError(400, "Alternate question cannot be identical to the primary question");
+  if (!isTypeAllowed(section, candidate.type)) {
+    const allowed = allowedTypesFor(section);
+    throw new HttpError(400, allowed.length === 1 ? `Alternate question must be of type ${allowed[0]}` : `Alternate question must be one of: ${allowed.join(", ")}`);
+  }
+  if (candidate.chapterId !== primary.chapterId) {
+    const ch = paper.blueprint.chapters.find((c) => c.chapterId === primary.chapterId)?.chapter;
+    throw new HttpError(
+      400,
+      `Board Guardrail Violation: Alternate (OR) choice must match primary question chapter (${ch ? `Chapter ${ch.number}: ${ch.title}` : "the same chapter"}).`,
+    );
+  }
+  const marksProblem = subpartsMarksProblem(section, candidate);
+  if (marksProblem) throw new HttpError(400, `Board Guardrail Violation: Alternate (OR) choice ${marksProblem.replace("total subpart marks", "total marks")}`);
+  if (paper.items.some((i) => i.id !== slot.itemId && (i.question.id === candidate.id || i.orQuestion?.id === candidate.id))) {
+    throw new HttpError(409, "This question is already used in this paper");
+  }
+  return candidate;
+}

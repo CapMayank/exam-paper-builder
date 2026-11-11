@@ -7,7 +7,7 @@ import { PasteQuestionsPanel } from "@/components/PasteQuestionsPanel";
 import { isExhaustedUsage, QuestionFreshnessAlert, QuestionUsagePills } from "@/components/QuestionUsageHistory";
 import { QuestionView } from "@/components/QuestionView";
 import { ErrorBanner, Modal, Spinner } from "@/components/ui";
-import { toPlacedItems, whyCannotAdd, type BlueprintDef } from "@/lib/blueprint";
+import { slotPlacement, subpartsMarksProblem, toPlacedItems, whyCannotAdd, type BlueprintDef } from "@/lib/blueprint";
 import { allowedTypesFor, isTypeAllowed } from "@/lib/sectionTypes";
 import { api, retryTransient } from "@/lib/client";
 import {
@@ -24,7 +24,7 @@ import {
   serializeMatchColumnPair,
 } from "@/lib/constants";
 import { type Book, type PaperData, type QuestionDto, type Section, subpartsTotalMarks, normalizeSubpartMarks } from "@/lib/types";
-import { resolveInternalChoiceRequirement } from "@/lib/internalChoiceRules";
+import { paperSectionChoiceRequirement } from "@/lib/internalChoiceRules";
 import { MathText } from "./MathText";
 import { QuestionContent } from "./QuestionContent";
 import type { GeneratedPaperQuestion, GeneratedQuestionItem } from "@/lib/gemini";
@@ -36,6 +36,11 @@ const PICKER_TAB_KEY = "paperbuilder.picker.tab";
  * Adds questions to one blueprint section, either from the bank (smartly ordered) or by writing a new one,
  * which is saved to the bank first so it's reusable later.
  */
+/** "Answer any N of these" survives only when it really is a choice among the parts. */
+function keptAttemptCount(n: unknown, parts: number): { attemptCount?: number } {
+  return typeof n === "number" && Number.isInteger(n) && n > 0 && n < parts ? { attemptCount: n } : {};
+}
+
 export function QuestionPicker({
   paper,
   section,
@@ -122,13 +127,8 @@ export function QuestionPicker({
     [paper.blueprint.sections, paper.items, replacingItemId],
   );
 
-  const activeItemMarks = activeItem
-    ? (activeItem.question.subparts && activeItem.question.subparts.length > 0
-        ? subpartsTotalMarks(activeItem.question.subparts)
-        : (isMultiUnitMatch
-            ? Math.min(parseMatchColumnPairs(activeItem.question.options, activeItem.question.text, (activeItem.question as any).explanation).length || section.count, section.count) * section.marksEach
-            : section.marksEach))
-    : 0;
+  // counted exactly as the server counts it
+  const activeItemMarks = activeItem ? slotPlacement(section, activeItem.question).marks : 0;
 
   const marksToGenerate = targetSlotMarks;
 
@@ -177,8 +177,8 @@ export function QuestionPicker({
             why = `Must be a type this section accepts (${allowedTypes.join(", ")}).`;
           } else if (activeItem && q.chapterId !== activeItem.question.chapterId) {
             why = `Must match primary question chapter (Ch ${activeItem.question.chapter?.number}).`;
-          } else if (q.subparts && q.subparts.length > 0 && subpartsTotalMarks(q.subparts) !== targetSlotMarks) {
-            why = `Subpart marks (${subpartsTotalMarks(q.subparts)}m) must match slot (${targetSlotMarks}m).`;
+          } else if (subpartsMarksProblem(section, q)) {
+            why = `Its parts: ${subpartsMarksProblem(section, q)}`;
           }
         } else {
           if (paper.items.some((i) => (i.question.id === q.id || i.orQuestion?.id === q.id) && i.id !== replacingItemId)) {
@@ -186,26 +186,17 @@ export function QuestionPicker({
           } else if (isReplacing && activeItem?.orQuestion?.id === q.id) {
             why = "Cannot be identical to the alternate (OR) choice of this slot.";
           } else {
-            const qSubmarks = q.subparts && q.subparts.length > 0 ? subpartsTotalMarks(q.subparts) : 0;
-            if (q.subparts && q.subparts.length > 0 && qSubmarks !== targetSlotMarks) {
-              why = `Subpart marks (${qSubmarks}m) must match slot (${targetSlotMarks}m).`;
-            } else {
-              const qMatchPairs = isMultiUnitMatch ? parseMatchColumnPairs(q.options, q.text, (q as any).explanation).length : 0;
-              const qCandidateMarks = isMultiUnitMatch
-                ? Math.min(qMatchPairs || section.count, section.count) * section.marksEach
-                : (qSubmarks > 0 ? qSubmarks : targetSlotMarks);
-              const qCandidateUnits = isMultiUnitMatch
-                ? Math.min(qMatchPairs || section.count, section.count)
-                : undefined;
-              why = whyCannotAdd(def, placed, {
-                sectionId: section.id,
-                chapterId: q.chapterId,
-                type: q.type,
-                marks: qCandidateMarks,
-                subpartsCount: qCandidateUnits,
-                passageGroupId: q.passageGroupId,
-              });
-            }
+            // the same two checks the server makes when the question is added
+            const marksProblem = subpartsMarksProblem(section, q);
+            why = marksProblem
+              ? `Its parts: ${marksProblem}`
+              : whyCannotAdd(def, placed, {
+                  sectionId: section.id,
+                  chapterId: q.chapterId,
+                  type: q.type,
+                  ...slotPlacement(section, q),
+                  passageGroupId: q.passageGroupId,
+                });
           }
         }
         return { q, why };
@@ -385,18 +376,7 @@ export function QuestionPicker({
         throw new Error("Please select a valid chapter.");
       }
 
-      const choiceReq = resolveInternalChoiceRequirement({
-        schoolName: paper.schoolName,
-        blueprintName: paper.blueprint.name,
-        className: paper.blueprint.book.className,
-        academicSession: paper.academicSession || paper.blueprint.academicSession,
-        subject: paper.blueprint.book.subject,
-        subjectCode: paper.subjectCode || paper.blueprint.subjectCode,
-        questionType: section.type,
-        marksEach: section.marksEach,
-        sectionTitle: section.title,
-        sectionInstructions: section.instructions,
-      });
+      const choiceReq = paperSectionChoiceRequirement(paper, section);
 
       const isMatch = pickType === "MATCH_COLUMN";
       let processedOptions = aiGenerated.options || [];
@@ -423,6 +403,7 @@ export function QuestionPicker({
         text: aiGenerated.text,
         options: processedOptions,
         subparts: normalizedSubparts,
+        ...keptAttemptCount((aiGenerated as { attemptCount?: number }).attemptCount, normalizedSubparts.length),
         answer: aiGenerated.answer || "",
         difficulty: aiDifficulty,
         spaceMm: 0, // classes 1–12 answer in a separate copy
@@ -452,6 +433,7 @@ export function QuestionPicker({
           text: aiGenerated.orQuestion.text,
           options: orProcessedOptions,
           subparts: orNormalizedSubparts,
+          ...keptAttemptCount((aiGenerated.orQuestion as { attemptCount?: number }).attemptCount, orNormalizedSubparts.length),
           answer: aiGenerated.orQuestion.answer || "",
           difficulty: aiGenerated.orQuestion.difficulty || aiDifficulty,
           spaceMm: 0, // classes 1–12 answer in a separate copy
@@ -501,6 +483,7 @@ export function QuestionPicker({
       text: aiGenerated.text,
       options: processedOptions,
       subparts: normalizedSubparts,
+      ...keptAttemptCount((aiGenerated as { attemptCount?: number }).attemptCount, normalizedSubparts.length),
       answer: aiGenerated.answer || "",
       difficulty: aiDifficulty,
       imagePath: null,

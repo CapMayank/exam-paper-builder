@@ -1,10 +1,8 @@
 import { body, HttpError, route } from "@/lib/api";
-import { whyCannotAdd } from "@/lib/blueprint";
-import { parseMatchColumnPairs } from "@/lib/constants";
-import { assertCanModifyPaper, loadPaperView, toPlacedItems } from "@/lib/papers";
+import { slotPlacement, subpartsMarksProblem, whyCannotAdd } from "@/lib/blueprint";
+import { assertCanModifyPaper, assertValidOrChoice, loadPaperView, toPlacedItems } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { addItemSchema } from "@/lib/schemas";
-import { parseSubpartsPayload, subpartsTotalMarks, validateSubPartsSum } from "@/lib/types";
 
 /** Add a question to a section. The blueprint rules are enforced here, not just in the UI. */
 export const POST = route(async (req, { id }, user) => {
@@ -24,60 +22,29 @@ export const POST = route(async (req, { id }, user) => {
   const targetSection = paper.blueprint.sections.find((s) => s.id === input.sectionId);
   if (!targetSection) throw new HttpError(404, "Section not found");
 
-  const parsedCandidatePayload = parseSubpartsPayload(question.subpartsJson);
-  const candidateSubparts = parsedCandidatePayload.subparts;
-  const attemptCount = (question as any).attemptCount || parsedCandidatePayload.attemptCount;
-  const isCandidateSubpartsValid = validateSubPartsSum(candidateSubparts, targetSection.marksEach, attemptCount);
-
-  if (candidateSubparts.length > 0 && !isCandidateSubpartsValid) {
-    const candidateSubmarks = attemptCount ? attemptCount * (candidateSubparts[0]?.marks || 1) : subpartsTotalMarks(candidateSubparts);
-    throw new HttpError(
-      400,
-      `Board Guardrail Violation: Question total subpart marks (${candidateSubmarks}) must match section marks (${targetSection.marksEach}).`
-    );
-  }
-
-  const candidateSubmarks = attemptCount
-    ? attemptCount * (candidateSubparts[0]?.marks || 1)
-    : subpartsTotalMarks(candidateSubparts);
-
-  const isTargetMatch = targetSection.type === "MATCH_COLUMN";
-  const isMultiUnitMatch = isTargetMatch && targetSection.count > 1;
-  let matchPairsCount = 0;
-  if (isTargetMatch) {
-    try {
-      const parsed = JSON.parse(question.optionsJson || "[]");
-      matchPairsCount = parseMatchColumnPairs(Array.isArray(parsed) ? parsed : [], question.text, (question as any).explanation).length;
-    } catch {}
-  }
-
-  const candidateMarks = isTargetMatch
-    ? (isMultiUnitMatch
-        ? Math.min(matchPairsCount || targetSection.count, targetSection.count) * targetSection.marksEach
-        : targetSection.marksEach)
-    : (candidateSubmarks > 0 ? Math.min(candidateSubmarks, targetSection.marksEach) : targetSection.marksEach);
-  const candidateUnits = isMultiUnitMatch
-    ? Math.min(matchPairsCount || targetSection.count, targetSection.count)
-    : undefined;
-
-  const placedItems = toPlacedItems(paper.blueprint.sections, paper.items);
+  const marksProblem = subpartsMarksProblem(targetSection, question);
+  if (marksProblem) throw new HttpError(400, `Board Guardrail Violation: Question ${marksProblem}`);
 
   const reason = whyCannotAdd(
     {
       sections: paper.blueprint.sections,
       chapters: paper.blueprint.chapters.map((c) => ({ chapterId: c.chapterId, marks: c.marks, unitKey: c.unitKey, unitTitle: c.unitTitle })),
     },
-    placedItems,
+    toPlacedItems(paper.blueprint.sections, paper.items),
     {
       sectionId: input.sectionId,
       chapterId: question.chapterId,
       type: question.type,
-      marks: candidateMarks,
-      subpartsCount: candidateUnits,
+      ...slotPlacement(targetSection, question),
       passageGroupId: question.passageGroupId,
     },
   );
   if (reason) throw new HttpError(409, reason);
+
+  // an OR sent along with the question is held to the same rules as one linked afterwards
+  if (input.orQuestionId) {
+    await assertValidOrChoice(paper, { sectionId: input.sectionId }, question, input.orQuestionId);
+  }
 
   const last = paper.items.filter((i) => i.sectionId === input.sectionId).at(-1);
   await prisma.paperQuestion.create({

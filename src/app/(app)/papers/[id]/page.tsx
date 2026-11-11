@@ -85,7 +85,7 @@ import { questionSlotMarks } from "@/lib/blueprint";
 import { componentCoverage, parseComponents } from "@/lib/languageComponents";
 import { formatQuestionNumber, computeDisplayedPaperNumbering } from "@/lib/layout";
 import { nextSetIdentifier } from "@/lib/multiset";
-import { resolveInternalChoiceRequirement } from "@/lib/internalChoiceRules";
+import { paperSectionChoiceRequirement } from "@/lib/internalChoiceRules";
 import type { Book, PaperData, PaperItem, Section, MarksStyle, NumberingStyle, PrintDensity } from "@/lib/types";
 
 function Bar({ used, target, isComplete }: { used: number; target: number; isComplete?: boolean }) {
@@ -1864,18 +1864,8 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
               .filter((c) => c.remainingMarks > 0)
               .sort((a, b) => b.remainingMarks - a.remainingMarks);
 
-            const secChoiceReq = resolveInternalChoiceRequirement({
-              board: (paper as any).board,
-              academicSession: paper.academicSession,
-              className: blueprint.book.className,
-              subject: blueprint.book.subject,
-              subjectCode: paper.subjectCode || blueprint.subjectCode,
-              marksEach: s.marksEach,
-              questionType: s.type,
-              sectionInstructions: s.instructions,
-              schoolName: paper.schoolName,
-              blueprintName: blueprint.name,
-            });
+            // the same rule the server audits with, including the blueprint's own "OR required / no OR" setting
+            const secChoiceReq = paperSectionChoiceRequirement(paper, s);
 
             return (
               <section
@@ -2055,6 +2045,8 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                         );
                         const isTypeMismatch = !toleratesType(s, it.question.type);
                         const isExcess = idx >= s.count || effectiveUnits > s.count;
+                        // this slot's own rule: the blueprint may switch the OR on or off slot by slot
+                        const slotChoiceReq = paperSectionChoiceRequirement(paper, s, idx);
 
                         const isMatchQ = it.question.type === "MATCH_COLUMN" || s.type === "MATCH_COLUMN";
                         const questionTotalMarks = questionSlotMarks(s, it.question as never).marks;
@@ -2211,7 +2203,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                               {canEditPaper && (
                                 <div className="flex flex-wrap items-center gap-1.5 ml-auto">
                                   {!it.orQuestion ? (
-                                    secChoiceReq.forbidden ? null : (
+                                    slotChoiceReq.forbidden ? null : (
                                       <button
                                         className="btn btn-sm border-slate-200 bg-white text-slate-600 hover:text-purple-700 hover:border-purple-200 hover:bg-purple-50/50 shadow-2xs font-medium"
                                         title="Add internal choice alternate question (OR)"
@@ -2222,8 +2214,8 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                     )
                                   ) : (
                                     <>
-                                      {secChoiceReq.forbidden && (
-                                        <span className="badge !bg-red-100 !text-red-800 border border-red-200 text-[10px] font-bold" title={secChoiceReq.reason}>
+                                      {slotChoiceReq.forbidden && (
+                                        <span className="badge !bg-red-100 !text-red-800 border border-red-200 text-[10px] font-bold" title={slotChoiceReq.reason}>
                                           ⚠ Forbidden Choice
                                         </span>
                                       )}

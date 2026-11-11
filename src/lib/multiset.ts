@@ -1,6 +1,6 @@
 import { cleanOptionText, normalizeMcqAnswer } from "./constants";
 import { isParaphraseOrDuplicateChoice } from "./internalChoiceRules";
-import { parseSubparts, subpartsTotalMarks, type SubPart } from "./types";
+import { attemptedSubpartsMarks, parseSubparts, parseSubpartsPayload, subpartsTotalMarks, type SubPart } from "./types";
 
 export const LETTERS = "ABCDEF";
 
@@ -290,6 +290,9 @@ export type TargetSetItemPlan = {
   isVariant: boolean;
   isFallback: boolean;
   originalQuestionId: string;
+  /** The Set 1 placement this slot was planned from: its per-question settings carry over to the new set. */
+  sourceItemId: string;
+  sourcePosition: number;
 };
 
 export type TargetSetPlan = {
@@ -351,10 +354,10 @@ export function planMultiSetDistribution(params: {
       if (difficulty && q.difficulty !== difficulty) return false;
       if (marksEach !== undefined) {
         if (q.marks !== undefined && q.marks !== marksEach) return false;
-        if (type === "CASE_STUDY") {
-          const sub = q.subparts ?? parseSubparts(q.subpartsJson);
-          if (sub.length > 0 && subpartsTotalMarks(sub) !== marksEach) return false;
-        }
+        // a question with parts must be worth exactly the slot ("any N of" counts the N attempted)
+        const payload = parseSubpartsPayload(q.subpartsJson);
+        const sub = q.subparts ?? payload.subparts;
+        if (sub.length > 0 && attemptedSubpartsMarks(sub, payload.attemptCount) !== marksEach) return false;
       }
       return true;
     });
@@ -382,7 +385,10 @@ export function planMultiSetDistribution(params: {
 
     const { commonCount, variantCount } = calculateSectionOverlap(items.length, commonRatio);
 
-    if (variantCount === 0) {
+    // A combined match question fills the whole section by its pairs; another one rarely has the same number of
+    // pairs, so it stays common to every set.
+    const combinedMatch = sec.type === "MATCH_COLUMN" && sec.count > 1;
+    if (variantCount === 0 || combinedMatch) {
       sectionAllocations.push({ section: sec, commonSlots: items, variantSlots: [] });
       continue;
     }
@@ -425,6 +431,8 @@ export function planMultiSetDistribution(params: {
           isVariant: false,
           isFallback: false,
           originalQuestionId: item.questionId,
+          sourceItemId: item.id,
+          sourcePosition: item.position,
         });
       }
 
@@ -521,11 +529,15 @@ export function planMultiSetDistribution(params: {
           isVariant: !isFallback && finalPrimaryId !== item.questionId,
           isFallback,
           originalQuestionId: item.questionId,
+          sourceItemId: item.id,
+          sourcePosition: item.position,
         });
       }
 
       // 3. Shuffle or preserve positions within section
-      const ordered = shufflePositions ? shuffle(sectionPlannedItems) : sectionPlannedItems;
+      const ordered = shufflePositions
+        ? shuffle(sectionPlannedItems)
+        : [...sectionPlannedItems].sort((a, b) => a.sourcePosition - b.sourcePosition);
       for (let p = 0; p < ordered.length; p++) {
         ordered[p].position = p + 1;
         allSetItems.push(ordered[p]);

@@ -1,9 +1,8 @@
 import { body, HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
-import { whyCannotAdd } from "@/lib/blueprint";
-import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
+import { slotPlacement, subpartsMarksProblem, whyCannotAdd } from "@/lib/blueprint";
+import { assertCanModifyPaper, loadPaperView, toPlacedItems } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
-import { parseSubparts, subpartsTotalMarks } from "@/lib/types";
 
 /**
  * Add multiple questions to a section in a single batch operation.
@@ -60,40 +59,29 @@ export const POST = route(async (req, params, user) => {
     }
   }
 
-  // Sequentially simulate blueprint budget additions
-  const placedItems = paper.items.map((i) => {
-    const subparts = parseSubparts(i.question.subpartsJson);
-    const submarks = subpartsTotalMarks(subparts);
-    return {
-      sectionId: i.sectionId,
-      chapterId: i.question.chapterId,
-      marks: submarks > 0 ? submarks : undefined,
-      subpartsCount: subparts.length > 1 ? subparts.length : undefined,
-    };
-  });
+  // Sequentially simulate blueprint budget additions, counting each question exactly as the single-add path does
+  const placedItems = toPlacedItems(paper.blueprint.sections, paper.items);
 
   const blueprintDef = {
     sections: paper.blueprint.sections,
     chapters: paper.blueprint.chapters.map((c) => ({ chapterId: c.chapterId, marks: c.marks, unitKey: c.unitKey, unitTitle: c.unitTitle })),
   };
 
-  for (const q of questions) {
-    const candidateSubparts = parseSubparts(q.subpartsJson);
-    const candidateSubmarks = subpartsTotalMarks(candidateSubparts);
+  // keep the order the teacher picked them in
+  const byId = new Map(questions.map((q) => [q.id, q]));
+  const ordered = uniqueQuestionIds.map((qId) => byId.get(qId)!);
 
-    if (candidateSubparts.length > 0 && candidateSubmarks !== section.marksEach) {
-      throw new HttpError(
-        400,
-        `Board Guardrail Violation: Question "${q.text.slice(0, 30)}…" subpart marks (${candidateSubmarks}) must match section marks (${section.marksEach}).`
-      );
+  for (const q of ordered) {
+    const marksProblem = subpartsMarksProblem(section, q);
+    if (marksProblem) {
+      throw new HttpError(400, `Board Guardrail Violation: Question "${q.text.slice(0, 30)}…" ${marksProblem}`);
     }
 
     const candidate = {
       sectionId,
       chapterId: q.chapterId,
       type: q.type,
-      marks: candidateSubmarks > 0 ? candidateSubmarks : undefined,
-      subpartsCount: candidateSubparts.length > 1 ? candidateSubparts.length : undefined,
+      ...slotPlacement(section, q),
       passageGroupId: q.passageGroupId,
     };
 
@@ -114,7 +102,7 @@ export const POST = route(async (req, params, user) => {
 
   // Insert all in a single transaction
   await prisma.$transaction(async (tx) => {
-    for (const q of questions) {
+    for (const q of ordered) {
       await tx.paperQuestion.create({
         data: {
           paperId: id,

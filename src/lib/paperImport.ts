@@ -42,11 +42,7 @@ export interface ImportedPaperQuestion {
   subparts?: ImportedPaperSubpart[];
 }
 
-/** What a question's `subpartsJson` column holds: the plain list, or { attemptCount, subparts } for "any N of". */
-export function subpartsColumn(subparts: ImportedPaperSubpart[] | undefined, attemptCount: number | undefined): string {
-  const list = subparts ?? [];
-  return JSON.stringify(attemptCount && attemptCount > 0 && attemptCount <= list.length && list.length > 1 ? { attemptCount, subparts: list } : list);
-}
+export { subpartsColumn } from "./questionWrite";
 
 function importedAttemptCount(raw: unknown): number | undefined {
   const n = Number(raw);

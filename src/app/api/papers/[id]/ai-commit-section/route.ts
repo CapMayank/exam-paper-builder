@@ -108,6 +108,8 @@ export const POST = route(async (req, { id }, user) => {
     subjectCode: paper.subjectCode || paper.blueprint.subjectCode,
     sectionTitle: section.title,
     sectionInstructions: section.instructions,
+    orChoiceMode: section.orChoiceMode,
+    orSlotsJson: section.orSlotsJson,
     questionType,
     marksEach: section.marksEach,
     slots: questions.map((q, idx) => {
