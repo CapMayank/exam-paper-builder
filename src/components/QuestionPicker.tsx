@@ -809,7 +809,7 @@ export function QuestionPicker({
             paper={paper}
             section={section}
             chapters={paper.blueprint.chapters.map((c) => c.chapter)}
-            openMarks={chapterGaps}
+            gaps={chapterGaps}
             slotsLeft={Math.max(0, sectionStatus.needed - sectionStatus.filled)}
             onPaper={onPaper}
             onClose={onClose}
@@ -834,7 +834,8 @@ export function QuestionPicker({
               fixedBookId={paper.blueprint.bookId}
               fixedType={pickType}
               targetMarks={section.marksEach}
-              allowedChapterIds={openChapters.map((c) => c.chapterId)}
+              allowedChapterIds={paper.blueprint.chapters.map((c) => c.chapterId)}
+              hideChapter
               openMarks={chapterGaps}
               submitLabel={
                 isAlternate

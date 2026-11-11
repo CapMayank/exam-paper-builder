@@ -193,7 +193,7 @@ describe("pasting several questions into a section", () => {
     expect(splitPastedQuestions("1. Define soil.\nAns: The top layer of the earth.", false)[0].answer).toBe("The top layer of the earth.");
   });
 
-  it("hands out chapters within the open marks, title match first", () => {
+  it("hands out chapters title match first, then by need, and never refuses a question", () => {
     const got = assignChapters(
       ["Explain photosynthesis.", "Name two food components.", "Draw a cell.", "Draw a leaf.", "Draw a root."],
       chapters,
@@ -204,8 +204,8 @@ describe("pasting several questions into a section", () => {
       { chapterId: "c3", reason: "title" },
       { chapterId: "c2", reason: "title" },
       { chapterId: "c1", reason: "quota" },
-      null, // all quotas used up
-      null,
+      { chapterId: "c1", reason: "quota" }, // every target is met: the lowest-numbered chapter takes the extra
+      { chapterId: "c2", reason: "quota" },
     ]);
   });
 });

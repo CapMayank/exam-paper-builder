@@ -15,18 +15,17 @@ export const PASTEABLE_TYPES = new Set(["MCQ", "TRUE_FALSE", "FILL_BLANK", "VERY
 // Classes 1–12 answer in a separate copy: only drawing and map questions take room on the paper.
 const SPACE: Record<string, number> = { DRAW: 70, MAP_WORK: 70 };
 
-type Override = { chapterId?: string; difficulty?: string; skill?: string; skip?: boolean };
+type Override = { difficulty?: string; skill?: string; skip?: boolean };
 
 /**
- * Paste or type several questions for one section at once. Each one gets a chapter with room left in the
- * blueprint, a difficulty and a skill filled in; the teacher corrects any of them, then all are saved to the
+ * Paste or type several questions for one section at once. Each one is matched to a chapter, and gets a difficulty and a skill filled in; the teacher corrects any of them, then all are saved to the
  * bank and placed in the section together.
  */
 export function PasteQuestionsPanel({
   paper,
   section,
   chapters,
-  openMarks,
+  gaps,
   slotsLeft,
   onPaper,
   onClose,
@@ -35,8 +34,8 @@ export function PasteQuestionsPanel({
   section: Section;
   /** Blueprint chapters of this paper's book. */
   chapters: ChapterLite[];
-  /** Marks still open per chapter. */
-  openMarks: Record<string, number>;
+  /** How far each chapter is below its target (negative when over); questions are spread over the neediest. */
+  gaps: Record<string, number>;
   slotsLeft: number;
   onPaper: (p: PaperData) => void;
   onClose: () => void;
@@ -50,18 +49,18 @@ export function PasteQuestionsPanel({
 
   const parsed = useMemo(() => splitPastedQuestions(raw, isMcq), [raw, isMcq]);
 
-  // chapters are handed out in order, using up each chapter's open marks (a teacher's own pick counts too)
-  const left = { ...openMarks };
+  // chapters are matched automatically and spread over the chapters furthest below their targets
+  const left = { ...gaps };
   const rows = parsed.map((q, i) => {
     const o = overrides[i] ?? {};
-    const auto = o.chapterId || o.skip ? null : assignChapters([q.text], chapters, left, section.marksEach)[0];
-    const chapterId = o.chapterId ?? auto?.chapterId ?? "";
-    if (chapterId && !o.skip && i < slotsLeft) left[chapterId] = (left[chapterId] ?? 0) - section.marksEach;
+    const auto = o.skip || chapters.length === 0 ? null : assignChapters([q.text], chapters, left, section.marksEach)[0];
+    const chapterId = auto?.chapterId ?? "";
+    if (chapterId && i < slotsLeft) left[chapterId] = (left[chapterId] ?? 0) - section.marksEach;
     const problem =
       i >= slotsLeft
         ? "No slot left in this section"
-        : !chapterId
-          ? "No chapter has marks left for this question"
+        : !chapterId && !o.skip
+          ? "This blueprint has no chapters"
           : isMcq && q.options.length < 2
             ? "Needs at least 2 options: (a) …, (b) …"
             : null;
@@ -190,24 +189,14 @@ export function PasteQuestionsPanel({
                     {r.problem && <p className="mt-0.5 text-xs font-medium text-amber-700">{r.problem}</p>}
                   </td>
                   <td>
-                    <select
-                      className="input py-1 text-xs"
-                      aria-label={`Chapter for question ${i + 1}`}
-                      value={r.chapterId}
-                      onChange={(e) => patch(i, { chapterId: e.target.value })}
-                    >
-                      {!r.chapterId && <option value="">No room left</option>}
-                      {chapters.map((c) => (
-                        <option key={c.id} value={c.id} disabled={(openMarks[c.id] ?? 0) < section.marksEach}>
-                          {c.number}. {c.title}
-                        </option>
-                      ))}
-                    </select>
-                    {r.chapterReason && (
-                      <span className="mt-0.5 block text-[11px] text-indigo-700">
-                        {r.chapterReason === "title" ? "matches the title" : `most marks left (${chapterTitle(r.chapterId)?.number})`}
+                    {chapterTitle(r.chapterId) ? (
+                      <span className="text-xs text-slate-700">
+                        Ch {chapterTitle(r.chapterId)?.number}. {chapterTitle(r.chapterId)?.title}
+                        <span className="mt-0.5 block text-[11px] text-indigo-700">
+                          {r.chapterReason === "title" ? "matches the title" : r.chapterReason === "bank" ? "like questions already in it" : "needs the most marks"}
+                        </span>
                       </span>
-                    )}
+                    ) : null}
                   </td>
                   <td>
                     <select
@@ -246,7 +235,7 @@ export function PasteQuestionsPanel({
 
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-slate-500">
-          Chapter, difficulty and skill are filled in for you. Change any that are wrong before adding.
+          Chapter, difficulty and skill are filled in for you; a wrong chapter can be changed later with Edit.
         </p>
         <div className="flex gap-2">
           <button type="button" className="btn" onClick={onClose} disabled={busy}>

@@ -1,6 +1,6 @@
 /**
  * Turns questions pasted or typed one after another into separate questions for one paper section, and gives
- * each a chapter that still has room in the blueprint.
+ * each the chapter that fits it best.
  *
  * Accepted layouts: numbered ("1. …", "Q2) …"), separated by blank lines, or simply one question per line.
  * For multiple-choice sections, option lines "(a) …" / "a) …" (or all options on one line) and an
@@ -82,25 +82,23 @@ export function splitPastedQuestions(raw: string, withOptions: boolean): PastedQ
 }
 
 /**
- * A chapter for each question, in order: the chapter its words match (if that chapter can still take a question
- * of `marksEach`), otherwise the chapter with the most marks left. Quotas are used up as questions are assigned,
- * so the result never exceeds the blueprint. `null` when no chapter has room left.
+ * A chapter for each question, in order: the chapter its words match, otherwise the chapter furthest below its
+ * target. Each pick lowers that chapter's gap by `marksEach`, so a batch is spread over the chapters that need
+ * marks most. A chapter at or over its target is still used when it is the best match: nothing is refused.
  */
 export function assignChapters(
   texts: string[],
   chapters: ChapterLite[],
-  openMarks: Record<string, number>,
+  gaps: Record<string, number>,
   marksEach: number,
-): Array<{ chapterId: string; reason: "title" | "bank" | "quota" } | null> {
-  const left = { ...openMarks };
+): Array<{ chapterId: string; reason: "title" | "bank" | "quota" }> {
+  const left = { ...gaps };
   return texts.map((text) => {
-    const roomy = chapters.filter((c) => (left[c.id] ?? 0) >= marksEach);
-    if (roomy.length === 0) return null;
-    const byTitle = suggestChapter(text, roomy);
-    const pick =
-      byTitle && byTitle.reason !== "quota"
-        ? byTitle
-        : { chapterId: [...roomy].sort((a, b) => (left[b.id] ?? 0) - (left[a.id] ?? 0) || a.number - b.number)[0].id, reason: "quota" as const };
+    const byMatch = suggestChapter(text, chapters, left);
+    const pick = byMatch ?? {
+      chapterId: [...chapters].sort((a, b) => (left[b.id] ?? 0) - (left[a.id] ?? 0) || a.number - b.number)[0].id,
+      reason: "quota" as const,
+    };
     left[pick.chapterId] = (left[pick.chapterId] ?? 0) - marksEach;
     return pick;
   });
