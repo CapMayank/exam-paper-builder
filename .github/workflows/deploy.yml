@@ -1,4 +1,4 @@
-name: Deploy Exam Paper Builder
+name: Build & Deploy Exam Paper Builder
 
 on:
   push:
@@ -10,9 +10,49 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  build-and-deploy:
+    name: Build on GitHub & Deploy to VM
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client & initialize build schema
+        run: |
+          npx prisma generate
+          DATABASE_URL="file:./dev.db" npx prisma db push --skip-generate
+
+      - name: Build Next.js on GitHub runner
+        run: npm run build
+        env:
+          DATABASE_URL: "file:./dev.db"
+          NODE_ENV: production
+
+      - name: Package production build bundle
+        run: |
+          tar --exclude='.next/cache' -czf next-build.tar.gz .next
+
+      - name: Transfer pre-built bundle to server via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          source: "next-build.tar.gz"
+          target: "/home/ubuntu/exam-paper-builder"
+          overwrite: true
+          timeout: 120s
+
       - name: Execute Remote Deployment via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -21,7 +61,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
           script_stop: true
-          command_timeout: 30m
+          command_timeout: 15m
           timeout: 60s
           script: |
             cd /home/ubuntu/exam-paper-builder

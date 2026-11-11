@@ -106,9 +106,42 @@ echo "🗄️ Generating Prisma client and syncing database schema..."
 npx prisma generate
 npx prisma db push --skip-generate
 
-# 7. Next.js Production Build
-echo "⚙️ Building Next.js production bundle..."
-NODE_OPTIONS='--max-old-space-size=2048' npm run build
+# 7. Next.js Production Bundle (Unpack pre-built bundle from CI, or build locally)
+BUILD_ARCHIVE=""
+if [ -f "next-build.tar.gz" ]; then
+  BUILD_ARCHIVE="next-build.tar.gz"
+elif [ -f "/home/ubuntu/next-build.tar.gz" ]; then
+  BUILD_ARCHIVE="/home/ubuntu/next-build.tar.gz"
+elif [ -f "/home/ubuntu/exam-paper-builder/next-build.tar.gz" ]; then
+  BUILD_ARCHIVE="/home/ubuntu/exam-paper-builder/next-build.tar.gz"
+fi
+
+if [ -n "$BUILD_ARCHIVE" ]; then
+  echo "📦 Found pre-built Next.js bundle ($BUILD_ARCHIVE) from GitHub Actions."
+  echo "   Extracting with zero-downtime atomic swap..."
+  rm -rf .next_incoming .next_old
+  mkdir -p .next_incoming
+  tar -xzf "$BUILD_ARCHIVE" -C .next_incoming
+  rm -f "$BUILD_ARCHIVE"
+  if [ -d ".next_incoming/.next" ]; then
+    [ -d .next ] && mv .next .next_old
+    mv .next_incoming/.next .next
+    rm -rf .next_old .next_incoming
+    echo "✓ Pre-built Next.js bundle successfully installed into .next"
+  elif [ -f ".next_incoming/BUILD_ID" ]; then
+    [ -d .next ] && mv .next .next_old
+    mv .next_incoming .next
+    rm -rf .next_old
+    echo "✓ Pre-built Next.js bundle successfully installed into .next"
+  else
+    echo "⚠️ Warning: Unexpected structure in pre-built archive. Falling back to local build..."
+    rm -rf .next_incoming
+    NODE_OPTIONS='--max-old-space-size=2048' npm run build
+  fi
+else
+  echo "⚙️ No pre-built bundle found. Falling back to building Next.js production bundle on server..."
+  NODE_OPTIONS='--max-old-space-size=2048' npm run build
+fi
 
 # 8. Zero-Downtime Reload via PM2
 echo "🔄 Reloading PM2 process gracefully..."

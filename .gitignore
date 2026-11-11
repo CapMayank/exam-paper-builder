@@ -47,17 +47,26 @@ next-env.d.ts
 
 # sqlite databases (preserve production and local data)
 prisma/*.db
+prisma/*.db.*
 prisma/*.db-journal
 prisma/*.db-wal
 prisma/*.db-shm
 prisma/*.db.bak
+prisma/*.db.before-*
 
 # uploads and scratch
 /data/uploads/*
 !/data/uploads/.gitkeep
 /scratch/
 .vscode/
+.claude/
 graphify-out/cache/
+
+# build archives & temporary deployment folders
+*.tar.gz
+next-build.tar.gz
+.next_incoming/
+.next_old/
 
 # downloads and reference media
 /downloads/
@@ -65,5 +74,3 @@ graphify-out/cache/
 *.jpg
 *.jpeg
 !/public/**
-
-prisma/*.db.before-reset-*
