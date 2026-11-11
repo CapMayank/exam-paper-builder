@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { diagnosePaperImplications, paperStatus, whyCannotAdd, type BlueprintDef, type PlacedItem } from "./blueprint";
+import { finaliseBlocker } from "./papers";
+import { validatePaperPreflight } from "./preflight";
 
 const bp: BlueprintDef = {
   sections: [
@@ -69,5 +71,49 @@ describe("chapter weightage is a guide, never a gate", () => {
     const chapterGaps = imps.filter((i) => i.code === "CHAPTER_EXCESS" || i.code === "CHAPTER_DEFICIT");
     expect(chapterGaps.length).toBeGreaterThan(0);
     expect(chapterGaps.every((i) => i.severity === "warning")).toBe(true);
+  });
+});
+
+describe("finalising and preflight treat chapters as information", () => {
+  const paper = (complete: boolean, chapters: Array<{ chapterId: string; target: number; used: number }>) =>
+    ({
+      id: "p",
+      examDate: "15/03/2026",
+      generalInstructions: "All questions compulsory.",
+      progress: { complete, usedMarks: 5, totalMarks: 5, chapters },
+      blueprint: {
+        name: "BP",
+        book: { className: "Class 8", subject: "Science" },
+        sections: [{ id: "s", count: 1, marksEach: 5, type: "LONG", title: "Section A" }],
+        chapters: [{ chapterId: "c1", marks: 5 }, { chapterId: "c2", marks: 0 }],
+      },
+      items: [],
+    }) as never;
+
+  it("lets a paper with full sections and uneven chapters be finalised, with one info note", () => {
+    const report = validatePaperPreflight(paper(true, [{ chapterId: "c1", target: 5, used: 1 }, { chapterId: "c2", target: 0, used: 4 }]));
+    expect(report.canFinalize).toBe(true);
+    const note = report.info.filter((i) => i.code === "CHAPTER_COVERAGE");
+    expect(note).toHaveLength(1);
+    expect(note[0].message).toBe("Chapter coverage differs from the blueprint for 2 chapter(s). This does not stop finalising.");
+  });
+
+  it("adds no coverage note when every chapter is on target", () => {
+    const report = validatePaperPreflight(paper(true, [{ chapterId: "c1", target: 5, used: 5 }]));
+    expect(report.info.some((i) => i.code === "CHAPTER_COVERAGE")).toBe(false);
+  });
+
+  it("still blocks while a section has an empty slot", () => {
+    const report = validatePaperPreflight(paper(false, []));
+    expect(report.errors.some((e) => e.code === "BLUEPRINT_INCOMPLETE")).toBe(true);
+  });
+
+  it("finaliseBlocker ignores chapter warnings", () => {
+    const view = {
+      progress: { complete: true },
+      internalChoiceAudit: null,
+      implications: [{ code: "CHAPTER_EXCESS", severity: "warning", message: "" }, { code: "CHAPTER_OUTSIDE_BLUEPRINT", severity: "warning", message: "" }],
+    } as never;
+    expect(finaliseBlocker(view)).toBeNull();
   });
 });

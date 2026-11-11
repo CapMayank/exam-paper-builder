@@ -36,6 +36,21 @@ export function validatePaperPreflight(paper: PaperData): PreflightReport {
     });
   }
 
+  // 1b. Chapter coverage is a guide: report the difference, never block on it
+  {
+    const unitOf = new Map(paper.blueprint.chapters.map((c) => [c.chapterId, c.unitKey || c.chapterId]));
+    const groups = new Map<string, { target: number; used: number }>();
+    for (const c of paper.progress.chapters ?? []) groups.set(unitOf.get(c.chapterId) ?? c.chapterId, { target: c.target, used: c.used });
+    const off = [...groups.values()].filter((g) => g.used !== g.target).length;
+    if (off > 0) {
+      issues.push({
+        code: "CHAPTER_COVERAGE",
+        severity: "info",
+        message: `Chapter coverage differs from the blueprint for ${off} chapter(s). This does not stop finalising.`,
+      });
+    }
+  }
+
   // 2. Exam Date validation
   if (!paper.examDate || paper.examDate.trim() === "" || paper.examDate === "DD/MM/YYYY") {
     issues.push({
