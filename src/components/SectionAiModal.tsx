@@ -29,7 +29,6 @@ import {
   QUESTION_TYPE_LABEL,
   serializeMatchColumnPair,
 } from "@/lib/constants";
-import { toPlacedItems, whyCannotAdd, type PlacedItem } from "@/lib/blueprint";
 import type { GeneratedPaperQuestion } from "@/lib/gemini";
 import { planPaperSlotAssignments, slotFitsRole, slotRowRole } from "@/lib/paperAutogen";
 import { allowedTypesFor } from "@/lib/sectionTypes";
@@ -152,43 +151,20 @@ export function SectionAiModal({
     return out;
   }, [paper, section]);
 
-  // The placement rule the server applies when the generated questions are saved, so chapters are chosen (and a
-  // run is refused) before any question is generated rather than after.
-  const quotaDef = React.useMemo(
-    () => ({
-      sections: paper.blueprint.sections,
-      chapters: paper.blueprint.chapters.map((c) => ({ chapterId: c.chapterId, marks: c.marks, unitKey: c.unitKey, unitTitle: c.unitTitle })),
-    }),
-    [paper.blueprint],
-  );
-  const placedNow = React.useMemo(() => toPlacedItems(paper.blueprint.sections, paper.items), [paper.blueprint.sections, paper.items]);
-  const slotCandidate = (chapterId: string) => ({
-    sectionId: section!.id,
-    chapterId,
-    type: aiType || section!.type,
-    marks: targetSlotMarks,
-    subpartsCount: isMultiUnitMatch ? section!.count : undefined,
-    passageGroupId: section!.role === "PASSAGE" ? "ai" : null,
-  });
-
   // Which chapter each new question goes to: the planner's slots for the chosen form first, then chapters suited
   // to that form (a passage, a writing task, grammar). Each entry carries the chapter's real remaining marks.
   const plannedChapterAllocations = React.useMemo(() => {
     if (!section) return [];
     const left = new Map(chapterQuotas.map((c) => [c.id, c.remainingMarks]));
-    const sim: PlacedItem[] = [...placedNow];
-    const canTake = (id: string) => whyCannotAdd(quotaDef, sim, slotCandidate(id)) === null;
     const take = (c: { id: string; number: number; title: string }) => {
       const before = left.get(c.id) ?? 0;
       left.set(c.id, before - targetSlotMarks);
-      sim.push(slotCandidate(c.id));
       return { id: c.id, number: c.number, title: c.title, remainingMarks: before };
     };
     const subject = paper.blueprint.book?.subject;
     const result: Array<{ id: string; number: number; title: string; remainingMarks: number }> = [];
-    for (const sl of plannedSlotsByForm.get(aiType || section.type) ?? []) {
-      if (result.length >= questionCount) break;
-      if (canTake(sl.chapterId)) result.push(take({ id: sl.chapterId, number: sl.chapterNumber, title: sl.chapterTitle }));
+    for (const sl of (plannedSlotsByForm.get(aiType || section.type) ?? []).slice(0, questionCount)) {
+      result.push(take({ id: sl.chapterId, number: sl.chapterNumber, title: sl.chapterTitle }));
     }
 
     const fits = (title: string) => slotFitsRole(aiType || section.type, targetSlotMarks, slotRowRole(title, subject));
@@ -197,16 +173,13 @@ export function SectionAiModal({
         pool.filter((c) => (left.get(c.id) ?? 0) >= targetSlotMarks).sort((a, b) => (left.get(b.id) ?? 0) - (left.get(a.id) ?? 0));
       const suited = chapterQuotas.filter((c) => fits(c.title));
       const pick =
-        byRoom(suited).find((c) => canTake(c.id)) ??
-        byRoom(chapterQuotas).find((c) => canTake(c.id)) ??
         byRoom(suited)[0] ??
         byRoom(chapterQuotas)[0] ??
         [...chapterQuotas].sort((a, b) => (left.get(b.id) ?? 0) - (left.get(a.id) ?? 0))[0];
       if (pick) result.push(take(pick));
     }
     return result;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paper, section, questionCount, chapterQuotas, targetSlotMarks, aiType, plannedSlotsByForm, quotaDef, placedNow]);
+  }, [paper, section, questionCount, chapterQuotas, targetSlotMarks, aiType, plannedSlotsByForm]);
 
   useEffect(() => {
     if (isOpen && section) {
@@ -255,14 +228,6 @@ export function SectionAiModal({
             marks: targetSlotMarks,
           });
         }
-      }
-
-      // refuse now what saving would refuse later, before any question is generated
-      const sim: PlacedItem[] = [...placedNow];
-      for (const [i, s] of slots.entries()) {
-        const why = s.chapterId ? whyCannotAdd(quotaDef, sim, slotCandidate(s.chapterId)) : null;
-        if (why) throw new Error(`Question ${i + 1} (${s.chapterTitle}) cannot be placed: ${why}`);
-        sim.push(slotCandidate(s.chapterId));
       }
 
       const customKey =

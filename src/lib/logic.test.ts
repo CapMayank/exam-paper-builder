@@ -64,17 +64,17 @@ describe("whyCannotAdd / paperStatus", () => {
     ];
     expect(whyCannotAdd(bp, items, { sectionId: "A", chapterId: "c1", type: "MCQ" })).toMatch(/full/);
   });
-  it("rejects when chapter quota would be exceeded", () => {
+  it("allows a question that takes its chapter past its target (weightage is a guide)", () => {
     const items = [{ sectionId: "B", chapterId: "c1" }]; // 2 of 3 used
-    expect(whyCannotAdd(bp, items, { sectionId: "B", chapterId: "c1", type: "SHORT" })).toMatch(/only 3 marks/);
+    expect(whyCannotAdd(bp, items, { sectionId: "B", chapterId: "c1", type: "SHORT" })).toBeNull();
   });
-  it("rejects chapters not in blueprint", () => {
-    expect(whyCannotAdd(bp, [], { sectionId: "A", chapterId: "zz", type: "MCQ" })).toMatch(/not in the blueprint/);
+  it("allows a chapter that is not in the blueprint", () => {
+    expect(whyCannotAdd(bp, [], { sectionId: "A", chapterId: "zz", type: "MCQ" })).toBeNull();
   });
   it("allows a valid question", () => {
     expect(whyCannotAdd(bp, [], { sectionId: "A", chapterId: "c1", type: "MCQ" })).toBeNull();
   });
-  it("is complete only when every section and chapter is exactly filled", () => {
+  it("is complete when every section is filled, and chapters only inform", () => {
     const items = [
       { sectionId: "A", chapterId: "c1" },
       { sectionId: "A", chapterId: "c2" },
@@ -83,17 +83,11 @@ describe("whyCannotAdd / paperStatus", () => {
     ];
     expect(paperStatus(bp, items.slice(0, 3)).complete).toBe(false);
     expect(paperStatus(bp, items).complete).toBe(true);
+    const lopsided = items.map((i) => ({ ...i, chapterId: "c1" }));
+    expect(paperStatus(bp, lopsided).complete).toBe(true);
   });
-  it("rejects candidate when subpart marks exceed remaining chapter quota", () => {
-    // c1 target is 3. Section A marksEach is 1. If candidate has 4 marks via subparts, it should reject even in 1-mark section.
-    expect(
-      whyCannotAdd(bp, [], {
-        sectionId: "A",
-        chapterId: "c1",
-        type: "MCQ",
-        marks: 4,
-      })
-    ).toMatch(/allows only 3 marks/);
+  it("allows a candidate whose marks exceed its chapter's remaining target", () => {
+    expect(whyCannotAdd(bp, [], { sectionId: "A", chapterId: "c1", type: "MCQ", marks: 4 })).toBeNull();
   });
   it("diagnoses SECTION_OVERFILLED when section count is reduced below subparts count", () => {
     const implications = diagnosePaperImplications(

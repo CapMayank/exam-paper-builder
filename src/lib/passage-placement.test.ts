@@ -128,13 +128,13 @@ describe("unit-level chapter quotas", () => {
     expect([a.target, a.used]).toEqual([4, 2]);
     expect(st.chapters.find((c) => c.chapterId === "c")).toMatchObject({ target: 2, used: 0 });
   });
-  it("accepts two questions from different lessons of the same unit but not a third", () => {
+  it("accepts questions from different lessons of a unit, past the unit's budget too", () => {
     const placed = [
       { sectionId: "s", chapterId: "a", marks: 2 },
       { sectionId: "s", chapterId: "b", marks: 2 },
     ];
     expect(whyCannotAdd(def, [placed[0]], { sectionId: "s", chapterId: "b", type: "SHORT" })).toBeNull();
-    expect(whyCannotAdd({ ...def, sections: [{ ...def.sections[0], count: 4 }] }, placed, { sectionId: "s", chapterId: "a", type: "SHORT" })).toMatch(/only 4 marks/);
+    expect(whyCannotAdd({ ...def, sections: [{ ...def.sections[0], count: 4 }] }, placed, { sectionId: "s", chapterId: "a", type: "SHORT" })).toBeNull();
   });
   it("autofill draws on the unit's budget across lessons", () => {
     const res = autoFillPaper(def, [], [

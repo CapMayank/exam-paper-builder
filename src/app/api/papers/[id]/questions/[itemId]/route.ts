@@ -108,7 +108,6 @@ export const PATCH = route(async (req, { id, itemId }, user) => {
         ...slotPlacement(item.section, candidate),
         passageGroupId: candidate.passageGroupId,
       },
-      { replaces: toPlacedItems(paper.blueprint.sections, paper.items.filter((i) => i.id === itemId))[0] },
     );
     if (reason) throw new HttpError(409, reason);
 
@@ -255,7 +254,6 @@ export const PUT = route(async (req, { id, itemId }, user) => {
       ...slotPlacement(item.section, qInput),
       passageGroupId: qInput.passageGroupId,
     },
-    { replaces: toPlacedItems(paper.blueprint.sections, paper.items.filter((i) => i.id === itemId))[0] },
   );
   if (reason) throw new HttpError(409, reason);
 
