@@ -27,6 +27,7 @@ export function PasteQuestionsPanel({
   section,
   chapters,
   openMarks,
+  placementProblems,
   slotsLeft,
   onPaper,
   onClose,
@@ -37,6 +38,8 @@ export function PasteQuestionsPanel({
   chapters: ChapterLite[];
   /** Marks still open per chapter. */
   openMarks: Record<string, number>;
+  /** Why each chapter, taken in order, cannot give the section one more question (the server's own rule). */
+  placementProblems?: (chapterIds: string[]) => Array<string | null>;
   slotsLeft: number;
   onPaper: (p: PaperData) => void;
   onClose: () => void;
@@ -52,7 +55,7 @@ export function PasteQuestionsPanel({
 
   // chapters are handed out in order, using up each chapter's open marks (a teacher's own pick counts too)
   const left = { ...openMarks };
-  const rows = parsed.map((q, i) => {
+  const drafted = parsed.map((q, i) => {
     const o = overrides[i] ?? {};
     const auto = o.chapterId || o.skip ? null : assignChapters([q.text], chapters, left, section.marksEach)[0];
     const chapterId = o.chapterId ?? auto?.chapterId ?? "";
@@ -75,6 +78,9 @@ export function PasteQuestionsPanel({
       problem,
     };
   });
+  // checked before anything is saved, so a refusal never leaves half-added questions in the bank
+  const refusals = placementProblems?.(drafted.map((r) => (r.skip || r.problem ? "" : r.chapterId))) ?? [];
+  const rows = drafted.map((r, i) => (refusals[i] ? { ...r, problem: refusals[i] } : r));
   const toSave = rows.filter((r) => !r.skip && !r.problem);
 
   const patch = (i: number, p: Override) => setOverrides((prev) => ({ ...prev, [i]: { ...prev[i], ...p } }));

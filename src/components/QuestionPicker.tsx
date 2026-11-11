@@ -7,7 +7,7 @@ import { PasteQuestionsPanel } from "@/components/PasteQuestionsPanel";
 import { isExhaustedUsage, QuestionFreshnessAlert, QuestionUsagePills } from "@/components/QuestionUsageHistory";
 import { QuestionView } from "@/components/QuestionView";
 import { ErrorBanner, Modal, Spinner } from "@/components/ui";
-import { slotPlacement, subpartsMarksProblem, toPlacedItems, whyCannotAdd, type BlueprintDef } from "@/lib/blueprint";
+import { chaptersOpenForSlot, slotPlacement, subpartsMarksProblem, toPlacedItems, whyCannotAdd, type BlueprintDef } from "@/lib/blueprint";
 import { allowedTypesFor, isTypeAllowed } from "@/lib/sectionTypes";
 import { api, retryTransient } from "@/lib/client";
 import {
@@ -127,6 +127,12 @@ export function QuestionPicker({
     [paper.blueprint.sections, paper.items, replacingItemId],
   );
 
+  // the question being replaced, counted as the server counts it: a like-for-like swap is never a quota question
+  const replacedPlaced = useMemo(
+    () => (replacingItemId ? toPlacedItems(paper.blueprint.sections, paper.items.filter((i) => i.id === replacingItemId))[0] : null),
+    [paper.blueprint.sections, paper.items, replacingItemId],
+  );
+
   // counted exactly as the server counts it
   const activeItemMarks = activeItem ? slotPlacement(section, activeItem.question).marks : 0;
 
@@ -135,18 +141,87 @@ export function QuestionPicker({
   const sectionStatus = paper.progress.sections.find((s) => s.id === section.id)!;
   const full = !isReplacing && !isAlternate && sectionStatus.filled >= sectionStatus.needed;
 
-  // Chapters that can still take this section's question marks (locked to primary question's chapter if alternate choice).
+  // Chapters that can still take this section's question marks (locked to primary question's chapter if alternate
+  // choice). Asked of the same rule the server enforces, so a chapter offered here is never refused on save.
+  const openChapterIds = useMemo(() => new Set(chaptersOpenForSlot(def, placed, section.id, { replaces: replacedPlaced })), [def, placed, section.id, replacedPlaced]);
   const openChapters = isAlternate
     ? paper.blueprint.chapters.filter((c) => (activeItem ? c.chapterId === activeItem.question.chapterId : true))
-    : paper.blueprint.chapters.filter((c) => {
+    : paper.blueprint.chapters.filter((c) => openChapterIds.has(c.chapterId));
+
+  // marks each chapter can still give this section (none for a chapter the slot may not be filled from)
+  const openMarksByChapter = Object.fromEntries(
+    paper.blueprint.chapters.map((c) => {
+      const prog = paper.progress.chapters.find((p) => p.chapterId === c.chapterId);
+      let used = prog?.used ?? 0;
+      if (activeItem && activeItem.question.chapterId === c.chapterId && isReplacing) used -= activeItemMarks;
+      const isOpen = openChapters.some((o) => o.chapterId === c.chapterId);
+      return [c.chapterId, isOpen ? Math.max(0, (prog?.target ?? c.marks) - used) : 0];
+    }),
+  );
+
+  /** Why each of these chapters, taken in order, cannot give this section one more question (null when it can). */
+  const placementProblems = (chapterIds: string[]): Array<string | null> => {
+    const sim = [...placed];
+    return chapterIds.map((chapterId) => {
+      if (!chapterId) return null;
+      const cand = { sectionId: section.id, chapterId, type: pickType, marks: section.marksEach };
+      const why = whyCannotAdd(def, sim, cand);
+      if (!why) sim.push(cand);
+      return why;
+    });
+  };
+
+  // Shown when the slot cannot be filled from any chapter: says why, and which chapters are closest to having room.
+  const quotaDeadEnd = (() => {
+    const marksLeft = paper.progress.totalMarks - paper.progress.usedMarks;
+    const seen = new Set<string>();
+    const closest = paper.blueprint.chapters
+      .map((c) => {
         const prog = paper.progress.chapters.find((p) => p.chapterId === c.chapterId);
-        let used = prog?.used ?? 0;
-        if (activeItem && activeItem.question.chapterId === c.chapterId && isReplacing) {
-          used -= activeItemMarks;
-        }
-        // the quota is the lesson's unit total, not the lesson's own share
-        return used + targetSlotMarks <= (prog?.target ?? c.marks);
-      });
+        const target = prog?.target ?? c.marks;
+        const used = prog?.used ?? 0;
+        return { key: c.unitKey || c.chapterId, title: c.unitTitle || c.chapter.title, target, used, toFree: used + targetSlotMarks - target };
+      })
+      .filter((c) => c.target >= targetSlotMarks && c.toFree > 0 && !seen.has(c.key) && Boolean(seen.add(c.key)))
+      .sort((a, b) => a.toFree - b.toFree)
+      .slice(0, 4);
+    const fragmented = marksLeft >= targetSlotMarks && closest.length > 0;
+    return (
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900 space-y-2">
+        <p className="font-semibold">
+          {fragmented
+            ? `No chapter has ${targetSlotMarks} marks free for this question`
+            : `No chapter has marks left for a ${targetSlotMarks}-mark question`}
+        </p>
+        {fragmented ? (
+          <>
+            <p>
+              {marksLeft} marks are still to be placed, but they are spread over the chapters in smaller amounts, and a{" "}
+              {targetSlotMarks}-mark question has to come from one chapter.
+            </p>
+            <p>
+              To make room, replace shorter questions from one of these chapters with questions from chapters that still
+              have marks left:
+            </p>
+            <ul className="list-disc pl-5 space-y-0.5">
+              {closest.map((c) => (
+                <li key={c.key}>
+                  <span className="font-semibold">{c.title}</span>: free {c.toFree} more mark{c.toFree === 1 ? "" : "s"} ({c.used} of{" "}
+                  {c.target} used)
+                </li>
+              ))}
+            </ul>
+            <p>Or change the chapter weightage in the blueprint so that it matches the questions already placed.</p>
+          </>
+        ) : (
+          <p>
+            The blueprint&apos;s chapter weightage is used up, or no chapter is given as many as {targetSlotMarks} marks. Change
+            the chapter weightage in the blueprint, or replace a question already placed.
+          </p>
+        )}
+      </div>
+    );
+  })();
 
   useEffect(() => {
     const sp = new URLSearchParams({ bookId: paper.blueprint.bookId, type: pickType, excludePaperId: paper.id });
@@ -196,13 +271,28 @@ export function QuestionPicker({
                   type: q.type,
                   ...slotPlacement(section, q),
                   passageGroupId: q.passageGroupId,
-                });
+                }, { replaces: replacedPlaced });
           }
         }
         return { q, why };
       })
       .sort((a, b) => Number(!!a.why) - Number(!!b.why) || (a.q.timesUsed ?? 0) - (b.q.timesUsed ?? 0));
   }, [bank, placed, def, section.id, isAlternate, activeItem, paper.items, pickType, targetSlotMarks, isMultiUnitMatch, replacingItemId]);
+
+  // Questions that each fit on their own may not fit together; say so before the batch is sent, not after.
+  const batchProblem = useMemo(() => {
+    if (selectedIds.size < 2) return null;
+    const sim = [...placed];
+    for (const id of selectedIds) {
+      const q = bank.find((b) => b.id === id);
+      if (!q) continue;
+      const cand = { sectionId: section.id, chapterId: q.chapterId, type: q.type, ...slotPlacement(section, q), passageGroupId: q.passageGroupId };
+      const why = whyCannotAdd(def, sim, cand);
+      if (why) return `These cannot all be added together. Ch ${q.chapter?.number ?? "?"}: ${why}`;
+      sim.push(cand);
+    }
+    return null;
+  }, [selectedIds, bank, placed, def, section]);
 
   /** Resolves true when the question was placed; false when it was refused (the error is shown in the banner). */
   async function add(questionId: string, orQuestionId?: string | null): Promise<boolean> {
@@ -627,7 +717,7 @@ export function QuestionPicker({
                       return (
                         <option key={c.chapterId} value={c.chapterId}>
                           Ch {c.chapter.number}. {c.chapter.title}
-                          {open ? "" : " (quota full)"}
+                          {open ? "" : " (no room for this slot)"}
                         </option>
                       );
                     })}
@@ -655,7 +745,8 @@ export function QuestionPicker({
               />
             </div>
 
-            {ranked.length > 0 && ranked.every((r) => !!r.why) && (
+            {!full && !isAlternate && openChapters.length === 0 && quotaDeadEnd}
+            {(full || isAlternate || openChapters.length > 0) && ranked.length > 0 && ranked.every((r) => !!r.why) && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
                 <span className="font-semibold">Notice:</span> All {ranked.length} question(s) in this book currently exceed remaining chapter mark quotas. Switch to &quot;Compose New Question&quot; to write a question for an open chapter, or adjust chapter weightages in the blueprint.
               </div>
@@ -772,6 +863,7 @@ export function QuestionPicker({
                     {selectedIds.size}
                   </span>
                   <span>{selectedIds.size} question{selectedIds.size > 1 ? "s" : ""} selected for {section.title}</span>
+                  {batchProblem && <span className="font-medium text-amber-800">· {batchProblem}</span>}
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -784,7 +876,7 @@ export function QuestionPicker({
                   </button>
                   <button
                     type="button"
-                    disabled={batchBusy}
+                    disabled={batchBusy || Boolean(batchProblem)}
                     onClick={handleBatchInsert}
                     className="btn btn-sm bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs flex items-center gap-1.5 shadow-xs"
                   >
@@ -806,12 +898,8 @@ export function QuestionPicker({
             paper={paper}
             section={section}
             chapters={paper.blueprint.chapters.map((c) => c.chapter)}
-            openMarks={Object.fromEntries(
-              paper.blueprint.chapters.map((c) => {
-                const prog = paper.progress.chapters.find((p) => p.chapterId === c.chapterId);
-                return [c.chapterId, (prog?.target ?? c.marks) - (prog?.used ?? 0)];
-              }),
-            )}
+            openMarks={openMarksByChapter}
+            placementProblems={placementProblems}
             slotsLeft={Math.max(0, sectionStatus.needed - sectionStatus.filled)}
             onPaper={onPaper}
             onClose={onClose}
@@ -830,13 +918,7 @@ export function QuestionPicker({
             </div>
           ) : openChapters.length === 0 ? (
             <div className="space-y-3">
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-800 space-y-1">
-                <p className="font-semibold">All Chapter Quotas Full for {section.marksEach}m Questions</p>
-                <p>
-                  Every chapter&apos;s allocated marks in the blueprint have been completely utilized.
-                  To add more questions to this section, adjust the chapter mark quotas in your blueprint or replace an existing question.
-                </p>
-              </div>
+              {quotaDeadEnd}
               <div className="flex justify-end">
                 <button type="button" className="btn" onClick={onClose}>
                   Close
@@ -852,12 +934,7 @@ export function QuestionPicker({
               fixedType={pickType}
               targetMarks={section.marksEach}
               allowedChapterIds={openChapters.map((c) => c.chapterId)}
-              openMarks={Object.fromEntries(
-                openChapters.map((c) => {
-                  const prog = paper.progress.chapters.find((p) => p.chapterId === c.chapterId);
-                  return [c.chapterId, (prog?.target ?? c.marks) - (prog?.used ?? 0)];
-                }),
-              )}
+              openMarks={Object.fromEntries(openChapters.map((c) => [c.chapterId, openMarksByChapter[c.chapterId] ?? 0]))}
               submitLabel={
                 isAlternate
                   ? "Save to Bank & Set as Alternate"
@@ -894,13 +971,7 @@ export function QuestionPicker({
             </div>
           ) : openChapters.length === 0 ? (
             <div className="space-y-3">
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-800 space-y-1">
-                <p className="font-semibold">All Chapter Quotas Full for {section.marksEach}m Questions</p>
-                <p>
-                  Every chapter&apos;s allocated marks in the blueprint have been completely utilized.
-                  To generate questions for this section, adjust the chapter mark quotas in your blueprint or replace an existing question.
-                </p>
-              </div>
+              {quotaDeadEnd}
               <div className="flex justify-end">
                 <button type="button" className="btn" onClick={onClose}>
                   Close

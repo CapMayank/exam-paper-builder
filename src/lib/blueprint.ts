@@ -283,11 +283,23 @@ export function validateBlueprint(bp: {
 function checkBoundedPartitionFeasible(
   denominations: number[],
   capacities: number[],
-  chapterQuotas: number[]
+  chapterQuotas: number[],
 ): boolean {
+  return partitionFeasible(denominations, capacities, chapterQuotas, Infinity) === true;
+}
+
+/** As above, but gives up (null) after `budget` search steps so an interactive caller never stalls. */
+function partitionFeasible(
+  denominations: number[],
+  capacities: number[],
+  chapterQuotas: number[],
+  budget: number,
+): boolean | null {
+  let steps = 0;
   function getSolutions(target: number): number[][] {
     const sols: number[][] = [];
     function solve(dIdx: number, curSum: number, curSol: number[]) {
+      if (++steps > budget) return;
       if (dIdx === denominations.length) {
         if (curSum === target) sols.push([...curSol]);
         return;
@@ -307,6 +319,7 @@ function checkBoundedPartitionFeasible(
   const allSolutions: number[][][] = [];
   for (const q of chapterQuotas) {
     const sols = getSolutions(q);
+    if (steps > budget) return null;
     if (sols.length === 0) return false;
     allSolutions.push(sols);
   }
@@ -316,6 +329,7 @@ function checkBoundedPartitionFeasible(
   const memo = new Set<string>();
 
   function search(step: number): boolean {
+    if (++steps > budget) return false;
     if (step === order.length) {
       return remaining.every((r) => r === 0);
     }
@@ -338,11 +352,109 @@ function checkBoundedPartitionFeasible(
       for (let k = 0; k < denominations.length; k++) remaining[k] += sol[k];
     }
 
-    memo.add(stateKey);
+    if (steps <= budget) memo.add(stateKey);
     return false;
   }
 
-  return search(0);
+  const found = search(0);
+  return found ? true : steps > budget ? null : false;
+}
+
+const COMPLETABLE_SEARCH_BUDGET = 150_000;
+// Keyed by the items array and its length: callers that simulate a batch push onto the same array.
+const completableCache = new WeakMap<PlacedItem[], { length: number; results: Map<string, boolean | null> }>();
+
+/**
+ * Can the paper still be finished exactly: can every chapter's (or unit's) remaining marks be made up from the
+ * slots that are still empty? `null` when that cannot be judged: the blueprint's totals do not agree, a chapter
+ * or section is already over, a match question spills over its chapter, or the search would take too long.
+ */
+function canStillComplete(bp: BlueprintDef, items: PlacedItem[]): boolean | null {
+  // a combined match question's extra pairs are credited to whichever chapters end up short, so what each
+  // chapter still owes is not fixed until the paper is finished
+  if (rawQuotaUsage(bp, items).overflow > 0) return null;
+  const status = paperStatus(bp, items);
+  const slotsLeft = new Map<number, number>();
+  let slotMarksLeft = 0;
+  for (const s of bp.sections) {
+    const st = status.sections.find((x) => x.id === s.id)!;
+    const left = st.needed - st.filled;
+    if (left < 0 || s.marksEach <= 0) return null;
+    if (left === 0) continue;
+    slotsLeft.set(s.marksEach, (slotsLeft.get(s.marksEach) ?? 0) + left);
+    slotMarksLeft += left * s.marksEach;
+  }
+  const rep = quotaRepresentatives(bp.chapters);
+  const quotas: number[] = [];
+  let quotaMarksLeft = 0;
+  for (const c of status.chapters) {
+    if (rep.get(c.chapterId) !== c.chapterId) continue; // one entry per quota group
+    const left = c.target - c.used;
+    if (left < 0) return null;
+    if (left === 0) continue;
+    quotas.push(left);
+    quotaMarksLeft += left;
+  }
+  if (slotMarksLeft !== quotaMarksLeft || quotas.length > 30) return null;
+  if (quotas.length === 0) return true;
+  const denominations = [...slotsLeft.keys()].sort((a, b) => a - b);
+  return partitionFeasible(denominations, denominations.map((d) => slotsLeft.get(d)!), quotas, COMPLETABLE_SEARCH_BUDGET);
+}
+
+/**
+ * True when the paper can be finished now but could not be once `candidate` is placed: its marks would come out
+ * of a chapter that needs them for a bigger (or smaller) question still to be set. Papers that are already
+ * stuck, or whose blueprint does not add up, are never refused here.
+ */
+function strandsChapterMarks(
+  bp: BlueprintDef,
+  items: PlacedItem[],
+  candidate: PlacedItem,
+  groupKey: string,
+  replaces?: PlacedItem | null,
+): boolean {
+  let entry = completableCache.get(items);
+  if (!entry || entry.length !== items.length) {
+    completableCache.set(items, (entry = { length: items.length, results: new Map() }));
+  }
+  const results = entry.results;
+  const memo = (key: string, compute: () => boolean | null) => {
+    if (!results.has(key)) results.set(key, compute());
+    return results.get(key)!;
+  };
+  // the paper as it stands: with the question being replaced still in it
+  const standing = replaces
+    ? memo(`now|${replaces.sectionId}|${replaces.chapterId}|${replaces.marks ?? ""}|${replaces.subpartsCount ?? ""}`, () =>
+        canStillComplete(bp, [...items, replaces]),
+      )
+    : memo("now", () => canStillComplete(bp, items));
+  if (standing !== true) return false;
+  const key = `${candidate.sectionId}|${groupKey}|${candidate.marks ?? ""}|${candidate.subpartsCount ?? ""}`;
+  return memo(key, () => canStillComplete(bp, [...items, candidate])) === false;
+}
+
+const STRANDS_MARKS_REASON =
+  "This chapter's remaining marks are needed by other questions still to be set. Choose a question from a different chapter.";
+
+/**
+ * Chapters a new question for `sectionId` may come from: the chapter has the marks free, and using them here
+ * still leaves a paper that can be finished. The picker, the AI and paste all offer exactly these.
+ */
+export function chaptersOpenForSlot(
+  bp: BlueprintDef,
+  items: PlacedItem[],
+  sectionId: string,
+  opts: { replaces?: PlacedItem | null } = {},
+): string[] {
+  const section = bp.sections.find((s) => s.id === sectionId);
+  if (!section) return [];
+  const isMultiUnitMatch = section.type === "MATCH_COLUMN" && section.count > 1;
+  const candidate = isMultiUnitMatch
+    ? { marks: section.count * section.marksEach, subpartsCount: section.count }
+    : { marks: section.marksEach };
+  return bp.chapters
+    .filter((c) => whyCannotAdd(bp, items, { sectionId, chapterId: c.chapterId, type: section.type, ...candidate }, opts) === null)
+    .map((c) => c.chapterId);
 }
 
 /** Arithmetic feasibility checks for chapter mark allocations against section denominations. */
@@ -532,6 +644,8 @@ export function whyCannotAdd(
   bp: BlueprintDef,
   items: PlacedItem[],
   candidate: { sectionId: string; chapterId: string; type: string; marks?: number; subpartsCount?: number; passageGroupId?: string | null },
+  /** `replaces`: the question the candidate takes the place of (already left out of `items`). */
+  opts: { replaces?: PlacedItem | null } = {},
 ): string | null {
   const section = bp.sections.find((s) => s.id === candidate.sectionId);
   if (!section) return "That section is not part of this paper's blueprint.";
@@ -539,6 +653,23 @@ export function whyCannotAdd(
   if (typeReason) return typeReason;
   const roleReason = roleMismatchReason(section, candidate);
   if (roleReason) return roleReason;
+  // A swap within the same slot, chapter group and marks changes no count, so it is never a quota question:
+  // a typo can always be fixed, even on a paper its blueprint has since moved away from.
+  const replaced = opts.replaces;
+  if (replaced && replaced.sectionId === candidate.sectionId) {
+    const groupOf = quotaRepresentatives(bp.chapters);
+    const sameGroup =
+      (groupOf.get(replaced.chapterId) ?? replaced.chapterId) === (groupOf.get(candidate.chapterId) ?? candidate.chapterId);
+    const marksOf = (i: { marks?: number; subpartsCount?: number }) => getItemMarks(i as PlacedItem, section.marksEach);
+    if (
+      sameGroup &&
+      bp.chapters.some((c) => c.chapterId === candidate.chapterId) &&
+      marksOf(replaced) === marksOf(candidate) &&
+      getItemUnits(replaced, section.count) === getItemUnits(candidate as PlacedItem, section.count)
+    ) {
+      return null;
+    }
+  }
   const status = paperStatus(bp, items);
   const sec = status.sections.find((s) => s.id === section.id)!;
   if (sec.filled >= sec.needed) return `${section.title} is already full (${sec.needed} questions).`;
@@ -580,6 +711,13 @@ export function whyCannotAdd(
   if (slack < overflowAfter) {
     return `The blueprint allows only ${chapter.target} marks from this chapter; ${chapter.used} are already used.`;
   }
+  const placed: PlacedItem = {
+    sectionId: section.id,
+    chapterId: candidate.chapterId,
+    marks: candidateMarks,
+    subpartsCount: candidateUnits > 1 ? candidateUnits : undefined,
+  };
+  if (strandsChapterMarks(bp, items, placed, key, replaced)) return STRANDS_MARKS_REASON;
   return null;
 }
 

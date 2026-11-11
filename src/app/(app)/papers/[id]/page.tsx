@@ -34,7 +34,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { use, useCallback, useEffect, useRef, useState, Fragment } from "react";
+import { use, useCallback, useEffect, useMemo, useRef, useState, Fragment } from "react";
 import { AIPaperAuditModal } from "@/components/AIPaperAuditModal";
 import { AIPaperGeneratorModal } from "@/components/AIPaperGeneratorModal";
 import { DiagramSearchModal } from "@/components/DiagramSearchModal";
@@ -81,7 +81,7 @@ import {
   type ExamType,
   type PaperLanguage,
 } from "@/lib/constants";
-import { questionSlotMarks } from "@/lib/blueprint";
+import { chaptersOpenForSlot, questionSlotMarks, toPlacedItems } from "@/lib/blueprint";
 import { componentCoverage, parseComponents } from "@/lib/languageComponents";
 import { formatQuestionNumber, computeDisplayedPaperNumbering } from "@/lib/layout";
 import { nextSetIdentifier } from "@/lib/multiset";
@@ -570,6 +570,19 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
     }
     call(() => api<PaperData>(`/api/papers/${id}`, { method: "PATCH", json }), adopt);
   };
+
+  // Chapters each section's next question may come from, by the rule the server enforces when one is added.
+  const openChapterIdsBySection = useMemo(() => {
+    const out = new Map<string, Set<string>>();
+    if (!paper) return out;
+    const def = {
+      sections: paper.blueprint.sections,
+      chapters: paper.blueprint.chapters.map((c) => ({ chapterId: c.chapterId, marks: c.marks, unitKey: c.unitKey, unitTitle: c.unitTitle })),
+    };
+    const placed = toPlacedItems(paper.blueprint.sections, paper.items);
+    for (const s of paper.blueprint.sections) out.set(s.id, new Set(chaptersOpenForSlot(def, placed, s.id)));
+    return out;
+  }, [paper]);
 
   if (!paper) {
     return error ? (
@@ -1861,7 +1874,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                   remainingMarks: rem,
                 };
               })
-              .filter((c) => c.remainingMarks > 0)
+              .filter((c) => c.remainingMarks > 0 && openChapterIdsBySection.get(s.id)?.has(c.id))
               .sort((a, b) => b.remainingMarks - a.remainingMarks);
 
             // the same rule the server audits with, including the blueprint's own "OR required / no OR" setting
@@ -2533,7 +2546,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                           </span>
                                         ))
                                       ) : (
-                                        <span className="text-slate-400 italic">All chapter quotas allocated</span>
+                                        <span className="text-slate-400 italic">No chapter has {targetMarksForSlot} mark{targetMarksForSlot > 1 ? "s" : ""} free</span>
                                       )}
                                     </div>
                                   </div>
