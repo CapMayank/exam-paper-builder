@@ -19,6 +19,7 @@ import { Modal, Spinner, useToast } from "@/components/ui";
 import { cleanOptionText, type PaperLanguage } from "@/lib/constants";
 import { api, retryTransient } from "@/lib/client";
 import { MathText } from "./MathText";
+import { QuestionContent } from "./QuestionContent";
 import type { Book, Chapter } from "@/lib/types";
 
 export interface GeneratedQuestionPayload {
@@ -556,7 +557,7 @@ export function AIQuestionGeneratorModal({
             <div className="space-y-2">
               <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Question Text</span>
               <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3 text-sm text-slate-900 leading-relaxed">
-                <MathText text={activeQuestion.text} />
+                <QuestionContent text={activeQuestion.text} />
               </div>
             </div>
 
@@ -607,7 +608,7 @@ export function AIQuestionGeneratorModal({
                         </span>
                       </div>
                       <div className="text-slate-800">
-                        <MathText text={sp.text} />
+                        <QuestionContent text={sp.text} />
                       </div>
                       {sp.answer && (
                         <div className="text-emerald-800 pt-1 border-t border-slate-200/60 font-mono text-[11px]">

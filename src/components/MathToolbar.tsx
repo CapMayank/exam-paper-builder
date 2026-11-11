@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { MathText } from "./MathText";
-import { Modal } from "./ui";
-import { Calculator, ChevronDown, ChevronUp, Grid, Sparkles, Table as TableIcon } from "lucide-react";
+import { TableModal } from "./TableModal";
+import { Calculator, Grid, Table as TableIcon } from "lucide-react";
 
 export type MathCategory = "arithmetic" | "science" | "calculus" | "trig" | "geometry" | "formulas" | "tables";
 
@@ -163,40 +163,8 @@ export function MathToolbar({
   onNewFormula: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<MathCategory>("arithmetic");
-  const [expanded, setExpanded] = useState(false);
   const [showTableModal, setShowTableModal] = useState(false);
-
-  // Frequency Table Generator State
-  const [tableHeaders, setTableHeaders] = useState({
-    col1: "Class Interval",
-    col2: "Frequency",
-  });
-  const [tableRows, setTableRows] = useState([
-    { col1: "0-10", col2: "5" },
-    { col1: "10-20", col2: "8" },
-    { col1: "20-30", col2: "12" },
-    { col1: "30-40", col2: "15" },
-    { col1: "40-50", col2: "10" },
-  ]);
-
-  function handleInsertTable() {
-    const validRows = tableRows.filter((r) => r.col1.trim() || r.col2.trim());
-    if (validRows.length === 0) return;
-
-    // Transposed horizontal table (standard Indian / CBSE board exam layout):
-    // Row 1: Header 1 & intervals
-    // Row 2: Header 2 & frequencies
-    const colCount = validRows.length + 1;
-    const colSpec = "|c|" + "c|".repeat(validRows.length);
-
-    const row1 = `\\text{${tableHeaders.col1}} & ` + validRows.map((r) => r.col1.trim()).join(" & ") + " \\\\";
-    const row2 = `\\text{${tableHeaders.col2}} & ` + validRows.map((r) => r.col2.trim()).join(" & ") + " \\\\";
-
-    const latex = `$$\\begin{array}{${colSpec}}\n\\hline\n${row1}\n\\hline\n${row2}\n\\hline\n\\end{array}$$`;
-
-    onInsert(latex);
-    setShowTableModal(false);
-  }
+  const [tableModalMode, setTableModalMode] = useState<"grid" | "stat">("grid");
 
   return (
     <div className="rounded-lg border border-indigo-100 bg-indigo-50/40 p-2 text-xs">
@@ -286,7 +254,22 @@ export function MathToolbar({
           </button>
           <button
             type="button"
-            onClick={() => setShowTableModal(true)}
+            onClick={() => {
+              setTableModalMode("grid");
+              setShowTableModal(true);
+            }}
+            className="flex items-center gap-1 rounded bg-white px-2 py-0.5 font-semibold text-indigo-700 hover:bg-indigo-50 border border-indigo-200 transition"
+            title="Create a custom table with required rows and columns"
+          >
+            <Grid size={12} className="text-indigo-600" />
+            + Table
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setTableModalMode("stat");
+              setShowTableModal(true);
+            }}
             className="flex items-center gap-1 rounded bg-white px-2 py-0.5 font-semibold text-emerald-700 hover:bg-emerald-50 border border-emerald-200 transition"
             title="Create a Class Interval & Frequency Table"
           >
@@ -319,119 +302,13 @@ export function MathToolbar({
           ))}
       </div>
 
-      {/* Frequency Table Generator Modal */}
-      {showTableModal && (
-        <Modal
-          title="Insert Statistics Frequency Table"
-          subtitle="Generate a CBSE-standard Class Interval and Frequency table for Mean, Median, or Mode problems."
-          onClose={() => setShowTableModal(false)}
-        >
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="label">Header 1 (Row 1)</label>
-                <input
-                  className="input text-xs"
-                  value={tableHeaders.col1}
-                  onChange={(e) => setTableHeaders({ ...tableHeaders, col1: e.target.value })}
-                  placeholder="e.g. Class Interval"
-                />
-              </div>
-              <div>
-                <label className="label">Header 2 (Row 2)</label>
-                <input
-                  className="input text-xs"
-                  value={tableHeaders.col2}
-                  onChange={(e) => setTableHeaders({ ...tableHeaders, col2: e.target.value })}
-                  placeholder="e.g. Frequency"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="label">Table Columns &amp; Values</span>
-                <button
-                  type="button"
-                  className="btn btn-sm"
-                  onClick={() =>
-                    setTableRows([...tableRows, { col1: "", col2: "" }])
-                  }
-                >
-                  + Add Column
-                </button>
-              </div>
-
-              <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
-                {tableRows.map((r, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <span className="w-6 text-xs text-slate-400">#{i + 1}</span>
-                    <input
-                      className="input text-xs flex-1"
-                      placeholder="e.g. 0-10"
-                      value={r.col1}
-                      onChange={(e) => {
-                        const copy = [...tableRows];
-                        copy[i].col1 = e.target.value;
-                        setTableRows(copy);
-                      }}
-                    />
-                    <input
-                      className="input text-xs w-28"
-                      placeholder="Frequency"
-                      value={r.col2}
-                      onChange={(e) => {
-                        const copy = [...tableRows];
-                        copy[i].col2 = e.target.value;
-                        setTableRows(copy);
-                      }}
-                    />
-                    <button
-                      type="button"
-                      disabled={tableRows.length <= 2}
-                      className="rounded p-1 text-slate-400 hover:text-red-600 disabled:opacity-20"
-                      onClick={() => setTableRows(tableRows.filter((_, idx) => idx !== i))}
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Live Table Preview */}
-            <div className="rounded border border-slate-200 bg-slate-50 p-3">
-              <span className="label text-indigo-700">Live Table Preview:</span>
-              <div className="overflow-x-auto pt-1 text-center">
-                <MathText
-                  text={`$$\\begin{array}{|c|${"c|".repeat(tableRows.length)}}\n\\hline\n\\text{${tableHeaders.col1}} & ${tableRows
-                    .map((r) => r.col1 || "-")
-                    .join(" & ")} \\\\\n\\hline\n\\text{${tableHeaders.col2}} & ${tableRows
-                    .map((r) => r.col2 || "-")
-                    .join(" & ")} \\\\\n\\hline\n\\end{array}$$`}
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setShowTableModal(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={handleInsertTable}
-              >
-                Insert Table into Question
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
+      {/* Table Generator Modal */}
+      <TableModal
+        isOpen={showTableModal}
+        onClose={() => setShowTableModal(false)}
+        onInsert={onInsert}
+        initialMode={tableModalMode}
+      />
     </div>
   );
 }

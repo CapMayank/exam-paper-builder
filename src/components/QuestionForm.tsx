@@ -12,6 +12,7 @@ import {
   Shuffle,
   Sigma,
   Sparkles,
+  Table as TableIcon,
   Wand2,
   X,
 } from "lucide-react";
@@ -54,6 +55,7 @@ import { MathToolbar } from "./MathToolbar";
 import { DiagramSearchModal } from "./DiagramSearchModal";
 import { FigureStudio } from "./figure-studio";
 import { AIQuestionImproverModal } from "./AIQuestionImproverModal";
+import { TableModal } from "./TableModal";
 import { ErrorBanner, Field } from "./ui";
 
 /** Pre-primary worksheets are written on: they keep blank answer space under each question. */
@@ -278,6 +280,7 @@ export function QuestionForm({
   const [sketching, setSketching] = useState(false);
   const [diagramSearchOpen, setDiagramSearchOpen] = useState(false);
   const [aiImproverOpen, setAiImproverOpen] = useState(false);
+  const [tableModalOpen, setTableModalOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const activeEditorRef = useRef<MathRichEditorHandle | null>(null);
@@ -727,6 +730,14 @@ export function QuestionForm({
                   title="Symbols and formulas, inserted where the cursor is"
                 >
                   <Sigma size={13} aria-hidden /> Maths
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTableModalOpen(true)}
+                  className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                  title="Insert a custom table with required rows and columns"
+                >
+                  <TableIcon size={13} aria-hidden /> Table
                 </button>
                 <button
                   type="button"
@@ -1366,6 +1377,13 @@ export function QuestionForm({
           }}
         />
       )}
+
+      <TableModal
+        isOpen={tableModalOpen}
+        onClose={() => setTableModalOpen(false)}
+        onInsert={handleInsertSnippet}
+        initialMode="grid"
+      />
     </form>
   );
 }

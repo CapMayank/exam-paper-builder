@@ -504,15 +504,15 @@
     "semantic_hash": ""
   },
   "src/components/AIQuestionGeneratorModal.tsx": {
-    "mtime": 1793874879.9213314,
-    "seen": 1793876742.4971845,
-    "ast_hash": "3e566afe39cf5819b5132d1364573475",
+    "mtime": 1794385493.306348,
+    "seen": 1794385795.6677077,
+    "ast_hash": "20871249e82f49caa0bfb1c239e7ae7a",
     "semantic_hash": ""
   },
   "src/components/AIQuestionImproverModal.tsx": {
-    "mtime": 1792165545.024056,
-    "seen": 1792685467.5911267,
-    "ast_hash": "7f0ede14cdb222a0ea01abdbb9d4f76c",
+    "mtime": 1794385517.7462516,
+    "seen": 1794385795.6677077,
+    "ast_hash": "454746f08d9df7762b302b40cf1f4e7d",
     "semantic_hash": ""
   },
   "src/components/AcademicRolloverModal.tsx": {
@@ -570,9 +570,9 @@
     "semantic_hash": ""
   },
   "src/components/MathToolbar.tsx": {
-    "mtime": 1793701303.9310248,
-    "seen": 1793761828.274749,
-    "ast_hash": "7a1ab5833ac6af1733727382810d31eb",
+    "mtime": 1794385721.6148763,
+    "seen": 1794385795.6677077,
+    "ast_hash": "f92433e68f8ceaaf218a89e8af0d0e42",
     "semantic_hash": ""
   },
   "src/components/PaperImportModal.tsx": {
@@ -594,9 +594,9 @@
     "semantic_hash": ""
   },
   "src/components/QuestionForm.tsx": {
-    "mtime": 1794288611.4186485,
-    "seen": 1794374958.522357,
-    "ast_hash": "9011662636fd72c54304f16061f10a44",
+    "mtime": 1794385468.3127823,
+    "seen": 1794385795.6677077,
+    "ast_hash": "a00faf71febc0ef1e2d8ee97a8a95133",
     "semantic_hash": ""
   },
   "src/components/QuestionPicker.tsx": {
@@ -1278,9 +1278,9 @@
     "semantic_hash": ""
   },
   ".github/workflows/deploy.yml": {
-    "mtime": 1794374931.4969773,
-    "seen": 1794374958.522357,
-    "ast_hash": "ea6dbf39e1e2757eb3b86061e618c8df",
+    "mtime": 1794376052.0408232,
+    "seen": 1794385795.6687033,
+    "ast_hash": "432076f138e71634da9f7af3b9248dc9",
     "semantic_hash": ""
   },
   "AGENTS.md": {
@@ -2316,9 +2316,9 @@
     "semantic_hash": ""
   },
   "src/lib/subjectPrompts.ts": {
-    "mtime": 1793801354.2093604,
-    "seen": 1793869612.9517496,
-    "ast_hash": "9926fbad2ffc2dc69c2b4408fa1c79e2",
+    "mtime": 1794385526.6573873,
+    "seen": 1794385795.6677077,
+    "ast_hash": "d169781cb8da3d37310b84bf802d1538",
     "semantic_hash": ""
   },
   "src/lib/template-workflow-matrix.test.ts": {
@@ -2787,6 +2787,24 @@
     "mtime": 1793895386.4945135,
     "seen": 1794374958.522357,
     "ast_hash": "d31abddd2547cdfd8351d88357dee9f6",
+    "semantic_hash": ""
+  },
+  "src/components/TableModal.tsx": {
+    "mtime": 1794385250.4152756,
+    "seen": 1794385795.6677077,
+    "ast_hash": "d3361868f210c9c4c9e4635f71cb478a",
+    "semantic_hash": ""
+  },
+  "src/lib/tableUtils.test.ts": {
+    "mtime": 1794385195.7940023,
+    "seen": 1794385795.6687033,
+    "ast_hash": "cfaafa8e66bc7394a1a9b1abbbd907dc",
+    "semantic_hash": ""
+  },
+  "src/lib/tableUtils.ts": {
+    "mtime": 1794385692.4372935,
+    "seen": 1794385795.6687033,
+    "ast_hash": "9051a1b1296d28cece9005f3f7c27d5d",
     "semantic_hash": ""
   }
 }

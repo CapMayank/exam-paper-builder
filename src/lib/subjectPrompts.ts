@@ -26,6 +26,7 @@ export const UNIVERSAL_QUALITY_RULES: string[] = [
   "Each question must be answerable from the prescribed textbook for this class; do not require facts, formulas or data from outside it.",
   "An OR alternative must be equivalent in marks, length, difficulty and type of thinking to its main question (a definition must not be the alternative to a numerical).",
   "When the answer needs a set number of points, say how many (e.g. 'Give any three reasons') and make it match the marks.",
+  "Tables: When a question provides tabular data (such as frequency distributions, observation/experiment tables, or comparative charts), format it as a standard Markdown table (| Col 1 | Col 2 |) or LaTeX array environment ($$\\begin{array}{|c|c|}\\hline ... \\hline\\end{array}$$) so it renders as a native exam table in paper preview and Word export.",
 ];
 
 /** Chapter cues for Class 9-10 Science, used to suggest which kind of question a slot should be. */

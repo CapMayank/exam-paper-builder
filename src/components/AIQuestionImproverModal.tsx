@@ -16,6 +16,7 @@ import {
 import { Modal, Spinner, useToast } from "@/components/ui";
 import { api } from "@/lib/client";
 import { MathText } from "./MathText";
+import { QuestionContent } from "./QuestionContent";
 import type { QuestionImproveResult } from "@/lib/gemini";
 
 interface AIQuestionImproverModalProps {
@@ -287,7 +288,7 @@ export function AIQuestionImproverModal({
           <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3.5 space-y-2 text-xs">
             <span className="font-bold text-slate-500 uppercase tracking-wide block">Current Version</span>
             <div className="rounded-lg border border-slate-200 bg-white p-3 text-slate-800 leading-relaxed min-h-24">
-              <MathText text={initialText} />
+              <QuestionContent text={initialText} />
             </div>
             {initialOptions.length > 0 && (
               <div className="space-y-1 pt-1">
@@ -328,7 +329,7 @@ export function AIQuestionImproverModal({
             ) : result ? (
               <div className="space-y-2">
                 <div className="rounded-lg border border-indigo-200 bg-white p-3 text-slate-900 leading-relaxed font-medium min-h-24">
-                  <MathText text={result.improvedText} />
+                  <QuestionContent text={result.improvedText} />
                 </div>
 
                 {result.improvedOptions && result.improvedOptions.length > 0 && (
