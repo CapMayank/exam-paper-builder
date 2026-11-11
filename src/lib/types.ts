@@ -293,6 +293,49 @@ export function parseSubpartsPayload(json?: unknown): { subparts: SubPart[]; att
   }
 }
 
+/** Smallest share of a mark a part can carry: a 1-mark question with four blanks gives ¼ each. */
+export const PART_MARK_STEP = 0.25;
+
+const sameMarks = (a: number, b: number) => Math.abs(a - b) < 1e-6;
+
+/** Part marks as stored: a positive multiple of ¼ (0 when the input is not a usable number). */
+export function snapPartMarks(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.max(PART_MARK_STEP, Math.round(n / PART_MARK_STEP) * PART_MARK_STEP);
+}
+
+/** Marks as printed: 0.5 → "½", 1.5 → "1½", 2 → "2". */
+export function formatMarksValue(marks: number): string {
+  if (!Number.isFinite(marks)) return "";
+  const whole = Math.floor(marks + 1e-6);
+  const frac = marks - whole;
+  const glyph = sameMarks(frac, 0.25) ? "¼" : sameMarks(frac, 0.5) ? "½" : sameMarks(frac, 0.75) ? "¾" : null;
+  if (glyph) return whole > 0 ? `${whole}${glyph}` : glyph;
+  return sameMarks(frac, 0) ? String(whole) : String(Math.round(marks * 100) / 100);
+}
+
+/** What each of `count` equal parts carries when together they are worth `total`; null when that is not a multiple of ¼. */
+export function equalPartMarks(total: number, count: number): number | null {
+  if (!(total > 0) || !(count > 0)) return null;
+  const each = total / count;
+  const steps = each / PART_MARK_STEP;
+  return steps >= 1 && sameMarks(steps, Math.round(steps)) ? Math.round(steps) * PART_MARK_STEP : null;
+}
+
+/**
+ * `total` marks shared over `count` parts in steps of ¼, as evenly as possible (any remainder goes to the
+ * last parts). null when there is less than ¼ per part.
+ */
+export function splitMarksEvenly(total: number, count: number): number[] | null {
+  if (!(count > 0)) return null;
+  const units = Math.round(total / PART_MARK_STEP);
+  const base = Math.floor(units / count);
+  if (base < 1) return null;
+  const extra = units - base * count;
+  return Array.from({ length: count }, (_, i) => (base + (i >= count - extra ? 1 : 0)) * PART_MARK_STEP);
+}
+
 export function subpartsTotalMarks(
   subparts?: (Pick<SubPart, "marks" | "subparts"> | null | undefined)[] | null,
 ): number {
@@ -334,14 +377,14 @@ export function validateSubPartsSum(
     const valid = subparts.filter(Boolean) as Pick<SubPart, "marks" | "subparts">[];
     if (valid.length > 0) {
       const allEqual = valid.every((sp) => sp.marks === valid[0]?.marks);
-      if (allEqual && (valid[0].marks * attemptCount) === expectedTotalMarks) {
+      if (allEqual && sameMarks(valid[0].marks * attemptCount, expectedTotalMarks)) {
         return true;
       }
       const sumFirstK = subpartsTotalMarks(valid.slice(0, attemptCount));
-      if (sumFirstK === expectedTotalMarks) return true;
+      if (sameMarks(sumFirstK, expectedTotalMarks)) return true;
     }
   }
-  return subpartsTotalMarks(subparts) === expectedTotalMarks;
+  return sameMarks(subpartsTotalMarks(subparts), expectedTotalMarks);
 }
 
 /**
@@ -368,7 +411,19 @@ export function normalizeSubpartMarks<T extends { marks: number; subparts?: any[
   let valid = [...subparts];
 
   const currentTotal = subpartsTotalMarks(valid);
-  if (currentTotal === target) return valid;
+  if (sameMarks(currentTotal, target)) return valid;
+
+  // Fewer marks than parts to answer (e.g. four blanks in a 2-mark question): whole marks cannot fit, share fractions.
+  const answered = typeof attemptCount === "number" && attemptCount > 0 && attemptCount <= valid.length ? attemptCount : valid.length;
+  if (target < answered) {
+    if (answered < valid.length) {
+      const each = equalPartMarks(target, answered);
+      if (each) return valid.map((sp) => ({ ...sp, marks: each }));
+    } else {
+      const shares = splitMarksEvenly(target, valid.length);
+      if (shares) return valid.map((sp, idx) => ({ ...sp, marks: shares[idx] }));
+    }
+  }
 
   if (currentTotal <= 0) {
     const base = Math.floor(target / valid.length);

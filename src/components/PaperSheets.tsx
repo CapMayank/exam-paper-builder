@@ -30,7 +30,7 @@ import {
   resolvePaperExamType,
   type PaperLanguage,
 } from "@/lib/constants";
-import { decomposeStemSubparts } from "@/lib/subpartExtractor";
+import { decomposeForSlot } from "@/lib/subpartExtractor";
 import { WorkbookHeader } from "@/lib/kindergarten/components/WorkbookHeader";
 import {
   computeDisplayedPaperNumbering,
@@ -588,7 +588,7 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
         const subparts = it.question.subparts && it.question.subparts.length > 0
           ? it.question.subparts
           : canHaveSubparts(it.question.type)
-          ? decomposeStemSubparts(it.question.text)?.subparts ?? []
+          ? decomposeForSlot(it.question.text, s.marksEach)?.subparts ?? []
           : [];
         const canDecompose = !isPrePrimary && !it.orQuestion && subparts && subparts.length > 1;
         const totalQuestionMarks = questionSlotMarks(s, { ...it.question, subparts } as never).marks;
@@ -645,7 +645,7 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
                     q={it.question}
                     number={currentN}
                     numberLabel={numberLabel}
-                    marks={s.marksEach}
+                    marks={totalQuestionMarks}
                     marksStyle={paper.marksStyle || "RIGHT_COLUMN"}
                     compact={isEffectiveCompact}
                   fit={fit}

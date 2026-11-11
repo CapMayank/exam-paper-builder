@@ -64,7 +64,7 @@ describe("Adversarial Challenge: subPartSchema Boundary & Stress Testing", () =>
     expect(() => subPartSchema.parse({ label: "(a)", text: threeThousandOne, marks: 1 })).toThrow();
   });
 
-  it("enforces strict marks boundaries (1 <= marks <= 50, integer only)", () => {
+  it("enforces strict marks boundaries (1/4 <= marks <= 50, in steps of 1/4)", () => {
     // Valid boundaries
     expect(subPartSchema.parse({ label: "(a)", text: "T", marks: 1 }).marks).toBe(1);
     expect(subPartSchema.parse({ label: "(a)", text: "T", marks: 50 }).marks).toBe(50);
@@ -76,9 +76,12 @@ describe("Adversarial Challenge: subPartSchema Boundary & Stress Testing", () =>
     expect(() => subPartSchema.parse({ label: "(a)", text: "T", marks: 51 })).toThrow();
     expect(() => subPartSchema.parse({ label: "(a)", text: "T", marks: 1000000 })).toThrow();
 
-    // Floating point marks (CBSE subparts in our schema require integer marks)
-    expect(() => subPartSchema.parse({ label: "(a)", text: "T", marks: 1.5 })).toThrow();
-    expect(() => subPartSchema.parse({ label: "(a)", text: "T", marks: 0.5 })).toThrow();
+    // Half and quarter marks are allowed (four blanks in a 2-mark question carry 1/2 each); other fractions are not
+    expect(subPartSchema.parse({ label: "(a)", text: "T", marks: 1.5 }).marks).toBe(1.5);
+    expect(subPartSchema.parse({ label: "(a)", text: "T", marks: 0.5 }).marks).toBe(0.5);
+    expect(subPartSchema.parse({ label: "(a)", text: "T", marks: 0.25 }).marks).toBe(0.25);
+    expect(() => subPartSchema.parse({ label: "(a)", text: "T", marks: 0.3 })).toThrow();
+    expect(() => subPartSchema.parse({ label: "(a)", text: "T", marks: 0.1 })).toThrow();
 
     // Non-numeric or NaN
     expect(() => subPartSchema.parse({ label: "(a)", text: "T", marks: NaN })).toThrow();

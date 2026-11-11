@@ -44,7 +44,7 @@ import {
 import { getMaxPaperDiagramBudget, isSectionVisuallyEligible } from "@/lib/diagram-rules";
 import type { GeneratedPaperQuestion } from "@/lib/gemini";
 import type { PaperAutogenPlan } from "@/lib/paperAutogen";
-import { normalizeSubpartMarks, type PaperData } from "@/lib/types";
+import { formatMarksValue, normalizeSubpartMarks, type PaperData } from "@/lib/types";
 
 interface AIPaperGeneratorModalProps {
   paperId: string;
@@ -1095,7 +1095,7 @@ export function AIPaperGeneratorModal({
                                 <div key={spIdx} className="text-[11px] text-slate-700 flex items-start gap-1">
                                   <span className="font-bold text-slate-500">{sp.label}</span>
                                   <span className="flex-1"><QuestionContent text={sp.text} /></span>
-                                  <span className="text-[10px] text-slate-400 font-mono">[{sp.marks}m]</span>
+                                  <span className="text-[10px] text-slate-400 font-mono">[{formatMarksValue(sp.marks)}m]</span>
                                 </div>
                               ))}
                             </div>
@@ -1119,7 +1119,7 @@ export function AIPaperGeneratorModal({
                                       <div key={spIdx} className="text-[11px] text-slate-700 flex items-start gap-1">
                                         <span className="font-bold text-slate-500">{sp.label}</span>
                                         <span className="flex-1"><QuestionContent text={sp.text} /></span>
-                                        <span className="text-[10px] text-slate-400 font-mono">[{sp.marks}m]</span>
+                                        <span className="text-[10px] text-slate-400 font-mono">[{formatMarksValue(sp.marks)}m]</span>
                                       </div>
                                     ))}
                                   </div>

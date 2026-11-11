@@ -1,4 +1,4 @@
-import { type SubPart } from "./types";
+import { equalPartMarks, type SubPart } from "./types";
 
 /**
  * Known sequences of subpart labels for ordered progression detection.
@@ -61,6 +61,20 @@ export function detectAttemptCount(stem: string): number | undefined {
   }
 
   return undefined;
+}
+
+/**
+ * A list of parts typed into the question text, with the question's marks shared equally over the parts a
+ * student answers (four blanks in a 2-mark question carry ½ each). A part's marks are 0, meaning "print no
+ * marks against it", when the question's marks are unknown or do not divide into quarter marks.
+ */
+export function decomposeForSlot(text: string, slotMarks?: number | null): DecomposedSubpartsResult | null {
+  const decomposed = decomposeStemSubparts(text);
+  if (!decomposed) return null;
+  const n = decomposed.subparts.length;
+  const answered = decomposed.attemptCount && decomposed.attemptCount < n ? decomposed.attemptCount : n;
+  const each = typeof slotMarks === "number" ? equalPartMarks(slotMarks, answered) ?? 0 : 0;
+  return { ...decomposed, subparts: decomposed.subparts.map((sp) => ({ ...sp, marks: each })) };
 }
 
 /**

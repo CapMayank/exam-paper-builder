@@ -181,9 +181,8 @@ describe("Audit Defect Fixes Regression Test Suite (DEF-01 to DEF-15)", () => {
       // Must NOT truncate the 4th subpart!
       expect(normalized).toHaveLength(4);
       expect(normalized[3].text).toBe("What happens when brakes are applied?");
-      for (const sp of normalized) {
-        expect(sp.marks).toBeGreaterThanOrEqual(1);
-      }
+      // four parts cannot each carry a whole mark in a 3-mark question: they share it as 3/4 each
+      expect(normalized.map((sp) => sp.marks)).toEqual([0.75, 0.75, 0.75, 0.75]);
     });
   });
 

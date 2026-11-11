@@ -4,6 +4,7 @@ import {
   ArrowDown,
   ArrowUp,
   ChevronDown,
+  Copy,
   ImagePlus,
   Library,
   PencilRuler,
@@ -40,7 +41,18 @@ import {
   parseKindergartenConfig,
   serializeKindergartenConfig,
 } from "@/lib/kindergarten/registry";
-import { type Book, type QuestionDto, type SubPart, attemptedSubpartsMarks, validateSubPartsSum } from "@/lib/types";
+import {
+  type Book,
+  type QuestionDto,
+  type SubPart,
+  attemptedSubpartsMarks,
+  equalPartMarks,
+  formatMarksValue,
+  snapPartMarks,
+  splitMarksEvenly,
+  validateSubPartsSum,
+} from "@/lib/types";
+import { decomposeForSlot, decomposeStemSubparts } from "@/lib/subpartExtractor";
 import {
   type ChapterBank,
   DIFFICULTY_LABEL,
@@ -90,8 +102,53 @@ const DEFAULT_ASSERTION_OPTIONS_HI = [
   "अभिकथन (A) गलत है, किंतु कारण (R) सही है।",
 ];
 
-function getSubpartLabel(index: number): string {
-  return ROMAN_LABELS[index] ?? `(${index + 1})`;
+/** The ways a question's parts are lettered; picking one relabels every part in order. */
+const PART_LABEL_STYLES: { id: string; name: string; labels: string[] }[] = [
+  { id: "roman", name: "(i), (ii), (iii)", labels: ["i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x", "xi", "xii"] },
+  { id: "alpha", name: "(a), (b), (c)", labels: "abcdefghijkl".split("") },
+  { id: "ALPHA", name: "(A), (B), (C)", labels: "ABCDEFGHIJKL".split("") },
+  { id: "num", name: "(1), (2), (3)", labels: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"] },
+  { id: "hindi", name: "(क), (ख), (ग)", labels: ["क", "ख", "ग", "घ", "ङ", "च", "छ", "ज", "झ", "ञ", "ट", "ठ"] },
+].map((st) => ({ ...st, labels: st.labels.map((l) => `(${l})`) }));
+
+function partLabel(styleId: string | null, index: number): string {
+  const style = PART_LABEL_STYLES.find((st) => st.id === styleId) ?? PART_LABEL_STYLES[0];
+  return style.labels[index] ?? `(${index + 1})`;
+}
+
+/** The lettering the parts follow, or null when the teacher typed labels of their own (those are left alone). */
+function labelStyleOf(parts: SubPart[]): string | null {
+  if (parts.length === 0) return "roman";
+  const found = PART_LABEL_STYLES.find((st) => parts.every((sp) => st.labels.includes(sp.label.trim())));
+  return found ? found.id : null;
+}
+
+/** Parts lettered in order again after one is added, removed or moved. */
+function relabelParts(parts: SubPart[], styleId: string | null = labelStyleOf(parts)): SubPart[] {
+  return styleId ? parts.map((sp, i) => ({ ...sp, label: partLabel(styleId, i) })) : parts;
+}
+
+/** Marks box of one part: takes ½ and ¼ marks, and lets the teacher clear it while typing. */
+function PartMarksInput({ value, onChange }: { value: number; onChange: (marks: number) => void }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  return (
+    <input
+      type="number"
+      inputMode="decimal"
+      min={0.25}
+      max={20}
+      step={0.25}
+      aria-label="Marks for this part"
+      className="input !py-0.5 !px-1.5 w-16 text-xs font-semibold text-center"
+      value={draft ?? String(value)}
+      onChange={(e) => {
+        setDraft(e.target.value);
+        const marks = snapPartMarks(e.target.value);
+        if (marks > 0) onChange(Math.min(20, marks));
+      }}
+      onBlur={() => setDraft(null)}
+    />
+  );
 }
 
 function getDefaultSubpartsForType(qType?: string, targetMarks?: number): SubPart[] {
@@ -379,6 +436,9 @@ export function QuestionForm({
     }
 
     if (usesSubparts) {
+      if (subparts.some((sp) => sp.options && sp.options.length > 0 && sp.options.filter((o) => o.trim()).length < MIN_OPTIONS)) {
+        return setError(`A part with options needs at least ${MIN_OPTIONS} of them filled in. Fill them or remove that part's options.`);
+      }
       if (subparts.length === 0) {
         return setError("Please add at least one sub-question / subpart.");
       }
@@ -386,14 +446,14 @@ export function QuestionForm({
         return setError("Fill in the prompt text for every subpart.");
       }
       if (subparts.some((sp) => !sp.marks || sp.marks <= 0)) {
-        return setError("Every subpart must have at least 1 mark allocated.");
+        return setError("Give every part some marks (½ and ¼ marks are allowed).");
       }
       const totalSubMarks = attemptedSubpartsMarks(subparts, attemptCount);
       if (targetMarks !== undefined && !validateSubPartsSum(subparts, targetMarks, attemptCount)) {
         return setError(
           attemptCount
-            ? `Any ${attemptCount} of these parts add up to ${totalSubMarks}m, but the question must be worth ${targetMarks}m. Adjust the parts or how many are answered.`
-            : `Subpart marks sum (${totalSubMarks}m) must equal section question marks (${targetMarks}m). Adjust individual subparts to balance.`
+            ? `Any ${attemptCount} of these parts add up to ${formatMarksValue(totalSubMarks)} marks, but the question must be worth ${targetMarks}. Use "Split marks equally" or adjust the parts.`
+            : `The parts add up to ${formatMarksValue(totalSubMarks)} marks, but the question must be worth ${targetMarks}. Use "Split marks equally" or adjust the parts.`
         );
       }
       if (attemptCount && subparts.some((sp) => sp.marks !== subparts[0].marks)) {
@@ -433,11 +493,11 @@ export function QuestionForm({
         subparts: usesSubparts
           ? subparts.map((sp) => ({
               ...sp,
-              marks: Math.max(1, Math.round(Number(sp.marks) || 1)),
+              marks: snapPartMarks(sp.marks) || 1,
               label: sp.label.trim() || "(i)",
               text: sp.text.trim(),
               answer: sp.answer?.trim() || "",
-              options: Array.isArray(sp.options) && sp.options.length > 0 ? sp.options.map((o) => o.trim()) : undefined,
+              options: Array.isArray(sp.options) ? sp.options.map((o) => o.trim()).filter(Boolean) : undefined,
             }))
           : [],
         ...(usesSubparts && attemptCount ? { attemptCount } : {}),
@@ -489,6 +549,96 @@ export function QuestionForm({
   const prePrimary = isPrePrimaryClass(book?.className);
   // Answer space is a worksheet setting: shown for pre-primary, or to clear space an older question still has.
   const showAnswerSpace = !isDrawingType(type) && (prePrimary || (initial?.spaceMm ?? 0) > 0);
+
+  // Sub-questions can be added to any written question (fill in the blanks, one-word, short answer...), not only passages.
+  const canAddParts = canHaveSubparts(type) && type !== "MATCH_COLUMN" && !isKindergartenType(type);
+  const partStyle = labelStyleOf(subparts);
+  // A list like "(i) ... (ii) ..." typed into the question text: offered for conversion into real parts.
+  const typedList = useMemo(
+    () => (canAddParts && subparts.length === 0 ? decomposeStemSubparts(text) : null),
+    [canAddParts, subparts.length, text],
+  );
+  const typedListAnswered = typedList
+    ? typedList.attemptCount && typedList.attemptCount < typedList.subparts.length
+      ? typedList.attemptCount
+      : typedList.subparts.length
+    : 0;
+  const typedListEach = typedList && targetMarks !== undefined ? equalPartMarks(targetMarks, typedListAnswered) : null;
+
+  /** The question's marks shared equally over the parts a student answers; null when there is no target or it cannot be shared. */
+  function evenMarks(count: number, answered?: number): number[] | null {
+    if (targetMarks === undefined || count === 0) return null;
+    if (answered && answered < count) {
+      const each = equalPartMarks(targetMarks, answered);
+      return each ? Array.from({ length: count }, () => each) : null;
+    }
+    return splitMarksEvenly(targetMarks, count);
+  }
+
+  /** True while the parts still carry the equal share nobody has hand-tuned: adding or removing a part then re-shares the marks. */
+  function isEvenlyShared(parts: SubPart[]): boolean {
+    if (targetMarks === undefined || parts.length === 0) return false;
+    const shares = evenMarks(parts.length, attemptCount);
+    return !!shares && parts.every((sp, i) => sp.marks === shares[i]);
+  }
+
+  function applyParts(next: SubPart[], reshare: boolean, answered = attemptCount) {
+    const shares = reshare ? evenMarks(next.length, answered && answered < next.length ? answered : undefined) : null;
+    setSubparts(relabelParts(shares ? next.map((sp, i) => ({ ...sp, marks: shares[i] })) : next, partStyle));
+  }
+
+  function addPart() {
+    const reshare = subparts.length === 0 || isEvenlyShared(subparts);
+    const left = targetMarks !== undefined ? targetMarks - attemptedSubpartsMarks(subparts, attemptCount) : 0;
+    const marks = attemptCount && subparts[0] ? subparts[0].marks : left > 0 ? snapPartMarks(left) : 1;
+    applyParts([...subparts, { label: partLabel(partStyle, subparts.length), text: "", marks, answer: "" }], reshare);
+  }
+
+  function removePart(index: number) {
+    applyParts(subparts.filter((_, j) => j !== index), isEvenlyShared(subparts));
+  }
+
+  function movePart(index: number, by: -1 | 1) {
+    const next = [...subparts];
+    [next[index], next[index + by]] = [next[index + by], next[index]];
+    // each part keeps its own marks; only the lettering follows the new order
+    applyParts(next, false);
+  }
+
+  function duplicatePart(index: number) {
+    const copy = { ...subparts[index], id: undefined };
+    applyParts([...subparts.slice(0, index + 1), copy, ...subparts.slice(index + 1)], isEvenlyShared(subparts));
+  }
+
+  function splitMarksEqually() {
+    const shares = evenMarks(subparts.length, attemptCount);
+    if (!shares) {
+      return setError(
+        targetMarks === undefined
+          ? "This question has no fixed marks to split yet. Set each part's marks yourself."
+          : `${targetMarks} marks cannot be shared over ${attemptCount ?? subparts.length} parts in steps of ¼. Change the number of parts.`,
+      );
+    }
+    setError(null);
+    setSubparts(subparts.map((sp, i) => ({ ...sp, marks: shares[i] })));
+  }
+
+  function changeAttemptCount(next: number | undefined) {
+    const reshare = isEvenlyShared(subparts);
+    setAttemptCount(next);
+    if (reshare) applyParts(subparts, true, next);
+  }
+
+  /** Turns a "(i) ... (ii) ..." list typed in the question text into parts that share the question's marks. */
+  function convertTypedList() {
+    const found = decomposeForSlot(text, targetMarks);
+    if (!found) return;
+    const answered = found.attemptCount && found.attemptCount < found.subparts.length ? found.attemptCount : undefined;
+    const shares = evenMarks(found.subparts.length, answered);
+    setText(found.stem);
+    setAttemptCount(answered);
+    setSubparts(found.subparts.map((sp, i) => ({ ...sp, marks: sp.marks || shares?.[i] || 1, answer: "" })));
+  }
 
   function changeType(newType: string) {
     setType(newType);
@@ -860,7 +1010,45 @@ export function QuestionForm({
         </div>
       )}
 
-      {/* Multi-part Sub-questions Editor (Case Study, Unseen Passage, Reference to Context) */}
+      {/* Sub-questions: offered for every written question, with a shortcut for a list already typed in the text */}
+      {canAddParts && !usesSubparts && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50/60 px-3.5 py-2.5 text-xs text-slate-600">
+          {typedList ? (
+            <>
+              <span className="flex-1 min-w-[14rem]">
+                The question text lists {typedList.subparts.length} parts ({typedList.subparts[0].label} to{" "}
+                {typedList.subparts[typedList.subparts.length - 1].label}).
+                {typedListEach
+                  ? ` On the paper each carries ${formatMarksValue(typedListEach)} of the ${targetMarks} marks.`
+                  : " Make them parts to give each its own marks and answer."}
+              </span>
+              <button type="button" className="btn btn-xs btn-primary font-medium" onClick={convertTypedList}>
+                Make these separate parts
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="flex-1 min-w-[14rem]">Has sub-questions like (i), (ii), (iii)? Add them as parts: the marks are shared between them.</span>
+              <button
+                type="button"
+                className="btn btn-xs bg-white font-medium"
+                onClick={() =>
+                  applyParts(
+                    [
+                      { label: partLabel("roman", 0), text: "", marks: 1, answer: "" },
+                      { label: partLabel("roman", 1), text: "", marks: 1, answer: "" },
+                    ],
+                    true,
+                  )
+                }
+              >
+                <Plus size={12} /> Add sub-questions
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {usesSubparts && (
         <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3.5">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2">
@@ -869,19 +1057,30 @@ export function QuestionForm({
               {(() => {
                 const total = attemptedSubpartsMarks(subparts, attemptCount);
                 const expected = targetMarks ?? total;
-                const isBalanced = total === expected;
+                const isBalanced = Math.abs(total - expected) < 1e-6;
                 return isBalanced ? (
                   <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800 border border-emerald-300">
-                    ✓ {total}/{expected} marks
+                    ✓ {formatMarksValue(total)}/{formatMarksValue(expected)} marks
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800 border border-amber-300">
-                    {total}/{expected} marks · {total > expected ? `${total - expected} too many` : `${expected - total} short`}
+                    {formatMarksValue(total)}/{formatMarksValue(expected)} marks ·{" "}
+                    {total > expected ? `${formatMarksValue(total - expected)} too many` : `${formatMarksValue(expected - total)} short`}
                   </span>
                 );
               })()}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {targetMarks !== undefined && subparts.length > 0 && (
+                <button
+                  type="button"
+                  onClick={splitMarksEqually}
+                  className="btn btn-xs bg-white font-medium"
+                  title={`Share the ${targetMarks} marks equally between the parts`}
+                >
+                  Split marks equally
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => {
@@ -890,41 +1089,50 @@ export function QuestionForm({
                 }}
                 className="btn btn-xs bg-white font-medium"
               >
-                Reset parts
+                {isSubpartQuestionType(type) ? "Reset parts" : "Remove parts"}
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setSubparts([
-                    ...subparts,
-                    { label: getSubpartLabel(subparts.length), text: "", marks: 1, answer: "" },
-                  ]);
-                }}
-                className="btn btn-xs btn-primary font-medium"
-              >
+              <button type="button" onClick={addPart} className="btn btn-xs btn-primary font-medium">
                 <Plus size={12} /> Add part
               </button>
             </div>
           </div>
 
-          {subparts.length > 1 && (
-            <label className="flex flex-wrap items-center gap-2 text-xs text-slate-700">
-              <span className="font-medium">Students answer</span>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-700">
+            <label className="flex items-center gap-2">
+              <span className="font-medium">Numbered as</span>
               <select
                 className="input !w-auto !py-1 text-xs"
-                value={attemptCount ?? 0}
-                onChange={(e) => setAttemptCount(Number(e.target.value) || undefined)}
+                value={partStyle ?? "custom"}
+                onChange={(e) => e.target.value !== "custom" && setSubparts(relabelParts(subparts, e.target.value))}
               >
-                <option value={0}>all {subparts.length} parts</option>
-                {Array.from({ length: subparts.length - 1 }, (_, n) => n + 1).map((n) => (
-                  <option key={n} value={n}>
-                    any {n} of the {subparts.length} parts
+                {PART_LABEL_STYLES.map((st) => (
+                  <option key={st.id} value={st.id}>
+                    {st.name}
                   </option>
                 ))}
+                {!partStyle && <option value="custom">My own labels</option>}
               </select>
-              {attemptCount && <span className="text-slate-500">Marks count the {attemptCount} answered.</span>}
             </label>
-          )}
+
+            {subparts.length > 1 && (
+              <label className="flex flex-wrap items-center gap-2">
+                <span className="font-medium">Students answer</span>
+                <select
+                  className="input !w-auto !py-1 text-xs"
+                  value={attemptCount ?? 0}
+                  onChange={(e) => changeAttemptCount(Number(e.target.value) || undefined)}
+                >
+                  <option value={0}>all {subparts.length} parts</option>
+                  {Array.from({ length: subparts.length - 1 }, (_, n) => n + 1).map((n) => (
+                    <option key={n} value={n}>
+                      any {n} of the {subparts.length} parts
+                    </option>
+                  ))}
+                </select>
+                {attemptCount && <span className="text-slate-500">Marks count the {attemptCount} answered.</span>}
+              </label>
+            )}
+          </div>
 
           <div className="space-y-3">
             {subparts.map((sp, i) => (
@@ -949,55 +1157,48 @@ export function QuestionForm({
                   <div className="flex items-center gap-1.5">
                     <label className="flex items-center gap-1 text-xs text-slate-600 font-medium">
                       Marks:
-                      <input
-                        type="number"
-                        min={1}
-                        max={20}
-                        className="input !py-0.5 !px-1.5 w-14 text-xs font-semibold text-center"
+                      <PartMarksInput
                         value={sp.marks}
-                        onChange={(e) => {
-                          const val = Math.max(1, Math.min(20, Number(e.target.value) || 1));
-                          setSubparts(subparts.map((s, j) => (j === i ? { ...s, marks: val } : s)));
-                        }}
+                        onChange={(marks) => setSubparts((subs) => subs.map((s, j) => (j === i ? { ...s, marks } : s)))}
                       />
                     </label>
 
                     <button
                       type="button"
                       disabled={i === 0}
-                      onClick={() => {
-                        const next = [...subparts];
-                        const temp = next[i - 1];
-                        next[i - 1] = next[i];
-                        next[i] = temp;
-                        setSubparts(next);
-                      }}
+                      onClick={() => movePart(i, -1)}
                       className="rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
                       title="Move up"
+                      aria-label="Move part up"
                     >
                       <ArrowUp size={14} />
                     </button>
                     <button
                       type="button"
                       disabled={i === subparts.length - 1}
-                      onClick={() => {
-                        const next = [...subparts];
-                        const temp = next[i + 1];
-                        next[i + 1] = next[i];
-                        next[i] = temp;
-                        setSubparts(next);
-                      }}
+                      onClick={() => movePart(i, 1)}
                       className="rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
                       title="Move down"
+                      aria-label="Move part down"
                     >
                       <ArrowDown size={14} />
                     </button>
                     <button
                       type="button"
+                      onClick={() => duplicatePart(i)}
+                      className="rounded p-1 text-slate-500 hover:bg-slate-100"
+                      title="Duplicate part"
+                      aria-label="Duplicate part"
+                    >
+                      <Copy size={14} />
+                    </button>
+                    <button
+                      type="button"
                       disabled={subparts.length <= 1}
-                      onClick={() => setSubparts(subparts.filter((_, j) => j !== i))}
+                      onClick={() => removePart(i)}
                       className="rounded p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-30"
-                      title="Delete subpart"
+                      title="Delete part"
+                      aria-label="Delete part"
                     >
                       <X size={14} />
                     </button>
@@ -1019,15 +1220,28 @@ export function QuestionForm({
                   <MathRichEditor
                     className="text-xs"
                     value={sp.answer ?? ""}
-                    placeholder={`Model answer / marking rubric for ${sp.label || i + 1} (optional)`}
+                    placeholder={
+                      sp.options && sp.options.length > 0
+                        ? `Correct option for ${sp.label || i + 1}, e.g. (b)`
+                        : `Model answer / marking rubric for ${sp.label || i + 1} (optional)`
+                    }
                     onActivate={activate({ type: "subpart-answer", index: i })}
                     onChange={(v) => setSubparts((subs) => subs.map((s, j) => (j === i ? { ...s, answer: v } : s)))}
                   />
                 </div>
 
-                {sp.options && sp.options.length > 0 && (
+                {sp.options && sp.options.length > 0 ? (
                   <div className="space-y-1.5 pt-1 rounded-md bg-slate-50 p-2.5 border border-slate-200">
-                    <label className="text-[11px] font-semibold text-slate-600">Sub-question Options:</label>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-semibold text-slate-600">Options of this part:</span>
+                      <button
+                        type="button"
+                        className="text-[11px] font-medium text-slate-500 hover:text-red-600"
+                        onClick={() => setSubparts((subs) => subs.map((s, j) => (j === i ? { ...s, options: undefined } : s)))}
+                      >
+                        Remove options
+                      </button>
+                    </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {sp.options.map((opt, optIdx) => (
                         <div key={optIdx} className="flex items-center gap-1.5">
@@ -1035,6 +1249,7 @@ export function QuestionForm({
                           <MathRichEditor
                             className="flex-1 text-xs"
                             value={opt}
+                            placeholder={`Option (${String.fromCharCode(97 + optIdx)})`}
                             onActivate={activate({ type: "text" })}
                             onChange={(v) =>
                               setSubparts((subs) =>
@@ -1048,6 +1263,14 @@ export function QuestionForm({
                       ))}
                     </div>
                   </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="text-[11px] font-medium text-indigo-700 hover:underline"
+                    onClick={() => setSubparts((subs) => subs.map((s, j) => (j === i ? { ...s, options: ["", "", "", ""] } : s)))}
+                  >
+                    + Give this part options (a) to (d)
+                  </button>
                 )}
               </div>
             ))}

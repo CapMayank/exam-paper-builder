@@ -1,3 +1,4 @@
+import { formatMarksValue } from "../types";
 import type { PaperLocaleDictionary, PaperLanguage } from "./types";
 
 const DEVANAGARI_LETTERS = ["क", "ख", "ग", "घ", "ङ", "च", "छ", "ज", "झ", "ञ", "ट", "ठ", "ड", "ढ", "ण", "त", "थ", "द", "ध", "न"];
@@ -539,9 +540,9 @@ export const SANSKRIT_DICTIONARY: PaperLocaleDictionary = {
   },
   choiceSeparator: "(अथवा)",
   marksLabel: (marks: number) => {
-    if (marks === 1) return "[1 अङ्कः]";
+    if (marks <= 1) return `[${formatMarksValue(marks)} अङ्कः]`;
     if (marks === 2) return "[2 अङ्कौ]";
-    return `[${marks} अङ्काः]`;
+    return `[${formatMarksValue(marks)} अङ्काः]`;
   },
   formulaLabel: (count: number, marksEach: number) => `(${count} × ${marksEach} = ${count * marksEach} अङ्काः)`,
   columnLabels: { colA: "स्तम्भ 'अ'", colB: "स्तम्भ 'ब'" },
@@ -640,7 +641,7 @@ export const HINDI_DICTIONARY: PaperLocaleDictionary = {
     GRAMMAR: "निर्देशानुसार व्याकरण सम्बन्धी प्रश्नों के उत्तर दीजिए:",
   },
   choiceSeparator: "अथवा",
-  marksLabel: (marks: number) => `[${marks} अंक]`,
+  marksLabel: (marks: number) => `[${formatMarksValue(marks)} अंक]`,
   formulaLabel: (count: number, marksEach: number) => `(${count} × ${marksEach} = ${count * marksEach} अंक)`,
   columnLabels: { colA: "स्तम्भ 'अ'", colB: "स्तम्भ 'ब'" },
   footer: {
@@ -740,7 +741,7 @@ export const ENGLISH_DICTIONARY: PaperLocaleDictionary = {
     GRAMMAR: "Do as directed for the grammar questions:",
   },
   choiceSeparator: "OR",
-  marksLabel: (marks: number) => `[${marks} ${marks === 1 ? "Mark" : "Marks"}]`,
+  marksLabel: (marks: number) => `[${formatMarksValue(marks)} ${marks <= 1 ? "Mark" : "Marks"}]`,
   formulaLabel: (count: number, marksEach: number) => `(${count} × ${marksEach} = ${count * marksEach} Marks)`,
   columnLabels: { colA: "Column A", colB: "Column B" },
   footer: {
@@ -838,7 +839,7 @@ export const BILINGUAL_DICTIONARY: PaperLocaleDictionary = {
     GRAMMAR: "निर्देशानुसार उत्तर दीजिए / Do as directed:",
   },
   choiceSeparator: "OR (अथवा)",
-  marksLabel: (marks: number) => `[${marks} ${marks === 1 ? "Mark" : "Marks"} / अंक]`,
+  marksLabel: (marks: number) => `[${formatMarksValue(marks)} ${marks <= 1 ? "Mark" : "Marks"} / अंक]`,
   formulaLabel: (count: number, marksEach: number) => `(${count} × ${marksEach} = ${count * marksEach} Marks / अंक)`,
   columnLabels: { colA: "स्तम्भ 'अ' (Column A)", colB: "स्तम्भ 'ब' (Column B)" },
   footer: {

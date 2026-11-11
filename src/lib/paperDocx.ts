@@ -44,7 +44,7 @@ import {
   QUESTION_TYPE_LABEL,
   resolvePaperExamType,
 } from "@/lib/constants";
-import { decomposeStemSubparts } from "@/lib/subpartExtractor";
+import { decomposeForSlot } from "@/lib/subpartExtractor";
 import { prisma } from "@/lib/prisma";
 import { parseSubparts, parseSubpartsPayload, subpartsTotalMarks, type SubPart } from "@/lib/types";
 import { UPLOAD_DIR } from "@/lib/uploads";
@@ -114,7 +114,7 @@ function renderSubpartsDocx(
   for (let spIdx = 0; spIdx < subparts.length; spIdx++) {
     const sp = subparts[spIdx];
     const spLabel = sp.label && String(sp.label).trim() ? String(sp.label).trim() : (romans[spIdx] || `(${spIdx + 1})`);
-    const spMarks = typeof sp.marks === "number" && Number.isFinite(sp.marks) ? sp.marks : 1;
+    const spMarks = typeof sp.marks === "number" && Number.isFinite(sp.marks) ? sp.marks : 0;
     paragraphs.push(
       new Paragraph({
         indent: { left: baseIndent },
@@ -122,7 +122,7 @@ function renderSubpartsDocx(
         children: [
           new TextRun({ text: `${spLabel} `, bold: true, font }),
           ...formatMathTextRuns(sp.text || "", { font }),
-          new TextRun({ text: ` ${formatMarksLabel(spMarks, lang)}`, bold: true, font }),
+          ...(spMarks > 0 ? [new TextRun({ text: ` ${formatMarksLabel(spMarks, lang)}`, bold: true, font })] : []),
         ],
       }),
     );
@@ -718,7 +718,7 @@ export async function buildPaperDocx(
       let parsedSubparts = canHaveSubparts(q.type) ? rawSubparts : [];
       let baseQText = isMatch ? getMatchColumnInstruction(q.text) : q.text;
       if (parsedSubparts.length === 0 && canHaveSubparts(q.type)) {
-        const decomp = decomposeStemSubparts(baseQText);
+        const decomp = decomposeForSlot(baseQText, section.marksEach);
         if (decomp) {
           baseQText = decomp.stem;
           parsedSubparts = decomp.subparts;
@@ -942,7 +942,7 @@ export async function buildPaperDocx(
         let parsedOrSubparts = canHaveSubparts(orQ.type) ? rawOrSubparts : [];
         let baseOrQText = isOrMatch ? getMatchColumnInstruction(orQ.text) : orQ.text;
         if (parsedOrSubparts.length === 0 && canHaveSubparts(orQ.type)) {
-          const decompOr = decomposeStemSubparts(baseOrQText);
+          const decompOr = decomposeForSlot(baseOrQText, section.marksEach);
           if (decompOr) {
             baseOrQText = decompOr.stem;
             parsedOrSubparts = decompOr.subparts;

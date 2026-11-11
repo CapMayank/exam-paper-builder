@@ -18,7 +18,7 @@ import {
   QUESTION_TYPE_LABEL,
   resolvePaperExamType,
 } from "@/lib/constants";
-import { subpartsTotalMarks } from "@/lib/types";
+import { formatMarksValue, subpartsTotalMarks } from "@/lib/types";
 import { computeDisplayedPaperNumbering, formatQuestionNumber } from "@/lib/layout";
 import type { PaperData, QuestionDto } from "@/lib/types";
 
@@ -26,6 +26,7 @@ function getMarksRubric(marks: number, type: string) {
   if (isMcqLikeType(type)) return ["1 mark: Correct option selected"];
   if (type === "TRUE_FALSE") return ["1 mark: Correct identification of True/False"];
   if (type === "FILL_BLANK") return ["1 mark: Correct word/term filled in"];
+  if (marks < 1) return [`${formatMarksValue(marks)} mark: Correct answer`];
   if (marks === 1) return ["1 mark: Complete and accurate answer"];
   if (marks === 2) return ["1 mark: Accurate definition or principle statement", "1 mark: Proper explanation, formula or example"];
   if (marks === 3) return ["1 mark: Core principle/statement", "1 mark: Accurate diagram, formula, or derivation", "1 mark: Correct conclusion, units, or application"];
@@ -558,9 +559,9 @@ function QuestionSolutionItem({
                   <span className="font-bold text-indigo-700 mr-1.5">{sp.label || `(${idx + 1})`}</span>
                   <QuestionContent text={sp.text} />
                 </div>
-                {sp.marks !== undefined && (
+                {sp.marks > 0 && (
                   <span className="whitespace-nowrap rounded bg-slate-200 px-1.5 py-0.5 text-[11px] font-bold text-slate-700">
-                    [{sp.marks} M]
+                    [{formatMarksValue(sp.marks)} M]
                   </span>
                 )}
               </div>
@@ -586,7 +587,7 @@ function QuestionSolutionItem({
                     <MathText text={sp.answer} />
                   ) : (
                     <span className="italic text-slate-500">
-                      Standard conceptual evaluation for {sp.marks} mark(s).
+                      Standard conceptual evaluation for {formatMarksValue(sp.marks)} mark(s).
                     </span>
                   )}
                 </div>

@@ -13,7 +13,8 @@ import {
   parseMatchColumnPairs,
   type MarksStyle,
 } from "@/lib/constants";
-import { decomposeStemSubparts } from "@/lib/subpartExtractor";
+import { formatMarksValue } from "@/lib/types";
+import { decomposeForSlot } from "@/lib/subpartExtractor";
 import {
   getKindergartenActivity,
   parseKindergartenConfig,
@@ -46,6 +47,7 @@ function SingleQuestionBody({
   number,
   numberLabel,
   marks,
+  slotMarks = marks,
   marksStyle = "INLINE",
   showAnswer,
   renderMode = "FULL",
@@ -59,6 +61,8 @@ function SingleQuestionBody({
   number?: number;
   numberLabel?: string;
   marks?: number;
+  /** What the whole question is worth, even where `marks` is not printed on this body (an OR pair prints it once). */
+  slotMarks?: number;
   marksStyle?: MarksStyle;
   showAnswer?: boolean;
   renderMode?: QuestionRenderMode;
@@ -85,7 +89,7 @@ function SingleQuestionBody({
     const effectiveSubparts = q.subparts && q.subparts.length > 0
       ? q.subparts
       : canHaveSubparts(q.type)
-      ? decomposeStemSubparts(q.text)?.subparts ?? []
+      ? decomposeForSlot(q.text, slotMarks)?.subparts ?? []
       : [];
     const sp = effectiveSubparts && subpartIndex !== undefined ? effectiveSubparts[subpartIndex] : null;
     if (!sp) return null;
@@ -154,7 +158,7 @@ function SingleQuestionBody({
               </div>
             )}
           </div>
-          {sp.marks !== undefined && marksStyle !== "SUPPRESSED" && (
+          {sp.marks > 0 && marksStyle !== "SUPPRESSED" && (
             <div
               style={{
                 whiteSpace: "nowrap",
@@ -205,7 +209,7 @@ function SingleQuestionBody({
   const baseStemText = q.type === "MATCH_COLUMN" && matchPairs.length > 0 ? getMatchColumnInstruction(q.text) : q.text;
 
   const decomposed = (!q.subparts || q.subparts.length === 0) && canHaveSubparts(q.type)
-    ? decomposeStemSubparts(baseStemText)
+    ? decomposeForSlot(baseStemText, slotMarks)
     : null;
   const stemText = decomposed ? decomposed.stem : baseStemText;
   const effectiveSubparts = q.subparts && q.subparts.length > 0
@@ -355,7 +359,7 @@ function SingleQuestionBody({
                                 </div>
                               )}
                             </div>
-                            {nested.marks !== undefined && marksStyle !== "SUPPRESSED" && (
+                            {nested.marks > 0 && marksStyle !== "SUPPRESSED" && (
                               <div style={{ whiteSpace: "nowrap", fontWeight: 700, fontSize: marksFontSize, paddingLeft: "2mm", color: "#475569" }}>
                                 {formatMarksLabel(nested.marks, effectiveLang)}
                               </div>
@@ -370,7 +374,7 @@ function SingleQuestionBody({
                       </div>
                     )}
                   </div>
-                  {sp.marks !== undefined && marksStyle !== "SUPPRESSED" && (
+                  {sp.marks > 0 && marksStyle !== "SUPPRESSED" && (
                     <div
                       style={{
                         whiteSpace: "nowrap",
@@ -390,7 +394,7 @@ function SingleQuestionBody({
         </div>
         {marks !== undefined && marksStyle === "RIGHT_COLUMN" && (
           <div style={{ whiteSpace: "nowrap", fontWeight: 700, fontSize: marksFontSize, paddingLeft: "3mm" }}>
-            [{marks}]
+            [{formatMarksValue(marks)}]
           </div>
         )}
       </div>
@@ -511,6 +515,7 @@ export function QuestionView({
         number={number}
         numberLabel={numberLabel}
         marks={primaryMarks}
+        slotMarks={marks}
         marksStyle={marksStyle}
         showAnswer={showAnswer}
         renderMode={renderMode}
@@ -543,6 +548,7 @@ export function QuestionView({
           <SingleQuestionBody
             q={orQuestion}
             marks={orMarks}
+            slotMarks={marks}
             showAnswer={showAnswer}
             marksStyle={marksStyle}
             isA5={isA5}

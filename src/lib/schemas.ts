@@ -142,7 +142,8 @@ export const subPartSchema: z.ZodType<SubPartInput> = z.lazy(() =>
     id: z.string().optional(),
     label: z.string().trim().min(1, "Subpart label required (e.g. (a), (i))").max(20),
     text: z.string().trim().min(1, "Subpart text required").max(3000),
-    marks: z.number().int().min(1, "Marks must be at least 1").max(50),
+    // parts of a small question share its marks: four blanks in a 2-mark question carry ½ each
+    marks: z.number().min(0.25, "Marks must be at least ¼").max(50).multipleOf(0.25, "Marks go in steps of ¼"),
     answer: z.string().trim().max(3000).optional().default(""),
     options: z.array(z.string().trim().min(1).max(500)).max(MAX_OPTIONS).optional().default([]),
     subparts: z.array(subPartSchema).optional().default([]),

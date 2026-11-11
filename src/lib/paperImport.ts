@@ -1052,7 +1052,7 @@ export function matchQuestionToBlueprintSection(
     // Marks alignment is crucial: short answer always has more marks than very short/one word.
     const hasSubparts = Array.isArray(q.subparts) && q.subparts.length > 0;
     const subpartMarksEach = hasSubparts
-      ? (q.subparts![0].marks || Math.round(qMarks / q.subparts!.length))
+      ? (q.subparts![0].marks || qMarks / q.subparts!.length)
       : qMarks;
     const isCompoundMatch =
       hasSubparts &&
@@ -1445,7 +1445,7 @@ export function verifyPaperAgainstBlueprint(
         if (q.marks === bpSec.marksEach) return false;
         if (importedQuestionMarks(q, bpSec) === importedQuestionUnits(q, bpSec) * bpSec.marksEach && importedQuestionUnits(q, bpSec) > 1 && bpSec.type === "MATCH_COLUMN") return false;
         if (Array.isArray(q.subparts) && q.subparts.length > 0 && bpSec.count >= q.subparts.length) {
-          const spMarks = q.subparts[0].marks || Math.round(q.marks / q.subparts.length);
+          const spMarks = q.subparts[0].marks || q.marks / q.subparts.length;
           return spMarks !== bpSec.marksEach;
         }
         return true;
