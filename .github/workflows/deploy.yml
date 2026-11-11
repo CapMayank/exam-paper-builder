@@ -60,10 +60,10 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
-          script_stop: true
           command_timeout: 15m
           timeout: 60s
           script: |
+            set -e
             cd /home/ubuntu/exam-paper-builder
             git fetch --quiet origin main
             git reset --hard origin/main
