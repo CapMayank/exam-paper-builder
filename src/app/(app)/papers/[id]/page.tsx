@@ -41,6 +41,7 @@ import { DiagramSearchModal } from "@/components/DiagramSearchModal";
 import { FigureStudio } from "@/components/figure-studio";
 import { PaperImportModal } from "@/components/PaperImportModal";
 import { PaperPreflightModal } from "@/components/PaperPreflightModal";
+import { AICoverageModal } from "@/components/AICoverageModal";
 import { PaperSheets } from "@/components/PaperSheets";
 import { PaperSnapshotDrawer } from "@/components/PaperSnapshotDrawer";
 import { SubjectWorkspaceDrawer } from "@/components/subject-workspace/SubjectWorkspaceDrawer";
@@ -152,6 +153,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   const [sectionAutofilling, setSectionAutofilling] = useState<string | null>(null);
   const [sectionAiModalSection, setSectionAiModalSection] = useState<Section | null>(null);
   const [preflightOpen, setPreflightOpen] = useState(false);
+  const [coverageOpen, setCoverageOpen] = useState(false);
   const [autosaveStatus, setAutosaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isFirstRender = useRef(true);
@@ -1188,6 +1190,16 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                   </>
                 );
               })()}
+              {paper.items.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setCoverageOpen(true)}
+                  className="btn btn-sm w-full justify-center text-xs"
+                  title="Ask the AI which chapter each question tests (one request)"
+                >
+                  <Sparkles size={12} className="text-amber-500" /> Check coverage with AI
+                </button>
+              )}
             </section>
           </div>
 
@@ -2829,6 +2841,14 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
       )}
 
       {/* Pre-Finalization Quality Preflight Modal */}
+      {coverageOpen && paper && (
+        <AICoverageModal
+          paper={paper}
+          canApply={canEditPaper}
+          onClose={() => setCoverageOpen(false)}
+          onApplied={(p) => adopt(p)}
+        />
+      )}
       {preflightOpen && paper && (
         <PaperPreflightModal
           isOpen={preflightOpen}
