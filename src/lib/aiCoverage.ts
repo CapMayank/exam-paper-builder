@@ -10,6 +10,10 @@ export type CoverageItem = {
   number: number;
   marks: number;
   storedChapterId: string;
+  /** The question's number as printed on the paper (numbering style aware); falls back to `number`. */
+  label?: string;
+  /** The start of its text, so the teacher can recognise it. */
+  preview?: string;
 };
 
 export type CoverageReport = {
@@ -19,6 +23,8 @@ export type CoverageReport = {
     itemId: string;
     questionId: string;
     number: number;
+    label: string;
+    preview: string;
     storedChapterId: string;
     aiChapterId: string;
     confidence: CoverageConfidence;
@@ -60,6 +66,8 @@ export function buildCoverageReport(input: {
         itemId: it.itemId,
         questionId: it.questionId,
         number: it.number,
+        label: it.label ?? String(it.number),
+        preview: it.preview ?? "",
         storedChapterId: it.storedChapterId,
         aiChapterId: ai.chapterId,
         confidence: ai.confidence,
@@ -72,4 +80,13 @@ export function buildCoverageReport(input: {
     disagreements,
     unclassified,
   };
+}
+
+/** One line per skipped change, led by the question's printed number when it is known ("Q7: reason"). */
+export function describeSkips(
+  skipped: Array<{ questionId: string; reason: string }>,
+  disagreements: Array<{ questionId: string; label: string }>,
+): string[] {
+  const labelOf = new Map(disagreements.map((d) => [d.questionId, d.label]));
+  return skipped.map((s) => (labelOf.has(s.questionId) ? `Q${labelOf.get(s.questionId)}: ${s.reason}` : s.reason));
 }

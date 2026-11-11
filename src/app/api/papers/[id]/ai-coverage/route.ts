@@ -1,6 +1,7 @@
 import { HttpError, route } from "@/lib/api";
 import { buildCoverageReport } from "@/lib/aiCoverage";
 import { classifyPaperChaptersWithGemini, quotaErrorText } from "@/lib/gemini";
+import { computeDisplayedPaperNumbering } from "@/lib/layout";
 import { canModifyPaper, loadPaperView, toPlacedItems } from "@/lib/papers";
 
 /**
@@ -16,9 +17,14 @@ export const POST = route(async (req, { id }, user) => {
   if (paper.items.length === 0) throw new HttpError(400, "Add some questions first: there is nothing to check yet.");
   if (paper.blueprint.chapters.length === 0) throw new HttpError(400, "This blueprint has no chapters to check against.");
 
-  // numbered in paper order, in the same order the marks are counted
-  const ordered = [...paper.items].sort((a, b) => a.position - b.position);
+  // section by section, then by place in the section (positions restart in every section)
+  const sectionIndex = new Map(paper.blueprint.sections.map((s, i) => [s.id, i]));
+  const ordered = [...paper.items].sort(
+    (a, b) => (sectionIndex.get(a.sectionId) ?? 999) - (sectionIndex.get(b.sectionId) ?? 999) || a.position - b.position,
+  );
   const placed = toPlacedItems(paper.blueprint.sections, ordered);
+  // the number each question carries on the printed paper, so the teacher can find what the AI is talking about
+  const printed = computeDisplayedPaperNumbering(paper.blueprint.sections, paper.items, (paper.numberingStyle as "CONTINUOUS" | "PREFIXED" | "SECTION_RELATIVE" | undefined) || "CONTINUOUS");
   const items = ordered.map((it, i) => ({
     itemId: it.id,
     questionId: it.question.id,
@@ -26,6 +32,8 @@ export const POST = route(async (req, { id }, user) => {
     marks: placed[i]?.marks ?? 0,
     storedChapterId: it.question.chapterId,
     text: it.question.text,
+    label: String(printed.itemNumbers[it.id]?.questionNumber ?? i + 1),
+    preview: it.question.text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 90),
   }));
   const targets = paper.blueprint.chapters.map((c) => ({
     chapterId: c.chapterId,
@@ -53,6 +61,8 @@ export const POST = route(async (req, { id }, user) => {
       number: it.number,
       marks: it.marks,
       storedChapterId: it.storedChapterId,
+      label: it.label,
+      preview: it.preview,
     })),
     targets,
     rows: res.data.rows,

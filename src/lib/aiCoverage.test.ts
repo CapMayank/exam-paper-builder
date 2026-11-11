@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCoverageReport } from "./aiCoverage";
+import { buildCoverageReport, describeSkips } from "./aiCoverage";
 
 const targets = [
   { chapterId: "a", title: "A", target: 5 },
@@ -27,7 +27,7 @@ describe("buildCoverageReport", () => {
       { chapterId: "b", title: "B", target: 3, aiMarks: 4 },
     ]);
     expect(rep.disagreements).toEqual([
-      { itemId: "i2", questionId: "q2", number: 2, storedChapterId: "a", aiChapterId: "b", confidence: "MEDIUM" },
+      { itemId: "i2", questionId: "q2", number: 2, label: "2", preview: "", storedChapterId: "a", aiChapterId: "b", confidence: "MEDIUM" },
     ]);
     expect(rep.unclassified).toEqual([]);
   });
@@ -68,5 +68,33 @@ describe("buildCoverageReport", () => {
   it("treats an unknown confidence as LOW", () => {
     const rep = buildCoverageReport({ items, targets, rows: [{ number: 2, chapterId: "b", confidence: "maybe" }] });
     expect(rep.disagreements[0].confidence).toBe("LOW");
+  });
+});
+
+describe("labels shown to the teacher", () => {
+  it("carries the printed question number and a text preview onto each disagreement", () => {
+    const rep = buildCoverageReport({
+      items: [{ itemId: "i2", questionId: "q2", number: 1, marks: 2, storedChapterId: "a", label: "7", preview: "Why does a swing slow down?" }],
+      targets,
+      rows: [{ number: 1, chapterId: "b", confidence: "HIGH" }],
+    });
+    expect(rep.disagreements[0]).toMatchObject({ label: "7", preview: "Why does a swing slow down?" });
+  });
+
+  it("falls back to the internal number when no printed number is known", () => {
+    const rep = buildCoverageReport({ items, targets, rows: [{ number: 2, chapterId: "b", confidence: "HIGH" }] });
+    expect(rep.disagreements[0].label).toBe("2");
+  });
+});
+
+describe("describeSkips", () => {
+  const disagreements = [
+    { itemId: "i2", questionId: "q2", number: 2, label: "7", preview: "", storedChapterId: "a", aiChapterId: "b", confidence: "HIGH" as const },
+  ];
+  it("names each skipped question by its printed number", () => {
+    expect(describeSkips([{ questionId: "q2", reason: "Not yours." }], disagreements)).toEqual(["Q7: Not yours."]);
+  });
+  it("still reports a question it cannot name", () => {
+    expect(describeSkips([{ questionId: "zzz", reason: "Gone." }], disagreements)).toEqual(["Gone."]);
   });
 });

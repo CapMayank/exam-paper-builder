@@ -21,9 +21,33 @@ export const POST = route(async (req, { id }, user) => {
   if (paper.status === "FINAL") throw new HttpError(409, "This paper is finalised. Reopen it to change chapters.");
 
   const onPaper = new Set(paper.items.flatMap((i) => [i.question.id, i.orQuestion?.id].filter((q): q is string => Boolean(q))));
+  // an alternate (OR) choice must keep its main question's chapter, so the two always move together
+  const altIds = new Set(paper.items.flatMap((i) => (i.orQuestion ? [i.orQuestion.id] : [])));
+  const partnerOf = new Map(paper.items.flatMap((i) => (i.orQuestion ? [[i.question.id, i.orQuestion.id] as const] : [])));
   const bookChapters = new Set(
     (await prisma.chapter.findMany({ where: { bookId: paper.blueprint.bookId }, select: { id: true } })).map((c) => c.id),
   );
+
+  /** Why this question's chapter cannot be changed by this user from this paper; null when it can. */
+  async function blocker(questionId: string): Promise<string | null> {
+    const q = await prisma.question.findUnique({
+      where: { id: questionId },
+      include: {
+        book: { select: { className: true, subject: true } },
+        paperQuestions: { select: { paperId: true, orQuestionId: true, paper: { select: { status: true } } } },
+        orPaperQuestions: { select: { paperId: true, paper: { select: { status: true } } } },
+      },
+    });
+    if (!q) return "That question no longer exists.";
+    if (!canModifyQuestion(user, q)) return "You can only change your own questions, or those of the classes and subjects assigned to you.";
+    if (q.paperQuestions.some((p) => p.paper.status === "FINAL") || q.orPaperQuestions.some((p) => p.paper.status === "FINAL")) {
+      return "This question is in a finalised paper and can't be changed.";
+    }
+    if (q.paperQuestions.some((p) => p.paperId !== id && p.orQuestionId) || q.orPaperQuestions.some((p) => p.paperId !== id)) {
+      return "This question is half of an internal-choice (OR) pair in another paper, so its chapter can't change here.";
+    }
+    return null;
+  }
 
   const applied: string[] = [];
   const skipped: Array<{ questionId: string; reason: string }> = [];
@@ -33,34 +57,29 @@ export const POST = route(async (req, { id }, user) => {
       skip("That question is not on this paper.");
       continue;
     }
+    if (altIds.has(change.questionId)) {
+      skip("An alternate (OR) choice follows its main question: change the main question instead.");
+      continue;
+    }
     if (!bookChapters.has(change.chapterId)) {
       skip("That chapter does not belong to this paper's book.");
       continue;
     }
-    const question = await prisma.question.findUnique({
-      where: { id: change.questionId },
-      include: {
-        book: { select: { className: true, subject: true } },
-        paperQuestions: { select: { paper: { select: { status: true } } } },
-        orPaperQuestions: { select: { paper: { select: { status: true } } } },
-      },
-    });
-    if (!question) {
-      skip("That question no longer exists.");
+    const group = [change.questionId, ...(partnerOf.has(change.questionId) ? [partnerOf.get(change.questionId)!] : [])];
+    let reason: string | null = null;
+    for (const [i, qid] of group.entries()) {
+      const why = await blocker(qid);
+      if (why) {
+        reason = i === 0 ? why : `Its alternate (OR) choice: ${why}`;
+        break;
+      }
+    }
+    if (reason) {
+      skip(reason);
       continue;
     }
-    if (!canModifyQuestion(user, question)) {
-      skip("You can only change your own questions, or those of the classes and subjects assigned to you.");
-      continue;
-    }
-    if (question.paperQuestions.some((p) => p.paper.status === "FINAL") || question.orPaperQuestions.some((p) => p.paper.status === "FINAL")) {
-      skip("This question is in a finalised paper and can't be changed.");
-      continue;
-    }
-    if (question.chapterId !== change.chapterId) {
-      await prisma.question.update({ where: { id: question.id }, data: { chapterId: change.chapterId } });
-    }
-    applied.push(question.id);
+    await prisma.question.updateMany({ where: { id: { in: group } }, data: { chapterId: change.chapterId } });
+    applied.push(change.questionId);
   }
 
   if (applied.length > 0) {

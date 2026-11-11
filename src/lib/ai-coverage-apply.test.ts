@@ -34,6 +34,10 @@ describe("AI coverage: apply chapter changes", () => {
   let ownQ: string;
   let foreignQ: string;
   let outsideQ: string;
+  let sectionId: string;
+  let orPaperId: string;
+  let otherPaperId: string;
+  let pos = 10;
 
   beforeAll(async () => {
     const admin = await prisma.user.create({ data: { name: `Cov admin ${stamp}`, email: `cov-admin-${stamp}@test.internal`, passwordHash: "x", role: "ADMIN", active: true } });
@@ -60,6 +64,7 @@ describe("AI coverage: apply chapter changes", () => {
       include: { sections: true },
     });
     blueprintId = bp.id;
+    sectionId = bp.sections[0].id;
     const mk = (text: string, createdById: string) =>
       prisma.question.create({ data: { bookId, chapterId: ch1, type: "MCQ", text, optionsJson: JSON.stringify(["a", "b", "c", "d"]), answer: "A", createdById } });
     ownQ = (await mk(`Own question ${stamp}`, teacherId)).id;
@@ -68,10 +73,14 @@ describe("AI coverage: apply chapter changes", () => {
     paperId = (await prisma.paper.create({ data: { title: `Cov paper ${stamp}`, blueprintId, layout: "PAGE", schoolName: "T", academicSession: "2026–27", createdById: teacherId, status: "DRAFT" } })).id;
     await prisma.paperQuestion.create({ data: { paperId, sectionId: bp.sections[0].id, questionId: ownQ, position: 0 } });
     await prisma.paperQuestion.create({ data: { paperId, sectionId: bp.sections[0].id, questionId: foreignQ, position: 1 } });
+    const mkPaper = async (title: string) =>
+      (await prisma.paper.create({ data: { title: `${title} ${stamp}`, blueprintId, layout: "PAGE", schoolName: "T", academicSession: "2026–27", createdById: teacherId, status: "DRAFT" } })).id;
+    orPaperId = await mkPaper("Cov OR paper");
+    otherPaperId = await mkPaper("Cov other paper");
   });
 
   afterAll(async () => {
-    await prisma.paperQuestion.deleteMany({ where: { paperId } });
+    await prisma.paperQuestion.deleteMany({ where: { paper: { blueprintId } } });
     await prisma.paper.deleteMany({ where: { blueprintId } });
     await prisma.question.deleteMany({ where: { bookId } });
     await prisma.blueprint.deleteMany({ where: { id: blueprintId } });
@@ -112,5 +121,56 @@ describe("AI coverage: apply chapter changes", () => {
     } finally {
       await prisma.paper.update({ where: { id: paperId }, data: { status: "DRAFT" } });
     }
+  });
+
+  describe("internal-choice (OR) pairs", () => {
+    const mkq = (text: string, createdById: string) =>
+      prisma.question.create({ data: { bookId, chapterId: ch1, type: "MCQ", text: `${text} ${stamp}-${Math.random()}`, optionsJson: JSON.stringify(["a", "b", "c", "d"]), answer: "A", createdById } });
+    const pair = async (altOwner: string, onPaper = orPaperId) => {
+      const main = await mkq("OR main", teacherId);
+      const alt = await mkq("OR alt", altOwner);
+      await prisma.paperQuestion.create({ data: { paperId: onPaper, sectionId, questionId: main.id, orQuestionId: alt.id, position: pos++ } });
+      return { main: main.id, alt: alt.id };
+    };
+    const run = (changes: Array<{ questionId: string; chapterId: string }>) =>
+      call(apply as Handler, `/api/papers/${orPaperId}/ai-coverage/apply`, { id: orPaperId }, { changes });
+
+    it("moves the OR alternative together with its main question, so the pair keeps one chapter", async () => {
+      mockSessionUserId = teacherId;
+      const { main, alt } = await pair(teacherId);
+      const res = await run([{ questionId: main, chapterId: ch2 }]);
+      expect(res.data.applied).toEqual([main]);
+      expect(await chapterOf(main)).toBe(ch2);
+      expect(await chapterOf(alt)).toBe(ch2);
+    });
+
+    it("skips the change, and moves neither, when the user may not edit the alternative", async () => {
+      mockSessionUserId = teacherId;
+      const { main, alt } = await pair(adminId);
+      const res = await run([{ questionId: main, chapterId: ch2 }]);
+      expect(res.data.applied).toEqual([]);
+      expect(res.data.skipped.map((s: { questionId: string }) => s.questionId)).toEqual([main]);
+      expect(await chapterOf(main)).toBe(ch1);
+      expect(await chapterOf(alt)).toBe(ch1);
+    });
+
+    it("never changes an alternative on its own: it follows its main question", async () => {
+      mockSessionUserId = teacherId;
+      const { alt } = await pair(teacherId);
+      const res = await run([{ questionId: alt, chapterId: ch2 }]);
+      expect(res.data.applied).toEqual([]);
+      expect(res.data.skipped).toHaveLength(1);
+      expect(await chapterOf(alt)).toBe(ch1);
+    });
+
+    it("skips a question that is half of an OR pair in another paper", async () => {
+      mockSessionUserId = teacherId;
+      const { main } = await pair(teacherId);
+      const elsewhereAlt = await mkq("OR elsewhere", teacherId);
+      await prisma.paperQuestion.create({ data: { paperId: otherPaperId, sectionId, questionId: main, orQuestionId: elsewhereAlt.id, position: pos++ } });
+      const res = await run([{ questionId: main, chapterId: ch2 }]);
+      expect(res.data.applied).toEqual([]);
+      expect(await chapterOf(main)).toBe(ch1);
+    });
   });
 });

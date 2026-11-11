@@ -193,6 +193,14 @@ export function assignChapter(text: string, chapters: ChapterLite[], gaps: Recor
   return [...chapters].sort((a, b) => (gaps[b.id] ?? 0) - (gaps[a.id] ?? 0) || a.number - b.number)[0].id;
 }
 
+/**
+ * The chapters a question being written for a slot may be filed under: every blueprint chapter, except for an
+ * alternate (OR) choice, which must stay in its main question's chapter or the pair is refused.
+ */
+export function composerChapterIds(blueprintChapterIds: string[], lockedChapterId?: string | null): string[] {
+  return lockedChapterId ? [lockedChapterId] : blueprintChapterIds;
+}
+
 const HOTS = /\b(justify|evaluate|analy[sz]e|predict|what would happen|suppose|imagine|design|create|criticall?y|give reasons?|differentiate between|distinguish)\b|क्यों\s+होता|तर्क\s+दीजिए|विश्लेषण|मूल्यांकन|कल्पना\s+कीजिए/i;
 const APPLY = /\b(calculate|solve|find|draw|construct|show that|prove|apply|use the|measure|convert|complete the|arrange)\b|गणना|हल\s+कीजिए|ज्ञात\s+कीजिए|बनाइए|सिद्ध\s+कीजिए/i;
 const UNDERSTAND = /\b(explain|describe|why|how|compare|discuss|summari[sz]e|illustrate|give (an )?examples?|in your own words|classify|difference)\b|समझाइए|वर्णन|क्यों|कैसे|तुलना|अंतर/i;

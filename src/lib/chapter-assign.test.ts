@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assignChapter } from "./questionTagging";
+import { assignChapter, composerChapterIds } from "./questionTagging";
 import { assignChapters } from "./pasteQuestions";
 
 const chapters = [
@@ -45,5 +45,20 @@ describe("assignChapters: pasted questions are spread, never refused", () => {
     const gaps = { a: 1, b: 1, c: 1 };
     assignChapters(["q1", "q2"], chapters, gaps, 1);
     expect(gaps).toEqual({ a: 1, b: 1, c: 1 });
+  });
+});
+
+describe("composerChapterIds: which chapters a new question may be filed under", () => {
+  it("is every blueprint chapter for an ordinary question", () => {
+    expect(composerChapterIds(["a", "b", "c"], null)).toEqual(["a", "b", "c"]);
+  });
+
+  it("is only the main question's chapter for an alternate (OR) choice, so the pair always matches", () => {
+    expect(composerChapterIds(["a", "b", "c"], "b")).toEqual(["b"]);
+  });
+
+  it("assigns that one chapter whatever the text says", () => {
+    const [only] = composerChapterIds(["a", "b", "c"], "c");
+    expect(assignChapter("Why does a tree give shade?", chapters.filter((c) => c.id === only), { c: -4 })).toBe("c");
   });
 });

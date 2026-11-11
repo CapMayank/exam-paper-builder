@@ -30,12 +30,21 @@ describe("auto-fill treats chapter targets as a preference", () => {
     expect(res.added.map((a) => a.chapterId).sort()).toEqual(["X", "Y"]);
   });
 
-  it("uses a chapter the blueprint does not list rather than leaving a slot empty", () => {
+  it("never takes a question from a chapter the blueprint does not cover, even to fill a slot", () => {
     const res = autoFillPaper(bp, [], [
       { id: "q1", chapterId: "X", type: "MCQ" },
       { id: "q2", chapterId: "ELSEWHERE", type: "MCQ" },
     ]);
-    expect(res.complete).toBe(true);
+    expect(res.added.map((a) => a.questionId)).toEqual(["q1"]);
+    expect(res.unfilled[0].count).toBe(1);
+  });
+
+  it("prefers a covered chapter that is over its target to an uncovered one", () => {
+    const res = autoFillPaper(bp, [{ sectionId: "a", chapterId: "X", marks: 1 }, { sectionId: "a", chapterId: "X", marks: 1 }].slice(0, 1), [
+      { id: "q1", chapterId: "X", type: "MCQ" },
+      { id: "q2", chapterId: "ELSEWHERE", type: "MCQ" },
+    ]);
+    expect(res.added.map((a) => a.questionId)).toEqual(["q1"]);
   });
 
   it("does not place a question of the wrong type just to fill a slot", () => {

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { ErrorBanner, Modal, Spinner } from "@/components/ui";
-import type { CoverageReport } from "@/lib/aiCoverage";
+import { describeSkips, type CoverageReport } from "@/lib/aiCoverage";
 import { api } from "@/lib/client";
 import type { PaperData } from "@/lib/types";
 
@@ -28,7 +28,7 @@ export function AICoverageModal({
   const [report, setReport] = useState<CoverageReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
-  const [skipped, setSkipped] = useState<ApplyResult["skipped"] | null>(null);
+  const [skipped, setSkipped] = useState<string[] | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -70,10 +70,12 @@ export function AICoverageModal({
     try {
       const res = await api<ApplyResult>(`/api/papers/${paper.id}/ai-coverage/apply`, { method: "POST", json: { changes } });
       onApplied(res.paper);
-      setSkipped(res.skipped);
+      setSkipped(describeSkips(res.skipped, report.disagreements));
       const done = new Set(res.applied);
+      const refused = new Set(res.skipped.map((s) => s.questionId));
       setReport((r) => (r ? { ...r, disagreements: r.disagreements.filter((d) => !done.has(d.questionId)) } : r));
-      setPicked((p) => new Set([...p].filter((q) => !done.has(q))));
+      // a refused change would be refused again, so it is no longer ticked
+      setPicked((p) => new Set([...p].filter((q) => !done.has(q) && !refused.has(q))));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -125,7 +127,7 @@ export function AICoverageModal({
                       {canApply && (
                         <input
                           type="checkbox"
-                          aria-label={`Apply the change for question ${d.number}`}
+                          aria-label={`Apply the change for question ${d.label}`}
                           checked={picked.has(d.questionId)}
                           onChange={() =>
                             setPicked((p) => {
@@ -139,7 +141,8 @@ export function AICoverageModal({
                         />
                       )}
                       <span>
-                        Q{d.number}: stored {chapterLabel(d.storedChapterId)}, AI says {chapterLabel(d.aiChapterId)} ({d.confidence})
+                        Q{d.label}: stored {chapterLabel(d.storedChapterId)}, AI says {chapterLabel(d.aiChapterId)} ({d.confidence})
+                        {d.preview && <span className="block truncate text-[11px] text-slate-500">{d.preview}</span>}
                       </span>
                     </li>
                   ))}
@@ -157,8 +160,8 @@ export function AICoverageModal({
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
                 <p className="font-semibold">{skipped.length} change{skipped.length === 1 ? " was" : "s were"} not applied:</p>
                 <ul className="mt-1 list-disc pl-5">
-                  {skipped.map((s, i) => (
-                    <li key={i}>{s.reason}</li>
+                  {skipped.map((line, i) => (
+                    <li key={i}>{line}</li>
                   ))}
                 </ul>
               </div>

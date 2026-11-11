@@ -373,13 +373,15 @@ export function autoFillPaper(
   }
 
   // Chapter targets are a preference, never a gate: a slot the chapter budgets left empty is filled with the
-  // best remaining question of its type, preferring the chapter furthest below its target.
+  // best remaining question of its type, preferring the chapter furthest below its target. Only chapters the
+  // blueprint covers are used: a paper must stay inside the syllabus of its exam.
+  const covered = new Set(bp.chapters.map((c) => c.chapterId));
   for (const slot of sortedSlots) {
     if (chosen.has(slot.order)) continue;
     const leftover = slotKeys(slot)
       .flatMap((key) => candidatesByType.get(key) ?? [])
       .filter((c) => {
-        if (chosenQuestionIds.has(c.id)) return false;
+        if (chosenQuestionIds.has(c.id) || !covered.has(c.chapterId)) return false;
         if (slot.needsPairs !== undefined) return (c.matchPairs ?? 0) >= slot.needsPairs;
         return c.subpartsMarks === undefined || c.subpartsMarks === slot.marksEach;
       })

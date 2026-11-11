@@ -9,6 +9,7 @@ import { QuestionView } from "@/components/QuestionView";
 import { ErrorBanner, Modal, Spinner } from "@/components/ui";
 import { slotPlacement, subpartsMarksProblem, toPlacedItems, whyCannotAdd, type BlueprintDef } from "@/lib/blueprint";
 import { allowedTypesFor, isTypeAllowed } from "@/lib/sectionTypes";
+import { composerChapterIds } from "@/lib/questionTagging";
 import { api, retryTransient } from "@/lib/client";
 import {
   cleanMatchItem,
@@ -838,7 +839,10 @@ export function QuestionPicker({
               fixedBookId={paper.blueprint.bookId}
               fixedType={pickType}
               targetMarks={section.marksEach}
-              allowedChapterIds={paper.blueprint.chapters.map((c) => c.chapterId)}
+              allowedChapterIds={composerChapterIds(
+                paper.blueprint.chapters.map((c) => c.chapterId),
+                isAlternate ? activeItem?.question.chapterId : null,
+              )}
               hideChapter
               openMarks={chapterGaps}
               submitLabel={
