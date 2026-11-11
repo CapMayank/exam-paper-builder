@@ -142,13 +142,17 @@ export function QuestionPicker({
     : paper.blueprint.chapters;
 
   // How far each chapter is below its target (negative when above); the replaced question's marks do not count.
-  const chapterGaps: Record<string, number> = Object.fromEntries(
-    paper.blueprint.chapters.map((c) => {
-      const prog = paper.progress.chapters.find((p) => p.chapterId === c.chapterId);
-      let used = prog?.used ?? 0;
-      if (activeItem && activeItem.question.chapterId === c.chapterId && isReplacing) used -= activeItemMarks;
-      return [c.chapterId, (prog?.target ?? c.marks) - used];
-    }),
+  const chapterGaps = useMemo<Record<string, number>>(
+    () =>
+      Object.fromEntries(
+        paper.blueprint.chapters.map((c) => {
+          const prog = paper.progress.chapters.find((p) => p.chapterId === c.chapterId);
+          let used = prog?.used ?? 0;
+          if (activeItem && activeItem.question.chapterId === c.chapterId && isReplacing) used -= activeItemMarks;
+          return [c.chapterId, (prog?.target ?? c.marks) - used];
+        }),
+      ),
+    [paper.blueprint.chapters, paper.progress.chapters, activeItem, isReplacing, activeItemMarks],
   );
 
   useEffect(() => {
@@ -204,8 +208,16 @@ export function QuestionPicker({
         }
         return { q, why };
       })
-      .sort((a, b) => Number(!!a.why) - Number(!!b.why) || (a.q.timesUsed ?? 0) - (b.q.timesUsed ?? 0));
-  }, [bank, placed, def, section.id, isAlternate, activeItem, paper.items, pickType, targetSlotMarks, isMultiUnitMatch, replacingItemId]);
+      // questions that fit come first, those from the most under-covered chapters first among them, then the least used and newest
+      .sort(
+        (a, b) =>
+          Number(!!a.why) - Number(!!b.why) ||
+          (chapterGaps[b.q.chapterId] ?? 0) - (chapterGaps[a.q.chapterId] ?? 0) ||
+          (a.q.timesUsed ?? 0) - (b.q.timesUsed ?? 0) ||
+          Date.parse(b.q.createdAt ?? "") - Date.parse(a.q.createdAt ?? "") ||
+          0,
+      );
+  }, [chapterGaps, bank, placed, def, section.id, isAlternate, activeItem, paper.items, pickType, targetSlotMarks, isMultiUnitMatch, replacingItemId]);
 
   /** Resolves true when the question was placed; false when it was refused (the error is shown in the banner). */
   async function add(questionId: string, orQuestionId?: string | null): Promise<boolean> {
@@ -285,10 +297,12 @@ export function QuestionPicker({
   useEffect(() => {
     if (openChapters.length > 0) {
       if (!aiChapterId || !openChapters.some((c) => c.chapterId === aiChapterId)) {
-        setAiChapterId(openChapters[0].chapterId);
+        // default to the chapter furthest below its target
+        const neediest = [...openChapters].sort((a, b) => (chapterGaps[b.chapterId] ?? 0) - (chapterGaps[a.chapterId] ?? 0))[0];
+        setAiChapterId(neediest.chapterId);
       }
     }
-  }, [openChapters, aiChapterId]);
+  }, [openChapters, aiChapterId, chapterGaps]);
 
   async function handleGenerateAiQuestion() {
     const selectedChapter = paper.blueprint.chapters.find((c) => c.chapterId === aiChapterId)?.chapter;
@@ -518,7 +532,7 @@ export function QuestionPicker({
         isAlternate
           ? "Add an internal choice alternate for students (does not consume blueprint chapter marks)."
           : isReplacing
-          ? "Replace the current slot. Chapter mark quotas will adjust automatically."
+          ? "Replace the current slot."
           : `${section.title}: ${sectionStatus.filled} of ${sectionStatus.needed} slots filled. ${
               tab === "bank" ? "Pick from the bank." : tab === "new" ? "Write a new question; it is saved to the bank too." : tab === "paste" ? "Paste several at once." : "Generate with AI."
             }`
@@ -625,15 +639,11 @@ export function QuestionPicker({
                 ) : (
                   <>
                     <option value="">All chapters</option>
-                    {paper.blueprint.chapters.map((c) => {
-                      const open = openChapters.some((o) => o.chapterId === c.chapterId);
-                      return (
-                        <option key={c.chapterId} value={c.chapterId}>
-                          Ch {c.chapter.number}. {c.chapter.title}
-                          {open ? "" : " (no room for this slot)"}
-                        </option>
-                      );
-                    })}
+                    {paper.blueprint.chapters.map((c) => (
+                      <option key={c.chapterId} value={c.chapterId}>
+                        Ch {c.chapter.number}. {c.chapter.title}
+                      </option>
+                    ))}
                   </>
                 )}
               </select>
@@ -657,12 +667,6 @@ export function QuestionPicker({
                 onChange={(e) => setFilters({ ...filters, q: e.target.value })}
               />
             </div>
-
-            {ranked.length > 0 && ranked.every((r) => !!r.why) && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-                <span className="font-semibold">Notice:</span> All {ranked.length} question(s) in this book currently exceed remaining chapter mark quotas. Switch to &quot;Compose New Question&quot; to write a question for an open chapter, or adjust chapter weightages in the blueprint.
-              </div>
-            )}
 
             <ul className="max-h-[55vh] space-y-2.5 overflow-y-auto pr-1">
               {ranked.map(({ q, why }, idx) => (
@@ -913,16 +917,10 @@ export function QuestionPicker({
                     >
                       {openChapters.map((c) => {
                         const ch = paper.blueprint.chapters.find((x) => x.chapterId === c.chapterId)?.chapter;
-                        const prog = paper.progress.chapters.find((p) => p.chapterId === c.chapterId);
-                        const used = prog?.used ?? 0;
-                        const quota = prog?.target ?? c.marks;
-                        const adjustedUsed = (activeItem && activeItem.question.chapterId === c.chapterId && isReplacing)
-                          ? Math.max(0, used - activeItemMarks)
-                          : used;
-                        const remaining = Math.max(0, quota - adjustedUsed);
+                        const target = paper.progress.chapters.find((p) => p.chapterId === c.chapterId)?.target ?? c.marks;
                         return (
                           <option key={c.chapterId} value={c.chapterId}>
-                            Ch {ch?.number}: {ch?.title} ({remaining}m available of {quota}m quota)
+                            Ch {ch?.number}: {ch?.title} ({target - (chapterGaps[c.chapterId] ?? 0)} of {target})
                           </option>
                         );
                       })}

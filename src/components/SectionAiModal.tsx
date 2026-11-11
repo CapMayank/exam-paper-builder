@@ -116,20 +116,19 @@ export function SectionAiModal({
   const remainingQuestions = isMultiUnitMatch ? (sectionItems.length === 0 ? 1 : 0) : remainingUnits;
   const targetSlotMarks = isMultiUnitMatch ? (section?.count ?? 1) * (section?.marksEach ?? 1) : (section?.marksEach ?? 1);
 
-  // Track chapter quotas and remaining deficits
+  // How far each chapter is from its target (gap > 0: needs marks; < 0: already over). A guide, never a limit.
   const chapterQuotas = React.useMemo(() => {
     return (paper.blueprint.chapters || []).map((bc) => {
       const prog = paper.progress.chapters.find((p) => p.chapterId === bc.chapterId);
       const used = prog?.used ?? 0;
       const target = prog?.target ?? bc.marks;
-      const remaining = Math.max(0, target - used);
       return {
         id: bc.chapterId,
         number: bc.chapter?.number ?? 0,
         title: bc.chapter?.title ?? "General",
         targetMarks: target,
         usedMarks: used,
-        remainingMarks: remaining,
+        gap: target - used,
       };
     });
   }, [paper.blueprint.chapters, paper.progress.chapters]);
@@ -155,27 +154,22 @@ export function SectionAiModal({
   // to that form (a passage, a writing task, grammar). Each entry carries the chapter's real remaining marks.
   const plannedChapterAllocations = React.useMemo(() => {
     if (!section) return [];
-    const left = new Map(chapterQuotas.map((c) => [c.id, c.remainingMarks]));
+    const left = new Map(chapterQuotas.map((c) => [c.id, c.gap]));
     const take = (c: { id: string; number: number; title: string }) => {
       const before = left.get(c.id) ?? 0;
       left.set(c.id, before - targetSlotMarks);
-      return { id: c.id, number: c.number, title: c.title, remainingMarks: before };
+      return { id: c.id, number: c.number, title: c.title, gap: before };
     };
     const subject = paper.blueprint.book?.subject;
-    const result: Array<{ id: string; number: number; title: string; remainingMarks: number }> = [];
+    const result: Array<{ id: string; number: number; title: string; gap: number }> = [];
     for (const sl of (plannedSlotsByForm.get(aiType || section.type) ?? []).slice(0, questionCount)) {
       result.push(take({ id: sl.chapterId, number: sl.chapterNumber, title: sl.chapterTitle }));
     }
 
     const fits = (title: string) => slotFitsRole(aiType || section.type, targetSlotMarks, slotRowRole(title, subject));
     for (let i = result.length; i < questionCount; i++) {
-      const byRoom = (pool: typeof chapterQuotas) =>
-        pool.filter((c) => (left.get(c.id) ?? 0) >= targetSlotMarks).sort((a, b) => (left.get(b.id) ?? 0) - (left.get(a.id) ?? 0));
-      const suited = chapterQuotas.filter((c) => fits(c.title));
-      const pick =
-        byRoom(suited)[0] ??
-        byRoom(chapterQuotas)[0] ??
-        [...chapterQuotas].sort((a, b) => (left.get(b.id) ?? 0) - (left.get(a.id) ?? 0))[0];
+      const neediest = (pool: typeof chapterQuotas) => [...pool].sort((a, b) => (left.get(b.id) ?? 0) - (left.get(a.id) ?? 0))[0];
+      const pick = neediest(chapterQuotas.filter((c) => fits(c.title))) ?? neediest(chapterQuotas);
       if (pick) result.push(take(pick));
     }
     return result;
@@ -193,7 +187,7 @@ export function SectionAiModal({
       setLanguage(paperLang === "sa" ? "sa" : paperLang === "hi" ? "hi" : "en");
       if (availableChapters.length > 0) {
         // Default to chapter with highest remaining deficit
-        const topDeficit = [...chapterQuotas].sort((a, b) => b.remainingMarks - a.remainingMarks)[0];
+        const topDeficit = [...chapterQuotas].sort((a, b) => b.gap - a.gap)[0];
         setSelectedChapterId(topDeficit?.id || availableChapters[0].id);
       }
     }
@@ -459,7 +453,7 @@ export function SectionAiModal({
               {/* Chapter Selection */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Chapter Scope &amp; Quota Balancing
+                  Chapter scope
                 </label>
                 <div className="flex items-center gap-3 mb-2">
                   <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
@@ -496,7 +490,7 @@ export function SectionAiModal({
                       </span>
                     </div>
                     <p className="text-[11px] text-indigo-800/80 mb-2">
-                      Questions target chapters with remaining blueprint quota to satisfy paper requirements:
+                      Questions go to the chapters furthest below their targets, or the chapter this paper's plan names for the slot:
                     </p>
                     <div className="flex flex-wrap gap-1.5">
                       {plannedChapterAllocations.map((alloc, idx) => (
@@ -507,11 +501,9 @@ export function SectionAiModal({
                           <span className="font-bold text-indigo-600 font-mono">Q{idx + 1}</span>
                           <span className="font-medium truncate max-w-[150px]">Ch {alloc.number}: {alloc.title}</span>
                           <span className={`rounded px-1.5 py-0.2 font-mono text-[10px] font-semibold ${
-                            alloc.remainingMarks > 0
-                              ? "bg-indigo-50 text-indigo-700"
-                              : "bg-amber-50 text-amber-700"
+                            alloc.gap > 0 ? "bg-indigo-50 text-indigo-700" : "bg-slate-100 text-slate-600"
                           }`}>
-                            {Math.max(0, alloc.remainingMarks)} marks left
+                            {alloc.gap > 0 ? `${alloc.gap}m under target` : "target met"}
                           </span>
                         </div>
                       ))}
@@ -528,40 +520,10 @@ export function SectionAiModal({
                     >
                       {chapterQuotas.map((c) => (
                         <option key={c.id} value={c.id}>
-                          Ch {c.number}: {c.title} — {c.remainingMarks}m available of {c.targetMarks}m quota ({c.usedMarks}m used)
+                          Ch {c.number}: {c.title} — {c.usedMarks} of {c.targetMarks}m
                         </option>
                       ))}
                     </select>
-                    {(() => {
-                      const sel = chapterQuotas.find((c) => c.id === selectedChapterId);
-                      if (!sel) return null;
-                      const needed = questionCount * targetSlotMarks;
-                      const willExceed = needed > sel.remainingMarks;
-                      return (
-                        <div
-                          className={`flex items-center justify-between text-[11px] px-2.5 py-1.5 rounded-lg border ${
-                            willExceed
-                              ? "bg-amber-50 border-amber-200 text-amber-800"
-                              : "bg-slate-50 border-slate-200 text-slate-600"
-                          }`}
-                        >
-                          <span>
-                            Needs <strong>{needed}m</strong> ({questionCount} &times; {targetSlotMarks}m)
-                          </span>
-                          <span>
-                            {willExceed ? (
-                              <strong className="text-amber-700">
-                                Exceeds chapter quota by {needed - sel.remainingMarks}m
-                              </strong>
-                            ) : (
-                              <span className="text-emerald-700 font-medium">
-                                Within quota ({sel.remainingMarks - needed}m remaining)
-                              </span>
-                            )}
-                          </span>
-                        </div>
-                      );
-                    })()}
                   </div>
                 )}
               </div>
