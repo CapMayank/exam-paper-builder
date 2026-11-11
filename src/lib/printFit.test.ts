@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   BOOKLET_MAX_PAGES,
+  blankSides,
+  chooseFitLevel,
+  sheetCost,
   describeFit,
   FIT_LEVELS,
   fitMm,
@@ -118,5 +121,40 @@ describe("passage text scale", () => {
       expect(FIT_LEVELS[i].passageScale).toBeLessThanOrEqual(FIT_LEVELS[i - 1].passageScale);
     }
     for (const f of FIT_LEVELS) expect(f.passageScale * f.zoom).toBeGreaterThanOrEqual(0.8);
+  });
+});
+
+describe("sheetCost", () => {
+  it("counts folded A4 sheets, four A5 pages each", () => {
+    expect([3, 4, 5, 8, 9].map((p) => sheetCost(p))).toEqual([1, 1, 2, 2, 3]);
+  });
+
+  it("counts a 1-2 page paper as one sheet unless it prints two-up", () => {
+    expect(sheetCost(2)).toBe(1);
+    expect(sheetCost(2, true)).toBe(0.5);
+    expect(sheetCost(3, true)).toBe(1);
+  });
+});
+
+describe("chooseFitLevel", () => {
+  it("keeps the configured spacing when tightening saves no sheet", () => {
+    expect(chooseFitLevel([4, 4, 3, 3, 3, 3])).toBe(0);
+    expect(chooseFitLevel([5, 5, 5, 5, 5, 5])).toBe(0);
+  });
+
+  it("takes the loosest level that drops a sheet", () => {
+    expect(chooseFitLevel([5, 5, 4, 4, 4, 3])).toBe(2);
+    expect(chooseFitLevel([10, 9, 9, 8, 8, 7])).toBe(3);
+  });
+
+  it("squeezes a 3-page paper to 2 only when it prints two-up", () => {
+    expect(chooseFitLevel([3, 3, 2, 2], false)).toBe(0);
+    expect(chooseFitLevel([3, 3, 2, 2], true)).toBe(2);
+  });
+});
+
+describe("blankSides", () => {
+  it("is what a booklet leaves unprinted", () => {
+    expect([4, 5, 6, 8].map(blankSides)).toEqual([0, 3, 2, 0]);
   });
 });

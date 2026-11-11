@@ -91,6 +91,29 @@ export function nextFitLevel(level: number, pages: number, maxPages = BOOKLET_MA
   return level >= lastLevel ? null : level + 1;
 }
 
+/**
+ * What a paper of `pages` A5 pages costs in folded A4 sheets (4 pages each). A 1–2 page paper printed
+ * two-up puts two copies on one sheet, so it costs half.
+ */
+export function sheetCost(pages: number, twoUp = false): number {
+  if (twoUp && pages <= 2) return 0.5;
+  return Math.max(1, Math.ceil(pages / 4));
+}
+
+/** Sides a booklet of `pages` pages leaves unprinted (5 pages -> 2 sheets -> 3 blank sides). */
+export function blankSides(pages: number): number {
+  return Math.max(1, Math.ceil(pages / 4)) * 4 - pages;
+}
+
+/**
+ * Picks the print level from the page count measured at each level (index = level): the loosest level
+ * that reaches the fewest sheets. Tightening that saves no sheet is never applied.
+ */
+export function chooseFitLevel(pagesByLevel: readonly number[], twoUp = false): number {
+  const costs = pagesByLevel.map((p) => sheetCost(p, twoUp));
+  return Math.max(0, costs.indexOf(Math.min(...costs)));
+}
+
 export type FitStatus = {
   level: number;
   pages: number;

@@ -22,6 +22,7 @@ import {
 import { getInternalChoiceSeparatorLabel } from "@/lib/internalChoiceRules";
 import { isTextPredominantlySanskrit, type PaperLanguage } from "@/lib/localization";
 import type { PrintFit } from "@/lib/printFit";
+import { hasUniformSubpartMarks, optionMinWidth, splitStemParagraphs, subpartGridColumns } from "@/lib/compactLayout";
 import type { QuestionDto } from "@/lib/types";
 import { MathText } from "@/components/MathText";
 import { QuestionContent } from "@/components/QuestionContent";
@@ -30,10 +31,44 @@ const LETTERS = "ABCDEFGHIJ";
 const LETTERS_LIST = ["(A)", "(B)", "(C)", "(D)", "(E)", "(F)", "(G)", "(H)", "(I)", "(J)"];
 const ROMAN_LOWER = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
 
-/** Four short options (e.g. numbers, single words) share one row instead of wrapping in two columns. */
-function subpartOptionColumns(options: string[]): string {
-  const longest = Math.max(0, ...options.map((o) => cleanOptionText(o).length));
-  return options.length === 4 && longest <= 14 ? "repeat(4, 1fr)" : "1fr 1fr";
+/**
+ * Options laid out to use as few lines as they need: short ones four across, medium ones two across, and an
+ * option too long for its share takes a row of its own instead of wrapping inside a narrow column.
+ */
+function OptionFlow({ options, forceSingle, isA5, fontSize, marginTop }: { options: string[]; forceSingle?: boolean; isA5?: boolean; fontSize: string; marginTop: string }) {
+  const cleaned = options.map((o) => cleanOptionText(o));
+  const minWidth = optionMinWidth(cleaned, forceSingle);
+  const gapMm = isA5 ? 3 : 4;
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: `${isA5 ? 1 : 1.5}mm ${gapMm}mm`, marginTop }}>
+      {cleaned.map((o, i) => (
+        <div
+          key={i}
+          className="opt-text"
+          style={{
+            // no grow: options that fit their share line up in columns across questions
+            flex: "0 0 auto",
+            minWidth: minWidth === "100%" ? "100%" : `calc(${minWidth} - ${gapMm}mm)`,
+            maxWidth: "100%",
+            boxSizing: "border-box",
+            whiteSpace: "pre-wrap",
+            overflowWrap: "anywhere",
+            fontSize,
+          }}
+        >
+          <span style={{ fontWeight: 600 }}>({LETTERS[i]?.toLowerCase() ?? i + 1})</span> <MathText text={o} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** The stem as printed: a match question shows only its instruction, a decomposable one only its lead-in. */
+export function questionStemText(q: QuestionDto, slotMarks?: number): string {
+  const pairs = q.type === "MATCH_COLUMN" ? parseMatchColumnPairs(q.options, q.text, (q as { explanation?: string }).explanation) : [];
+  const base = q.type === "MATCH_COLUMN" && pairs.length > 0 ? getMatchColumnInstruction(q.text) : q.text;
+  const decomposed = (!q.subparts || q.subparts.length === 0) && canHaveSubparts(q.type) ? decomposeForSlot(base, slotMarks) : null;
+  return decomposed ? decomposed.stem : base;
 }
 
 function isPassageType(type: string): boolean {
@@ -56,11 +91,17 @@ function SingleQuestionBody({
   isA5,
   lang,
   fit,
+  dense,
+  stemPart,
 }: {
   q: QuestionDto;
   number?: number;
   numberLabel?: string;
   marks?: number;
+  /** Printed paper: short sub-items share a line and marks tags that repeat the question's total are dropped. */
+  dense?: boolean;
+  /** STEM_ONLY: print only this paragraph of the stem (see splitStemParagraphs), so a passage can cross a page. */
+  stemPart?: number;
   /** What the whole question is worth, even where `marks` is not printed on this body (an OR pair prints it once). */
   slotMarks?: number;
   marksStyle?: MarksStyle;
@@ -93,6 +134,7 @@ function SingleQuestionBody({
       : [];
     const sp = effectiveSubparts && subpartIndex !== undefined ? effectiveSubparts[subpartIndex] : null;
     if (!sp) return null;
+    const hideSubMarks = Boolean(dense) && hasUniformSubpartMarks(effectiveSubparts);
     const contPrefix = effectiveLang === "sa" ? "प्रश्नः" : effectiveLang === "hi" ? "प्रश्न" : "Q.";
     const contLabel = displayLabel
       ? displayLabel.startsWith("Q.") || displayLabel.startsWith("प्रश्न")
@@ -143,14 +185,7 @@ function SingleQuestionBody({
               <MathText text={sp.text} />
             </div>
             {sp.options && sp.options.length > 0 && (
-              <div style={{ display: "grid", gridTemplateColumns: subpartOptionColumns(sp.options), gap: isA5 ? "1mm 3mm" : "1.5mm 4mm", marginTop: "1.5mm" }}>
-                {sp.options.map((opt, optIdx) => (
-                  <div key={optIdx} className="opt-text" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", fontSize: optFontSize }}>
-                    <span style={{ fontWeight: 600 }}>({LETTERS[optIdx].toLowerCase()})</span>{" "}
-                    <MathText text={cleanOptionText(opt)} />
-                  </div>
-                ))}
-              </div>
+              <OptionFlow options={sp.options} isA5={isA5} fontSize={optFontSize} marginTop="1.5mm" />
             )}
             {showAnswer && sp.answer && (
               <div style={{ marginTop: "1mm", fontSize: isA5 ? "7.5pt" : "0.85em", color: "#166534" }}>
@@ -158,7 +193,7 @@ function SingleQuestionBody({
               </div>
             )}
           </div>
-          {sp.marks > 0 && marksStyle !== "SUPPRESSED" && (
+          {sp.marks > 0 && marksStyle !== "SUPPRESSED" && !hideSubMarks && (
             <div
               style={{
                 whiteSpace: "nowrap",
@@ -195,14 +230,8 @@ function SingleQuestionBody({
   }
 
   const isMcq = isMcqLikeType(q.type);
-  const maxOptionLen = q.options && q.options.length > 0 ? Math.max(...q.options.map((o) => o.length)) : 0;
   const isMathComplex = q.options?.some((o) => o.includes("\\frac") || o.includes("\\sqrt") || o.includes("\n"));
-  const gridTemplateColumns =
-    q.type === "ASSERTION_REASON" || isMathComplex || maxOptionLen > 35
-      ? "1fr"
-      : maxOptionLen <= 14 && q.options.length <= 4
-      ? "repeat(4, 1fr)"
-      : "1fr 1fr";
+  const singleColumnOptions = q.type === "ASSERTION_REASON" || Boolean(isMathComplex);
 
   const normalizedMcq = isMcq ? normalizeMcqAnswer(q.answer, q.options) : null;
   const matchPairs = q.type === "MATCH_COLUMN" ? parseMatchColumnPairs(q.options, q.text, (q as any).explanation) : [];
@@ -218,24 +247,33 @@ function SingleQuestionBody({
     ? decomposed.subparts
     : [];
 
+  // One paragraph of a split stem: only the first carries the number, only the last the marks and attachments.
+  const stemParts = renderMode === "STEM_ONLY" && stemPart !== undefined ? splitStemParagraphs(stemText) : null;
+  const shownStem = stemParts ? stemParts[stemPart ?? 0] ?? "" : stemText;
+  const isFirstStemPart = !stemParts || stemPart === 0;
+  const isLastStemPart = !stemParts || stemPart === stemParts.length - 1;
+  const hideSubMarks = Boolean(dense) && hasUniformSubpartMarks(effectiveSubparts);
+  const subGridCols = dense && !showAnswer && renderMode !== "STEM_ONLY" ? subpartGridColumns(effectiveSubparts, isA5) : 0;
+
   return (
     <div>
       <div style={{ display: "flex", gap: "2.5mm", alignItems: "flex-start" }}>
         {displayLabel !== undefined && (
-          <div style={{ minWidth: "7mm", fontWeight: 700, whiteSpace: "nowrap" }}>
+          <div style={{ minWidth: "7mm", fontWeight: 700, whiteSpace: "nowrap", ...(isFirstStemPart ? null : { visibility: "hidden" as const }) }}>
             {displayLabel.endsWith(".") ? displayLabel : `${displayLabel}.`}
           </div>
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight, ...(isA5 && fit && fit.passageScale !== 1 && (renderMode === "STEM_ONLY" || isPassageType(q.type)) ? { fontSize: `${fit.passageScale}em` } : null) }}>
-            <QuestionContent text={stemText} isA5={isA5} />
-            {marks !== undefined && marksStyle === "INLINE" && (
-              <span style={{ fontWeight: 700, fontSize: marksFontSize, marginLeft: "2mm", whiteSpace: "nowrap", color: "#334155" }}>
+          {/* flow-root keeps the right-floated marks tag inside this box when it drops to a line of its own */}
+          <div style={{ display: "flow-root", whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight, ...(isA5 && fit && fit.passageScale !== 1 && (renderMode === "STEM_ONLY" || isPassageType(q.type)) ? { fontSize: `${fit.passageScale}em` } : null) }}>
+            <QuestionContent text={shownStem} isA5={isA5} />
+            {marks !== undefined && marksStyle === "INLINE" && isLastStemPart && (
+              <span style={{ float: "right", fontWeight: 700, fontSize: marksFontSize, marginLeft: "2mm", whiteSpace: "nowrap", color: "#334155" }}>
                 {formatMarksLabel(marks, effectiveLang)}
               </span>
             )}
           </div>
-          {q.imagePath && (
+          {isLastStemPart && q.imagePath && (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={imageUrl(q.imagePath)}
@@ -243,16 +281,10 @@ function SingleQuestionBody({
               style={{ display: "block", marginTop: "2mm", maxWidth: "100%", maxHeight: isA5 ? "50mm" : "70mm", objectFit: "contain" }}
             />
           )}
-          {isMcq && q.options.length > 0 && (
-            <div style={{ display: "grid", gridTemplateColumns, gap: isA5 ? "1mm 3mm" : "1.5mm 4mm", marginTop: "2mm" }}>
-              {q.options.map((o, i) => (
-                <div key={i} className="opt-text" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", fontSize: optFontSize }}>
-                  <span style={{ fontWeight: 600 }}>({LETTERS[i]?.toLowerCase() ?? i + 1})</span> <MathText text={cleanOptionText(o)} />
-                </div>
-              ))}
-            </div>
+          {isLastStemPart && isMcq && q.options.length > 0 && (
+            <OptionFlow options={q.options} forceSingle={singleColumnOptions} isA5={isA5} fontSize={optFontSize} marginTop={dense ? "1mm" : "2mm"} />
           )}
-          {q.type === "MATCH_COLUMN" && matchPairs.length > 0 && (
+          {isLastStemPart && q.type === "MATCH_COLUMN" && matchPairs.length > 0 && (
             <table
               style={{
                 width: "100%",
@@ -300,7 +332,7 @@ function SingleQuestionBody({
               </tbody>
             </table>
           )}
-          {q.type === "TRUE_FALSE" && (
+          {isLastStemPart && q.type === "TRUE_FALSE" && (
             <div style={{ marginTop: "1.5mm", fontStyle: "italic", fontSize: metaFontSize }}>
               {effectiveLang === "sa"
                 ? "(आम् / न)"
@@ -311,8 +343,25 @@ function SingleQuestionBody({
                 : "(True / False)"}
             </div>
           )}
-          {renderMode !== "STEM_ONLY" && effectiveSubparts.length > 0 && (
-            <div style={{ marginTop: "2mm", display: "flex", flexDirection: "column", gap: isA5 ? "1.5mm" : "2.5mm" }}>
+          {subGridCols > 0 && (
+            <div style={{ marginTop: "1.2mm", display: "grid", gridTemplateColumns: `repeat(${subGridCols}, 1fr)`, gap: isA5 ? "1mm 3mm" : "1.5mm 4mm" }}>
+              {effectiveSubparts.map((sp, idx) => (
+                <div key={idx} style={{ display: "flex", gap: "1.5mm", alignItems: "baseline", minWidth: 0 }}>
+                  <span style={{ fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>{sp.label || `(${idx + 1})`}</span>
+                  <span style={{ minWidth: 0, overflowWrap: "anywhere", lineHeight }}>
+                    <MathText text={sp.text.trim()} />
+                    {sp.marks > 0 && marksStyle !== "SUPPRESSED" && !hideSubMarks && (
+                      <span style={{ fontWeight: 700, fontSize: marksFontSize, marginLeft: "1.5mm", whiteSpace: "nowrap", color: "#475569" }}>
+                        {formatMarksLabel(sp.marks, effectiveLang)}
+                      </span>
+                    )}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          {subGridCols === 0 && renderMode !== "STEM_ONLY" && effectiveSubparts.length > 0 && (
+            <div style={{ marginTop: dense ? "1.2mm" : "2mm", display: "flex", flexDirection: "column", gap: isA5 ? "1.5mm" : "2.5mm" }}>
               {effectiveSubparts.map((sp, idx) => (
                 <div
                   key={idx}
@@ -332,14 +381,7 @@ function SingleQuestionBody({
                       <QuestionContent text={sp.text} isA5={isA5} />
                     </div>
                     {sp.options && sp.options.length > 0 && (
-                      <div style={{ display: "grid", gridTemplateColumns: subpartOptionColumns(sp.options), gap: isA5 ? "1mm 3mm" : "1.5mm 4mm", marginTop: "1.5mm" }}>
-                        {sp.options.map((opt, optIdx) => (
-                          <div key={optIdx} className="opt-text" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", fontSize: optFontSize }}>
-                            <span style={{ fontWeight: 600 }}>({LETTERS[optIdx].toLowerCase()})</span>{" "}
-                            <MathText text={cleanOptionText(opt)} />
-                          </div>
-                        ))}
-                      </div>
+                      <OptionFlow options={sp.options} isA5={isA5} fontSize={optFontSize} marginTop="1.5mm" />
                     )}
                     {/* Level 2 nested subparts support */}
                     {sp.subparts && sp.subparts.length > 0 && (
@@ -359,7 +401,7 @@ function SingleQuestionBody({
                                 </div>
                               )}
                             </div>
-                            {nested.marks > 0 && marksStyle !== "SUPPRESSED" && (
+                            {nested.marks > 0 && marksStyle !== "SUPPRESSED" && !(dense && hasUniformSubpartMarks(sp.subparts ?? [])) && (
                               <div style={{ whiteSpace: "nowrap", fontWeight: 700, fontSize: marksFontSize, paddingLeft: "2mm", color: "#475569" }}>
                                 {formatMarksLabel(nested.marks, effectiveLang)}
                               </div>
@@ -374,7 +416,7 @@ function SingleQuestionBody({
                       </div>
                     )}
                   </div>
-                  {sp.marks > 0 && marksStyle !== "SUPPRESSED" && (
+                  {sp.marks > 0 && marksStyle !== "SUPPRESSED" && !hideSubMarks && (
                     <div
                       style={{
                         whiteSpace: "nowrap",
@@ -393,7 +435,7 @@ function SingleQuestionBody({
           )}
         </div>
         {marks !== undefined && marksStyle === "RIGHT_COLUMN" && (
-          <div style={{ whiteSpace: "nowrap", fontWeight: 700, fontSize: marksFontSize, paddingLeft: "3mm" }}>
+          <div style={{ whiteSpace: "nowrap", fontWeight: 700, fontSize: marksFontSize, paddingLeft: "3mm", ...(isFirstStemPart ? null : { visibility: "hidden" as const }) }}>
             [{formatMarksValue(marks)}]
           </div>
         )}
@@ -433,8 +475,17 @@ export function QuestionView({
   isA5,
   lang,
   fit,
+  dense,
+  hideMarks,
+  stemPart,
 }: {
   q: QuestionDto;
+  /** Printed paper: use the space-saving arrangement (see SingleQuestionBody). */
+  dense?: boolean;
+  /** Do not print this question's own marks tag (the section heading already states what each is worth). */
+  hideMarks?: boolean;
+  /** STEM_ONLY: print only this paragraph of the stem. */
+  stemPart?: number;
   orQuestion?: QuestionDto | null;
   number?: number;
   numberLabel?: string;
@@ -469,6 +520,7 @@ export function QuestionView({
           isA5={isA5}
           lang={effectiveLang}
           fit={fit}
+          dense={dense}
         />
       </div>
     );
@@ -489,8 +541,8 @@ export function QuestionView({
   // Show marks allocation ONCE for the entire choice group:
   // - For INLINE marks style with an OR choice, display marks once on the OR alternative at the end of the group.
   // - For RIGHT_COLUMN marks style, display marks once on the primary row at the top-right of the group.
-  const primaryMarks = orQuestion && marksStyle === "INLINE" ? undefined : marks;
-  const orMarks = orQuestion && marksStyle === "INLINE" ? marks : undefined;
+  const primaryMarks = hideMarks || (orQuestion && marksStyle === "INLINE") ? undefined : marks;
+  const orMarks = !hideMarks && orQuestion && marksStyle === "INLINE" ? marks : undefined;
 
   const spaceLabel = isDraw
     ? effectiveLang === "sa"
@@ -522,6 +574,8 @@ export function QuestionView({
         isA5={isA5}
         lang={effectiveLang}
         fit={fit}
+        dense={dense}
+        stemPart={stemPart}
       />
 
       {orQuestion && (
@@ -553,6 +607,7 @@ export function QuestionView({
             marksStyle={marksStyle}
             isA5={isA5}
             lang={effectiveLang}
+            dense={dense}
           />
         </div>
       )}

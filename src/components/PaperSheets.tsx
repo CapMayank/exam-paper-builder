@@ -1,10 +1,11 @@
 "use client";
 import { questionSlotMarks } from "@/lib/blueprint";
 import { questionInstruction } from "@/lib/sectionTypes";
-import { BOOKLET_MAX_PAGES, describeFit, FIT_LEVELS, fitMm, getFit, MIN_QUESTION_GAP_MM, nextFitLevel, WORKSHEET_FIT_LEVELS, WORKSHEET_MAX_PAGES, type FitStatus, type PrintFit } from "@/lib/printFit";
+import { BOOKLET_MAX_PAGES, chooseFitLevel, describeFit, FIT_LEVELS, fitMm, getFit, MIN_QUESTION_GAP_MM, nextFitLevel, sheetCost, WORKSHEET_FIT_LEVELS, WORKSHEET_MAX_PAGES, type FitStatus, type PrintFit } from "@/lib/printFit";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { QuestionView } from "@/components/QuestionView";
+import { QuestionView, questionStemText } from "@/components/QuestionView";
+import { isShortStemPart, splitStemParagraphs, statesMarksEach, subpartGridColumns } from "@/lib/compactLayout";
 import { MathText } from "@/components/MathText";
 import { QuestionContent } from "@/components/QuestionContent";
 import { imageUrl } from "@/lib/client";
@@ -331,6 +332,8 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
   let n = 0;
   let sectionGroupCounter = 0;
   let sectionRelativeCounter = 0;
+  // True while printing a title group whose heading says "Each question carries N marks".
+  let groupStatesMarksEach = false;
   for (let i = 0; i < blueprint.sections.length; i++) {
     const s = blueprint.sections[i];
     const prev = i > 0 ? blueprint.sections[i - 1] : null;
@@ -360,6 +363,7 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
     // Worksheets list activities straight away – no "Section A" headings.
     const isWorksheet = blueprint.curriculumMode === WORKSHEET_MODE;
 
+    if (!isSameAsPrev) groupStatesMarksEach = false;
     // Only render the main SECTION header if it's the first in this title group!
     if (!isWorksheet && !isSameAsPrev) {
       const allInGroup = blueprint.sections.filter(
@@ -388,6 +392,7 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
         type: s.type,
       });
       const localizedSectionTitle = locale.section.formatSectionHeader(sectionLetter, s.title);
+      groupStatesMarksEach = !isGroupedObjective && statesMarksEach(reconciledMainInstruction);
 
       blocks.push({
         key: `sec-main-${s.id}`,
@@ -574,6 +579,19 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
         });
       });
     } else {
+      // The heading (or the type sub-heading's "6 × 2 = 12") already says what each question is worth: when every
+      // question here is worth exactly that, its own marks tag only costs a line.
+      const marksOf = (item: (typeof sectionItems)[number]) => {
+        const sub = item.question.subparts && item.question.subparts.length > 0
+          ? item.question.subparts
+          : canHaveSubparts(item.question.type)
+          ? decomposeForSlot(item.question.text, s.marksEach)?.subparts ?? []
+          : [];
+        return questionSlotMarks(s, { ...item.question, subparts: sub } as never).marks;
+      };
+      const hideQuestionMarks =
+        !isWorksheet && !isPrePrimary && (groupStatesMarksEach || hasMultipleTypes) && sectionItems.every((item) => marksOf(item) === s.marksEach);
+      let lastInstructionLine = "";
       for (const it of sectionItems) {
         const currentN = n;
         const numberLabel = formatQuestionNumber(
@@ -590,10 +608,15 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
           : canHaveSubparts(it.question.type)
           ? decomposeForSlot(it.question.text, s.marksEach)?.subparts ?? []
           : [];
-        const canDecompose = !isPrePrimary && !it.orQuestion && subparts && subparts.length > 1;
+        // Short sub-items ("(i) Write (ii) Clean …") share lines inside one block instead of taking a block each.
+        const subGridCols = isPrePrimary || it.orQuestion ? 0 : subpartGridColumns(subparts, isA5);
+        const canDecompose = !isPrePrimary && !it.orQuestion && subparts && subparts.length > 1 && subGridCols === 0;
         const totalQuestionMarks = questionSlotMarks(s, { ...it.question, subparts } as never).marks;
         // A question in a different form from its section's (e.g. grammar in a short-answer section) gets its own line.
-        const instructionLine = questionInstruction(s, it.question.type, it.instruction);
+        // The same instruction on consecutive questions ("Write as directed.") prints once, above the first.
+        const ownInstructionLine = questionInstruction(s, it.question.type, it.instruction);
+        const instructionLine = ownInstructionLine && ownInstructionLine === lastInstructionLine && !it.pageBreakBefore ? "" : ownInstructionLine;
+        lastInstructionLine = ownInstructionLine;
         if (instructionLine) {
           blocks.push({
             key: `${it.id}-instr`,
@@ -608,28 +631,37 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
         const breakBeforeQuestion = Boolean(it.pageBreakBefore) && !instructionLine;
 
         if (canDecompose) {
-          // Passage stem keepWithNext: true ensures stems are never detached from first subpart
-          blocks.push({
-            key: `${it.id}-stem`,
-            keepWithNext: true,
-            forceBreakBefore: breakBeforeQuestion,
-            groupId: it.id,
-            render: () => (
-              <div style={{ paddingBottom: g(isA5 ? 1.5 : 2.5) }}>
-                <QuestionView
-                  q={it.question}
-                  number={currentN}
-                  numberLabel={numberLabel}
-                  marks={totalQuestionMarks}
-                  marksStyle={paper.marksStyle || "RIGHT_COLUMN"}
-                  compact={isEffectiveCompact}
-                  fit={fit}
-                  renderMode="STEM_ONLY"
-                  isA5={isA5}
-                  lang={paperLang}
-                />
-              </div>
-            ),
+          // The stem prints one paragraph per block, so a long passage starts on the current page and carries on
+          // overleaf. Its last paragraph stays with the first subpart, and a short lead-in line stays with the
+          // paragraph after it, so neither is left alone at the foot of a page.
+          const stemParts = splitStemParagraphs(questionStemText(it.question, totalQuestionMarks));
+          stemParts.forEach((part, partIdx) => {
+            const isLastPart = partIdx === stemParts.length - 1;
+            blocks.push({
+              key: partIdx === 0 ? `${it.id}-stem` : `${it.id}-stem-${partIdx}`,
+              keepWithNext: isLastPart || isShortStemPart(part),
+              forceBreakBefore: partIdx === 0 && breakBeforeQuestion,
+              groupId: it.id,
+              render: () => (
+                <div style={{ paddingBottom: g(isA5 ? 1.5 : 2.5) }}>
+                  <QuestionView
+                    q={it.question}
+                    number={currentN}
+                    numberLabel={numberLabel}
+                    marks={totalQuestionMarks}
+                    marksStyle={paper.marksStyle || "RIGHT_COLUMN"}
+                    compact={isEffectiveCompact}
+                    fit={fit}
+                    renderMode="STEM_ONLY"
+                    stemPart={stemParts.length > 1 ? partIdx : undefined}
+                    isA5={isA5}
+                    lang={paperLang}
+                    dense
+                    hideMarks={hideQuestionMarks}
+                  />
+                </div>
+              ),
+            });
           });
 
           // 2. Individual subparts: can cleanly break across page boundaries
@@ -654,6 +686,7 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
                     isContinuation={isContinuation}
                     isA5={isA5}
                     lang={paperLang}
+                    dense
                   />
                 </div>
               ),
@@ -674,10 +707,12 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
                   numberLabel={numberLabel}
                   marks={totalQuestionMarks}
                   marksStyle={paper.marksStyle || "RIGHT_COLUMN"}
-                  compact={isEffectiveCompact}
+                  compact={isEffectiveCompact || subGridCols > 0}
                   fit={fit}
                   isA5={isA5}
                   lang={paperLang}
+                  dense
+                  hideMarks={hideQuestionMarks}
                 />
               </div>
             ),
@@ -905,9 +940,12 @@ export function PaperSheets({
   const fitMaxPages = isWorksheet ? WORKSHEET_MAX_PAGES : maxPages;
   const fitActive = isWorksheet || (isA5 && autoFit);
   // Any change to the paper or print options restarts the fit from the configured spacing.
-  const fitInputKey = useMemo(() => ({}), [paper, compact, isA5, showSignatures, fitActive, fitMaxPages]);
-  const [fitState, setFitState] = useState({ key: fitInputKey, level: 0 });
-  const fitLevel = fitActive && fitState.key === fitInputKey ? fitState.level : 0;
+  const fitTwoUp = Boolean(twoUpCutMode);
+  const fitInputKey = useMemo(() => ({}), [paper, compact, isA5, showSignatures, fitActive, fitMaxPages, fitTwoUp]);
+  // `measured[level]` is the page count seen at each level tried so far; `final` marks the level that was chosen.
+  const [fitState, setFitState] = useState<{ key: object; level: number; measured: number[]; final: boolean }>({ key: fitInputKey, level: 0, measured: [], final: false });
+  const fitCurrent = fitActive && fitState.key === fitInputKey ? fitState : null;
+  const fitLevel = fitCurrent?.level ?? 0;
   const fit = useMemo(() => getFit(fitLevel, fitLevels), [fitLevel, fitLevels]);
   const blocks = useMemo(
     () => buildBlocks(paper, compact, isA5, showSignatures, fit),
@@ -944,11 +982,27 @@ export function PaperSheets({
         blocks.map((b) => b.groupId),
         blocks.map((b) => Boolean(b.forceBreakBefore))
       );
-      const next = fitActive ? nextFitLevel(fitLevel, paged.length, fitMaxPages, fitLevels.length - 1) : null;
-      if (next !== null) {
-        // Still too long: re-measure with tighter spacing before showing anything.
-        setFitState({ key: fitInputKey, level: next });
-        return;
+      if (fitActive && isWorksheet) {
+        const next = nextFitLevel(fitLevel, paged.length, fitMaxPages, fitLevels.length - 1);
+        if (next !== null) {
+          // Still too long: re-measure with tighter spacing before showing anything.
+          setFitState({ key: fitInputKey, level: next, measured: [], final: false });
+          return;
+        }
+      } else if (fitActive && !fitCurrent?.final) {
+        // Booklet: try each level until no sheet can be saved any more, then print at the loosest level
+        // that reaches the fewest sheets. Tightening that saves no sheet is not applied.
+        const measured = [...(fitCurrent?.measured ?? []), paged.length];
+        const atFloor = sheetCost(paged.length, fitTwoUp) <= sheetCost(1, fitTwoUp);
+        if (!atFloor && fitLevel < fitLevels.length - 1) {
+          setFitState({ key: fitInputKey, level: fitLevel + 1, measured, final: false });
+          return;
+        }
+        const chosen = chooseFitLevel(measured, fitTwoUp);
+        if (chosen !== fitLevel) {
+          setFitState({ key: fitInputKey, level: chosen, measured, final: true });
+          return;
+        }
       }
       setPages(paged);
       setFitStatus(fitActive ? describeFit(fitLevel, paged.length, fitMaxPages, fitLevels) : undefined);
@@ -956,7 +1010,7 @@ export function PaperSheets({
     return () => {
       cancelled = true;
     };
-  }, [blocks, fitActive, fitLevel, fitInputKey, fitMaxPages, fitLevels]);
+  }, [blocks, fitActive, fitLevel, fitCurrent, fitInputKey, fitMaxPages, fitLevels, fitTwoUp, isWorksheet]);
 
   const pageCount = pages?.length ?? 0;
   const isEligibleTwoUp = isA5 && pageCount > 0 && pageCount <= 2;
@@ -996,7 +1050,8 @@ export function PaperSheets({
       const groupsOnThisPage = new Set<string>();
       for (const idx of pageBlockIndices) {
         const b = blocks[idx];
-        if (b.groupId) {
+        // `pages` can be one render behind `blocks` (it is re-measured in an effect)
+        if (b?.groupId) {
           if (seenGroups.has(b.groupId) && !groupsOnThisPage.has(b.groupId)) {
             contKeys.add(b.key);
           }
@@ -1018,7 +1073,7 @@ export function PaperSheets({
         key={key}
         n={i + 1}
         total={pageCount}
-        blocks={pages[i].map((b) => blocks[b])}
+        blocks={pages[i].map((b) => blocks[b]).filter(Boolean)}
         isA5={isA5}
         continuationKeys={continuationKeys}
         watermark={effectiveWatermark}

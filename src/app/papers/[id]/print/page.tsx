@@ -22,7 +22,7 @@ import { use, useCallback, useEffect, useState } from "react";
 import { PaperSheets, type SheetsInfo } from "@/components/PaperSheets";
 import { Modal } from "@/components/ui";
 import { api } from "@/lib/client";
-import { BOOKLET_MAX_PAGES } from "@/lib/printFit";
+import { blankSides, BOOKLET_MAX_PAGES } from "@/lib/printFit";
 import { EXAM_TYPES, EXAM_TYPE_LABEL, isBookletLayout, resolvePaperExamType, type ExamType } from "@/lib/constants";
 import type { PaperData } from "@/lib/types";
 
@@ -298,7 +298,7 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
               </div>
             )}
 
-            {/* Automatic fit of booklet papers into 8 A5 pages (2 folded A4 sheets) */}
+            {/* Automatic fit of booklet papers onto the fewest folded A4 sheets (4 A5 pages each) */}
             {isA5 && (
               <div className="flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 p-0.5 text-xs font-semibold">
                 <button
@@ -307,10 +307,10 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
                   className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 transition ${
                     autoFitPages ? "bg-amber-500 text-white shadow-xs font-bold" : "text-amber-900 hover:bg-amber-100/70"
                   }`}
-                  title={`Tightens spacing step by step (never below readable size) until the paper fits ${BOOKLET_MAX_PAGES} A5 pages. Turn off to print the paper's own Print Density exactly.`}
+                  title="Tightens spacing step by step (never below readable size) only as far as it saves a whole A4 sheet, e.g. 5 pages down to 4. Turn off to print the paper's own Print Density exactly."
                 >
                   <Sparkles size={13} />
-                  <span>Fit to {BOOKLET_MAX_PAGES} pages: {autoFitPages ? "AUTO" : "OFF"}</span>
+                  <span>Fit to fewest sheets: {autoFitPages ? "AUTO" : "OFF"}</span>
                 </button>
               </div>
             )}
@@ -408,19 +408,28 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
             ⚠ This paper is {info.fit.pages} A5 pages — more than the {info.fit.maxPages}-page booklet limit
             (2 folded A4 sheets)
             {info.fit.tightened ? ", even at the tightest readable spacing" : ""}. Shorten some questions or
-            switch to &quot;Compact (Question Only)&quot;{autoFitPages ? "" : ", or turn on Fit to 8 pages"}.
+            switch to &quot;Compact (Question Only)&quot;{autoFitPages ? "" : ", or turn on Fit to fewest sheets"}.
           </div>
         )}
         {isA5 && !info?.fit?.overLimit && info?.fit?.tightened && (
           <div className="mx-auto mt-2 max-w-7xl rounded-md border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
-            Spacing was tightened automatically (level {info.fit.level}) to fit {info.fit.pages} of{" "}
-            {info.fit.maxPages} A5 pages.
+            Spacing was tightened automatically (level {info.fit.level}) so the paper fits {info.fit.pages} A5{" "}
+            {info.fit.pages === 1 ? "page" : "pages"} and saves an A4 sheet.
+          </div>
+        )}
+        {/* A booklet that spills just past a sheet wastes most of the next one */}
+        {isA5 && booklet && info && !info.isTwoUpCut && info.contentPages > 2 && blankSides(info.contentPages) >= 2 && (
+          <div className="mx-auto mt-2 max-w-7xl rounded-md border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
+            ⚠ This paper is {info.contentPages} A5 pages, so {blankSides(info.contentPages)} sides of the last A4 sheet
+            stay blank{autoFitPages ? ", even at the tightest readable spacing" : ""}. Shorten or remove a question to
+            drop to {info.contentPages - (4 - blankSides(info.contentPages))} pages
+            {autoFitPages ? "" : ", or turn on Fit to fewest sheets"}.
           </div>
         )}
         {isA5 && !autoFitPages && info && info.pages > BOOKLET_MAX_PAGES && (
           <div className="mx-auto mt-2 max-w-7xl rounded-md border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-800">
             ⚠ This paper is {info.pages} A5 pages — more than the {BOOKLET_MAX_PAGES}-page booklet limit. Turn on
-            Fit to {BOOKLET_MAX_PAGES} pages to tighten the spacing automatically.
+            Fit to fewest sheets to tighten the spacing automatically.
           </div>
         )}
 
