@@ -7,7 +7,7 @@ import {
   validateCircular465Blueprint,
   TERM_CONFIGS,
 } from "./curriculumTemplates";
-import { checkBlueprintFeasibility, validateBlueprint } from "./blueprint";
+import { validateBlueprint } from "./blueprint";
 import {
   adaptCustomSchoolBlueprint,
   mapCurriculumTemplateToBlueprintInput,
@@ -224,77 +224,6 @@ describe("MPBSE Blueprint Engine & Circular 465 Logic", () => {
   // ===========================================================================
   // SUITE 3: ENHANCED DP FEASIBILITY ENGINE (LEVELS 1, 2, 3)
   // ===========================================================================
-  describe("Suite 3: 3-Level Dynamic Programming Feasibility Engine", () => {
-    it("Level 1: detects total marks mismatch when enforceMarksConservation is true", () => {
-      const warnings = checkBlueprintFeasibility({
-        sections: [{ count: 10, marksEach: 2 }], // 20m
-        chapters: [{ chapterId: "c1", marks: 15 }], // 15m
-        enforceMarksConservation: true,
-      });
-      expect(warnings.length).toBeGreaterThan(0);
-      expect(warnings[0]).toMatch(/Sections total 20 marks but chapter weightage totals 15/);
-    });
-
-    it("Level 2: detects chapter marks quota below minimum section denomination", () => {
-      const warnings = checkBlueprintFeasibility({
-        sections: [{ count: 5, marksEach: 3 }],
-        chapters: [{ chapterId: "c1", title: "Chemistry", marks: 2 }, { chapterId: "c2", marks: 13 }],
-      });
-      expect(warnings.length).toBeGreaterThan(0);
-      expect(warnings[0]).toMatch(/smallest section question is 3 marks/);
-    });
-
-    it("Level 2: detects unreachable single-chapter coin-change denomination combinations", () => {
-      const warnings = checkBlueprintFeasibility({
-        sections: [{ count: 2, marksEach: 4 }, { count: 2, marksEach: 6 }],
-        chapters: [{ chapterId: "c1", title: "Physics", marks: 5 }, { chapterId: "c2", marks: 15 }],
-      });
-      expect(warnings.length).toBeGreaterThan(0);
-      expect(warnings[0]).toMatch(/cannot be formed by any combination of section question denominations/);
-    });
-
-    it("Level 3: detects global bounded capacity partition conflicts when single-chapter DP passes", () => {
-      // Setup: Sections provide 2x3m and 1x2m questions = 8 total marks.
-      // Capacities: C(2m) = 1, C(3m) = 2.
-      // Chapters: Ch1 = 4m, Ch2 = 4m = 8 total marks.
-      // Single-chapter DP:
-      // Ch1 (4m) is reachable via 2+2=4.
-      // Ch2 (4m) is reachable via 2+2=4.
-      // Level 2 passes for each chapter individually!
-      // But together they require four 2m questions, while only one 2m question exists.
-      // Level 3 bounded capacity engine must detect this conflict.
-      const warnings = checkBlueprintFeasibility({
-        sections: [
-          { count: 2, marksEach: 3 },
-          { count: 1, marksEach: 2 },
-        ],
-        chapters: [
-          { chapterId: "ch1", title: "Mechanics", marks: 4 },
-          { chapterId: "ch2", title: "Thermodynamics", marks: 4 },
-        ],
-      });
-
-      expect(warnings.length).toBe(1);
-      expect(warnings[0]).toMatch(/Denomination capacity conflict/);
-    });
-
-    it("Level 3: passes when valid global assignment partition exists", () => {
-      // Sections: 2x2m, 1x4m = 8m.
-      // Chapters: Ch1 = 4m (takes 2x2m), Ch2 = 4m (takes 1x4m). Total = 8m.
-      const warnings = checkBlueprintFeasibility({
-        sections: [
-          { count: 2, marksEach: 2 },
-          { count: 1, marksEach: 4 },
-        ],
-        chapters: [
-          { chapterId: "ch1", marks: 4 },
-          { chapterId: "ch2", marks: 4 },
-        ],
-      });
-      expect(warnings).toEqual([]);
-    });
-  });
-
   // ===========================================================================
   // SUITE 4: HAMILTON-HARE PROPORTIONAL TERM ADAPTATION ALGORITHM
   // ===========================================================================

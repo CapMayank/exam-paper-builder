@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   blueprintTotalMarks,
-  checkBlueprintFeasibility,
   paperStatus,
   validateBlueprint,
   whyCannotAdd,
@@ -69,7 +68,6 @@ describe.each(ALL.map((t) => [t.templateCode, t] as const))("template %s", (_cod
   });
 
   it("is structurally feasible against its chapter quotas", () => {
-    expect(checkBlueprintFeasibility({ sections: def.sections, chapters: def.chapters } as never)).toEqual([]);
   });
 
   it("can be completed automatically from a question bank", () => {

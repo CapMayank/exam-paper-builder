@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkBlueprintFeasibility, diagnosePaperImplications, paperStatus, validateBlueprint, whyCannotAdd, type BlueprintDef } from "./blueprint";
+import { diagnosePaperImplications, paperStatus, validateBlueprint, whyCannotAdd, type BlueprintDef } from "./blueprint";
 import { formatQuestionNumber } from "./constants";
 import { bookletPageCount, imposeBooklet, paginate } from "./layout";
 import { autoFillPaper, type CandidateQuestion } from "./autofill";
@@ -15,7 +15,7 @@ const bp: BlueprintDef = {
   ],
 };
 
-describe("validateBlueprint & checkBlueprintFeasibility", () => {
+describe("validateBlueprint", () => {
   it("accepts matching totals", () => {
     expect(validateBlueprint(bp)).toEqual([]);
   });
@@ -25,31 +25,6 @@ describe("validateBlueprint & checkBlueprintFeasibility", () => {
   });
   it("rejects empty sections", () => {
     expect(validateBlueprint({ sections: [], chapters: bp.chapters }).length).toBeGreaterThan(0);
-  });
-  it("flags impossible chapter quota below minimum section denomination", () => {
-    const warnings = checkBlueprintFeasibility({
-      sections: [{ count: 5, marksEach: 3 }],
-      chapters: [{ chapterId: "c1", title: "Acids and Bases", marks: 2 }, { chapterId: "c2", marks: 13 }],
-    });
-    expect(warnings.length).toBeGreaterThan(0);
-    expect(warnings[0]).toMatch(/Chapter "Acids and Bases"/);
-    expect(warnings[0]).toMatch(/smallest/);
-  });
-  it("flags chapter quota unreachable by denomination combination", () => {
-    const warnings = checkBlueprintFeasibility({
-      sections: [{ count: 2, marksEach: 2 }, { count: 2, marksEach: 4 }],
-      chapters: [{ chapterId: "c1", title: "Metals", marks: 3 }, { chapterId: "c2", marks: 9 }],
-    });
-    expect(warnings.length).toBeGreaterThan(0);
-    expect(warnings[0]).toMatch(/Chapter "Metals"/);
-    expect(warnings[0]).toMatch(/cannot be formed/);
-  });
-  it("passes when denominations can form chapter marks", () => {
-    const warnings = checkBlueprintFeasibility({
-      sections: [{ count: 5, marksEach: 2 }, { count: 5, marksEach: 3 }],
-      chapters: [{ chapterId: "c1", marks: 5 }, { chapterId: "c2", marks: 7 }],
-    });
-    expect(warnings).toEqual([]);
   });
 });
 

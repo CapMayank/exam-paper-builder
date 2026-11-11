@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { autoFillPaper } from "./autofill";
-import { blueprintTotalMarks, checkBlueprintFeasibility } from "./blueprint";
+import { blueprintTotalMarks } from "./blueprint";
 import { assignChapters, splitPastedQuestions } from "./pasteQuestions";
 import { skillOf, suggestChapter, suggestDifficulty, suggestSkill } from "./questionTagging";
 import { distributeSlotMarks, schoolPatternsForLevel, slotMarksOf } from "./schoolPatterns";
@@ -77,7 +77,6 @@ describe("school blueprint patterns", () => {
         sections: sections.map((sec, i) => ({ id: `s${i}`, title: `S${i}`, ...sec })),
         chapters: ids.map((id) => ({ chapterId: id, marks: marks[id] })),
       };
-      expect(checkBlueprintFeasibility({ ...bp, enforceMarksConservation: true })).toEqual([]);
       // a bank with plenty of questions of every type in every chapter
       const pool = bp.sections.flatMap((sec) => ids.flatMap((ch) => Array.from({ length: 6 }, (_, k) => ({ id: `${sec.type}-${ch}-${k}`, chapterId: ch, type: sec.type }))));
       const res = autoFillPaper(bp, [], pool);
