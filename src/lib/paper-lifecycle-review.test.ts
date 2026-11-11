@@ -20,7 +20,6 @@ import { POST as duplicatePaper } from "@/app/api/papers/[id]/duplicate/route";
 import { POST as duplicateSet } from "@/app/api/papers/[id]/duplicate-set/route";
 import { POST as parallelSets } from "@/app/api/papers/[id]/parallel-sets/route";
 import { POST as autofill } from "@/app/api/papers/[id]/autofill/route";
-import { POST as reconcile } from "@/app/api/papers/[id]/reconcile-blueprint/route";
 import { PUT as putBlueprint } from "@/app/api/blueprints/[id]/route";
 import { validatePaperPreflight } from "./preflight";
 import { loadPaperView } from "./papers";
@@ -397,41 +396,6 @@ describe("paper lifecycle review", () => {
       expect(res.status).toBe(200);
       const texts = (await prisma.paperQuestion.findMany({ where: { paperId: fresh.id }, include: { question: true } })).map((i) => i.question.text);
       expect(texts.filter((t) => t === only.text).length).toBeLessThanOrEqual(1);
-    });
-
-    it("a reconciled question keeps its figure, explanation and 'attempt any N'", async () => {
-      // chapter 1 over quota, chapter 2 short: reconcile re-tags one long question to chapter 2
-      const m1 = await mk("MCQ", ch1, `MCQ r1 ${Math.random()}`);
-      const m2 = await mk("MCQ", ch1, `MCQ r2 ${Math.random()}`);
-      const kept = { explanation: "Marking note", figureScene: '{"v":2}' };
-      const match = await mk("MATCH_COLUMN", ch1, "Match the columns.", { optionsJson: JSON.stringify(["A ||| 1", "B ||| 2", "C ||| 3", "D ||| 4"]), ...kept });
-      const v1 = await mk("VERY_SHORT", ch2, `VSA r1 ${Math.random()}`);
-      const v2 = await mk("VERY_SHORT", ch2, `VSA r2 ${Math.random()}`);
-      const anyTwo = { subpartsJson: JSON.stringify({ attemptCount: 2, subparts: anyTwoOfThree }), ...kept };
-      const l1 = await mk("LONG", ch1, "Answer any two of the following (reconcile 1).", anyTwo);
-      const l2 = await mk("LONG", ch1, "Answer any two of the following (reconcile 2).", anyTwo);
-      await place(sec.MCQ, m1.id, 0);
-      await place(sec.MCQ, m2.id, 1);
-      await place(sec.MATCH_COLUMN, match.id, 0);
-      await place(sec.VERY_SHORT, v1.id, 0);
-      await place(sec.VERY_SHORT, v2.id, 1);
-      await place(sec.LONG, l1.id, 0);
-      await place(sec.LONG, l2.id, 1);
-
-      const res = await call(reconcile as Handler, "POST", `${P()}/reconcile-blueprint`, { id: paperId });
-      expect(res.status).toBe(200);
-      expect(res.data.reassignmentsCount).toBeGreaterThan(0);
-      const view = (await loadPaperView(paperId))!;
-      expect(view.progress.complete).toBe(true);
-      // whichever 4-mark question was re-tagged to chapter 2 is this paper's own copy, complete
-      const items = await prisma.paperQuestion.findMany({ where: { paperId }, include: { question: true } });
-      const copies = items.map((i) => i.question).filter((q) => q.subpartsJson.includes("_forkedFrom"));
-      expect(copies).toHaveLength(1);
-      expect(copies[0]).toMatchObject({ chapterId: ch2, ...kept });
-      expect(copies[0].subpartsJson).toContain(`"_paperId":"${paperId}"`);
-      if (copies[0].type === "LONG") {
-        expect(view.items.find((i) => i.question.id === copies[0].id)?.question.attemptCount).toBe(2);
-      }
     });
   });
 

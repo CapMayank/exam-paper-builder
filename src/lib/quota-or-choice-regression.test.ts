@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { toPlacedItems, paperStatus, diagnosePaperImplications } from "./blueprint";
 import { planPaperSlotAssignments } from "./paperAutogen";
-import { getEffectiveQuestionMarks } from "./reconcileBlueprint";
 import { validatePaperPreflight } from "./preflight";
 import { validateSubPartsSum } from "./types";
 import { STANDARD_BLUEPRINT_TEMPLATES } from "./curriculumTemplates";
@@ -200,17 +199,6 @@ describe("Quota Manager & Internal Choice (OR) Marks Isolation Regression", () =
 
     const placedAttempt = toPlacedItems(sections, [testItemWithAttempt as any]);
     expect(placedAttempt[0].marks).toBe(4);
-
-    // Reconcile effective marks solver respects attemptCount
-    const effectiveReconcileMarks = getEffectiveQuestionMarks(
-      {
-        type: "LONG",
-        text: "Correct any four sentences",
-        subpartsJson: JSON.stringify({ attemptCount: 4, subparts: subparts5 }),
-      },
-      4
-    );
-    expect(effectiveReconcileMarks).toBe(4);
   });
 
   it("Requirement 3: Global Blueprint Planning ensures 100% quota satisfaction with 0 chapters over quota", () => {

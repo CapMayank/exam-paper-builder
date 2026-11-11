@@ -2463,7 +2463,6 @@ export interface PaperAuditReport {
     suggestedFix: string;
     fixedText?: string;
     fixedOptions?: string[];
-    canReconcileBlueprint?: boolean;
   }>;
   overallVerdict: string;
 }
