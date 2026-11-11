@@ -490,7 +490,7 @@ export function SectionAiModal({
                       </span>
                     </div>
                     <p className="text-[11px] text-indigo-800/80 mb-2">
-                      Questions go to the chapters furthest below their targets, or the chapter this paper's plan names for the slot:
+                      Questions go to the chapters furthest below their targets, or the chapter this paper&apos;s plan names for the slot:
                     </p>
                     <div className="flex flex-wrap gap-1.5">
                       {plannedChapterAllocations.map((alloc, idx) => (

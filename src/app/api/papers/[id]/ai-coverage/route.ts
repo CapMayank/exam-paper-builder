@@ -47,7 +47,13 @@ export const POST = route(async (req, { id }, user) => {
   }
 
   return buildCoverageReport({
-    items: items.map(({ text: _text, ...rest }) => rest),
+    items: items.map((it) => ({
+      itemId: it.itemId,
+      questionId: it.questionId,
+      number: it.number,
+      marks: it.marks,
+      storedChapterId: it.storedChapterId,
+    })),
     targets,
     rows: res.data.rows,
   });

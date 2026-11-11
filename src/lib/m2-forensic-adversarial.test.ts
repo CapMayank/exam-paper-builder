@@ -7,7 +7,6 @@ import {
   validateCircular465Blueprint,
   TERM_CONFIGS,
 } from "./curriculumTemplates";
-import { validateBlueprint } from "./blueprint";
 import { blueprintSchema } from "./schemas";
 
 describe("Forensic Adversarial Audit: Milestone 2 Deliverables", () => {
