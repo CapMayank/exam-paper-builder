@@ -276,7 +276,7 @@ export const POST = route(async (req, { id }, user) => {
     }
   }
 
-  // Same blueprint rules as the manual add path: section role, slot capacity, chapter quota.
+  // Same blueprint rules as the manual add path: section role and slot capacity (chapter weightage is a guide, not a rule).
   const placedSoFar = toPlacedItems(paper.blueprint.sections, paper.items);
   const bpDef = {
     sections: paper.blueprint.sections,

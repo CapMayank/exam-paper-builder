@@ -28,8 +28,7 @@ function safeJsonArray(json: string | null): string[] {
 /**
  * 1-Click Smart Auto-Fill:
  * Automatically assembles remaining questions for a draft paper from the question bank,
- * strictly abiding by section question types, blueprint chapter weightage quotas,
- * and mandatory/forbidden internal choice (OR / अथवा) rules.
+ * strictly abiding by section question types and mandatory/forbidden internal choice (OR / अथवा) rules.
  */
 export const POST = route(async (req, { id }, user) => {
   const paper = await loadPaperView(id);
@@ -223,12 +222,12 @@ export const POST = route(async (req, { id }, user) => {
       const marks = (item as any).marks || sec?.marksEach || 1;
       const chId = item.question.chapter?.id || (item.question as any).chapterId;
       const cur = (chapterRemainingMarks.get(rep(chId)) ?? 0);
-      chapterRemainingMarks.set(rep(chId), Math.max(0, cur - marks));
+      chapterRemainingMarks.set(rep(chId), cur - marks);
     }
     for (const a of result.added) {
       const sec = sectionMap.get(a.sectionId);
       const cur = (chapterRemainingMarks.get(rep(a.chapterId)) ?? 0);
-      chapterRemainingMarks.set(rep(a.chapterId), Math.max(0, cur - (sec?.marksEach ?? 0)));
+      chapterRemainingMarks.set(rep(a.chapterId), cur - (sec?.marksEach ?? 0));
     }
 
     for (const u of result.unfilled) {
@@ -265,9 +264,7 @@ export const POST = route(async (req, { id }, user) => {
 
         const chosenBpChapter = sortedChapters[0];
         if (!chosenBpChapter) break;
-        const needMarks = collapsedMatch ? u.count * sec.marksEach : sec.marksEach;
-        // a template question must never push a chapter or unit past its quota
-        if ((chapterRemainingMarks.get(rep(chosenBpChapter.chapterId)) ?? 0) < needMarks) break;
+        // chapter targets only decide which chapter a template question goes to, never whether it is placed
 
         const currentPlacedInSection =
           paper.items.filter((i) => i.sectionId === sec.id).length +
@@ -325,7 +322,7 @@ export const POST = route(async (req, { id }, user) => {
             });
 
             const cur = (chapterRemainingMarks.get(rep(chosenBpChapter.chapterId)) ?? 0);
-            chapterRemainingMarks.set(rep(chosenBpChapter.chapterId), Math.max(0, cur - (collapsedMatch ? u.count * sec.marksEach : sec.marksEach)));
+            chapterRemainingMarks.set(rep(chosenBpChapter.chapterId), cur - (collapsedMatch ? u.count * sec.marksEach : sec.marksEach));
           }
         }
       }
@@ -338,7 +335,7 @@ export const POST = route(async (req, { id }, user) => {
       addedCount: 0,
       unfilled: result.unfilled,
       complete: false,
-      message: `No matching questions found in question bank for remaining blueprint quotas.${unfilledSummary}`,
+      message: `No matching questions found in question bank for the remaining slots.${unfilledSummary}`,
       paper,
     };
   }

@@ -434,4 +434,32 @@ describe("paper lifecycle review", () => {
       }
     });
   });
+
+  describe("chapter weightage is a guide", () => {
+    /** Chapter 2's whole 8-mark target is used by two 4-mark long questions. */
+    async function fillChapterTwo() {
+      for (const [i, text] of ["Guide long 1", "Guide long 2"].entries()) {
+        const q = await mk("LONG", ch2, `${text} ${stamp}`);
+        await place(sec.LONG, q.id, i);
+      }
+    }
+
+    it("adds a question whose chapter is already at its target", async () => {
+      await fillChapterTwo();
+      const extra = await mk("VERY_SHORT", ch2, `Guide extra ${stamp}-${Math.random()}`);
+      const res = await call(addItem as Handler, "POST", `${P()}/questions`, { id: paperId }, { sectionId: sec.VERY_SHORT, questionId: extra.id });
+      expect(res.status).toBe(200);
+      expect(await prisma.paperQuestion.count({ where: { paperId, sectionId: sec.VERY_SHORT } })).toBe(1);
+    });
+
+    it("auto-fill fills a section from a chapter that is at its target", async () => {
+      await fillChapterTwo();
+      await prisma.question.deleteMany({ where: { bookId, type: "VERY_SHORT", paperQuestions: { none: {} }, orPaperQuestions: { none: {} } } });
+      await mk("VERY_SHORT", ch2, `Guide fill 1 ${stamp}`);
+      await mk("VERY_SHORT", ch2, `Guide fill 2 ${stamp}`);
+      const res = await call(autofill as Handler, "POST", `${P()}/autofill`, { id: paperId }, { sectionId: sec.VERY_SHORT });
+      expect(res.status).toBe(200);
+      expect(await prisma.paperQuestion.count({ where: { paperId, sectionId: sec.VERY_SHORT } })).toBe(2);
+    });
+  });
 });
