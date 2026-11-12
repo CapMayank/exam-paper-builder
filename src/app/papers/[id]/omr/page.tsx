@@ -6,6 +6,7 @@ import { use, useEffect, useMemo, useState } from "react";
 import { api, imageUrl } from "@/lib/client";
 import { DEFAULT_SCHOOL_LOGO, DEFAULT_SCHOOL_NAME, EXAM_TYPE_LABEL, isMcqLikeType, resolvePaperExamType } from "@/lib/constants";
 import { formatQuestionNumber } from "@/lib/layout";
+import { sectionLetter as titleSectionLetter } from "@/lib/sectionLetter";
 import type { PaperData } from "@/lib/types";
 
 export default function OmrSheetPage({ params }: PageProps<"/papers/[id]/omr">) {
@@ -53,8 +54,7 @@ export default function OmrSheetPage({ params }: PageProps<"/papers/[id]/omr">) 
         if (i > 0) sectionGroupCounter++;
         sectionRelativeCounter = 0;
       }
-      const match = s.title.match(/section\s+([a-z0-9]+)/i);
-      const sectionLetter = match ? match[1].toUpperCase() : String.fromCharCode(65 + sectionGroupCounter);
+      const sectionLetter = titleSectionLetter(s.title) ?? String.fromCharCode(65 + sectionGroupCounter);
 
       const items = paper.items.filter((item) => item.sectionId === s.id);
 

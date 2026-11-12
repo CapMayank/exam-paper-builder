@@ -128,6 +128,7 @@ export function imposeBooklet(realPages: number): Sheet[] {
 
 import { getSharedInstruction, type NumberingStyle, type PaperLanguage, localizeSectionTitle } from "./constants";
 import { localizeSectionInstruction } from "./localization";
+import { sectionLetter } from "./sectionLetter";
 
 
 export { NumberingStyle };
@@ -257,9 +258,7 @@ export function computeDisplayedPaperNumbering(
       const sItems = items
         .filter((it) => it.sectionId === sec.id)
         .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
-      const sLetter =
-        sec.title.match(/Section\s+([A-Z])/i)?.[1]?.toUpperCase() ||
-        String.fromCharCode(65 + sIdx);
+      const sLetter = sectionLetter(sec.title) || String.fromCharCode(65 + sIdx);
 
       const isNumberedSingleGroupedExercise =
         /(?:^|[^0-9])(?:प्रश्न\s*[1-5]\b|question\s*[1-5]\b|q[1-5]\b)/i.test(sec.title);

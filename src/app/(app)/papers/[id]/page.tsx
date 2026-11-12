@@ -87,6 +87,7 @@ import { resolveMarksStyle } from "@/lib/marksDisplay";
 import { coverageRows } from "@/lib/coverage";
 import { componentCoverage, parseComponents } from "@/lib/languageComponents";
 import { formatQuestionNumber, computeDisplayedPaperNumbering } from "@/lib/layout";
+import { sectionLetter } from "@/lib/sectionLetter";
 import { nextSetIdentifier } from "@/lib/multiset";
 import { paperSectionChoiceRequirement } from "@/lib/internalChoiceRules";
 import type { Book, PaperData, PaperItem, Section, MarksStyle, NumberingStyle, PrintDensity } from "@/lib/types";
@@ -1963,8 +1964,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                     <ol className="space-y-3 pt-1">
                       {items.map((it, idx) => {
                         const questionNumber = (firstNumber.get(s.id) ?? 1) + idx;
-                        const secLetterMatch = s.title.match(/\b([A-Z])\b/i);
-                        const secLetter = secLetterMatch ? secLetterMatch[1].toUpperCase() : String.fromCharCode(65 + (si % 26));
+                        const secLetter = sectionLetter(s.title) ?? String.fromCharCode(65 + (si % 26));
                         const numberLabel = formatQuestionNumber(
                           paper.numberingStyle || "CONTINUOUS",
                           questionNumber - 1,

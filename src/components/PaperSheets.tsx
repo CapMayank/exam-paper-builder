@@ -44,6 +44,7 @@ import {
   resolveGroupedExerciseInstruction,
 } from "@/lib/layout";
 import { resolveBoardAndSubjectCode } from "@/lib/curriculumContract";
+import { sectionLetter } from "@/lib/sectionLetter";
 import type { PaperData } from "@/lib/types";
 
 const LETTERS = "ABCDEFGHIJ";
@@ -68,9 +69,7 @@ const CONTENT_H_MM = 267;
 
 
 function extractSectionLetter(title: string, fallbackIndex: number): string {
-  const match = title.match(/\b([A-Z])\b/i);
-  if (match) return match[1].toUpperCase();
-  return String.fromCharCode(65 + (fallbackIndex % 26));
+  return sectionLetter(title) ?? String.fromCharCode(65 + (fallbackIndex % 26));
 }
 
 function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, showSignatures?: boolean, fit: PrintFit = getFit(0)): Block[] {

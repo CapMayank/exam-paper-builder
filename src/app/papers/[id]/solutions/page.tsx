@@ -20,6 +20,7 @@ import {
 import { formatMarksValue } from "@/lib/types";
 import { answerKeyMarks, showPartMarks } from "@/lib/marksDisplay";
 import { computeDisplayedPaperNumbering, formatQuestionNumber } from "@/lib/layout";
+import { sectionLetter as titleSectionLetter } from "@/lib/sectionLetter";
 import type { PaperData, QuestionDto } from "@/lib/types";
 
 function getMarksRubric(marks: number, type: string) {
@@ -126,8 +127,7 @@ export default function SolutionsPage({ params }: PageProps<"/papers/[id]/soluti
       }
       sectionRelativeCounter = 0;
     }
-    const match = s.title.match(/section\s+([a-z0-9]+)/i);
-    const sectionLetter = match ? match[1].toUpperCase() : String.fromCharCode(65 + sectionGroupCounter);
+    const sectionLetter = titleSectionLetter(s.title) ?? String.fromCharCode(65 + sectionGroupCounter);
 
     const items = paper.items.filter((item) => item.sectionId === s.id);
     for (const it of items) {

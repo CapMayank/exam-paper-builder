@@ -55,6 +55,7 @@ import {
   resolveGroupedExerciseInstruction,
 } from "@/lib/layout";
 import { resolveBoardAndSubjectCode } from "@/lib/curriculumContract";
+import { sectionLetter as titleSectionLetter } from "@/lib/sectionLetter";
 
 function renderQuestionOptions(
   opts: string[],
@@ -528,8 +529,7 @@ export async function buildPaperDocx(
       }
       sectionRelativeNum = 1;
     }
-    const match = section.title.match(/section\s+([a-z0-9]+)/i);
-    const sectionLetter = match ? match[1].toUpperCase() : String.fromCharCode(65 + sectionGroupCounter);
+    const sectionLetter = titleSectionLetter(section.title) ?? String.fromCharCode(65 + sectionGroupCounter);
 
     const items = sectionMap.get(section.id) || [];
     const allInGroup = paper.blueprint.sections.filter(
