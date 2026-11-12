@@ -353,6 +353,14 @@ export function subpartsTotalMarks(
 export const sumSubPartMarks = subpartsTotalMarks;
 
 /**
+ * "Answer any k of n": k is a real choice only when 0 < k < n. Then every part must carry the same marks and
+ * the question is worth k × that; otherwise (no k, or k ≥ n) the question is worth the sum of its parts.
+ */
+function isAnyKOfN(attemptCount: number | null | undefined, partCount: number): attemptCount is number {
+  return typeof attemptCount === "number" && attemptCount > 0 && attemptCount < partCount;
+}
+
+/**
  * What a question's parts are worth to the student: all of them, or `attemptCount` of them when the question
  * says "answer any N". 0 when there are no parts.
  */
@@ -361,36 +369,65 @@ export function attemptedSubpartsMarks(
   attemptCount?: number | null,
 ): number {
   if (!subparts || subparts.length === 0) return 0;
-  if (typeof attemptCount === "number" && attemptCount > 0 && attemptCount <= subparts.length) {
+  if (isAnyKOfN(attemptCount, subparts.length)) {
     return attemptCount * (subparts[0]?.marks || 1);
   }
   return subpartsTotalMarks(subparts);
 }
 
+/**
+ * True when the parts are worth `expectedTotalMarks` under the one rule: with "any k of n" (k < n) all parts
+ * carry equal marks and k × those marks is the total; otherwise the parts add up to the total.
+ */
 export function validateSubPartsSum(
   subparts: (Pick<SubPart, "marks" | "subparts"> | null | undefined)[] | null | undefined,
   expectedTotalMarks: number,
   attemptCount?: number,
 ): boolean {
   if (!subparts || subparts.length === 0) return true;
-  if (typeof attemptCount === "number" && attemptCount > 0 && attemptCount <= subparts.length) {
+  if (isAnyKOfN(attemptCount, subparts.length)) {
     const valid = subparts.filter(Boolean) as Pick<SubPart, "marks" | "subparts">[];
-    if (valid.length > 0) {
-      const allEqual = valid.every((sp) => sp.marks === valid[0]?.marks);
-      if (allEqual && sameMarks(valid[0].marks * attemptCount, expectedTotalMarks)) {
-        return true;
-      }
-      const sumFirstK = subpartsTotalMarks(valid.slice(0, attemptCount));
-      if (sameMarks(sumFirstK, expectedTotalMarks)) return true;
-    }
+    if (valid.length === 0) return false;
+    const each = valid[0].marks;
+    return valid.every((sp) => sameMarks(sp.marks, each)) && sameMarks(each * attemptCount, expectedTotalMarks);
   }
   return sameMarks(subpartsTotalMarks(subparts), expectedTotalMarks);
 }
 
+type MarkedPart = { marks: number; subparts?: any[] };
+
+const hasNestedParts = (p: MarkedPart | null | undefined): p is MarkedPart & { subparts: MarkedPart[] } =>
+  !!p && Array.isArray(p.subparts) && p.subparts.length > 0;
+
+/** Copies parts (and nested parts) so they can be changed without touching the caller's objects. */
+function cloneParts<T extends MarkedPart>(parts: T[]): T[] {
+  return parts.map((p) => (hasNestedParts(p) ? { ...p, subparts: cloneParts(p.subparts) } : p ? { ...p } : p));
+}
+
+/** The parts that carry marks in the total: a part with nested parts counts only through its leaves. */
+function leafParts(parts: MarkedPart[], out: MarkedPart[] = []): MarkedPart[] {
+  for (const p of parts) {
+    if (!p) continue;
+    if (hasNestedParts(p)) leafParts(p.subparts, out);
+    else out.push(p);
+  }
+  return out;
+}
+
+/** A part with nested parts shows what its leaves add up to. */
+function syncNestedMarks(parts: MarkedPart[]): void {
+  for (const p of parts) {
+    if (!hasNestedParts(p)) continue;
+    syncNestedMarks(p.subparts);
+    p.marks = subpartsTotalMarks(p.subparts);
+  }
+}
+
 /**
- * Deterministically balances subpart marks to guarantee that their sum
- * exactly equals expectedTotalMarks. Preserves minimum 1 mark per subpart.
- * Supports attemptCount (e.g. answer any 4 of 5) to avoid artificial fractional mark scaling.
+ * Deterministically balances generated part marks so they are worth exactly `expectedTotalMarks` (snapped to
+ * ¼), every leaf part a multiple of ¼ and never below ¼. Parts that already give the right total are returned
+ * unchanged. With "any k of n" (k < n) the parts are made equal at total ÷ k each. Whole marks are kept where
+ * they fit; nested parts are balanced through their leaf parts.
  */
 export function normalizeSubpartMarks<T extends { marks: number; subparts?: any[] }>(
   subparts: T[],
@@ -398,59 +435,74 @@ export function normalizeSubpartMarks<T extends { marks: number; subparts?: any[
   attemptCount?: number,
 ): T[] {
   if (!Array.isArray(subparts) || subparts.length === 0 || !expectedTotalMarks || expectedTotalMarks <= 0) return subparts;
-  const target = Math.max(1, Math.round(expectedTotalMarks || 1));
+  const UNIT = 1 / PART_MARK_STEP; // quarter-mark units in one mark
+  const targetUnits = Math.max(1, Math.round(expectedTotalMarks / PART_MARK_STEP));
+  const target = targetUnits * PART_MARK_STEP;
 
-  // If internal choice is specified (attemptCount of N items), preserve integer marks if match
+  // Internal choice (attemptCount of N items): equal parts already worth k × marks are left alone.
   if (typeof attemptCount === "number" && attemptCount > 0 && attemptCount <= subparts.length) {
-    const allEqual = subparts.every((sp) => sp.marks === subparts[0]?.marks);
-    if (allEqual && subparts[0] && subparts[0].marks * attemptCount === target) {
+    const allEqual = subparts.every((sp) => sameMarks(sp?.marks, subparts[0]?.marks));
+    if (allEqual && subparts[0] && sameMarks(subparts[0].marks * attemptCount, target)) {
       return subparts;
     }
   }
 
-  let valid = [...subparts];
+  if (sameMarks(subpartsTotalMarks(subparts), target) && !isAnyKOfN(attemptCount, subparts.length)) return subparts;
 
-  const currentTotal = subpartsTotalMarks(valid);
-  if (sameMarks(currentTotal, target)) return valid;
-
-  // Fewer marks than parts to answer (e.g. four blanks in a 2-mark question): whole marks cannot fit, share fractions.
-  const answered = typeof attemptCount === "number" && attemptCount > 0 && attemptCount <= valid.length ? attemptCount : valid.length;
-  if (target < answered) {
-    if (answered < valid.length) {
-      const each = equalPartMarks(target, answered);
-      if (each) return valid.map((sp) => ({ ...sp, marks: each }));
-    } else {
-      const shares = splitMarksEvenly(target, valid.length);
-      if (shares) return valid.map((sp, idx) => ({ ...sp, marks: shares[idx] }));
+  // "Any k of n": every part carries total ÷ k.
+  if (isAnyKOfN(attemptCount, subparts.length)) {
+    const each = equalPartMarks(target, attemptCount);
+    if (each) {
+      return subparts.map((sp) => {
+        if (!sp) return sp;
+        if (hasNestedParts(sp)) {
+          const inner = normalizeSubpartMarks(sp.subparts, each);
+          return { ...sp, marks: subpartsTotalMarks(inner), subparts: inner };
+        }
+        return { ...sp, marks: each };
+      });
     }
+    // No equal quarter-mark share exists (less than ¼ per answered part): fall back to balancing the sum.
+    if (sameMarks(subpartsTotalMarks(subparts), target)) return subparts;
   }
 
-  if (currentTotal <= 0) {
-    const base = Math.floor(target / valid.length);
-    const rem = target % valid.length;
-    return valid.map((sp, idx) => ({
-      ...sp,
-      marks: Math.max(1, base + (idx === valid.length - 1 ? rem : 0)),
-    }));
-  }
+  const result = cloneParts(subparts);
+  const leaves = leafParts(result);
+  if (leaves.length === 0) return subparts;
+  const units = leaves.map((l) => {
+    const m = Number(l.marks);
+    return Number.isFinite(m) && m > 0 ? Math.max(1, Math.round(m / PART_MARK_STEP)) : 0;
+  });
 
-  const diff = target - currentTotal;
-  if (diff > 0) {
-    const lastIdx = valid.length - 1;
-    return valid.map((sp, idx) =>
-      idx === lastIdx ? { ...sp, marks: sp.marks + diff } : { ...sp, marks: Math.max(1, sp.marks) },
-    );
+  if (targetUnits < leaves.length * UNIT) {
+    // Fewer marks than parts (e.g. four blanks in a 2-mark question): whole marks cannot fit, share fractions.
+    const shares = splitMarksEvenly(target, leaves.length);
+    leaves.forEach((l, idx) => (l.marks = shares ? shares[idx] : PART_MARK_STEP));
+  } else if (units.every((u) => u === 0)) {
+    // No usable marks at all: whole marks, any remainder on the last part.
+    const base = Math.floor(targetUnits / UNIT / leaves.length) * UNIT;
+    leaves.forEach((l, idx) => {
+      const u = idx === leaves.length - 1 ? targetUnits - base * (leaves.length - 1) : base;
+      l.marks = u * PART_MARK_STEP;
+    });
   } else {
-    let toReduce = -diff;
-    const result = valid.map((sp) => ({ ...sp, marks: Math.max(1, sp.marks) }));
-    for (let i = result.length - 1; i >= 0 && toReduce > 0; i--) {
-      const reducible = result[i].marks - 1;
-      const dec = Math.min(toReduce, reducible);
-      result[i].marks -= dec;
-      toReduce -= dec;
+    // Missing marks count as one whole mark; then the difference goes on (or comes off) the last parts.
+    const u = units.map((x) => (x === 0 ? UNIT : x));
+    let diff = targetUnits - u.reduce((a, b) => a + b, 0);
+    if (diff > 0) u[u.length - 1] += diff;
+    // Take marks off from the last part backwards, first down to one whole mark, then down to ¼.
+    for (const floor of [UNIT, 1]) {
+      for (let i = u.length - 1; i >= 0 && diff < 0; i--) {
+        const dec = Math.min(-diff, Math.max(0, u[i] - floor));
+        u[i] -= dec;
+        diff += dec;
+      }
     }
-    return result;
+    leaves.forEach((l, idx) => (l.marks = u[idx] * PART_MARK_STEP));
   }
+
+  syncNestedMarks(result);
+  return result;
 }
 
 export type UserData = {

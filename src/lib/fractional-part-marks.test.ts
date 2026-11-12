@@ -9,6 +9,7 @@ import {
   normalizeSubpartMarks,
   snapPartMarks,
   splitMarksEvenly,
+  subpartsTotalMarks,
   validateSubPartsSum,
 } from "./types";
 
@@ -69,5 +70,45 @@ describe("parts of a small question share its marks", () => {
     expect(normalizeSubpartMarks(four, 1, 2).map((p) => p.marks)).toEqual([0.5, 0.5, 0.5, 0.5]);
     // unchanged behaviour when whole marks fit
     expect(normalizeSubpartMarks([{ marks: 1 }, { marks: 1 }, { marks: 1 }], 5).map((p) => p.marks)).toEqual([1, 1, 3]);
+  });
+});
+
+describe("normalising parts keeps quarter marks and exact totals", () => {
+  const onGrid = (m: number) => Math.abs(m / 0.25 - Math.round(m / 0.25)) < 1e-9;
+
+  it("shares a 2-mark total over four parts as ½ each", () => {
+    const four = [{ marks: 1 }, { marks: 1 }, { marks: 1 }, { marks: 1 }];
+    expect(normalizeSubpartMarks(four, 2).map((p) => p.marks)).toEqual([0.5, 0.5, 0.5, 0.5]);
+  });
+
+  it("keeps a fractional total of 1½ without pushing parts up to a whole mark", () => {
+    const result = normalizeSubpartMarks([{ marks: 0.5 }, { marks: 0.5 }], 1.5);
+    expect(subpartsTotalMarks(result as never)).toBe(1.5);
+    for (const p of result) {
+      expect(onGrid(p.marks)).toBe(true);
+      expect(p.marks).toBeGreaterThanOrEqual(0.25);
+    }
+  });
+
+  it("adjusts the leaf parts of a nested part so the total is exact", () => {
+    const result = normalizeSubpartMarks([{ marks: 1, subparts: [{ marks: 1 }, { marks: 1 }] }, { marks: 1 }], 4);
+    expect(subpartsTotalMarks(result as never)).toBe(4);
+    // the nested part last: its own marks are ignored by the total, so its leaves must change
+    const up = normalizeSubpartMarks([{ marks: 1 }, { marks: 1, subparts: [{ marks: 1 }, { marks: 1 }] }], 4);
+    expect(subpartsTotalMarks(up as never)).toBe(4);
+    const down = normalizeSubpartMarks([{ marks: 1 }, { marks: 9, subparts: [{ marks: 2 }, { marks: 2 }] }], 3);
+    expect(subpartsTotalMarks(down as never)).toBe(3);
+    for (const p of down[1].subparts!) expect(p.marks).toBeGreaterThanOrEqual(0.25);
+  });
+
+  it("makes unequal \"any k of n\" parts equal at total ÷ k", () => {
+    const result = normalizeSubpartMarks([{ marks: 2 }, { marks: 3 }, { marks: 2 }, { marks: 3 }], 5, 2);
+    expect(result.map((p) => p.marks)).toEqual([2.5, 2.5, 2.5, 2.5]);
+    expect(validateSubPartsSum(result, 5, 2)).toBe(true);
+  });
+
+  it("never changes a part when the total is already right", () => {
+    const parts = [{ marks: 0.25 }, { marks: 0.75 }, { marks: 0.5 }];
+    expect(normalizeSubpartMarks(parts, 1.5)).toEqual(parts);
   });
 });

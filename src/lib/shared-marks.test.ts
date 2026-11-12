@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { questionSlotMarks, toPlacedItems } from "./blueprint";
 import { validatePaperCompleteness } from "./paperCompletenessEngine";
+import { attemptedSubpartsMarks, validateSubPartsSum } from "./types";
 
 const sec = (over: object = {}) => ({ id: "s", title: "S", type: "SHORT", count: 2, marksEach: 3, ...over });
 const q = (over: object = {}) => ({ id: "q", chapterId: "c", type: "SHORT", text: "t", options: [], ...over });
@@ -35,5 +36,26 @@ describe("one marks rule everywhere", () => {
     }).marksValidation.actualTotalMarks;
     const direct = items.reduce((a, i) => a + questionSlotMarks(s, i.question as never).marks, 0);
     expect([placed, completeness]).toEqual([direct, direct]);
+  });
+});
+
+describe("one rule for \"answer any k of n\" parts", () => {
+  const parts = (...marks: number[]) => marks.map((m) => ({ marks: m }));
+
+  it("rejects unequal alternatives even when the first k happen to add up", () => {
+    expect(validateSubPartsSum(parts(3, 2, 5), 5, 2)).toBe(false);
+  });
+
+  it("accepts equal alternatives worth k x each", () => {
+    expect(validateSubPartsSum(parts(5, 5, 5, 5), 5, 1)).toBe(true);
+    expect(validateSubPartsSum(parts(5, 5, 5, 5), 10, 1)).toBe(false);
+    expect(attemptedSubpartsMarks(parts(2, 2, 2, 2, 2), 4)).toBe(8);
+  });
+
+  it("treats k equal to the number of parts as answering all of them (plain sum)", () => {
+    expect(validateSubPartsSum(parts(3, 2), 5, 2)).toBe(true);
+    expect(validateSubPartsSum(parts(3, 2), 6, 2)).toBe(false);
+    expect(validateSubPartsSum(parts(3, 2), 5)).toBe(true);
+    expect(attemptedSubpartsMarks(parts(3, 2), 2)).toBe(5);
   });
 });

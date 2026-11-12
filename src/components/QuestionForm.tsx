@@ -453,6 +453,10 @@ export function QuestionForm({
       if (subparts.some((sp) => !sp.marks || sp.marks <= 0)) {
         return setError("Give every part some marks (½ and ¼ marks are allowed).");
       }
+      // checked first: unequal "any N" parts fail the marks total too, and this says why
+      if (attemptCount && subparts.some((sp) => sp.marks !== subparts[0].marks)) {
+        return setError("When students answer any few of the parts, every part must carry the same marks.");
+      }
       const totalSubMarks = attemptedSubpartsMarks(subparts, attemptCount);
       if (targetMarks !== undefined && !validateSubPartsSum(subparts, targetMarks, attemptCount)) {
         return setError(
@@ -460,9 +464,6 @@ export function QuestionForm({
             ? `Any ${attemptCount} of these parts add up to ${formatMarksValue(totalSubMarks)} marks, but the question must be worth ${targetMarks}. Use "Split marks equally" or adjust the parts.`
             : `The parts add up to ${formatMarksValue(totalSubMarks)} marks, but the question must be worth ${targetMarks}. Use "Split marks equally" or adjust the parts.`
         );
-      }
-      if (attemptCount && subparts.some((sp) => sp.marks !== subparts[0].marks)) {
-        return setError("When students answer any few of the parts, every part must carry the same marks.");
       }
     }
 
