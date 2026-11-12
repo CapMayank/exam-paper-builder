@@ -173,6 +173,15 @@ describe("Comprehensive Question Paper Localization Architecture", () => {
       expect(reconciled).toBe("प्रश्नक्रमाङ्कः 1 तः 6 पर्यन्तम् वस्तुनिष्ठप्रश्नाः सन्ति");
     });
 
+    it("gives no section instruction when the teacher typed none, in any language", () => {
+      expect(reconcileSectionGroupInstruction("", 1, 5, "hi")).toBe("");
+      expect(reconcileSectionGroupInstruction(null, 1, 5, "sa")).toBe("");
+      expect(reconcileSectionGroupInstruction(undefined, 1, 5, "en")).toBe("");
+      expect(reconcileSectionGroupInstruction("   ", 1, 5)).toBe("");
+      expect(reconcileSectionGroupInstruction("   ", 1, 5, "hi")).toBe("");
+      expect(reconcileSectionGroupInstruction("सभी प्रश्न अनिवार्य हैं।", 1, 5, "hi")).toBe("सभी प्रश्न अनिवार्य हैं।");
+    });
+
     it("resolves English blueprint instructions into authentic Sanskrit shared instructions", () => {
       expect(resolveGroupedExerciseInstruction("Choose the correct option", "MCQ", false, "sa")).toBe(
         "उचितविकल्पं चित्वा लिखत:"

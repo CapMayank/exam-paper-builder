@@ -9,6 +9,7 @@ vi.mock("@/lib/session", () => ({
 }));
 
 import { buildPaperDocx } from "./paperDocx";
+import { getSharedInstruction } from "./constants";
 import { POST as postQuestion } from "../app/api/papers/[id]/questions/route";
 import { PUT as putQuestionItem } from "../app/api/papers/[id]/questions/[itemId]/route";
 
@@ -478,6 +479,93 @@ In crystal field theory, the interaction between transition metal d-orbitals and
         expect(text).not.toMatch(/essay topic\s*\[/);
       } finally {
         await made.cleanup();
+      }
+    });
+  });
+
+  describe("Word prints only the instructions the teacher typed", () => {
+    async function docText(paper: string): Promise<string> {
+      const result = await buildPaperDocx(paper, false, teacherUser as never);
+      const { default: JSZip } = await import("jszip");
+      const xml = await (await JSZip.loadAsync(result.buffer)).file("word/document.xml")!.async("string");
+      return xml.replace(/<[^>]+>/g, "");
+    }
+
+    it("a Hindi paper prints no default for an empty section instruction and keeps a typed English one", async () => {
+      const book = await prisma.book.create({
+        data: { title: `Hindi Instructions ${testStamp}`, subject: "Hindi", className: "Class 10", chapters: { create: [{ number: 1, title: "पाठ 1" }] } },
+        include: { chapters: true },
+      });
+      const bp = await prisma.blueprint.create({
+        data: {
+          name: `Hindi Instructions BP ${testStamp}`,
+          bookId: book.id,
+          examType: "ANNUAL",
+          durationMin: 180,
+          chapters: { create: [{ chapterId: book.chapters[0].id, marks: 8 }] },
+          sections: {
+            create: [
+              { position: 1, title: "खण्ड अ", type: "SHORT", count: 1, marksEach: 3, instructions: "   " },
+              { position: 2, title: "खण्ड ब", type: "LONG", count: 1, marksEach: 5, instructions: "Write the answers neatly." },
+            ],
+          },
+        },
+      });
+      const paper = await prisma.paper.create({
+        data: { title: `हिन्दी ${testStamp}`, blueprintId: bp.id, layout: "PAGE", schoolName: "Test School", status: "DRAFT", createdById: teacherUser.id },
+      });
+      try {
+        const text = await docText(paper.id);
+        expect(text).not.toContain(getSharedInstruction("SHORT", "hi"));
+        expect(text).not.toContain(getSharedInstruction("LONG", "hi"));
+        expect(text).toContain("Write the answers neatly.");
+      } finally {
+        await prisma.paper.delete({ where: { id: paper.id } });
+        await prisma.blueprintSection.deleteMany({ where: { blueprintId: bp.id } });
+        await prisma.blueprintChapter.deleteMany({ where: { blueprintId: bp.id } });
+        await prisma.blueprint.delete({ where: { id: bp.id } });
+        await prisma.chapter.deleteMany({ where: { bookId: book.id } });
+        await prisma.book.delete({ where: { id: book.id } });
+      }
+    });
+
+    it("an English paper keeps a typed Hindi section instruction and prints no automatic question line", async () => {
+      const section = await prisma.blueprintSection.create({
+        data: {
+          blueprintId,
+          position: 9,
+          title: "Section Typed Lines",
+          type: "SHORT",
+          count: 2,
+          marksEach: 3,
+          instructions: "सभी प्रश्न ध्यान से पढ़िए।",
+          allowedTypesJson: JSON.stringify(["GRAMMAR"]),
+        },
+      });
+      const g1 = await prisma.question.create({
+        data: { bookId, chapterId: ch1Id, type: "GRAMMAR", text: "Grammar item without a line.", createdById: teacherUser.id },
+      });
+      const g2 = await prisma.question.create({
+        data: { bookId, chapterId: ch1Id, type: "GRAMMAR", text: "Grammar item with a line.", createdById: teacherUser.id },
+      });
+      const paper = await prisma.paper.create({
+        data: { title: `Typed lines ${Date.now()}`, blueprintId, layout: "PAGE", schoolName: "Test School", status: "DRAFT", createdById: teacherUser.id },
+      });
+      await prisma.paperQuestion.create({ data: { paperId: paper.id, sectionId: section.id, questionId: g1.id, position: 0 } });
+      await prisma.paperQuestion.create({
+        data: { paperId: paper.id, sectionId: section.id, questionId: g2.id, position: 1, instruction: "Change into passive voice." },
+      });
+      try {
+        const text = await docText(paper.id);
+        expect(text).toContain("सभी प्रश्न ध्यान से पढ़िए।");
+        expect(text).not.toContain(getSharedInstruction("SHORT", "en"));
+        expect(text).not.toContain("Do as directed.");
+        expect(text).toContain("Change into passive voice.");
+      } finally {
+        await prisma.paperQuestion.deleteMany({ where: { paperId: paper.id } });
+        await prisma.paper.delete({ where: { id: paper.id } });
+        await prisma.question.deleteMany({ where: { id: { in: [g1.id, g2.id] } } });
+        await prisma.blueprintSection.delete({ where: { id: section.id } });
       }
     });
   });

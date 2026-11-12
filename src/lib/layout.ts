@@ -454,7 +454,7 @@ export function reconcileSectionGroupInstruction(
   endQ: number,
   paperLang?: PaperLanguage
 ): string {
-  if (!instruction) return "";
+  if (!instruction?.trim()) return "";
   let updated = instruction;
   if (paperLang) {
     updated = localizeSectionInstruction(updated, paperLang);

@@ -102,28 +102,7 @@ export function defaultAllowedTypes(type: string, marksEach: number, subject: st
   return [type, ...list.filter((t) => t !== type)];
 }
 
-/** Line printed above a question whose form differs from its section's, so students know what is asked. */
-export const TYPE_INSTRUCTION: Record<string, string> = {
-  MCQ: "Choose the correct option.",
-  FILL_BLANK: "Fill in the blank.",
-  TRUE_FALSE: "Write True or False.",
-  MATCH_COLUMN: "Match the columns.",
-  VERY_SHORT: "Answer in one or two sentences.",
-  SHORT: "Answer in 30–40 words.",
-  LONG: "Answer in detail.",
-  GRAMMAR: "Do as directed.",
-  UNSEEN_PASSAGE: "Read the passage and answer the questions that follow.",
-  REFERENCE_CONTEXT: "Read the extract and answer the questions that follow.",
-  WRITING_SKILL: "Write as directed.",
-  CASE_STUDY: "Read the case and answer the questions that follow.",
-  DRAW: "Draw a neat, labelled diagram.",
-  MAP_WORK: "Mark the following on the map.",
-};
-
-/** The instruction line to print for a placed question: the teacher's own text, else the automatic one. */
-export function questionInstruction(section: TypedSection, questionType: string, stored?: string | null): string {
-  const own = (stored ?? "").trim();
-  if (own) return own;
-  if (questionType === section.type || !isTypeAllowed(section, questionType)) return "";
-  return TYPE_INSTRUCTION[questionType] ?? "";
+/** The instruction line to print for a placed question: only what the teacher typed; nothing when they typed none. */
+export function questionInstruction(_section: TypedSection, _questionType: string, stored?: string | null): string {
+  return (stored ?? "").trim();
 }

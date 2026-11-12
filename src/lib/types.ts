@@ -107,7 +107,7 @@ export type PaperItem = {
   position: number;
   pageBreakBefore?: boolean;
   componentKey?: string;
-  /** Teacher's line printed above the question; "" = automatic when its type differs from the section's. */
+  /** Teacher's line printed above the question; "" = print nothing. */
   instruction?: string;
   question: QuestionDto;
   orQuestion?: QuestionDto | null;

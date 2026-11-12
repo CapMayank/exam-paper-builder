@@ -20,7 +20,6 @@ import {
   formatMarksLabel,
   getPaperLocale,
   getQuestionTypeLabel,
-  getSharedInstruction,
   isBookletLayout,
   isPrePrimaryClass,
   WORKSHEET_MODE,
@@ -370,19 +369,13 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
       const groupMarks = allInGroup.reduce((sum, x) => sum + x.count * x.marksEach, 0);
       const groupCount = allInGroup.reduce((sum, x) => sum + x.count, 0);
       const secRange = numbering.sectionRanges[s.id];
-      const rawReconciled = reconcileSectionGroupInstruction(
+      // Only the teacher's own section instruction prints (localised and renumbered); none typed, none printed.
+      const reconciledMainInstruction = reconcileSectionGroupInstruction(
         s.instructions,
         secRange?.groupStartQ ?? 0,
         secRange?.groupEndQ ?? 0,
         paperLang
       );
-      const hasDevanagari = /[\u0900-\u097F]/.test((rawReconciled || "").trim());
-      const reconciledMainInstruction =
-        (paperLang === "sa" || paperLang === "hi") && !hasDevanagari
-          ? getSharedInstruction(s.type, paperLang)
-          : paperLang === "en" && hasDevanagari
-          ? getSharedInstruction(s.type, "en")
-          : rawReconciled;
 
       const groupRightLabel = locale.section.formatGroupSummary(groupCount, groupMarks, {
         displayedCount: secRange?.groupDisplayedCount,
@@ -597,7 +590,7 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
         const subGridCols = isPrePrimary || it.orQuestion ? 0 : subpartGridColumns(subparts, isA5);
         const canDecompose = !isPrePrimary && !it.orQuestion && subparts && subparts.length > 1 && subGridCols === 0;
         const totalQuestionMarks = questionSlotMarks(s, { ...it.question, subparts } as never).marks;
-        // A question in a different form from its section's (e.g. grammar in a short-answer section) gets its own line.
+        // A line the teacher typed for this question prints above it; none typed, none printed.
         // The same instruction on consecutive questions ("Write as directed.") prints once, above the first.
         const ownInstructionLine = questionInstruction(s, it.question.type, it.instruction);
         const instructionLine = ownInstructionLine && ownInstructionLine === lastInstructionLine && !it.pageBreakBefore ? "" : ownInstructionLine;

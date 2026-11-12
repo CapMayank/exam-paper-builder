@@ -38,7 +38,6 @@ import {
   getColumnLabels,
   getMatchColumnInstruction,
   getQuestionTypeLabel,
-  getSharedInstruction,
   isMcqLikeType,
   isSubpartQuestionType,
   parseMatchColumnPairs,
@@ -586,19 +585,13 @@ export async function buildPaperDocx(
     // Sub-heading for specific question type within grouped section
     if (!isSameAsPrev && section.instructions && !isGroupedObjective) {
       const secRange = numbering.sectionRanges[section.id];
-      const rawReconciled = reconcileSectionGroupInstruction(
+      // Only the teacher's own section instruction prints (localised and renumbered); none typed, none printed.
+      const reconciledInstruction = reconcileSectionGroupInstruction(
         section.instructions,
         secRange?.groupStartQ ?? 0,
         secRange?.groupEndQ ?? 0,
         paperLang
       );
-      const hasDevanagari = /[\u0900-\u097F]/.test((rawReconciled || "").trim());
-      const reconciledInstruction =
-        (paperLang === "sa" || paperLang === "hi") && !hasDevanagari
-          ? getSharedInstruction(section.type, paperLang)
-          : paperLang === "en" && hasDevanagari
-          ? getSharedInstruction(section.type, "en")
-          : rawReconciled;
       if (reconciledInstruction) {
         paragraphs.push(
           new Paragraph({

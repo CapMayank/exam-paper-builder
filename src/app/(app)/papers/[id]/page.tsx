@@ -51,7 +51,7 @@ import { slotPlanSummary } from "@/lib/slotPlan";
 import { answerStageSummary, runAnswerStages } from "@/lib/answerStage";
 import { QuestionForm } from "@/components/QuestionForm";
 import { QuestionPicker } from "@/components/QuestionPicker";
-import { questionInstruction, toleratesType } from "@/lib/sectionTypes";
+import { toleratesType } from "@/lib/sectionTypes";
 import { isExhaustedUsage, QuestionFreshnessAlert, QuestionUsagePills } from "@/components/QuestionUsageHistory";
 import { QuestionView } from "@/components/QuestionView";
 import { ErrorBanner, Field, Modal, Spinner, useConfirm, useToast } from "@/components/ui";
@@ -2054,15 +2054,13 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                 <input
                                   key={`${it.id}:${it.instruction ?? ""}`}
                                   className="input !py-0.5 !text-[11px] min-w-0 flex-1 italic"
-                                  defaultValue={questionInstruction(s, it.question.type, it.instruction)}
-                                  placeholder="Line printed above this question"
+                                  defaultValue={it.instruction ?? ""}
+                                  placeholder="Optional line printed above this question"
                                   disabled={!canEditPaper || final}
                                   aria-label="Printed instruction"
                                   maxLength={300}
                                   onBlur={(e) => {
-                                    const v = e.target.value.trim();
-                                    const auto = questionInstruction(s, it.question.type, "");
-                                    const next = v === auto ? "" : v;
+                                    const next = e.target.value.trim();
                                     if (next !== (it.instruction ?? "")) void handleSetInstruction(it.id, next);
                                   }}
                                 />

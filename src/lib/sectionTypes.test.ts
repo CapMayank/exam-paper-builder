@@ -78,11 +78,14 @@ describe("school pattern defaults by subject", () => {
 
 describe("printed instruction line", () => {
   const english = sec("SHORT", 3, ["GRAMMAR"]);
-  it("is automatic only for a form the section explicitly allows", () => {
+  it("prints only what the teacher typed, never an automatic line", () => {
+    expect(questionInstruction({ type: "SHORT", allowedTypes: ["GRAMMAR"] } as never, "GRAMMAR", "")).toBe("");
+    expect(questionInstruction({ type: "SHORT", allowedTypes: ["GRAMMAR"] } as never, "GRAMMAR", " Do it ")).toBe("Do it");
     expect(questionInstruction(english, "SHORT")).toBe("");
-    expect(questionInstruction(english, "GRAMMAR")).toBe("Do as directed.");
+    expect(questionInstruction(english, "GRAMMAR")).toBe("");
+    expect(questionInstruction(english, "GRAMMAR", null)).toBe("");
+    expect(questionInstruction(english, "GRAMMAR", "   ")).toBe("");
     expect(questionInstruction(english, "GRAMMAR", "Change into passive voice.")).toBe("Change into passive voice.");
-    // an older paper's tolerated SHORT↔LONG swap prints exactly as before
     expect(questionInstruction(sec("SHORT", 3), "LONG")).toBe("");
   });
 });
