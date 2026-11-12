@@ -89,6 +89,7 @@ import { componentCoverage, parseComponents } from "@/lib/languageComponents";
 import { builderQuestionLabel, computeDisplayedPaperNumbering } from "@/lib/layout";
 import { nextSetIdentifier } from "@/lib/multiset";
 import { paperSectionChoiceRequirement } from "@/lib/internalChoiceRules";
+import { autosavePatch } from "@/lib/paperAutosave";
 import type { Book, PaperData, PaperItem, Section, MarksStyle, NumberingStyle, PrintDensity } from "@/lib/types";
 
 function Bar({ used, target, isComplete }: { used: number; target: number; isComplete?: boolean }) {
@@ -114,6 +115,9 @@ function Bar({ used, target, isComplete }: { used: number; target: number; isCom
     </div>
   );
 }
+
+// the server rejects the whole payload when one of these is empty, so autosave holds an emptied one back
+const AUTOSAVE_REQUIRED = ["title", "schoolName"] as const;
 
 export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) {
   const { id } = use(params);
@@ -157,7 +161,10 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   const [coverageOpen, setCoverageOpen] = useState(false);
   const [autosaveStatus, setAutosaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const isFirstRender = useRef(true);
+  // The details as last loaded from (or saved to) the server: autosave sends only what differs from these.
+  const loadedDetailsRef = useRef<typeof details | null>(null);
+  // (declared before the autosave effect, which only saves for a user who can edit the paper)
+  const [currentUser, setCurrentUser] = useState<Actor & { name: string; email: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   // The error banner sits at the top of a long page; an action far down (move, swap, replace) would fail silently
   // off-screen. Also raise it as a toast, which is visible wherever the teacher is scrolled to.
@@ -247,10 +254,11 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
       return;
     }
     setPaper(p);
-    setDetails({
+    const loaded = {
       title: p.title,
       schoolName: p.schoolName,
-      academicSession: p.academicSession ?? "2025–26",
+      // no fallback session here: whatever is in details can be saved, and a paper without one keeps none
+      academicSession: p.academicSession ?? "",
       examDate: p.examDate,
       paperSet: p.paperSet ?? "",
       subjectCode: p.subjectCode ?? "",
@@ -262,40 +270,29 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
       showSignatures: p.showSignatures === true,
       securityWatermark: p.securityWatermark === true,
       watermarkText: p.watermarkText ?? "",
-    });
+    };
+    loadedDetailsRef.current = loaded;
+    setDetails(loaded);
   }, [cancelAutosave]);
 
-  // Autosave effect for details
+  // Autosave: only the fields the teacher changed since the paper was loaded or last saved. Loading or adopting a
+  // paper sends nothing (details then equal what was loaded, including the detected language), and a view-only
+  // user sends nothing. An emptied title or school name is held back so it cannot sink the other changes.
   useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
-    }
-    if (!paper || paper.status === "FINAL") return;
+    if (!paper || paper.status === "FINAL" || !canModifyPaper(currentUser, paper)) return;
+    if (!loadedDetailsRef.current || !autosavePatch(loadedDetailsRef.current, details, AUTOSAVE_REQUIRED)) return;
 
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     autosaveTimerRef.current = setTimeout(async () => {
+      autosaveTimerRef.current = null;
+      // diff again when firing: an earlier save may have landed in the meantime
+      const changes = loadedDetailsRef.current && autosavePatch(loadedDetailsRef.current, details, AUTOSAVE_REQUIRED);
+      if (!changes) return;
       setAutosaveStatus("saving");
       try {
-        await api<PaperData>(`/api/papers/${id}`, {
-          method: "PATCH",
-          json: {
-            title: details.title,
-            schoolName: details.schoolName,
-            academicSession: details.academicSession,
-            examDate: details.examDate,
-            paperSet: details.paperSet,
-            subjectCode: details.subjectCode,
-            // language is not sent here: details.language starts from detection, and writing it back would
-            // overwrite the teacher's choice. The Language select saves its own change.
-            generalInstructions: details.generalInstructions,
-            printDensity: details.printDensity,
-            showCandidateDetails: details.showCandidateDetails,
-            showSignatures: details.showSignatures,
-            securityWatermark: details.securityWatermark,
-            watermarkText: details.watermarkText,
-          },
-        });
+        await api<PaperData>(`/api/papers/${id}`, { method: "PATCH", json: changes });
+        // the server now holds these values: they are the new baseline (onto whatever was adopted meanwhile)
+        if (loadedDetailsRef.current) loadedDetailsRef.current = { ...loadedDetailsRef.current, ...changes };
         setAutosaveStatus("saved");
         setTimeout(() => setAutosaveStatus("idle"), 2500);
       } catch {
@@ -306,7 +303,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
     return () => {
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     };
-  }, [id, details, paper?.status]);
+  }, [id, details, paper, currentUser]);
 
   async function handleMoveQuestion(itemId: string, direction: "up" | "down") {
     if (movingItemId) return;
@@ -511,8 +508,6 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
       setDuplicatingBusy(false);
     }
   }
-
-  const [currentUser, setCurrentUser] = useState<Actor & { name: string; email: string } | null>(null);
 
   useEffect(() => {
     api<Actor & { name: string; email: string }>("/api/me").then(setCurrentUser, () => undefined);
@@ -1331,7 +1326,12 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                       patch({ academicSession: nextSession });
                     }}
                   >
-                    {Array.from(new Set([...ACADEMIC_SESSIONS, details.academicSession || "2025–26"])).map((s) => (
+                    {!details.academicSession && (
+                      <option value="" disabled>
+                        Select session
+                      </option>
+                    )}
+                    {Array.from(new Set([...ACADEMIC_SESSIONS, details.academicSession].filter(Boolean))).map((s) => (
                       <option key={s} value={s}>
                         {s}
                       </option>
