@@ -45,6 +45,8 @@ export function detectAttemptCount(stem: string): number | undefined {
   if (/किन्हीं\s*(?:दो|2)|कोई\s*(?:दो|2)/i.test(stem)) return 2;
   if (/किन्हीं\s*(?:पाँच|पांच|5)|कोई\s*(?:पाँच|पांच|5)/i.test(stem)) return 5;
   if (/किन्हीं\s*(?:छह|छः|6)|कोई\s*(?:छह|छः|6)/i.test(stem)) return 6;
+  // "any one" is checked after the larger counts so those keep priority
+  if (/(?:किसी|कोई|किन्हीं)\s*(?:एक|1)/i.test(stem)) return 1;
 
   // English attempt indicators
   const enMatch = stem.match(/(?:attempt|answer)\s+any\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)/i) ||
@@ -59,6 +61,8 @@ export function detectAttemptCount(stem: string): number | undefined {
     const n = parseInt(val, 10);
     if (!isNaN(n) && n > 0) return n;
   }
+
+  if (/\bany\s+(?:one|1)\b/i.test(stem)) return 1;
 
   return undefined;
 }

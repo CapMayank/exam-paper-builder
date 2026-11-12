@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decomposeStemSubparts, detectAttemptCount } from "./subpartExtractor";
+import { decomposeForSlot, decomposeStemSubparts, detectAttemptCount } from "./subpartExtractor";
 
 describe("subpartExtractor", () => {
   it("correctly decomposes Sanskrit Question 32 with 5 subparts and attemptCount 4", () => {
@@ -106,6 +106,35 @@ describe("subpartExtractor", () => {
     it("detects English numbers", () => {
       expect(detectAttemptCount("Answer any 4 of the following questions")).toBe(4);
       expect(detectAttemptCount("Attempt any three parts")).toBe(3);
+    });
+
+    it("detects 'any one' choices", () => {
+      expect(detectAttemptCount("किसी एक विषय पर निबंध लिखिए-(कोई एक)")).toBe(1);
+      expect(detectAttemptCount("कोई एक")).toBe(1);
+      expect(detectAttemptCount("किन्हीं एक")).toBe(1);
+      expect(detectAttemptCount("Write an essay on any one topic")).toBe(1);
+      expect(detectAttemptCount("any 1 of the following")).toBe(1);
+    });
+
+    it("does not treat a bare 'एक' as a choice", () => {
+      expect(detectAttemptCount("एक निबंध लिखिए")).toBeUndefined();
+    });
+  });
+
+  describe("decomposeForSlot with an 'any one' essay", () => {
+    const essay = "किसी एक विषय पर निबंध लिखिए-\n(i) पर्यावरण रक्षा\n(ii) कोई महापुरुष\n(iii) अनुशासन\n(iv) विज्ञान से लाभ";
+
+    it("shares the slot marks as the full marks of each alternative", () => {
+      const res = decomposeForSlot(essay, 5);
+      expect(res).not.toBeNull();
+      expect(res!.attemptCount).toBe(1);
+      expect(res!.subparts).toHaveLength(4);
+      expect(res!.subparts.map((s) => s.marks)).toEqual([5, 5, 5, 5]);
+    });
+
+    it("gives parts 0 marks when the slot marks are unknown", () => {
+      const res = decomposeForSlot(essay, undefined);
+      expect(res!.subparts.map((s) => s.marks)).toEqual([0, 0, 0, 0]);
     });
   });
 });
