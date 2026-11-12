@@ -1,3 +1,4 @@
+import { questionSlotMarks } from "./blueprint";
 import { DEFAULT_MARKS_STYLE, MARKS_STYLES, type MarksStyle } from "./constants";
 
 /** k when the student answers only k of the parts (0 < k < partCount); otherwise undefined. */
@@ -31,4 +32,12 @@ export function partsAttemptCount(
 /** Stored marks style, or INLINE when empty or unknown. */
 export function resolveMarksStyle(value?: string | null): MarksStyle {
   return (MARKS_STYLES as readonly string[]).includes(value ?? "") ? (value as MarksStyle) : DEFAULT_MARKS_STYLE;
+}
+
+/** What a question is worth on the answer key: the same attempt-aware, slot-capped figure the paper prints. */
+export function answerKeyMarks(
+  section: Parameters<typeof questionSlotMarks>[0],
+  question: Parameters<typeof questionSlotMarks>[1],
+): number {
+  return questionSlotMarks(section, question).marks;
 }

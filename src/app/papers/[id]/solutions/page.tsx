@@ -14,11 +14,11 @@ import {
   isMcqLikeType,
   isSubpartQuestionType,
   normalizeMcqAnswer,
-  parseMatchColumnPairs,
   QUESTION_TYPE_LABEL,
   resolvePaperExamType,
 } from "@/lib/constants";
-import { formatMarksValue, subpartsTotalMarks } from "@/lib/types";
+import { formatMarksValue } from "@/lib/types";
+import { answerKeyMarks, showPartMarks } from "@/lib/marksDisplay";
 import { computeDisplayedPaperNumbering, formatQuestionNumber } from "@/lib/layout";
 import type { PaperData, QuestionDto } from "@/lib/types";
 
@@ -145,16 +145,7 @@ export default function SolutionsPage({ params }: PageProps<"/papers/[id]/soluti
       const numberLabel = itemNum?.displayLabel || fallbackLabel;
       const questionNum = itemNum?.questionNumber || numCount;
 
-      const isMatch = s.type === "MATCH_COLUMN" || it.question.type === "MATCH_COLUMN";
-      const matchPairCount = isMatch
-        ? (parseMatchColumnPairs(it.question.options, it.question.text, (it.question as any).explanation).length || s.count)
-        : 0;
-      const subpartsMarks = subpartsTotalMarks(it.question.subparts);
-      const totalQuestionMarks = isMatch
-        ? (s.count === 1 ? s.marksEach : Math.min(matchPairCount * s.marksEach, s.count * s.marksEach))
-        : subpartsMarks > 0
-        ? subpartsMarks
-        : s.marksEach;
+      const totalQuestionMarks = answerKeyMarks(s, it.question);
 
       allNumberedItems.push({
         number: questionNum,
@@ -559,7 +550,7 @@ function QuestionSolutionItem({
                   <span className="font-bold text-indigo-700 mr-1.5">{sp.label || `(${idx + 1})`}</span>
                   <QuestionContent text={sp.text} />
                 </div>
-                {sp.marks > 0 && (
+                {sp.marks > 0 && showPartMarks(q.subparts.length, q.attemptCount, "INLINE") && (
                   <span className="whitespace-nowrap rounded bg-slate-200 px-1.5 py-0.5 text-[11px] font-bold text-slate-700">
                     [{formatMarksValue(sp.marks)} M]
                   </span>
