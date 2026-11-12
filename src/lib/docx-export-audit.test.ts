@@ -339,6 +339,149 @@ In crystal field theory, the interaction between transition metal d-orbitals and
     });
   });
 
+  describe("Marks follow the print rules in Word", () => {
+    async function docText(paper: string): Promise<string> {
+      const result = await buildPaperDocx(paper, false, teacherUser as any);
+      const { default: JSZip } = await import("jszip");
+      const xml = await (await JSZip.loadAsync(result.buffer)).file("word/document.xml")!.async("string");
+      return xml.replace(/<[^>]+>/g, "");
+    }
+
+    async function makePaper(
+      marksStyle: string | undefined,
+      build: (sectionId: string) => Promise<{ questionId: string; orQuestionId?: string }>,
+    ) {
+      const section = await prisma.blueprintSection.create({
+        data: { blueprintId, position: 9, title: "Section Marks Rules", type: "LONG", count: 1, marksEach: 5 },
+      });
+      const { questionId, orQuestionId } = await build(section.id);
+      const paper = await prisma.paper.create({
+        data: {
+          title: `Marks rules ${Date.now()}`,
+          blueprintId,
+          layout: "PAGE",
+          schoolName: "Test Examination Board Academy",
+          status: "DRAFT",
+          createdById: teacherUser.id,
+          ...(marksStyle ? { marksStyle } : {}),
+        },
+      });
+      await prisma.paperQuestion.create({
+        data: { paperId: paper.id, sectionId: section.id, questionId, orQuestionId, position: 0 },
+      });
+      const questionIds = [questionId, ...(orQuestionId ? [orQuestionId] : [])];
+      return {
+        paperId: paper.id,
+        cleanup: async () => {
+          await prisma.paperQuestion.deleteMany({ where: { paperId: paper.id } });
+          await prisma.paper.delete({ where: { id: paper.id } });
+          await prisma.question.deleteMany({ where: { id: { in: questionIds } } });
+          await prisma.blueprintSection.delete({ where: { id: section.id } });
+        },
+      };
+    }
+
+    const mkQuestion = (text: string, subpartsJson?: unknown) =>
+      prisma.question.create({
+        data: {
+          bookId,
+          chapterId: ch1Id,
+          type: "LONG",
+          text,
+          subpartsJson: subpartsJson === undefined ? undefined : JSON.stringify(subpartsJson),
+          createdById: teacherUser.id,
+        },
+      });
+    const four = (marks: number) =>
+      ["First", "Second", "Third", "Fourth"].map((w, i) => ({ label: `(${i + 1})`, text: `${w} essay topic`, marks }));
+    const count = (text: string, re: RegExp) => (text.match(re) ?? []).length;
+
+    it("prints the total once for an any-1-of-4 question, not on each option", async () => {
+      const made = await makePaper(undefined, async () => {
+        const q = await mkQuestion("Write an essay on any one of the following.", { attemptCount: 1, subparts: four(5) });
+        return { questionId: q.id };
+      });
+      try {
+        const text = await docText(made.paperId);
+        expect(text).toContain("Write an essay on any one of the following.  [5 Marks]");
+        expect(count(text, /\[5 Marks?\]/g)).toBe(1);
+      } finally {
+        await made.cleanup();
+      }
+    });
+
+    it("prints no marks labels at all when the marks style is SUPPRESSED", async () => {
+      const made = await makePaper("SUPPRESSED", async () => {
+        const q = await mkQuestion("Answer each part below.", four(1));
+        return { questionId: q.id };
+      });
+      try {
+        const text = await docText(made.paperId);
+        expect(text).toContain("Answer each part below.");
+        expect(text).toContain("Fourth essay topic");
+        expect(count(text, /\[[\d½¼¾.]+ Marks?\]/g)).toBe(0);
+      } finally {
+        await made.cleanup();
+      }
+    });
+
+    it("treats an unknown stored marks style as INLINE", async () => {
+      const made = await makePaper("WEIRD", async () => {
+        const q = await mkQuestion("Answer every part below.", [
+          { label: "(1)", text: "Part alpha", marks: 2 },
+          { label: "(2)", text: "Part beta", marks: 3 },
+        ]);
+        return { questionId: q.id };
+      });
+      try {
+        const text = await docText(made.paperId);
+        expect(text).toContain("Part alpha [2 Marks]");
+        expect(text).toContain("Part beta [3 Marks]");
+        expect(text).toContain("Answer every part below.  [5 Marks]");
+      } finally {
+        await made.cleanup();
+      }
+    });
+
+    it("prints an OR pair's marks once, after the first question, not after the alternative", async () => {
+      const made = await makePaper(undefined, async () => {
+        const q = await mkQuestion("Primary question stem here.");
+        const or = await mkQuestion("Alternative question stem here.");
+        return { questionId: q.id, orQuestionId: or.id };
+      });
+      try {
+        const text = await docText(made.paperId);
+        expect(text).toContain("Primary question stem here.  [5 Marks]");
+        expect(text).toContain("Alternative question stem here.");
+        expect(text).not.toMatch(/Alternative question stem here\.\s*\[/);
+        expect(count(text, /\[5 Marks?\]/g)).toBe(1);
+      } finally {
+        await made.cleanup();
+      }
+    });
+
+    it("applies each body's own attempt count inside an OR pair", async () => {
+      const made = await makePaper(undefined, async () => {
+        const q = await mkQuestion("Compulsory body stem.", [
+          { label: "(1)", text: "Compulsory one", marks: 2 },
+          { label: "(2)", text: "Compulsory two", marks: 3 },
+        ]);
+        const or = await mkQuestion("Choice body stem.", { attemptCount: 1, subparts: four(5) });
+        return { questionId: q.id, orQuestionId: or.id };
+      });
+      try {
+        const text = await docText(made.paperId);
+        expect(text).toContain("Compulsory one [2 Marks]");
+        expect(text).toContain("Compulsory two [3 Marks]");
+        expect(text).toContain("Compulsory body stem.  [5 Marks]");
+        expect(count(text, /\[5 Marks?\]/g)).toBe(1); // the question line only; the options and the alternative print none
+        expect(text).not.toMatch(/essay topic\s*\[/);
+      } finally {
+        await made.cleanup();
+      }
+    });
+  });
+
   describe("Subpart Marks Invariant Guardrails (Edit PUT & Add POST)", () => {
     it("rejects PUT edit if subpart marks sum does not match section marksEach", async () => {
       const invalidPayload = {

@@ -1,5 +1,6 @@
 import { questionInstruction } from "./sectionTypes";
 import { questionSlotMarks } from "@/lib/blueprint";
+import { partsAttemptCount, resolveMarksStyle, showPartMarks } from "@/lib/marksDisplay";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -46,7 +47,7 @@ import {
 } from "@/lib/constants";
 import { decomposeForSlot } from "@/lib/subpartExtractor";
 import { prisma } from "@/lib/prisma";
-import { parseSubparts, parseSubpartsPayload, subpartsTotalMarks, type SubPart } from "@/lib/types";
+import { parseSubparts, parseSubpartsPayload, type SubPart } from "@/lib/types";
 import { UPLOAD_DIR } from "@/lib/uploads";
 import {
   computeDisplayedPaperNumbering,
@@ -105,6 +106,7 @@ function renderSubpartsDocx(
   isMarkingScheme: boolean,
   lang: PaperLanguage = "en",
   indentLevel = 1,
+  showMarks = true,
 ) {
   const romans = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
   const font = lang === "sa" || lang === "hi" ? "Mangal" : "Times New Roman";
@@ -122,7 +124,7 @@ function renderSubpartsDocx(
         children: [
           new TextRun({ text: `${spLabel} `, bold: true, font }),
           ...formatMathTextRuns(sp.text || "", { font }),
-          ...(spMarks > 0 ? [new TextRun({ text: ` ${formatMarksLabel(spMarks, lang)}`, bold: true, font })] : []),
+          ...(showMarks && spMarks > 0 ? [new TextRun({ text: ` ${formatMarksLabel(spMarks, lang)}`, bold: true, font })] : []),
         ],
       }),
     );
@@ -158,7 +160,7 @@ function renderSubpartsDocx(
     }
 
     if (Array.isArray(sp.subparts) && sp.subparts.length > 0) {
-      renderSubpartsDocx(sp.subparts, paragraphs, isMarkingScheme, lang, indentLevel + 1);
+      renderSubpartsDocx(sp.subparts, paragraphs, isMarkingScheme, lang, indentLevel + 1, showMarks);
     }
 
     if (isMarkingScheme && sp.answer) {
@@ -314,6 +316,7 @@ export async function buildPaperDocx(
   const view = mergeSameFormRows(loaded.blueprint.sections, loaded.items);
   const paper = { ...loaded, blueprint: { ...loaded.blueprint, sections: view.sections }, items: view.items };
 
+  const marksStyle = resolveMarksStyle(paper.marksStyle);
   const paperLang = detectPaperLanguage(paper, paper.items);
   const locale = getPaperLocale(paperLang);
   const isHindi = paperLang === "hi";
@@ -717,8 +720,9 @@ export async function buildPaperDocx(
       const { subparts: rawSubparts, attemptCount } = parseSubpartsPayload(q.subpartsJson);
       let parsedSubparts = canHaveSubparts(q.type) ? rawSubparts : [];
       let baseQText = isMatch ? getMatchColumnInstruction(q.text) : q.text;
+      let decomp: ReturnType<typeof decomposeForSlot> = null;
       if (parsedSubparts.length === 0 && canHaveSubparts(q.type)) {
-        const decomp = decomposeForSlot(baseQText, section.marksEach);
+        decomp = decomposeForSlot(baseQText, section.marksEach);
         if (decomp) {
           baseQText = decomp.stem;
           parsedSubparts = decomp.subparts;
@@ -741,7 +745,7 @@ export async function buildPaperDocx(
       renderQuestionTextWithTable(
         qLabel,
         qText,
-        item.orQuestion ? undefined : qTotalMarks,
+        marksStyle === "SUPPRESSED" ? undefined : qTotalMarks,
         isMatch,
         Boolean((item as any).pageBreakBefore) && !instructionLine,
         paragraphs,
@@ -899,7 +903,14 @@ export async function buildPaperDocx(
 
       // Subparts for case study / passage / multi-part questions
       if (parsedSubparts.length > 0) {
-        renderSubpartsDocx(parsedSubparts, paragraphs, isMarkingScheme, paperLang);
+        renderSubpartsDocx(
+          parsedSubparts,
+          paragraphs,
+          isMarkingScheme,
+          paperLang,
+          1,
+          showPartMarks(parsedSubparts.length, partsAttemptCount({ subparts: rawSubparts, attemptCount }, decomp), marksStyle),
+        );
       }
 
       // Model Answer / Solution for primary question
@@ -931,33 +942,17 @@ export async function buildPaperDocx(
       if (item.orQuestion) {
         const orQ = item.orQuestion;
         const isOrMatch = orQ.type === "MATCH_COLUMN";
-        let orMatchCount = 0;
-        if (isOrMatch && orQ.optionsJson) {
-          try {
-            const opts = JSON.parse(orQ.optionsJson);
-            orMatchCount = parseMatchColumnPairs(opts, orQ.text, (orQ as any).explanation).length;
-          } catch {}
-        }
         const { subparts: rawOrSubparts, attemptCount: orAttemptCount } = parseSubpartsPayload(orQ.subpartsJson);
         let parsedOrSubparts = canHaveSubparts(orQ.type) ? rawOrSubparts : [];
         let baseOrQText = isOrMatch ? getMatchColumnInstruction(orQ.text) : orQ.text;
+        let decompOr: ReturnType<typeof decomposeForSlot> = null;
         if (parsedOrSubparts.length === 0 && canHaveSubparts(orQ.type)) {
-          const decompOr = decomposeForSlot(baseOrQText, section.marksEach);
+          decompOr = decomposeForSlot(baseOrQText, section.marksEach);
           if (decompOr) {
             baseOrQText = decompOr.stem;
             parsedOrSubparts = decompOr.subparts;
           }
         }
-        const orSubpartsMarks = orAttemptCount
-          ? orAttemptCount * (parsedOrSubparts[0]?.marks || 1)
-          : subpartsTotalMarks(parsedOrSubparts);
-        const orTotalMarks = isOrMatch
-          ? (section.count === 1 ? section.marksEach : Math.min(orMatchCount * section.marksEach, section.count * section.marksEach))
-          : section.marksEach > 0 && orSubpartsMarks > section.marksEach
-          ? section.marksEach
-          : orSubpartsMarks > 0
-          ? orSubpartsMarks
-          : section.marksEach;
         const orQText = baseOrQText;
         const orSeparatorLabel = getInternalChoiceSeparatorLabel(paperLang);
 
@@ -978,7 +973,7 @@ export async function buildPaperDocx(
         renderQuestionTextWithTable(
           "",
           orQText,
-          qTotalMarks || orTotalMarks,
+          undefined, // the pair's marks print once, on the first question's line
           isOrMatch,
           false,
           paragraphs,
@@ -1135,7 +1130,18 @@ export async function buildPaperDocx(
 
         // Subparts for case study / passage for OR question
         if (parsedOrSubparts.length > 0) {
-          renderSubpartsDocx(parsedOrSubparts, paragraphs, isMarkingScheme, paperLang);
+          renderSubpartsDocx(
+            parsedOrSubparts,
+            paragraphs,
+            isMarkingScheme,
+            paperLang,
+            1,
+            showPartMarks(
+              parsedOrSubparts.length,
+              partsAttemptCount({ subparts: rawOrSubparts, attemptCount: orAttemptCount }, decompOr),
+              marksStyle,
+            ),
+          );
         }
 
         // Model Answer / Solution for OR question
