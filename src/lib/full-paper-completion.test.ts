@@ -11,6 +11,7 @@ import { POST as autoFillPaperRoute } from "@/app/api/papers/[id]/autofill/route
 import { POST as commitAiSection } from "@/app/api/papers/[id]/ai-commit-section/route";
 import { extractTableFromText } from "./math";
 import { prisma } from "./prisma";
+import { isTemplateFiller } from "./templateFiller";
 
 describe("Full Paper Completion & Robust Generation Suite", () => {
   let user: { id: string; role: string };
@@ -157,6 +158,12 @@ describe("Full Paper Completion & Robust Generation Suite", () => {
       expect(item.question.text).toBeTruthy();
       expect(item.orQuestion?.text).toBeTruthy();
       expect(item.question.text).not.toEqual(item.orQuestion?.text);
+      // the bank was empty, so both are offline template filler, and the client can tell
+      expect(isTemplateFiller(item.question)).toBe(true);
+      expect(isTemplateFiller(item.orQuestion!)).toBe(true);
+    }
+    for (const item of data.paper.items) {
+      expect(isTemplateFiller(item.question)).toBe(true);
     }
   });
 
@@ -206,6 +213,45 @@ describe("Full Paper Completion & Robust Generation Suite", () => {
     expect(data.paper.items).toHaveLength(1);
     expect(data.paper.items[0].orQuestion).toBeDefined();
     expect(data.paper.items[0].orQuestion.text).toContain("96 और 404");
+  });
+
+  it("2b. Auto-Fill does not attach an English template OR to a Hindi bank question in a Hindi paper", async () => {
+    await prisma.paperQuestion.deleteMany({ where: { paperId } });
+    // only the question below is in the bank: the earlier tests' questions would otherwise be picked
+    await prisma.question.deleteMany({ where: { bookId } });
+    await prisma.paper.update({ where: { id: paperId }, data: { language: "hi" } });
+    try {
+      const bankQ = await prisma.question.create({
+        data: {
+          bookId,
+          chapterId: ch1Id,
+          type: "SHORT",
+          text: "सिद्ध कीजिए कि $\\sqrt{7}$ एक अपरिमेय संख्या है। अपने उत्तर के प्रत्येक चरण का कारण लिखिए।",
+          answer: "माना $\\sqrt{7} = a/b$ जहाँ $a$ और $b$ सह-अभाज्य हैं; विरोधाभास से सिद्ध।",
+          optionsJson: "[]",
+          subpartsJson: "[]",
+          difficulty: "MEDIUM",
+          createdById: user.id,
+        },
+      });
+      const req = new Request(`http://localhost/api/papers/${paperId}/autofill`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sectionId: secShortId }),
+      });
+      const res = await autoFillPaperRoute(req, { params: Promise.resolve({ id: paperId }) });
+      const data = await res.json();
+      expect(res.status).toBe(200);
+
+      const items = await prisma.paperQuestion.findMany({ where: { paperId }, include: { orQuestion: true } });
+      expect(items).toHaveLength(1);
+      expect(items[0].questionId).toBe(bankQ.id);
+      // the only OR on offer is an English template: it is left out (the slot keeps its primary) and counted
+      expect(items[0].orQuestion).toBeNull();
+      expect(data.message).toMatch(/Left out 1 candidate question/);
+    } finally {
+      await prisma.paper.update({ where: { id: paperId }, data: { language: "en" } });
+    }
   });
 
   it("3. extractTableFromText handles single-line frequency distribution tables with inline prose", () => {

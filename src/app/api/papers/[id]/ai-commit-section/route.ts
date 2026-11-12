@@ -15,6 +15,7 @@ import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { isQuestionContaminated, validateGeneratedQuestion } from "@/lib/questionValidator";
 import { normalizeSubpartMarks } from "@/lib/types";
+import { TEMPLATE_FALLBACK_PROVENANCE } from "@/lib/templateFiller";
 import {
   verifyQuestionAcademicQuality,
   repairOrRegenerateQuestion,
@@ -334,7 +335,7 @@ export const POST = route(async (req, { id }, user) => {
       const chapterId = resolveChapterId(q, qIdx);
       const provenance =
         bodyIsMock || templateFallbackIdx.has(qIdx)
-          ? "TEMPLATE_FALLBACK: offline curriculum template, not AI-generated; teacher review required"
+          ? TEMPLATE_FALLBACK_PROVENANCE
           : "AI_GENERATED";
 
       // 1. Create primary question in the question bank

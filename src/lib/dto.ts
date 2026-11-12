@@ -35,6 +35,8 @@ export type QuestionDto = {
   subpartsJson?: string;
   usages?: QuestionUsageTag[];
   attemptCount?: number;
+  /** Where the question came from (e.g. "AI_GENERATED", or TEMPLATE_FALLBACK for offline template filler); absent for bank questions typed by a teacher. */
+  sourceProvenance?: string;
 };
 
 export type PaperSnapshotDto = {
@@ -236,6 +238,7 @@ export function toQuestionDto(
     usages,
     attemptCount,
     ...(q.passageGroupId ? { passageGroupId: q.passageGroupId } : {}),
+    ...(q.sourceProvenance ? { sourceProvenance: q.sourceProvenance } : {}),
   };
 }
 

@@ -2,7 +2,7 @@ import { isTypeAllowed } from "@/lib/sectionTypes";
 import { HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { autoFillPaper } from "@/lib/autofill";
-import { quotaRepresentatives } from "@/lib/blueprint";
+import { quotaRepresentatives, slotPlacement, subpartsMarksProblem, whyCannotAdd, type PlacedItem } from "@/lib/blueprint";
 import { suggestComponentsForPaper } from "@/lib/paperComponents";
 import {
   buildAndValidateGenerationContract,
@@ -15,6 +15,7 @@ import { devanagariShare, isQuestionContaminated, MIN_DEVANAGARI_SHARE } from "@
 import { parseMatchColumnPairs } from "@/lib/constants";
 import { attemptedSubpartsMarks, parseSubpartsPayload } from "@/lib/types";
 import { isVariantCopy } from "@/lib/questionWrite";
+import { TEMPLATE_FALLBACK_PROVENANCE } from "@/lib/templateFiller";
 
 function safeJsonArray(json: string | null): string[] {
   try {
@@ -154,11 +155,13 @@ export const POST = route(async (req, { id }, user) => {
     .map((i) => i.orQuestion?.id)
     .filter((qid): qid is string => Boolean(qid));
 
+  const blueprintDef = {
+    sections: paper.blueprint.sections,
+    chapters: paper.blueprint.chapters.map((c) => ({ chapterId: c.chapterId, marks: c.marks, unitKey: c.unitKey, unitTitle: c.unitTitle })),
+  };
+
   const result = autoFillPaper(
-    {
-      sections: paper.blueprint.sections,
-      chapters: paper.blueprint.chapters.map((c) => ({ chapterId: c.chapterId, marks: c.marks, unitKey: c.unitKey, unitTitle: c.unitTitle })),
-    },
+    blueprintDef,
     toPlacedItems(paper.blueprint.sections, paper.items),
     candidatePool,
     orQuestionIds,
@@ -181,6 +184,51 @@ export const POST = route(async (req, { id }, user) => {
 
   const chapterMap = new Map(paper.blueprint.chapters.map((c) => [c.chapterId, c.chapter]));
   const sectionMap = new Map(paper.blueprint.sections.map((s) => [s.id, s]));
+
+  // A Hindi/Sanskrit paper must not receive English filler (the offline templates are English).
+  const needsDevanagari = paper.language === "hi" || paper.language === "sa";
+  const wrongScript = (text: string) => needsDevanagari && devanagariShare(text) < MIN_DEVANAGARI_SHARE;
+
+  // What the paper will hold once this auto-fill is saved: its items, the bank picks and, as they are accepted,
+  // the template questions. Template questions and OR alternatives are checked against it.
+  const plannedItems: PlacedItem[] = [
+    ...toPlacedItems(paper.blueprint.sections, paper.items),
+    ...result.added.map((a) => {
+      const sec = sectionMap.get(a.sectionId);
+      const bq = bankById.get(a.questionId);
+      return { sectionId: a.sectionId, chapterId: a.chapterId, questionId: a.questionId, ...(sec && bq ? slotPlacement(sec, bq) : {}) };
+    }),
+  ];
+
+  /**
+   * Why `q` cannot take a slot in `sectionId`; null when it can. The same two checks a teacher's add goes
+   * through (POST /api/papers/[id]/questions): its parts' marks, then the blueprint slot. An OR alternative is
+   * checked as if it took its primary's slot, so `exceptQuestionId` leaves that primary out of the count.
+   */
+  const placementProblem = (
+    sectionId: string,
+    chapterId: string,
+    q: Parameters<typeof slotPlacement>[1] & { passageGroupId?: string | null },
+    exceptQuestionId?: string,
+  ): string | null => {
+    const sec = sectionMap.get(sectionId);
+    if (!sec) return "That section is not part of this paper's blueprint.";
+    const marksProblem = subpartsMarksProblem(sec, q);
+    if (marksProblem) return marksProblem;
+    const at = exceptQuestionId ? plannedItems.findIndex((p) => p.questionId === exceptQuestionId) : -1;
+    const against = at >= 0 ? plannedItems.filter((_, i) => i !== at) : plannedItems;
+    return whyCannotAdd(blueprintDef, against, {
+      sectionId,
+      chapterId,
+      type: q.type,
+      ...slotPlacement(sec, q),
+      passageGroupId: q.passageGroupId,
+    });
+  };
+
+  // Template questions (primary or OR) and bank OR alternatives left out because they failed those checks
+  let skippedTemplateCount = 0;
+  const skippedBankOrIds = new Set<string>();
 
   // Track used IDs and texts for pairing/synthesizing distinct OR alternatives
   const usedIds = new Set<string>([
@@ -306,20 +354,29 @@ export const POST = route(async (req, { id }, user) => {
             existingQuestionTexts: Array.from(usedTexts),
           })[0];
 
-          // A Hindi/Sanskrit paper must not receive English filler (the offline templates are English).
-          const needsDevanagari = paper.language === "hi" || paper.language === "sa";
-          if (grounded && needsDevanagari && devanagariShare(grounded.text) < MIN_DEVANAGARI_SHARE) continue;
+          // a template question in the wrong script or that does not fit the slot is left out: the slot stays empty
+          if (grounded && (wrongScript(grounded.text) || placementProblem(sec.id, chosenBpChapter.chapterId, grounded))) {
+            skippedTemplateCount++;
+            continue;
+          }
 
           if (grounded) {
+            let orQuestion = slotReq.required ? grounded.orQuestion : undefined;
+            // its OR alternative is held to the same checks; one that fails is dropped and the slot keeps its primary
+            if (orQuestion && (wrongScript(orQuestion.text) || placementProblem(sec.id, chosenBpChapter.chapterId, orQuestion))) {
+              skippedTemplateCount++;
+              orQuestion = undefined;
+            }
             usedTexts.add(grounded.text);
-            if (grounded.orQuestion) usedTexts.add(grounded.orQuestion.text);
+            if (orQuestion) usedTexts.add(orQuestion.text);
 
             synthesizedItems.push({
               sectionId: sec.id,
               chapterId: chosenBpChapter.chapterId,
               question: grounded,
-              orQuestion: slotReq.required ? grounded.orQuestion : undefined,
+              orQuestion,
             });
+            plannedItems.push({ sectionId: sec.id, chapterId: chosenBpChapter.chapterId, ...slotPlacement(sec, grounded) });
 
             const cur = (chapterRemainingMarks.get(rep(chosenBpChapter.chapterId)) ?? 0);
             chapterRemainingMarks.set(rep(chosenBpChapter.chapterId), cur - (collapsedMatch ? u.count * sec.marksEach : sec.marksEach));
@@ -335,7 +392,11 @@ export const POST = route(async (req, { id }, user) => {
       addedCount: 0,
       unfilled: result.unfilled,
       complete: false,
-      message: `No matching questions found in question bank for the remaining slots.${unfilledSummary}`,
+      message: `No matching questions found in question bank for the remaining slots.${
+        skippedTemplateCount > 0
+          ? ` Left out ${skippedTemplateCount} offline template question${skippedTemplateCount > 1 ? "s" : ""} that did not fit ${skippedTemplateCount > 1 ? "their" : "its"} slot's type, marks or language.`
+          : ""
+      }${unfilledSummary}`,
       paper,
     };
   }
@@ -349,19 +410,29 @@ export const POST = route(async (req, { id }, user) => {
       sectionId: string;
       chapterId: string;
       primaryQuestionText: string;
+      /** The primary question this OR is for; the OR is checked as if it took that question's slot. */
+      primaryQuestionId?: string;
     },
   ): Promise<string | null> => {
     const sec = sectionMap.get(params.sectionId);
     if (!sec) return null;
 
-    // 1. Try finding an unused distinct bank question from the same chapter and type
-    const bankMatch = validBankQuestions.find(
-      (q) =>
-        !usedIds.has(q.id) &&
-        q.chapterId === params.chapterId &&
-        isTypeAllowed(sec, q.type) &&
-        !isParaphraseOrDuplicateChoice(params.primaryQuestionText, q.text).isDuplicateOrParaphrase,
-    );
+    // 1. Try finding an unused distinct bank question from the same chapter and type that fits the slot
+    const bankMatch = validBankQuestions.find((q) => {
+      if (
+        usedIds.has(q.id) ||
+        q.chapterId !== params.chapterId ||
+        !isTypeAllowed(sec, q.type) ||
+        isParaphraseOrDuplicateChoice(params.primaryQuestionText, q.text).isDuplicateOrParaphrase
+      ) {
+        return false;
+      }
+      if (placementProblem(params.sectionId, q.chapterId, q, params.primaryQuestionId)) {
+        skippedBankOrIds.add(q.id);
+        return false;
+      }
+      return true;
+    });
     if (bankMatch) {
       usedIds.add(bankMatch.id);
       usedTexts.add(bankMatch.text);
@@ -407,6 +478,11 @@ export const POST = route(async (req, { id }, user) => {
         ? grounded.orQuestion
         : grounded;
     if (!candidate) return null;
+    // the same script and placement checks as a template primary; a failing one leaves the slot without an OR
+    if (wrongScript(candidate.text) || placementProblem(params.sectionId, params.chapterId, candidate, params.primaryQuestionId)) {
+      skippedTemplateCount++;
+      return null;
+    }
 
     usedTexts.add(candidate.text);
     synthesizedOrCount++;
@@ -422,7 +498,7 @@ export const POST = route(async (req, { id }, user) => {
         difficulty: candidate.difficulty || "MEDIUM",
         cognitiveLevel: candidate.cognitiveLevel || "APPLYING",
         explanation: candidate.explanation || null,
-        sourceProvenance: "TEMPLATE_FALLBACK: offline curriculum template, not AI-generated; teacher review required",
+        sourceProvenance: TEMPLATE_FALLBACK_PROVENANCE,
         createdById: user.id,
       },
     });
@@ -454,6 +530,7 @@ export const POST = route(async (req, { id }, user) => {
           sectionId: existing.sectionId,
           chapterId: existing.question.chapter?.id || (existing.question as any).chapterId,
           primaryQuestionText: existing.question.text,
+          primaryQuestionId: existing.question.id,
         });
         if (orQId) {
           await tx.paperQuestion.update({
@@ -484,6 +561,7 @@ export const POST = route(async (req, { id }, user) => {
           sectionId: item.sectionId,
           chapterId: item.chapterId,
           primaryQuestionText: primaryBankQ?.text || "",
+          primaryQuestionId: item.questionId,
         });
       }
 
@@ -515,7 +593,7 @@ export const POST = route(async (req, { id }, user) => {
           difficulty: syn.question.difficulty || "MEDIUM",
           cognitiveLevel: syn.question.cognitiveLevel || "APPLYING",
           explanation: syn.question.explanation || null,
-          sourceProvenance: "TEMPLATE_FALLBACK: offline curriculum template, not AI-generated; teacher review required",
+          sourceProvenance: TEMPLATE_FALLBACK_PROVENANCE,
           createdById: user.id,
         },
       });
@@ -534,7 +612,7 @@ export const POST = route(async (req, { id }, user) => {
             difficulty: syn.orQuestion.difficulty || "MEDIUM",
             cognitiveLevel: syn.orQuestion.cognitiveLevel || "APPLYING",
             explanation: syn.orQuestion.explanation || null,
-            sourceProvenance: "TEMPLATE_FALLBACK: offline curriculum template, not AI-generated; teacher review required",
+            sourceProvenance: TEMPLATE_FALLBACK_PROVENANCE,
             createdById: user.id,
           },
         });
@@ -596,6 +674,11 @@ export const POST = route(async (req, { id }, user) => {
     templateCount > 0
       ? ` ${templateCount} question${templateCount > 1 ? "s" : ""} (including OR alternatives) ${templateCount > 1 ? "are" : "is a"} generic offline template${templateCount > 1 ? "s" : ""} (not written by AI or from your bank): review or replace ${templateCount > 1 ? "them" : "it"} before printing.`
       : "";
+  const skippedCount = skippedTemplateCount + skippedBankOrIds.size;
+  const skippedNote =
+    skippedCount > 0
+      ? ` Left out ${skippedCount} candidate question${skippedCount > 1 ? "s" : ""} (offline templates or bank OR alternatives) that did not fit ${skippedCount > 1 ? "their" : "its"} slot's type, marks or language.`
+      : "";
   const finalUnfilledSummary = finalUnfilled.length > 0
     ? ` Unfilled: ${finalUnfilled.map((u) => `${u.title} (${u.count} needed)`).join(", ")}.`
     : "";
@@ -608,8 +691,8 @@ export const POST = route(async (req, { id }, user) => {
     complete: updatedPaper?.progress.complete ?? (finalUnfilled.length === 0),
     solverMode: result.solverMode,
     message: (updatedPaper?.progress.complete ?? (finalUnfilled.length === 0))
-      ? `Successfully auto-filled ${totalAdded} questions.${repairNote} Paper is now complete!${templateNote}${modeNote}`
-      : `Auto-filled ${totalAdded} questions.${repairNote}${templateNote}${finalUnfilledSummary}${modeNote}`,
+      ? `Successfully auto-filled ${totalAdded} questions.${repairNote} Paper is now complete!${templateNote}${skippedNote}${modeNote}`
+      : `Auto-filled ${totalAdded} questions.${repairNote}${templateNote}${skippedNote}${finalUnfilledSummary}${modeNote}`,
     paper: updatedPaper,
   };
 });
