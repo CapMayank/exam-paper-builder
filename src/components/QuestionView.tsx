@@ -22,13 +22,12 @@ import {
 import { getInternalChoiceSeparatorLabel } from "@/lib/internalChoiceRules";
 import { isTextPredominantlySanskrit, type PaperLanguage } from "@/lib/localization";
 import type { PrintFit } from "@/lib/printFit";
-import { optionMinWidth, splitStemParagraphs, subpartGridColumns } from "@/lib/compactLayout";
+import { optionLabel, optionMinWidth, splitStemParagraphs, subpartGridColumns } from "@/lib/compactLayout";
 import { partsAttemptCount, showPartMarks } from "@/lib/marksDisplay";
 import type { QuestionDto } from "@/lib/types";
 import { MathText } from "@/components/MathText";
 import { QuestionContent } from "@/components/QuestionContent";
 
-const LETTERS = "ABCDEFGHIJ";
 const LETTERS_LIST = ["(A)", "(B)", "(C)", "(D)", "(E)", "(F)", "(G)", "(H)", "(I)", "(J)"];
 const ROMAN_LOWER = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)", "(ix)", "(x)"];
 
@@ -36,7 +35,7 @@ const ROMAN_LOWER = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(v
  * Options laid out to use as few lines as they need: short ones four across, medium ones two across, and an
  * option too long for its share takes a row of its own instead of wrapping inside a narrow column.
  */
-function OptionFlow({ options, forceSingle, isA5, fontSize, marginTop }: { options: string[]; forceSingle?: boolean; isA5?: boolean; fontSize: string; marginTop: string }) {
+export function OptionFlow({ options, forceSingle, isA5, fontSize, marginTop }: { options: string[]; forceSingle?: boolean; isA5?: boolean; fontSize: string; marginTop: string }) {
   const cleaned = options.map((o) => cleanOptionText(o));
   const minWidth = optionMinWidth(cleaned, forceSingle);
   const gapMm = isA5 ? 3 : 4;
@@ -57,7 +56,7 @@ function OptionFlow({ options, forceSingle, isA5, fontSize, marginTop }: { optio
             fontSize,
           }}
         >
-          <span style={{ fontWeight: 600 }}>({LETTERS[i]?.toLowerCase() ?? i + 1})</span> <MathText text={o} />
+          <span style={{ fontWeight: 600 }}>{optionLabel(i)}</span> <MathText text={o} />
         </div>
       ))}
     </div>

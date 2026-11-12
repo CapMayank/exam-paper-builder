@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { optionMinWidth, splitStemParagraphs, subpartGridColumns } from "./compactLayout";
+import { groupedItemPrintsOptions, optionLabel, optionMinWidth, splitStemParagraphs, subpartGridColumns } from "./compactLayout";
 
 const sp = (...texts: string[]) => texts.map((text) => ({ text, marks: 0.5 }));
 
@@ -43,5 +43,25 @@ describe("splitStemParagraphs", () => {
   it("keeps a one-paragraph stem and display maths whole", () => {
     expect(splitStemParagraphs("One line\nsecond line")).toEqual(["One line\nsecond line"]);
     expect(splitStemParagraphs("Solve:\n\n$$x^2$$")).toHaveLength(1);
+  });
+});
+
+describe("optionLabel", () => {
+  it("labels options as a printed question does: (a)…(j), then numbers, with no four-option limit", () => {
+    expect([0, 1, 2, 3, 4, 5].map(optionLabel)).toEqual(["(a)", "(b)", "(c)", "(d)", "(e)", "(f)"]);
+    expect(optionLabel(9)).toBe("(j)");
+    expect(optionLabel(10)).toBe("(11)");
+  });
+});
+
+describe("groupedItemPrintsOptions", () => {
+  it("follows the item's own type, not the section's", () => {
+    // an MCQ placed in a true/false or fill-in section keeps its options
+    expect(groupedItemPrintsOptions({ type: "MCQ", options: ["x", "y"] })).toBe(true);
+    expect(groupedItemPrintsOptions({ type: "ASSERTION_REASON", options: ["x", "y"] })).toBe(true);
+    // a true/false item in an MCQ section prints none, even with stray options stored
+    expect(groupedItemPrintsOptions({ type: "TRUE_FALSE", options: ["True", "False"] })).toBe(false);
+    expect(groupedItemPrintsOptions({ type: "MCQ", options: [] })).toBe(false);
+    expect(groupedItemPrintsOptions({ type: "MCQ" })).toBe(false);
   });
 });

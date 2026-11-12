@@ -1,5 +1,6 @@
 // Pure helpers for the space-saving print arrangement: which blocks may sit side by side or be split.
 import { extractTableFromText } from "./math";
+import { isMcqLikeType } from "./constants";
 
 type SubpartLike = { text: string; marks?: number; options?: string[] | null; subparts?: unknown[] | null };
 
@@ -38,6 +39,18 @@ export function optionMinWidth(options: readonly string[], forceSingle = false):
   const longest = Math.max(0, ...options.map((o) => o.trim().length));
   if (options.some((o) => /\frac|\sqrt|\n/.test(o))) return "100%";
   return longest <= 14 && options.length <= 4 ? "25%" : "50%";
+}
+
+const OPTION_LETTERS = "abcdefghij";
+
+/** The printed label of the option at `idx`: (a)…(j), then (11), (12)… */
+export function optionLabel(idx: number): string {
+  return `(${OPTION_LETTERS[idx] ?? idx + 1})`;
+}
+
+/** A grouped exercise prints an item's options when the item itself is a choice question, whatever its section. */
+export function groupedItemPrintsOptions(q: { type?: string | null; options?: readonly string[] | null }): boolean {
+  return isMcqLikeType(q.type) && Array.isArray(q.options) && q.options.length > 0;
 }
 
 /**

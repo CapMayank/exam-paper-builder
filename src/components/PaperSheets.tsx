@@ -4,10 +4,10 @@ import { questionInstruction } from "@/lib/sectionTypes";
 import { BOOKLET_MAX_PAGES, chooseFitLevel, describeFit, FIT_LEVELS, fitMm, getFit, MIN_QUESTION_GAP_MM, nextFitLevel, sheetCost, WORKSHEET_FIT_LEVELS, WORKSHEET_MAX_PAGES, type FitStatus, type PrintFit } from "@/lib/printFit";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { QuestionView, questionStemText } from "@/components/QuestionView";
-import { isShortStemPart, splitStemParagraphs, subpartGridColumns } from "@/lib/compactLayout";
+import { OptionFlow, QuestionView, questionStemText } from "@/components/QuestionView";
+import { groupedItemPrintsOptions, isShortStemPart, splitStemParagraphs, subpartGridColumns } from "@/lib/compactLayout";
+import { getInternalChoiceSeparatorLabel } from "@/lib/internalChoiceRules";
 import { resolveMarksStyle } from "@/lib/marksDisplay";
-import { MathText } from "@/components/MathText";
 import { QuestionContent } from "@/components/QuestionContent";
 import { imageUrl } from "@/lib/client";
 import {
@@ -47,7 +47,7 @@ import {
 } from "@/lib/layout";
 import { resolveBoardAndSubjectCode } from "@/lib/curriculumContract";
 import { sectionLetter } from "@/lib/sectionLetter";
-import type { PaperData } from "@/lib/types";
+import type { PaperData, QuestionDto } from "@/lib/types";
 
 type Block = {
   key: string;
@@ -67,6 +67,54 @@ function renderBlock(b: Block, isContinuation: boolean): ReactNode {
 const CONTENT_W_MM = 182;
 const CONTENT_H_MM = 267;
 
+
+/**
+ * One item of a grouped exercise (or its OR alternative): its text, its options when the item itself is a choice
+ * question, its picture and its stored parts. No marks: the exercise line prints one formula for every item.
+ */
+function GroupedItemBody({ q, sectionType, isA5 }: { q: QuestionDto; sectionType: string; isA5?: boolean }) {
+  const lineHeight = isA5 ? 1.35 : 1.45;
+  const optFontSize = isA5 ? "8pt" : "8.5pt";
+  return (
+    <>
+      <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight }}>
+        <QuestionContent text={cleanQuestionStatement(q.text, sectionType)} isA5={isA5} />
+      </div>
+      {groupedItemPrintsOptions(q) && <OptionFlow options={q.options} isA5={isA5} fontSize={optFontSize} marginTop="1.5mm" />}
+      {q.imagePath && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={imageUrl(q.imagePath)}
+          alt=""
+          style={{
+            display: "block",
+            marginTop: "2mm",
+            maxWidth: "100%",
+            maxHeight: isA5 ? "50mm" : "70mm",
+            objectFit: "contain",
+          }}
+        />
+      )}
+      {q.subparts && q.subparts.length > 0 && (
+        <div style={{ marginTop: "1.2mm", display: "flex", flexDirection: "column", gap: isA5 ? "1mm" : "1.5mm" }}>
+          {q.subparts.map((sp, spIdx) => (
+            <div key={spIdx} style={{ display: "flex", gap: "2mm", alignItems: "flex-start" }}>
+              <span style={{ fontWeight: 600, minWidth: isA5 ? "5mm" : "6mm" }}>{sp.label || `(${spIdx + 1})`}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight }}>
+                  <QuestionContent text={sp.text} isA5={isA5} />
+                </div>
+                {sp.options && sp.options.length > 0 && (
+                  <OptionFlow options={sp.options} isA5={isA5} fontSize={optFontSize} marginTop="1mm" />
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
 
 function extractSectionLetter(title: string, fallbackIndex: number): string {
   return sectionLetter(title) ?? String.fromCharCode(65 + (fallbackIndex % 26));
@@ -518,45 +566,15 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
             >
               <span style={{ fontWeight: 600, minWidth: isA5 ? "5.5mm" : "6.5mm" }}>{subLabel}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight: isA5 ? 1.35 : 1.45 }}>
-                  <QuestionContent text={cleanQuestionStatement(it.question.text, s.type)} isA5={isA5} />
-                </div>
-                {s.type === "MCQ" && Array.isArray(it.question.options) && it.question.options.length > 0 && (
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
-                      gap: "1.5mm",
-                      marginTop: "1.5mm",
-                      fontSize: isA5 ? "8pt" : "8.5pt",
-                    }}
-                  >
-                    {it.question.options.map((opt: string, optIdx: number) => {
-                      const optLabel = isIndic
-                        ? ["(अ)", "(ब)", "(स)", "(द)"][optIdx] || `(${optIdx + 1})`
-                        : ["(A)", "(B)", "(C)", "(D)"][optIdx] || `(${optIdx + 1})`;
-                      return (
-                        <div key={optIdx} style={{ display: "flex", gap: "1.5mm" }}>
-                          <span style={{ fontWeight: 600 }}>{optLabel}</span>
-                          <MathText text={opt} />
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                {it.question.imagePath && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={imageUrl(it.question.imagePath)}
-                    alt=""
-                    style={{
-                      display: "block",
-                      marginTop: "2mm",
-                      maxWidth: "100%",
-                      maxHeight: isA5 ? "50mm" : "70mm",
-                      objectFit: "contain",
-                    }}
-                  />
+                {/* no marks here: the exercise line carries the one formula for every item */}
+                <GroupedItemBody q={it.question} sectionType={s.type} isA5={isA5} />
+                {it.orQuestion && (
+                  <>
+                    <div style={{ textAlign: "center", margin: "1.5mm 0", fontWeight: 700, fontSize: isA5 ? "8.5pt" : "9pt" }}>
+                      {getInternalChoiceSeparatorLabel(paperLang)}
+                    </div>
+                    <GroupedItemBody q={it.orQuestion} sectionType={s.type} isA5={isA5} />
+                  </>
                 )}
               </div>
             </div>
