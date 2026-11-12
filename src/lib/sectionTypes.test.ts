@@ -4,6 +4,7 @@ import { whyCannotAdd, type BlueprintDef } from "./blueprint";
 import {
   allowedTypesFor,
   defaultAllowedTypes,
+  groupedItemInstruction,
   isTypeAllowed,
   questionInstruction,
   subjectFamily,
@@ -130,5 +131,19 @@ describe("autofill with allowed forms", () => {
     ]);
     expect(res.complete).toBe(true);
     expect(res.added.map((a) => a.questionId).sort()).toEqual(["g1", "s1"]);
+  });
+});
+
+describe("groupedItemInstruction", () => {
+  const sec = { type: "TRUE_FALSE" } as never;
+  it("prints the line the teacher typed for an item of a grouped exercise", () => {
+    expect(groupedItemInstruction(sec, "MCQ", "  Choose the correct option. ", "Write True or False.")).toBe("Choose the correct option.");
+  });
+  it("prints nothing when none was typed", () => {
+    expect(groupedItemInstruction(sec, "TRUE_FALSE", "", "Write True or False.")).toBe("");
+    expect(groupedItemInstruction(sec, "TRUE_FALSE", null, "Write True or False.")).toBe("");
+  });
+  it("skips a line that repeats the exercise's own instruction", () => {
+    expect(groupedItemInstruction(sec, "TRUE_FALSE", " Write True or False.", "Write True or False. ")).toBe("");
   });
 });

@@ -106,3 +106,17 @@ export function defaultAllowedTypes(type: string, marksEach: number, subject: st
 export function questionInstruction(_section: TypedSection, _questionType: string, stored?: string | null): string {
   return (stored ?? "").trim();
 }
+
+/**
+ * The instruction line printed above one item of a grouped exercise: the one the teacher typed, or "" when none was
+ * typed or it only repeats the exercise's own instruction.
+ */
+export function groupedItemInstruction(
+  section: TypedSection,
+  questionType: string,
+  stored: string | null | undefined,
+  exerciseInstruction: string | null | undefined,
+): string {
+  const own = questionInstruction(section, questionType, stored);
+  return own && own !== (exerciseInstruction ?? "").trim() ? own : "";
+}

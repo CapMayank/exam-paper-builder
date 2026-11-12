@@ -52,8 +52,10 @@ describe("sectionLetter", () => {
     expect(sectionLetter("उपखण्ड A")).toBeUndefined();
   });
 
-  it("takes the letter only as a capital, and keeps looking past a lower-case one", () => {
-    expect(sectionLetter("section a")).toBeUndefined();
-    expect(sectionLetter("Part a of Section B")).toBe("B");
+  it("accepts a lower-case letter and returns it upper-case; the first match wins", () => {
+    expect(sectionLetter("section a")).toBe("A");
+    expect(sectionLetter("खण्ड b")).toBe("B");
+    expect(sectionLetter("Section wise marks")).toBeUndefined();
+    expect(sectionLetter("Part a of Section B")).toBe("A");
   });
 });

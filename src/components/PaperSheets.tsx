@@ -1,6 +1,6 @@
 "use client";
 import { questionSlotMarks } from "@/lib/blueprint";
-import { questionInstruction } from "@/lib/sectionTypes";
+import { groupedItemInstruction, questionInstruction } from "@/lib/sectionTypes";
 import { BOOKLET_MAX_PAGES, chooseFitLevel, describeFit, FIT_LEVELS, fitMm, getFit, MIN_QUESTION_GAP_MM, nextFitLevel, sheetCost, WORKSHEET_FIT_LEVELS, WORKSHEET_MAX_PAGES, type FitStatus, type PrintFit } from "@/lib/printFit";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -549,33 +549,32 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
       sectionItems.forEach((it, itemIdx) => {
         const isLastItem = itemIdx === sectionItems.length - 1;
         const subLabel = numbering.itemNumbers[it.id]?.subLabel ?? groupedSubLabel(itemIdx, isIndic);
+        // a line the teacher typed for this item prints above it, unless it repeats the exercise line
+        const itemInstruction = groupedItemInstruction(s, it.question.type, it.instruction, sharedInstruction);
         blocks.push({
           key: it.id,
           keepWithNext: itemIdx === 0,
           forceBreakBefore: Boolean(it.pageBreakBefore),
           groupId: `exercise-${s.id}`,
           node: (
-            <div
-              style={{
-                display: "flex",
-                gap: "2.5mm",
-                alignItems: "flex-start",
-                paddingLeft: isA5 ? "4mm" : "5mm",
-                paddingBottom: isLastItem ? questionBottomPadding : g(isA5 ? 1.5 : 2),
-              }}
-            >
-              <span style={{ fontWeight: 600, minWidth: isA5 ? "5.5mm" : "6.5mm" }}>{subLabel}</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                {/* no marks here: the exercise line carries the one formula for every item */}
-                <GroupedItemBody q={it.question} sectionType={s.type} isA5={isA5} />
-                {it.orQuestion && (
-                  <>
-                    <div style={{ textAlign: "center", margin: "1.5mm 0", fontWeight: 700, fontSize: isA5 ? "8.5pt" : "9pt" }}>
-                      {getInternalChoiceSeparatorLabel(paperLang)}
-                    </div>
-                    <GroupedItemBody q={it.orQuestion} sectionType={s.type} isA5={isA5} />
-                  </>
-                )}
+            <div style={{ paddingLeft: isA5 ? "4mm" : "5mm", paddingBottom: isLastItem ? questionBottomPadding : g(isA5 ? 1.5 : 2) }}>
+              {itemInstruction && (
+                <div style={{ fontStyle: "italic", fontWeight: 500, paddingBottom: g(isA5 ? 0.75 : 1) }}>{itemInstruction}</div>
+              )}
+              <div style={{ display: "flex", gap: "2.5mm", alignItems: "flex-start" }}>
+                <span style={{ fontWeight: 600, minWidth: isA5 ? "5.5mm" : "6.5mm" }}>{subLabel}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  {/* no marks here: the exercise line carries the one formula for every item */}
+                  <GroupedItemBody q={it.question} sectionType={s.type} isA5={isA5} />
+                  {it.orQuestion && (
+                    <>
+                      <div style={{ textAlign: "center", margin: "1.5mm 0", fontWeight: 700, fontSize: isA5 ? "8.5pt" : "9pt" }}>
+                        {getInternalChoiceSeparatorLabel(paperLang)}
+                      </div>
+                      <GroupedItemBody q={it.orQuestion} sectionType={s.type} isA5={isA5} />
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           ),
