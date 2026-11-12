@@ -5,7 +5,8 @@ import { BOOKLET_MAX_PAGES, chooseFitLevel, describeFit, FIT_LEVELS, fitMm, getF
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { QuestionView, questionStemText } from "@/components/QuestionView";
-import { isShortStemPart, splitStemParagraphs, statesMarksEach, subpartGridColumns } from "@/lib/compactLayout";
+import { isShortStemPart, splitStemParagraphs, subpartGridColumns } from "@/lib/compactLayout";
+import { resolveMarksStyle } from "@/lib/marksDisplay";
 import { MathText } from "@/components/MathText";
 import { QuestionContent } from "@/components/QuestionContent";
 import { imageUrl } from "@/lib/client";
@@ -332,8 +333,6 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
   let n = 0;
   let sectionGroupCounter = 0;
   let sectionRelativeCounter = 0;
-  // True while printing a title group whose heading says "Each question carries N marks".
-  let groupStatesMarksEach = false;
   for (let i = 0; i < blueprint.sections.length; i++) {
     const s = blueprint.sections[i];
     const prev = i > 0 ? blueprint.sections[i - 1] : null;
@@ -363,7 +362,6 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
     // Worksheets list activities straight away – no "Section A" headings.
     const isWorksheet = blueprint.curriculumMode === WORKSHEET_MODE;
 
-    if (!isSameAsPrev) groupStatesMarksEach = false;
     // Only render the main SECTION header if it's the first in this title group!
     if (!isWorksheet && !isSameAsPrev) {
       const allInGroup = blueprint.sections.filter(
@@ -392,7 +390,6 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
         type: s.type,
       });
       const localizedSectionTitle = locale.section.formatSectionHeader(sectionLetter, s.title);
-      groupStatesMarksEach = !isGroupedObjective && statesMarksEach(reconciledMainInstruction);
 
       blocks.push({
         key: `sec-main-${s.id}`,
@@ -579,18 +576,6 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
         });
       });
     } else {
-      // The heading (or the type sub-heading's "6 × 2 = 12") already says what each question is worth: when every
-      // question here is worth exactly that, its own marks tag only costs a line.
-      const marksOf = (item: (typeof sectionItems)[number]) => {
-        const sub = item.question.subparts && item.question.subparts.length > 0
-          ? item.question.subparts
-          : canHaveSubparts(item.question.type)
-          ? decomposeForSlot(item.question.text, s.marksEach)?.subparts ?? []
-          : [];
-        return questionSlotMarks(s, { ...item.question, subparts: sub } as never).marks;
-      };
-      const hideQuestionMarks =
-        !isWorksheet && !isPrePrimary && (groupStatesMarksEach || hasMultipleTypes) && sectionItems.every((item) => marksOf(item) === s.marksEach);
       let lastInstructionLine = "";
       for (const it of sectionItems) {
         const currentN = n;
@@ -649,7 +634,7 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
                     number={currentN}
                     numberLabel={numberLabel}
                     marks={totalQuestionMarks}
-                    marksStyle={paper.marksStyle || "RIGHT_COLUMN"}
+                    marksStyle={resolveMarksStyle(paper.marksStyle)}
                     compact={isEffectiveCompact}
                     fit={fit}
                     renderMode="STEM_ONLY"
@@ -657,7 +642,6 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
                     isA5={isA5}
                     lang={paperLang}
                     dense
-                    hideMarks={hideQuestionMarks}
                   />
                 </div>
               ),
@@ -678,7 +662,7 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
                     number={currentN}
                     numberLabel={numberLabel}
                     marks={totalQuestionMarks}
-                    marksStyle={paper.marksStyle || "RIGHT_COLUMN"}
+                    marksStyle={resolveMarksStyle(paper.marksStyle)}
                     compact={isEffectiveCompact}
                   fit={fit}
                     renderMode="SUBPART_ONLY"
@@ -706,13 +690,12 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
                   number={currentN}
                   numberLabel={numberLabel}
                   marks={totalQuestionMarks}
-                  marksStyle={paper.marksStyle || "RIGHT_COLUMN"}
+                  marksStyle={resolveMarksStyle(paper.marksStyle)}
                   compact={isEffectiveCompact || subGridCols > 0}
                   fit={fit}
                   isA5={isA5}
                   lang={paperLang}
                   dense
-                  hideMarks={hideQuestionMarks}
                 />
               </div>
             ),

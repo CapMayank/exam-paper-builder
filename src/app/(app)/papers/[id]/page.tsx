@@ -83,6 +83,7 @@ import {
   type PaperLanguage,
 } from "@/lib/constants";
 import { questionSlotMarks } from "@/lib/blueprint";
+import { resolveMarksStyle } from "@/lib/marksDisplay";
 import { coverageRows } from "@/lib/coverage";
 import { componentCoverage, parseComponents } from "@/lib/languageComponents";
 import { formatQuestionNumber, computeDisplayedPaperNumbering } from "@/lib/layout";
@@ -2076,7 +2077,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                 number={questionNumber}
                                 numberLabel={numberLabel}
                                 marks={questionTotalMarks}
-                                marksStyle={paper.marksStyle || "RIGHT_COLUMN"}
+                                marksStyle={resolveMarksStyle(paper.marksStyle)}
                                 lang={paper ? detectPaperLanguage(paper, paper.items) : "en"}
                               />
                             </div>

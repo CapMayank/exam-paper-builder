@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hasUniformSubpartMarks, optionMinWidth, splitStemParagraphs, statesMarksEach, subpartGridColumns } from "./compactLayout";
+import { optionMinWidth, splitStemParagraphs, subpartGridColumns } from "./compactLayout";
 
 const sp = (...texts: string[]) => texts.map((text) => ({ text, marks: 0.5 }));
 
@@ -26,14 +26,6 @@ describe("subpartGridColumns", () => {
   });
 });
 
-describe("hasUniformSubpartMarks", () => {
-  it("is true only when all sub-items are worth the same", () => {
-    expect(hasUniformSubpartMarks(sp("a", "b"))).toBe(true);
-    expect(hasUniformSubpartMarks([{ text: "a", marks: 1 }, { text: "b", marks: 2 }])).toBe(false);
-    expect(hasUniformSubpartMarks(sp("a"))).toBe(false);
-  });
-});
-
 describe("optionMinWidth", () => {
   it("goes four, two or one across by option length", () => {
     expect(optionMinWidth(["100 meters", "220 meters", "400 meters", "500 meters"])).toBe("25%");
@@ -51,14 +43,5 @@ describe("splitStemParagraphs", () => {
   it("keeps a one-paragraph stem and display maths whole", () => {
     expect(splitStemParagraphs("One line\nsecond line")).toEqual(["One line\nsecond line"]);
     expect(splitStemParagraphs("Solve:\n\n$$x^2$$")).toHaveLength(1);
-  });
-});
-
-describe("statesMarksEach", () => {
-  it("recognises the per-question marks sentence", () => {
-    expect(statesMarksEach("Choose the correct answer. Each question carries 1 mark.")).toBe(true);
-    expect(statesMarksEach("प्रत्येक प्रश्न पर 2 अंक निर्धारित हैं।")).toBe(true);
-    expect(statesMarksEach("Answer the following questions.")).toBe(false);
-    expect(statesMarksEach(null)).toBe(false);
   });
 });

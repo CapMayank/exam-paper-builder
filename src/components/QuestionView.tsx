@@ -22,7 +22,8 @@ import {
 import { getInternalChoiceSeparatorLabel } from "@/lib/internalChoiceRules";
 import { isTextPredominantlySanskrit, type PaperLanguage } from "@/lib/localization";
 import type { PrintFit } from "@/lib/printFit";
-import { hasUniformSubpartMarks, optionMinWidth, splitStemParagraphs, subpartGridColumns } from "@/lib/compactLayout";
+import { optionMinWidth, splitStemParagraphs, subpartGridColumns } from "@/lib/compactLayout";
+import { partsAttemptCount, showPartMarks } from "@/lib/marksDisplay";
 import type { QuestionDto } from "@/lib/types";
 import { MathText } from "@/components/MathText";
 import { QuestionContent } from "@/components/QuestionContent";
@@ -127,14 +128,15 @@ function SingleQuestionBody({
   const colLabels = getColumnLabels(effectiveLang);
 
   if (renderMode === "SUBPART_ONLY") {
+    const decomposed = (!q.subparts || q.subparts.length === 0) && canHaveSubparts(q.type)
+      ? decomposeForSlot(q.text, slotMarks)
+      : null;
     const effectiveSubparts = q.subparts && q.subparts.length > 0
       ? q.subparts
-      : canHaveSubparts(q.type)
-      ? decomposeForSlot(q.text, slotMarks)?.subparts ?? []
-      : [];
+      : decomposed?.subparts ?? [];
     const sp = effectiveSubparts && subpartIndex !== undefined ? effectiveSubparts[subpartIndex] : null;
     if (!sp) return null;
-    const hideSubMarks = Boolean(dense) && hasUniformSubpartMarks(effectiveSubparts);
+    const hideSubMarks = !showPartMarks(effectiveSubparts.length, partsAttemptCount(q, decomposed), marksStyle);
     const contPrefix = effectiveLang === "sa" ? "प्रश्नः" : effectiveLang === "hi" ? "प्रश्न" : "Q.";
     const contLabel = displayLabel
       ? displayLabel.startsWith("Q.") || displayLabel.startsWith("प्रश्न")
@@ -193,7 +195,7 @@ function SingleQuestionBody({
               </div>
             )}
           </div>
-          {sp.marks > 0 && marksStyle !== "SUPPRESSED" && !hideSubMarks && (
+          {sp.marks > 0 && !hideSubMarks && (
             <div
               style={{
                 whiteSpace: "nowrap",
@@ -252,7 +254,7 @@ function SingleQuestionBody({
   const shownStem = stemParts ? stemParts[stemPart ?? 0] ?? "" : stemText;
   const isFirstStemPart = !stemParts || stemPart === 0;
   const isLastStemPart = !stemParts || stemPart === stemParts.length - 1;
-  const hideSubMarks = Boolean(dense) && hasUniformSubpartMarks(effectiveSubparts);
+  const hideSubMarks = !showPartMarks(effectiveSubparts.length, partsAttemptCount(q, decomposed), marksStyle);
   const subGridCols = dense && !showAnswer && renderMode !== "STEM_ONLY" ? subpartGridColumns(effectiveSubparts, isA5) : 0;
 
   return (
@@ -350,7 +352,7 @@ function SingleQuestionBody({
                   <span style={{ fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>{sp.label || `(${idx + 1})`}</span>
                   <span style={{ minWidth: 0, overflowWrap: "anywhere", lineHeight }}>
                     <MathText text={sp.text.trim()} />
-                    {sp.marks > 0 && marksStyle !== "SUPPRESSED" && !hideSubMarks && (
+                    {sp.marks > 0 && !hideSubMarks && (
                       <span style={{ fontWeight: 700, fontSize: marksFontSize, marginLeft: "1.5mm", whiteSpace: "nowrap", color: "#475569" }}>
                         {formatMarksLabel(sp.marks, effectiveLang)}
                       </span>
@@ -401,7 +403,7 @@ function SingleQuestionBody({
                                 </div>
                               )}
                             </div>
-                            {nested.marks > 0 && marksStyle !== "SUPPRESSED" && !(dense && hasUniformSubpartMarks(sp.subparts ?? [])) && (
+                            {nested.marks > 0 && !hideSubMarks && (
                               <div style={{ whiteSpace: "nowrap", fontWeight: 700, fontSize: marksFontSize, paddingLeft: "2mm", color: "#475569" }}>
                                 {formatMarksLabel(nested.marks, effectiveLang)}
                               </div>
@@ -416,7 +418,7 @@ function SingleQuestionBody({
                       </div>
                     )}
                   </div>
-                  {sp.marks > 0 && marksStyle !== "SUPPRESSED" && !hideSubMarks && (
+                  {sp.marks > 0 && !hideSubMarks && (
                     <div
                       style={{
                         whiteSpace: "nowrap",
@@ -466,7 +468,7 @@ export function QuestionView({
   number,
   numberLabel,
   marks,
-  marksStyle = "RIGHT_COLUMN",
+  marksStyle = "INLINE",
   showAnswer,
   compact,
   renderMode = "FULL",
@@ -476,14 +478,11 @@ export function QuestionView({
   lang,
   fit,
   dense,
-  hideMarks,
   stemPart,
 }: {
   q: QuestionDto;
   /** Printed paper: use the space-saving arrangement (see SingleQuestionBody). */
   dense?: boolean;
-  /** Do not print this question's own marks tag (the section heading already states what each is worth). */
-  hideMarks?: boolean;
   /** STEM_ONLY: print only this paragraph of the stem. */
   stemPart?: number;
   orQuestion?: QuestionDto | null;
@@ -538,12 +537,6 @@ export function QuestionView({
 
   const orSeparator = getInternalChoiceSeparatorLabel(effectiveLang);
 
-  // Show marks allocation ONCE for the entire choice group:
-  // - For INLINE marks style with an OR choice, display marks once on the OR alternative at the end of the group.
-  // - For RIGHT_COLUMN marks style, display marks once on the primary row at the top-right of the group.
-  const primaryMarks = hideMarks || (orQuestion && marksStyle === "INLINE") ? undefined : marks;
-  const orMarks = !hideMarks && orQuestion && marksStyle === "INLINE" ? marks : undefined;
-
   const spaceLabel = isDraw
     ? effectiveLang === "sa"
       ? "[चित्राङ्कनार्थं स्थानम्]"
@@ -562,11 +555,12 @@ export function QuestionView({
 
   return (
     <div style={{ breakInside: "avoid", pageBreakInside: "avoid" }}>
+      {/* An OR pair prints its marks once, on the first question's line, in every marks style. */}
       <SingleQuestionBody
         q={q}
         number={number}
         numberLabel={numberLabel}
-        marks={primaryMarks}
+        marks={marks}
         slotMarks={marks}
         marksStyle={marksStyle}
         showAnswer={showAnswer}
@@ -601,7 +595,6 @@ export function QuestionView({
           </div>
           <SingleQuestionBody
             q={orQuestion}
-            marks={orMarks}
             slotMarks={marks}
             showAnswer={showAnswer}
             marksStyle={marksStyle}

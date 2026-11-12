@@ -16,6 +16,18 @@ export function showPartMarks(
   return alternativesCount(partCount, attemptCount) === undefined;
 }
 
+/**
+ * The "answer any k" count that applies to the parts a question prints: its own when it has stored parts,
+ * else the one read from a list typed into its text (`decomposeForSlot`).
+ */
+export function partsAttemptCount(
+  q: { subparts?: readonly unknown[] | null; attemptCount?: number | null },
+  decomposed: { attemptCount?: number } | null | undefined,
+): number | undefined {
+  if (q.subparts && q.subparts.length > 0) return q.attemptCount ?? undefined;
+  return decomposed?.attemptCount;
+}
+
 /** Stored marks style, or INLINE when empty or unknown. */
 export function resolveMarksStyle(value?: string | null): MarksStyle {
   return (MARKS_STYLES as readonly string[]).includes(value ?? "") ? (value as MarksStyle) : DEFAULT_MARKS_STYLE;

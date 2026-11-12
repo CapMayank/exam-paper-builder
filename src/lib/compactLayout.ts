@@ -29,11 +29,6 @@ export function subpartGridColumns(subparts: readonly SubpartLike[], isA5?: bool
   return 0;
 }
 
-/** True when every sub-item is worth the same, so the question's own total says it all. */
-export function hasUniformSubpartMarks(subparts: readonly SubpartLike[]): boolean {
-  return subparts.length > 1 && subparts.every((sp) => (sp.marks ?? 0) === (subparts[0].marks ?? 0));
-}
-
 /**
  * Narrowest share of the row one option may take: short options go four across, medium ones two across,
  * and an option longer than its share simply takes the next row (see optionFlowStyles).
@@ -59,9 +54,4 @@ export function splitStemParagraphs(text: string): string[] {
 /** A stem paragraph this short (an instruction line, a title) must not sit alone at the foot of a page. */
 export function isShortStemPart(part: string): boolean {
   return part.length < 160;
-}
-
-/** True when a section instruction already tells the student what each question is worth. */
-export function statesMarksEach(instruction: string | null | undefined): boolean {
-  return /each\s+question\s+carries\s+[\d½¼.]+\s*marks?|प्रत्येक\s+प्रश्न\s+(?:पर|के\s+लिए)\s*[\d०-९½.]+\s*अंक/i.test(instruction || "");
 }

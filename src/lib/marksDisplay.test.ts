@@ -1,5 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { alternativesCount, resolveMarksStyle, showPartMarks } from "./marksDisplay";
+import { alternativesCount, partsAttemptCount, resolveMarksStyle, showPartMarks } from "./marksDisplay";
+
+describe("partsAttemptCount", () => {
+  it("uses the question's own count when it has stored parts", () => {
+    expect(partsAttemptCount({ subparts: [{}, {}, {}, {}], attemptCount: 1 }, { attemptCount: 2 })).toBe(1);
+    expect(partsAttemptCount({ subparts: [{}, {}] }, { attemptCount: 1 })).toBeUndefined();
+  });
+
+  it("uses the count read from a typed list when the question has no stored parts", () => {
+    expect(partsAttemptCount({ subparts: [], attemptCount: 3 }, { attemptCount: 1 })).toBe(1);
+    expect(partsAttemptCount({}, { attemptCount: 2 })).toBe(2);
+    expect(partsAttemptCount({ subparts: null }, null)).toBeUndefined();
+  });
+});
 
 describe("alternativesCount", () => {
   it("returns k when the student answers only k of the parts", () => {
