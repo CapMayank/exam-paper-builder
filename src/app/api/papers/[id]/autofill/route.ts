@@ -15,6 +15,7 @@ import { devanagariShare, isQuestionContaminated, MIN_DEVANAGARI_SHARE } from "@
 import { parseMatchColumnPairs } from "@/lib/constants";
 import { attemptedSubpartsMarks, parseSubpartsPayload } from "@/lib/types";
 import { isVariantCopy } from "@/lib/questionWrite";
+import { detectPaperLanguage } from "@/lib/localization";
 import { TEMPLATE_FALLBACK_PROVENANCE } from "@/lib/templateFiller";
 
 function safeJsonArray(json: string | null): string[] {
@@ -185,8 +186,10 @@ export const POST = route(async (req, { id }, user) => {
   const chapterMap = new Map(paper.blueprint.chapters.map((c) => [c.chapterId, c.chapter]));
   const sectionMap = new Map(paper.blueprint.sections.map((s) => [s.id, s]));
 
-  // A Hindi/Sanskrit paper must not receive English filler (the offline templates are English).
-  const needsDevanagari = paper.language === "hi" || paper.language === "sa";
+  // A Hindi/Sanskrit paper must not receive English filler (the offline templates are English). The language
+  // is resolved as the print path does: a stored "en" means "not chosen", so subject and content decide.
+  const paperLang = detectPaperLanguage(paper, paper.items);
+  const needsDevanagari = paperLang === "hi" || paperLang === "sa";
   const wrongScript = (text: string) => needsDevanagari && devanagariShare(text) < MIN_DEVANAGARI_SHARE;
 
   // What the paper will hold once this auto-fill is saved: its items, the bank picks and, as they are accepted,

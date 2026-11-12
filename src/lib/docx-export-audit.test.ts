@@ -255,6 +255,9 @@ In crystal field theory, the interaction between transition metal d-orbitals and
     await prisma.blueprint.deleteMany({ where: { id: blueprintId } });
     await prisma.chapter.deleteMany({ where: { bookId } });
     await prisma.book.deleteMany({ where: { id: bookId } });
+    // Every buildPaperDocx call writes a PAPER_EXPORT_DOCX audit row as this run's own
+    // teacher; those rows outlive the user (onDelete: SetNull), so remove them first.
+    await prisma.auditLog.deleteMany({ where: { userId: teacherUser.id } });
     await prisma.user.deleteMany({ where: { id: teacherUser.id } });
   });
 

@@ -45,8 +45,11 @@ export function detectAttemptCount(stem: string): number | undefined {
   if (/किन्हीं\s*(?:दो|2)|कोई\s*(?:दो|2)/i.test(stem)) return 2;
   if (/किन्हीं\s*(?:पाँच|पांच|5)|कोई\s*(?:पाँच|पांच|5)/i.test(stem)) return 5;
   if (/किन्हीं\s*(?:छह|छः|6)|कोई\s*(?:छह|छः|6)/i.test(stem)) return 6;
-  // "any one" is checked after the larger counts so those keep priority
-  if (/(?:किसी|कोई|किन्हीं)\s*(?:एक|1)/i.test(stem)) return 1;
+  // "any one" is checked after the larger counts so those keep priority.
+  // The word or digit must end there: "एक" not followed by a further Devanagari
+  // letter, sign or digit (so not "एकल"; the danda । and ॥ may follow), "1" not
+  // followed by another digit (so not "10", "12").
+  if (/(?:किसी|कोई|किन्हीं)\s*(?:एक(?![\u0900-\u0963\u0966-\u097F])|1(?![0-9\u0966-\u096F]))/i.test(stem)) return 1;
 
   // English attempt indicators
   const enMatch = stem.match(/(?:attempt|answer)\s+any\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)/i) ||
@@ -62,7 +65,7 @@ export function detectAttemptCount(stem: string): number | undefined {
     if (!isNaN(n) && n > 0) return n;
   }
 
-  if (/\bany\s+(?:one|1)\b/i.test(stem)) return 1;
+  if (/\bany\s+(?:one\b|1(?![0-9\u0966-\u096F]))/i.test(stem)) return 1;
 
   return undefined;
 }

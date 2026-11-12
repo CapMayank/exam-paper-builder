@@ -262,9 +262,9 @@ export function detectPaperLanguage(
     }
   }
 
-  // 5. Fallback explicit overrides or default
-  if (paper?.language === "sa" || paper?.blueprint?.language === "sa") return "sa";
-  if (paper?.language === "hi" || paper?.blueprint?.language === "hi") return "hi";
+  // 5. Fallback: the blueprint's language, or default (a stored paper "hi"/"sa" already returned in step 1)
+  if (paper?.blueprint?.language === "sa") return "sa";
+  if (paper?.blueprint?.language === "hi") return "hi";
 
   return "en";
 }

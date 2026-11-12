@@ -119,6 +119,22 @@ describe("subpartExtractor", () => {
     it("does not treat a bare 'एक' as a choice", () => {
       expect(detectAttemptCount("एक निबंध लिखिए")).toBeUndefined();
     });
+
+    it("does not read a longer number or word starting with एक/1 as 'any one'", () => {
+      expect(detectAttemptCount("किन्हीं 10 प्रश्नों के उत्तर दीजिए")).toBeUndefined();
+      expect(detectAttemptCount("कोई 12 वाक्य लिखिए")).toBeUndefined();
+      expect(detectAttemptCount("किसी एकल कोशिका वाले जीव का नाम लिखिए")).toBeUndefined();
+      expect(detectAttemptCount("any 1० items")).toBeUndefined();
+    });
+
+    it("still reads 'any one' when the sentence ends right after it", () => {
+      expect(detectAttemptCount("कोई एक।")).toBe(1);
+    });
+
+    it("keeps multi-digit English counts", () => {
+      expect(detectAttemptCount("any 10 of the following")).toBe(10);
+      expect(detectAttemptCount("any 12 questions")).toBe(12);
+    });
   });
 
   describe("decomposeForSlot with an 'any one' essay", () => {

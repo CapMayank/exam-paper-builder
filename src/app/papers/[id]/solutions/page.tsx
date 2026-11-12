@@ -10,6 +10,7 @@ import {
   cleanOptionText,
   DEFAULT_SCHOOL_LOGO,
   DEFAULT_SCHOOL_NAME,
+  detectPaperLanguage,
   EXAM_TYPE_LABEL,
   isMcqLikeType,
   isSubpartQuestionType,
@@ -102,7 +103,8 @@ export default function SolutionsPage({ params }: PageProps<"/papers/[id]/soluti
   const displayedNumbering = computeDisplayedPaperNumbering(
     blueprint.sections,
     paper.items,
-    paper.numberingStyle || "CONTINUOUS"
+    paper.numberingStyle || "CONTINUOUS",
+    detectPaperLanguage(paper, paper.items)
   );
   const allNumberedItems: {
     number: number;
@@ -524,9 +526,12 @@ function QuestionSolutionItem({
             <QuestionContent text={q.text} />
           </span>
         </div>
-        <span className="whitespace-nowrap rounded bg-slate-200 px-1.5 py-0.5 text-xs font-bold text-slate-700">
-          [{marks} M]
-        </span>
+        {/* an OR pair's marks print once, on the main entry */}
+        {!isOrOption && (
+          <span className="whitespace-nowrap rounded bg-slate-200 px-1.5 py-0.5 text-xs font-bold text-slate-700">
+            [{marks} M]
+          </span>
+        )}
       </div>
 
       {q.imagePath && (
