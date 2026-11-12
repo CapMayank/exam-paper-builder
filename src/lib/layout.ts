@@ -153,6 +153,9 @@ export function formatQuestionNumber(
 
 export interface DisplayedItemNumber {
   questionNumber: number;
+  /** The printed question number ("7", "Q.7", "A3"); for a grouped item, the exercise's number. */
+  questionLabel: string;
+  /** questionLabel plus the grouped sub-label: "7 (a)". */
   displayLabel: string;
   subLabel?: string;
   isGroupedSubItem: boolean;
@@ -226,15 +229,40 @@ export function mergeSameFormRows<
   return { sections: merged, items: out, aliasOf };
 }
 
+const GROUPED_SUB_LETTERS = "abcdefghij";
+const DEVANAGARI_SUB_LABELS = ["(क)", "(ख)", "(ग)", "(घ)", "(ङ)", "(च)", "(छ)", "(ज)", "(झ)", "(ञ)"];
+
+/** The printed sub-label of the item at `idx` in a grouped exercise: (a)…(j) or (क)…(ञ), then (11), (12)… */
+export function groupedSubLabel(idx: number, isIndic: boolean): string {
+  const label = isIndic ? DEVANAGARI_SUB_LABELS[idx] : GROUPED_SUB_LETTERS[idx] && `(${GROUPED_SUB_LETTERS[idx]})`;
+  return label || `(${idx + 1})`;
+}
+
+/** Whether a grouped exercise under this heading prints Devanagari sub-labels. */
+export function groupedSubLabelsIndic(sectionTitle: string, paperLang?: PaperLanguage): boolean {
+  return paperLang === "sa" || paperLang === "hi" || /[ऀ-ॿ]/.test(sectionTitle);
+}
+
+/**
+ * The label the builder shows for a placed question: the one print shows. A grouped item is its exercise's number
+ * with its sub-label ("7 (a)"). Undefined for an item the numbering does not know.
+ */
+export function builderQuestionLabel(numbering: DisplayedPaperNumbering, itemId: string): string | undefined {
+  return numbering.itemNumbers[itemId]?.displayLabel;
+}
+
 /**
  * Computes consistent displayed question numbers across sections and items,
  * accounting for grouped objective exercises (TRUE_FALSE and FILL_BLANK with >1 item)
  * which occupy 1 top-level question number with (a), (b), ... sub-items.
+ * Numbered as the printed paper is: section-relative numbers and the fallback section letter run per heading
+ * (consecutive rows with the same title), and `paperLang` picks Devanagari sub-labels as print does.
  */
 export function computeDisplayedPaperNumbering(
   rawSections: Array<{ id: string; title: string; type: string; order?: number }>,
   rawItems: Array<{ id: string; sectionId?: string | null; position?: number; question?: { type?: string } }>,
-  numberingStyle: NumberingStyle = "CONTINUOUS"
+  numberingStyle: NumberingStyle = "CONTINUOUS",
+  paperLang?: PaperLanguage
 ): DisplayedPaperNumbering {
   // numbered as printed: rows of one form under one heading count as one run
   const { sections, items, aliasOf } = mergeSameFormRows(rawSections, rawItems);
@@ -252,13 +280,22 @@ export function computeDisplayedPaperNumbering(
   }> = [];
 
   let globalCounter = 0;
+  // as print: consecutive rows with one title are one heading; the fallback letter and section-relative count run per heading
+  let headingIdx = -1;
+  let headingCounter = 0;
+  const headingKey = (t: string) => t.trim().toLowerCase();
 
   if (sortedSections.length > 0) {
     sortedSections.forEach((sec, sIdx) => {
       const sItems = items
         .filter((it) => it.sectionId === sec.id)
         .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
-      const sLetter = sectionLetter(sec.title) || String.fromCharCode(65 + sIdx);
+      const prevSec = sIdx > 0 ? sortedSections[sIdx - 1] : null;
+      if (!prevSec || headingKey(prevSec.title) !== headingKey(sec.title)) {
+        headingIdx += 1;
+        headingCounter = 0;
+      }
+      const sLetter = sectionLetter(sec.title) || String.fromCharCode(65 + (headingIdx % 26));
 
       const isNumberedSingleGroupedExercise =
         /(?:^|[^0-9])(?:प्रश्न\s*[1-5]\b|question\s*[1-5]\b|q[1-5]\b)/i.test(sec.title);
@@ -285,15 +322,13 @@ export function computeDisplayedPaperNumbering(
 
       if (isGroupedObjective) {
         const qIdx = globalCounter++;
-        const qLabel = formatQuestionNumber(numberingStyle, qIdx, sLetter, 0);
-        const DEVANAGARI_SUB_LABELS = ["(क)", "(ख)", "(ग)", "(घ)", "(ङ)", "(च)", "(छ)", "(ज)", "(झ)", "(ञ)"];
-        const isIndic = /[\u0900-\u097F]/.test(sec.title);
+        const qLabel = formatQuestionNumber(numberingStyle, qIdx, sLetter, headingCounter++);
+        const isIndic = groupedSubLabelsIndic(sec.title, paperLang);
         sItems.forEach((item, localIdx) => {
-          const subLetter = isIndic
-            ? (DEVANAGARI_SUB_LABELS[localIdx] || `(${localIdx + 1})`)
-            : `(${String.fromCharCode(97 + localIdx)})`;
+          const subLetter = groupedSubLabel(localIdx, isIndic);
           itemNumbers[item.id] = {
             questionNumber: qIdx + 1,
+            questionLabel: qLabel,
             displayLabel: `${qLabel} ${subLetter}`,
             subLabel: subLetter,
             isGroupedSubItem: true,
@@ -311,11 +346,12 @@ export function computeDisplayedPaperNumbering(
         });
       } else {
         const startQ = globalCounter + 1;
-        sItems.forEach((item, localIdx) => {
+        sItems.forEach((item) => {
           const qIdx = globalCounter++;
-          const qLabel = formatQuestionNumber(numberingStyle, qIdx, sLetter, localIdx);
+          const qLabel = formatQuestionNumber(numberingStyle, qIdx, sLetter, headingCounter++);
           itemNumbers[item.id] = {
             questionNumber: qIdx + 1,
+            questionLabel: qLabel,
             displayLabel: qLabel,
             isGroupedSubItem: false,
           };
@@ -343,6 +379,7 @@ export function computeDisplayedPaperNumbering(
       const qLabel = formatQuestionNumber(numberingStyle, qIdx, "A", localIdx);
       itemNumbers[item.id] = {
         questionNumber: qIdx + 1,
+        questionLabel: qLabel,
         displayLabel: qLabel,
         isGroupedSubItem: false,
       };

@@ -37,6 +37,8 @@ import {
   computeDisplayedPaperNumbering,
   mergeSameFormRows,
   formatQuestionNumber,
+  groupedSubLabel,
+  groupedSubLabelsIndic,
   imposeBooklet,
   imposeTwoUpCut,
   paginate,
@@ -46,8 +48,6 @@ import {
 import { resolveBoardAndSubjectCode } from "@/lib/curriculumContract";
 import { sectionLetter } from "@/lib/sectionLetter";
 import type { PaperData } from "@/lib/types";
-
-const LETTERS = "ABCDEFGHIJ";
 
 type Block = {
   key: string;
@@ -88,7 +88,8 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
   const numbering = computeDisplayedPaperNumbering(
     blueprint.sections,
     paper.items,
-    paper.numberingStyle || "CONTINUOUS"
+    paper.numberingStyle || "CONTINUOUS",
+    paperLang
   );
   const resolvedBoardSubject = resolveBoardAndSubjectCode({
     subject: blueprint.book.subject,
@@ -445,12 +446,10 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
 
     if (isGroupedObjective) {
       const exerciseN = n;
-      const exerciseLabel = formatQuestionNumber(
-        paper.numberingStyle || "CONTINUOUS",
-        exerciseN,
-        sectionLetter,
-        sectionRelativeCounter
-      );
+      // the paper's one numbering (the builder shows the same); the local count only covers an item it does not know
+      const exerciseLabel =
+        numbering.itemNumbers[sectionItems[0].id]?.questionLabel ??
+        formatQuestionNumber(paper.numberingStyle || "CONTINUOUS", exerciseN, sectionLetter, sectionRelativeCounter);
       n += 1;
       sectionRelativeCounter += 1;
 
@@ -497,14 +496,11 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
         ),
       });
 
-      const DEVANAGARI_SUB_LABELS = ["(क)", "(ख)", "(ग)", "(घ)", "(ङ)", "(च)", "(छ)", "(ज)", "(झ)", "(ञ)"];
-      const isIndic = paperLang === "sa" || paperLang === "hi" || /[\u0900-\u097F]/.test(s.title);
+      const isIndic = groupedSubLabelsIndic(s.title, paperLang);
 
       sectionItems.forEach((it, itemIdx) => {
         const isLastItem = itemIdx === sectionItems.length - 1;
-        const subLabel = isIndic
-          ? (DEVANAGARI_SUB_LABELS[itemIdx] ?? `(${itemIdx + 1})`)
-          : `(${LETTERS[itemIdx]?.toLowerCase() ?? itemIdx + 1})`;
+        const subLabel = numbering.itemNumbers[it.id]?.subLabel ?? groupedSubLabel(itemIdx, isIndic);
         blocks.push({
           key: it.id,
           keepWithNext: itemIdx === 0,
@@ -571,12 +567,9 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
       let lastInstructionLine = "";
       for (const it of sectionItems) {
         const currentN = n;
-        const numberLabel = formatQuestionNumber(
-          paper.numberingStyle || "CONTINUOUS",
-          currentN,
-          sectionLetter,
-          sectionRelativeCounter
-        );
+        const numberLabel =
+          numbering.itemNumbers[it.id]?.questionLabel ??
+          formatQuestionNumber(paper.numberingStyle || "CONTINUOUS", currentN, sectionLetter, sectionRelativeCounter);
         n += 1;
         sectionRelativeCounter += 1;
 

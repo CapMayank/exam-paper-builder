@@ -86,8 +86,7 @@ import { questionSlotMarks } from "@/lib/blueprint";
 import { resolveMarksStyle } from "@/lib/marksDisplay";
 import { coverageRows } from "@/lib/coverage";
 import { componentCoverage, parseComponents } from "@/lib/languageComponents";
-import { formatQuestionNumber, computeDisplayedPaperNumbering } from "@/lib/layout";
-import { sectionLetter } from "@/lib/sectionLetter";
+import { builderQuestionLabel, computeDisplayedPaperNumbering } from "@/lib/layout";
 import { nextSetIdentifier } from "@/lib/multiset";
 import { paperSectionChoiceRequirement } from "@/lib/internalChoiceRules";
 import type { Book, PaperData, PaperItem, Section, MarksStyle, NumberingStyle, PrintDensity } from "@/lib/types";
@@ -592,18 +591,13 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   const pickerSection = blueprint.sections.find((s) => s.id === pickerSectionId) ?? null;
 
   // Continuous numbering & structured metrics across sections
+  // the same numbering print uses, so a question carries the label it will have on paper
   const paperNumbering = computeDisplayedPaperNumbering(
     blueprint.sections,
     paper.items,
-    paper.numberingStyle || "CONTINUOUS"
+    paper.numberingStyle || "CONTINUOUS",
+    detectPaperLanguage(paper, paper.items)
   );
-
-  const firstNumber = new Map<string, number>();
-  let numbered = 0;
-  for (const s of blueprint.sections) {
-    firstNumber.set(s.id, numbered + 1);
-    numbered += paper.items.filter((i) => i.sectionId === s.id).length;
-  }
 
   return (
     <div className="space-y-4">
@@ -1963,14 +1957,8 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                     {/* Question Slots List */}
                     <ol className="space-y-3 pt-1">
                       {items.map((it, idx) => {
-                        const questionNumber = (firstNumber.get(s.id) ?? 1) + idx;
-                        const secLetter = sectionLetter(s.title) ?? String.fromCharCode(65 + (si % 26));
-                        const numberLabel = formatQuestionNumber(
-                          paper.numberingStyle || "CONTINUOUS",
-                          questionNumber - 1,
-                          secLetter,
-                          idx
-                        );
+                        const questionNumber = paperNumbering.itemNumbers[it.id]?.questionNumber;
+                        const numberLabel = builderQuestionLabel(paperNumbering, it.id);
                         const isTypeMismatch = !toleratesType(s, it.question.type);
                         const isExcess = idx >= s.count || effectiveUnits > s.count;
                         // this slot's own rule: the blueprint may switch the OR on or off slot by slot
