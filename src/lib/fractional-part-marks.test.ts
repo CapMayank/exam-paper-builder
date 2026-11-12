@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { questionSlotMarks, subpartsMarksProblem } from "./blueprint";
 import { formatMarksLabel } from "./constants";
+import { validatePaperPreflight } from "./preflight";
 import { questionSchema } from "./schemas";
 import { decomposeForSlot } from "./subpartExtractor";
 import {
@@ -110,5 +111,35 @@ describe("normalising parts keeps quarter marks and exact totals", () => {
   it("never changes a part when the total is already right", () => {
     const parts = [{ marks: 0.25 }, { marks: 0.75 }, { marks: 0.5 }];
     expect(normalizeSubpartMarks(parts, 1.5)).toEqual(parts);
+  });
+});
+
+describe("unequal \"any k of n\" parts get a message that says what is wrong", () => {
+  const parts = (...marks: number[]) => marks.map((m, i) => ({ label: `(${i + 1})`, text: "part", marks: m }));
+
+  it("says the parts must be equal instead of '(5) must match (5)'", () => {
+    expect(subpartsMarksProblem({ marksEach: 5 }, { subparts: parts(2.5, 2.5, 3), attemptCount: 2 })).toBe(
+      "every part must carry the same marks when students answer any 2 of 3",
+    );
+  });
+
+  it("keeps the existing messages for equal parts with the wrong total and for a plain sum mismatch", () => {
+    expect(subpartsMarksProblem({ marksEach: 5 }, { subparts: parts(2.5, 2.5, 2.5), attemptCount: 2 })).toBeNull();
+    expect(subpartsMarksProblem({ marksEach: 6 }, { subparts: parts(2, 2, 2), attemptCount: 2 })).toBe(
+      "total subpart marks (4) must match section marks (6).",
+    );
+    expect(subpartsMarksProblem({ marksEach: 6 }, { subparts: parts(2, 3) })).toBe(
+      "total subpart marks (5) must match section marks (6).",
+    );
+  });
+
+  it("uses the same wording in the preflight warning", () => {
+    const paper = {
+      blueprint: { sections: [{ id: "s", count: 1, marksEach: 5, type: "LONG", title: "S" }], chapters: [], book: {} },
+      items: [{ id: "i", sectionId: "s", question: { id: "q", chapterId: "c", type: "LONG", text: "Answer any 2", subparts: parts(2.5, 2.5, 3), attemptCount: 2 }, orQuestion: null }],
+      progress: { complete: true, usedMarks: 5, totalMarks: 5 },
+    };
+    const warning = validatePaperPreflight(paper as never).warnings.find((w) => w.code === "SUBPARTS_MARKS_MISMATCH");
+    expect(warning?.message).toContain("every part must carry the same marks when students answer any 2 of 3");
   });
 });

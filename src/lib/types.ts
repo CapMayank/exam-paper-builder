@@ -361,6 +361,25 @@ function isAnyKOfN(attemptCount: number | null | undefined, partCount: number): 
 }
 
 /**
+ * "Answer any k of n" parts that do not all carry the same marks, which is never valid; null otherwise.
+ * Lets a check say why such parts are refused instead of reporting a marks total.
+ */
+export function unequalAnyKOfN(
+  subparts: (Pick<SubPart, "marks"> | null | undefined)[] | null | undefined,
+  attemptCount?: number | null,
+): { k: number; n: number } | null {
+  if (!subparts || !isAnyKOfN(attemptCount, subparts.length)) return null;
+  const valid = subparts.filter(Boolean) as Pick<SubPart, "marks">[];
+  if (valid.length === 0 || valid.every((sp) => sameMarks(sp.marks, valid[0].marks))) return null;
+  return { k: attemptCount, n: subparts.length };
+}
+
+/** The message for unequal "any k of n" parts, shared by placement and preflight. */
+export function unequalAnyKOfNMessage({ k, n }: { k: number; n: number }): string {
+  return `every part must carry the same marks when students answer any ${k} of ${n}`;
+}
+
+/**
  * What a question's parts are worth to the student: all of them, or `attemptCount` of them when the question
  * says "answer any N". 0 when there are no parts.
  */

@@ -1,7 +1,7 @@
 // Pure blueprint rules. Used by the API (to reject) and the UI (to explain). No I/O here.
 
 import { parseMatchColumnPairs } from "./constants";
-import { attemptedSubpartsMarks, parseSubpartsPayload, validateSubPartsSum } from "./types";
+import { attemptedSubpartsMarks, parseSubpartsPayload, unequalAnyKOfN, unequalAnyKOfNMessage, validateSubPartsSum } from "./types";
 import { toleratesType, typeRejection } from "./sectionTypes";
 
 export type SectionDef = {
@@ -647,6 +647,8 @@ export function subpartsMarksProblem(
   if (subparts.length === 0) return null;
   const attemptCount = q.attemptCount || payload.attemptCount;
   if (validateSubPartsSum(subparts as never, section.marksEach, attemptCount)) return null;
+  const unequal = unequalAnyKOfN(subparts, attemptCount);
+  if (unequal) return unequalAnyKOfNMessage(unequal);
   return `total subpart marks (${attemptedSubpartsMarks(subparts as never, attemptCount)}) must match section marks (${section.marksEach}).`;
 }
 

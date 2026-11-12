@@ -118,6 +118,8 @@ describe("Full Paper Completion & Robust Generation Suite", () => {
 
   afterAll(async () => {
     await prisma.paperQuestion.deleteMany({ where: { paperId } }).catch(() => {});
+    // Auto-Fill writes a PAPER_UPDATE audit row per run; it outlives the user (onDelete: SetNull)
+    await prisma.auditLog.deleteMany({ where: { entityType: "PAPER", entityId: paperId } }).catch(() => {});
     await prisma.paper.deleteMany({ where: { id: paperId } }).catch(() => {});
     await prisma.blueprintChapter.deleteMany({ where: { blueprintId } }).catch(() => {});
     await prisma.blueprintSection.deleteMany({ where: { blueprintId } }).catch(() => {});

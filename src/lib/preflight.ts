@@ -1,7 +1,7 @@
 import { cleanOptionText, isMcqLikeType } from "./constants";
 import { evaluatePaperInternalChoiceCompliance } from "./internalChoiceRules";
 import { computeDisplayedPaperNumbering } from "./layout";
-import { attemptedSubpartsMarks, validateSubPartsSum, type PaperData } from "./types";
+import { attemptedSubpartsMarks, unequalAnyKOfN, unequalAnyKOfNMessage, validateSubPartsSum, type PaperData } from "./types";
 
 export type PreflightIssue = {
   code: string;
@@ -118,10 +118,13 @@ export function validatePaperPreflight(paper: PaperData): PreflightReport {
       const isValid = validateSubPartsSum(q.subparts, sec?.marksEach ?? 1, attemptCount);
       if (sec && !isValid) {
         const sum = attemptedSubpartsMarks(q.subparts, attemptCount);
+        const unequal = unequalAnyKOfN(q.subparts, attemptCount);
         issues.push({
           code: "SUBPARTS_MARKS_MISMATCH",
           severity: "warning",
-          message: `Question ${qNum} subpart marks total ${sum}m, but section marks quota is ${sec.marksEach}m.`,
+          message: unequal
+            ? `Question ${qNum}: ${unequalAnyKOfNMessage(unequal)}.`
+            : `Question ${qNum} subpart marks total ${sum}m, but section marks quota is ${sec.marksEach}m.`,
           questionNumber: qNum,
           questionId: q.id,
         });

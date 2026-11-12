@@ -549,6 +549,12 @@ export const POST = route(async (req, { id }, user) => {
 
       let orQuestionId = item.orQuestionId || null;
       const primaryBankQ = bankById.get(item.questionId);
+      // the solver's own OR pick is held to the same placement checks; one that fails is replaced below
+      const solverOr = orQuestionId ? bankById.get(orQuestionId) : undefined;
+      if (solverOr && placementProblem(item.sectionId, item.chapterId, solverOr, item.questionId)) {
+        skippedBankOrIds.add(solverOr.id);
+        orQuestionId = null;
+      }
       if (
         // the solver already decided, slot by slot, whether this one needs an OR
         (item.requiresInternalChoice ?? internalChoiceSectionIds.has(item.sectionId)) &&
