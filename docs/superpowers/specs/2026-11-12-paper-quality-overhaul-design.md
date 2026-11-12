@@ -69,8 +69,9 @@ renderers (print `SHEETS`/`QV`, builder preview, `DOCX`, `SOL`).
    `PaperItem.instruction` prints.
 2. An empty section instruction prints nothing. Remove the `getSharedInstruction`
    fallback in the print path (`SHEETS:375-387, 418-422`,
-   `reconcileSectionGroupInstruction` in `src/lib/layout.ts:451-480`) and in
-   `resolveGroupedExerciseInstruction` (`layout.ts:487-516`).
+   `reconcileSectionGroupInstruction` in `src/lib/layout.ts:451-480`).
+   `resolveGroupedExerciseInstruction` (`layout.ts:487-516`) keeps its default: for a
+   grouped exercise with items (क), (ख)… that line is the question itself.
 3. Translation of a teacher-typed instruction is unchanged.
 4. Type sub-headings in multi-type sections and paper-level General Instructions stay.
 
