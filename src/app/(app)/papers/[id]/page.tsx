@@ -254,6 +254,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
       examDate: p.examDate,
       paperSet: p.paperSet ?? "",
       subjectCode: p.subjectCode ?? "",
+      // the stored language when it is a choice (hi / sa / bilingual), otherwise what the paper detects as
       language: detectPaperLanguage(p, p.items),
       generalInstructions: p.generalInstructions ?? "",
       printDensity: (p.printDensity as PrintDensity) ?? "STANDARD",
@@ -285,7 +286,8 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
             examDate: details.examDate,
             paperSet: details.paperSet,
             subjectCode: details.subjectCode,
-            language: details.language,
+            // language is not sent here: details.language starts from detection, and writing it back would
+            // overwrite the teacher's choice. The Language select saves its own change.
             generalInstructions: details.generalInstructions,
             printDensity: details.printDensity,
             showCandidateDetails: details.showCandidateDetails,

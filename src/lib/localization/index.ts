@@ -189,8 +189,13 @@ export function detectPaperLanguage(
   } | null,
   items?: Array<{ question?: { text?: string | null; options?: string[] } | null }> | null
 ): PaperLanguage {
-  // 1. Explicit bilingual override
-  if (paper?.language === "bilingual" || paper?.blueprint?.language === "bilingual") {
+  // 1. The teacher's choice. A stored Hindi, Sanskrit or bilingual is always a choice and wins over the
+  // subject and the content. A stored "en" is not: it is the column and create-schema default, so it cannot
+  // be told apart from "never chosen", and detection below decides.
+  if (paper?.language === "hi" || paper?.language === "sa" || paper?.language === "bilingual") {
+    return paper.language;
+  }
+  if (paper?.blueprint?.language === "bilingual") {
     return "bilingual";
   }
 
