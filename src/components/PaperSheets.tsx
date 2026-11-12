@@ -40,7 +40,7 @@ import {
   imposeBooklet,
   imposeTwoUpCut,
   paginate,
-  reconcileSectionGroupInstruction,
+  sectionHeadingInstruction,
   resolveGroupedExerciseInstruction,
 } from "@/lib/layout";
 import { resolveBoardAndSubjectCode } from "@/lib/curriculumContract";
@@ -369,9 +369,9 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
       const groupMarks = allInGroup.reduce((sum, x) => sum + x.count * x.marksEach, 0);
       const groupCount = allInGroup.reduce((sum, x) => sum + x.count, 0);
       const secRange = numbering.sectionRanges[s.id];
-      // Only the teacher's own section instruction prints (localised and renumbered); none typed, none printed.
-      const reconciledMainInstruction = reconcileSectionGroupInstruction(
+      const reconciledMainInstruction = sectionHeadingInstruction(
         s.instructions,
+        s.type,
         secRange?.groupStartQ ?? 0,
         secRange?.groupEndQ ?? 0,
         paperLang

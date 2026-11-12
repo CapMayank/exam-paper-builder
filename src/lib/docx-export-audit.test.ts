@@ -491,7 +491,7 @@ In crystal field theory, the interaction between transition metal d-orbitals and
       return xml.replace(/<[^>]+>/g, "");
     }
 
-    it("a Hindi paper prints no default for an empty section instruction and keeps a typed English one", async () => {
+    it("a Hindi paper prints no default for an empty section instruction and the Hindi default for untranslatable typed English", async () => {
       const book = await prisma.book.create({
         data: { title: `Hindi Instructions ${testStamp}`, subject: "Hindi", className: "Class 10", chapters: { create: [{ number: 1, title: "पाठ 1" }] } },
         include: { chapters: true },
@@ -517,8 +517,8 @@ In crystal field theory, the interaction between transition metal d-orbitals and
       try {
         const text = await docText(paper.id);
         expect(text).not.toContain(getSharedInstruction("SHORT", "hi"));
-        expect(text).not.toContain(getSharedInstruction("LONG", "hi"));
-        expect(text).toContain("Write the answers neatly.");
+        expect(text).toContain(getSharedInstruction("LONG", "hi"));
+        expect(text).not.toContain("Write the answers neatly.");
       } finally {
         await prisma.paper.delete({ where: { id: paper.id } });
         await prisma.blueprintSection.deleteMany({ where: { blueprintId: bp.id } });

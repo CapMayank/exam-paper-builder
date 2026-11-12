@@ -480,6 +480,27 @@ export function reconcileSectionGroupInstruction(
 }
 
 /**
+ * The instruction printed under a section heading, shared by the print view and the Word export.
+ * Empty (after trim) prints nothing in every language. A typed instruction is localised and renumbered;
+ * on a Hindi/Sanskrit paper, one the localiser could not put into Devanagari gives way to the section
+ * type's default in the paper's language (seeded blueprints carry English instructions).
+ */
+export function sectionHeadingInstruction(
+  instruction: string | null | undefined,
+  sectionType: string,
+  startQ: number,
+  endQ: number,
+  paperLang: PaperLanguage
+): string {
+  const reconciled = reconcileSectionGroupInstruction(instruction, startQ, endQ, paperLang);
+  if (!reconciled) return "";
+  if ((paperLang === "hi" || paperLang === "sa") && !/[ऀ-ॿ]/.test(reconciled)) {
+    return getSharedInstruction(sectionType, paperLang);
+  }
+  return reconciled;
+}
+
+/**
  * Resolves the prompt shown on a grouped objective exercise (TRUE_FALSE or FILL_BLANK).
  * Prevents a multi-section overview instruction (such as "Question Nos. 1 to 5: Total 32 objective-type questions...")
  * from being repeated as the individual exercise prompt for Q7 (FILL_BLANK) or Q8 (TRUE_FALSE).

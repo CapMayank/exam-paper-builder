@@ -51,7 +51,7 @@ import { UPLOAD_DIR } from "@/lib/uploads";
 import {
   computeDisplayedPaperNumbering,
   mergeSameFormRows,
-  reconcileSectionGroupInstruction,
+  sectionHeadingInstruction,
   resolveGroupedExerciseInstruction,
 } from "@/lib/layout";
 import { resolveBoardAndSubjectCode } from "@/lib/curriculumContract";
@@ -585,9 +585,9 @@ export async function buildPaperDocx(
     // Sub-heading for specific question type within grouped section
     if (!isSameAsPrev && section.instructions && !isGroupedObjective) {
       const secRange = numbering.sectionRanges[section.id];
-      // Only the teacher's own section instruction prints (localised and renumbered); none typed, none printed.
-      const reconciledInstruction = reconcileSectionGroupInstruction(
+      const reconciledInstruction = sectionHeadingInstruction(
         section.instructions,
+        section.type,
         secRange?.groupStartQ ?? 0,
         secRange?.groupEndQ ?? 0,
         paperLang

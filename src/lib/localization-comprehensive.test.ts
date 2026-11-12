@@ -11,7 +11,7 @@ import {
   localizeSectionTitle,
 } from "./constants";
 import { getInternalChoiceSeparatorLabel } from "./internalChoiceRules";
-import { reconcileSectionGroupInstruction, resolveGroupedExerciseInstruction } from "./layout";
+import { reconcileSectionGroupInstruction, resolveGroupedExerciseInstruction, sectionHeadingInstruction } from "./layout";
 import { validateGeneratedQuestion, validateGeneratedSection } from "./questionValidator";
 import type { GenerationContract } from "./curriculumContract";
 import type { PaperData, QuestionDto } from "./types";
@@ -180,6 +180,39 @@ describe("Comprehensive Question Paper Localization Architecture", () => {
       expect(reconcileSectionGroupInstruction("   ", 1, 5)).toBe("");
       expect(reconcileSectionGroupInstruction("   ", 1, 5, "hi")).toBe("");
       expect(reconcileSectionGroupInstruction("सभी प्रश्न अनिवार्य हैं।", 1, 5, "hi")).toBe("सभी प्रश्न अनिवार्य हैं।");
+    });
+
+    describe("sectionHeadingInstruction", () => {
+      it("prints nothing for an empty section instruction, in every language", () => {
+        for (const lang of ["en", "hi", "sa"] as const) {
+          expect(sectionHeadingInstruction("", "SHORT", 1, 5, lang)).toBe("");
+          expect(sectionHeadingInstruction("   ", "SHORT", 1, 5, lang)).toBe("");
+          expect(sectionHeadingInstruction(null, "SHORT", 1, 5, lang)).toBe("");
+          expect(sectionHeadingInstruction(undefined, "SHORT", 1, 5, lang)).toBe("");
+        }
+      });
+
+      it("keeps a typed Hindi instruction unchanged on a Hindi paper", () => {
+        expect(sectionHeadingInstruction("सभी प्रश्न अनिवार्य हैं।", "SHORT", 1, 5, "hi")).toBe("सभी प्रश्न अनिवार्य हैं।");
+      });
+
+      it("prints the translation of a typed English instruction the localiser understands", () => {
+        expect(sectionHeadingInstruction("Fill in the blanks.", "SHORT", 1, 5, "hi")).toBe(
+          "दिए गए रिक्त स्थानों की सही शब्दों द्वारा पूर्ति कीजिए।"
+        );
+      });
+
+      it("uses the section type's default in the paper's language for untranslatable typed English on hi/sa", () => {
+        expect(sectionHeadingInstruction("Write the answers neatly.", "LONG", 1, 5, "hi")).toBe(getSharedInstruction("LONG", "hi"));
+        expect(sectionHeadingInstruction("Write the answers neatly.", "SHORT", 1, 5, "sa")).toBe(getSharedInstruction("SHORT", "sa"));
+      });
+
+      it("keeps typed English unchanged on an English paper, with its range renumbered", () => {
+        expect(sectionHeadingInstruction("Write the answers neatly.", "LONG", 1, 5, "en")).toBe("Write the answers neatly.");
+        expect(sectionHeadingInstruction("Question Nos. 6 to 9 carry 2 marks.", "SHORT", 15, 26, "en")).toBe(
+          "Question Nos. 15 to 26 carry 2 marks."
+        );
+      });
     });
 
     it("resolves English blueprint instructions into authentic Sanskrit shared instructions", () => {
