@@ -265,7 +265,10 @@ export const PUT = route(async (req, { id, itemId }, user) => {
 
     // If updating master in bank, verify it's not locked by a finalised paper
     const inFinalPapers = await prisma.paperQuestion.count({
-      where: { questionId: item.questionId, paper: { status: "FINAL", id: { not: id } } },
+      where: {
+        OR: [{ questionId: item.questionId }, { orQuestionId: item.questionId }],
+        paper: { status: "FINAL", id: { not: id } },
+      },
     });
     if (inFinalPapers > 0) {
       throw new HttpError(

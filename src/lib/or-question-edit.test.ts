@@ -160,6 +160,25 @@ describe("edit the OR question of a paper slot", () => {
     expect((await res.json()).error).toMatch(/no alternate \(OR\) question/);
   });
 
+  it("refuses a bank edit of a main question that another finalised paper uses as its OR question", async () => {
+    const other = await prisma.question.create({
+      data: { bookId, chapterId: ch1, type: "SHORT", text: "Another main question for the finalised paper.", answer: "x", createdById: userId },
+    });
+    const finalPaper = await prisma.paper.create({
+      data: { title: `OR edit final ${stamp}`, blueprintId, layout: "PAGE", schoolName: "Test School", createdById: userId, status: "FINAL" },
+    });
+    try {
+      await prisma.paperQuestion.create({ data: { paperId: finalPaper.id, sectionId, questionId: other.id, orQuestionId: primaryId, position: 0 } });
+      const res = await put({ mode: "UPDATE_MASTER", question: question({ text: "Edited main: state the laws of reflection." }) });
+      expect(res.status).toBe(409);
+      expect((await res.json()).error).toMatch(/part of another finalised paper/);
+      expect((await prisma.question.findUnique({ where: { id: primaryId } }))?.text).toBe("State the two laws of reflection.");
+    } finally {
+      await prisma.paperQuestion.deleteMany({ where: { paperId: finalPaper.id } });
+      await prisma.paper.deleteMany({ where: { id: finalPaper.id } });
+    }
+  });
+
   it("still edits the main question when no target is sent", async () => {
     const res = await put({ mode: "UPDATE_MASTER", question: question({ text: "Edited main: state the laws of reflection." }) });
     expect(res.status).toBe(200);
