@@ -408,10 +408,10 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
     setSiblingLoading(true);
     setSiblingQuestions([]);
     try {
-      const data = await api<{ siblings: Array<{ id: string; text: string; difficulty: string }> }>(
+      const list = await api<Array<{ id: string; text: string; difficulty: string }>>(
         `/api/papers/${id}/questions/${itemId}/siblings`
       );
-      setSiblingQuestions(data.siblings || []);
+      setSiblingQuestions(Array.isArray(list) ? list : []);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -425,8 +425,8 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
     setError(null);
     try {
       const updated = await api<PaperData>(`/api/papers/${id}/questions/${itemId}`, {
-        method: "PUT",
-        json: { mode: "replace", question: { id: replacementQuestionId } },
+        method: "PATCH",
+        json: { replaceWithQuestionId: replacementQuestionId },
       });
       adopt(updated);
       setQuickSwapItemId(null);
