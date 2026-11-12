@@ -150,6 +150,9 @@ export const subPartSchema: z.ZodType<SubPartInput> = z.lazy(() =>
   })
 );
 
+/** The stored name of an uploaded figure (a UUID plus image extension), never a path. */
+const imageFileName = z.string().regex(/^[a-f0-9-]{36}\.(png|jpg|jpeg|webp|gif|svg)$/);
+
 export const questionSchema = z
   .object({
     bookId: z.string().min(1),
@@ -163,11 +166,7 @@ export const questionSchema = z
     difficulty: z.enum(DIFFICULTIES).default("MEDIUM"),
     /** Skill of the school grid (Knowledge / Understanding / Applying / HOTS), stored as a Bloom level. */
     cognitiveLevel: z.enum(COGNITIVE_LEVELS).nullable().optional(),
-    imagePath: z
-      .string()
-      .regex(/^[a-f0-9-]{36}\.(png|jpg|jpeg|webp|gif|svg)$/)
-      .nullable()
-      .default(null),
+    imagePath: imageFileName.nullable().default(null),
     spaceMm: z.number().int().min(0).max(250).default(0),
     showGrid: z.boolean().default(false),
     /** Shared id for the sub-questions of one passage; they can only be placed in a passage section. */
@@ -202,6 +201,8 @@ export const questionPatchSchema = z.object({
   spaceMm: z.number().int().min(0).max(250).optional(),
   showGrid: z.boolean().optional(),
   passageGroupId: z.string().trim().min(1).max(64).nullable().optional(),
+  /** The question's figure: an uploaded file name, or null to remove it. */
+  imagePath: imageFileName.nullable().optional(),
 });
 
 export const blueprintSchema = z.object({

@@ -50,6 +50,7 @@ export const PATCH = route(async (req, { id }, user) => {
   if (input.spaceMm !== undefined) data.spaceMm = input.spaceMm;
   if (input.showGrid !== undefined) data.showGrid = input.showGrid;
   if (input.passageGroupId !== undefined) data.passageGroupId = input.passageGroupId;
+  if (input.imagePath !== undefined) data.imagePath = input.imagePath;
 
   const updated = await prisma.question.update({
     where: { id },

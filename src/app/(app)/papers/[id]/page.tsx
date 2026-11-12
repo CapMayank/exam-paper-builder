@@ -516,8 +516,12 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
     api<Actor & { name: string; email: string }>("/api/me").then(setCurrentUser, () => undefined);
   }, []);
 
-  const reloadPaper = useCallback(() => {
-    api<PaperData>(`/api/papers/${id}`).then(adopt, (e) => setError(e.message));
+  const reloadPaper = useCallback(async () => {
+    try {
+      adopt(await api<PaperData>(`/api/papers/${id}`));
+    } catch (e) {
+      setError((e as Error).message);
+    }
   }, [id, adopt]);
 
   useEffect(() => {
@@ -2786,11 +2790,16 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
           onSelectDiagram={async ({ imagePath }) => {
             const currentItem = diagramModalItem;
             setDiagramModalItem(null);
-            await api(`/api/questions/${currentItem.item.question.id}`, {
-              method: "PATCH",
-              json: { imagePath },
-            });
-            await reloadPaper();
+            setError(null);
+            try {
+              await api(`/api/questions/${currentItem.item.question.id}`, {
+                method: "PATCH",
+                json: { imagePath },
+              });
+              await reloadPaper();
+            } catch (e) {
+              setError((e as Error).message);
+            }
           }}
           onOpenInStudio={(imgUrl) => {
             const currentItem = diagramModalItem;
@@ -2812,17 +2821,22 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
           onDone={async (png) => {
             const currentItem = studioItem;
             setStudioItem(null);
-            const fd = new FormData();
-            fd.append("file", png, "diagram.png");
-            const res = await api<{ name: string }>("/api/uploads", {
-              method: "POST",
-              body: fd,
-            });
-            await api(`/api/questions/${currentItem.item.question.id}`, {
-              method: "PATCH",
-              json: { imagePath: res.name },
-            });
-            await reloadPaper();
+            setError(null);
+            try {
+              const fd = new FormData();
+              fd.append("file", png, "diagram.png");
+              const res = await api<{ name: string }>("/api/uploads", {
+                method: "POST",
+                body: fd,
+              });
+              await api(`/api/questions/${currentItem.item.question.id}`, {
+                method: "PATCH",
+                json: { imagePath: res.name },
+              });
+              await reloadPaper();
+            } catch (e) {
+              setError((e as Error).message);
+            }
           }}
         />
       )}
