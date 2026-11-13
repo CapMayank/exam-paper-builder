@@ -3,8 +3,6 @@
 import {
   AlertCircle,
   AlertTriangle,
-  ArrowDown,
-  ArrowUp,
   BookOpen,
   CheckCircle2,
   ChevronDown,
@@ -16,12 +14,10 @@ import {
   FileDown,
   Grid3X3,
   History,
-  ImagePlus,
   KeyRound,
   Lightbulb,
   Lock,
   Pencil,
-  PencilRuler,
   Plus,
   Printer,
   RefreshCw,
@@ -48,7 +44,8 @@ import { SubjectWorkspaceDrawer } from "@/components/subject-workspace/SubjectWo
 import { SectionAiModal } from "@/components/SectionAiModal";
 import { KeyDisputesBanner } from "@/components/KeyDisputesBanner";
 import { slotPlanSummary } from "@/lib/slotPlan";
-import { choicePolicyNote, sectionStatusLine, sectionWarning } from "@/lib/workbenchView";
+import { choicePolicyNote, orMenuItems, rowActions, rowMenuItems, sectionStatusLine, sectionWarning } from "@/lib/workbenchView";
+import { RowMenu } from "@/components/RowMenu";
 import { answerStageSummary, runAnswerStages } from "@/lib/answerStage";
 import { PaperQuestionEditModal } from "@/components/PaperQuestionEditModal";
 import { QuestionPicker } from "@/components/QuestionPicker";
@@ -66,7 +63,6 @@ import {
   EXAM_TYPES,
   EXAM_TYPE_LABEL,
   inferExamTypeFromText,
-  canHaveSubparts,
   isSubpartQuestionType,
   LAYOUTS,
   LAYOUT_LABEL,
@@ -153,6 +149,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   });
   const [splitPreview, setSplitPreview] = useState(false);
   const [previewZoom, setPreviewZoom] = useState(0.55);
+  const [openRowMenu, setOpenRowMenu] = useState<{ itemId: string; kind: "more" | "or" } | null>(null);
   const [quickSwapItemId, setQuickSwapItemId] = useState<string | null>(null);
   const [siblingQuestions, setSiblingQuestions] = useState<Array<{ id: string; text: string; difficulty: string }>>([]);
   const [siblingLoading, setSiblingLoading] = useState(false);
@@ -478,6 +475,39 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
       then?.(r);
     } catch (e) {
       showError((e as Error).message);
+    }
+  }
+
+  function handleMoreSelect(key: string, it: PaperItem, section: Section) {
+    switch (key) {
+      case "addDiagram":
+      case "changeDiagram":
+        setDiagramModalItem({ item: it, section });
+        break;
+      case "editDiagram":
+        setStudioItem({ item: it, section, initialUrl: it.question.imagePath ? imageUrl(it.question.imagePath) : null });
+        break;
+      case "previewDiagramBw":
+        setBwPreviewIds((prev) => ({ ...prev, [it.question.id]: !prev[it.question.id] }));
+        break;
+      case "removeDiagram":
+        void call(async () => {
+          await api(`/api/questions/${it.question.id}`, { method: "PATCH", json: { imagePath: null } });
+          return api<PaperData>(`/api/papers/${id}`);
+        }, adopt);
+        break;
+      case "pageBreak":
+        void handleTogglePageBreak(it.id, !it.pageBreakBefore);
+        break;
+      case "moveUp":
+        void handleMoveQuestion(it.id, "up");
+        break;
+      case "moveDown":
+        void handleMoveQuestion(it.id, "down");
+        break;
+      case "quickSwap":
+        void handleOpenQuickSwap(it.id);
+        break;
     }
   }
 
@@ -1818,6 +1848,11 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                         const isExcess = idx >= s.count || effectiveUnits > s.count;
                         // this slot's own rule: the blueprint may switch the OR on or off slot by slot
                         const slotChoiceReq = paperSectionChoiceRequirement(paper, s, idx);
+                        const actions = rowActions({
+                          canEdit: canEditPaper,
+                          hasOr: Boolean(it.orQuestion),
+                          orForbidden: slotChoiceReq.forbidden,
+                        });
 
                         const isMatchQ = it.question.type === "MATCH_COLUMN" || s.type === "MATCH_COLUMN";
                         const questionTotalMarks = questionSlotMarks(s, it.question as never).marks;
@@ -1928,174 +1963,110 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                     Exhausted Question
                                   </span>
                                 )}
-                                <span className="badge font-bold !bg-indigo-50 !text-indigo-700 border border-indigo-200">
-                                  {questionTotalMarks} Mark{questionTotalMarks > 1 ? "s" : ""}
-                                  {canHaveSubparts(it.question.type) && it.question.subparts && it.question.subparts.length > 0 && ` (${it.question.subparts.length} parts)`}
-                                </span>
                                 <span className="badge font-semibold !bg-slate-100 !text-slate-700 border border-slate-200">{difficultyLabel(it.question.difficulty)}</span>
                                 <span className="badge !bg-slate-100 text-slate-700 font-medium border border-slate-200">
                                   Ch {it.question.chapter?.number}. {it.question.chapter?.title}
                                 </span>
                                 {it.orQuestion && (
                                   <span className="badge !bg-purple-50 !text-purple-800 border border-purple-200 font-semibold">
-                                    Internal Choice (Ch {it.orQuestion.chapter?.number})
+                                    OR question · Ch {it.orQuestion.chapter?.number}
                                   </span>
                                 )}
                               </div>
 
-                              {canEditPaper && (
+                              {actions.length > 0 && (
                                 <div className="flex flex-wrap items-center gap-1.5 ml-auto">
-                                  {!it.orQuestion ? (
-                                    slotChoiceReq.forbidden ? null : (
-                                      <button
-                                        className="btn btn-sm border-slate-200 bg-white text-slate-600 hover:text-purple-700 hover:border-purple-200 hover:bg-purple-50/50 shadow-2xs font-medium"
-                                        title="Add internal choice alternate question (OR)"
-                                        onClick={() => setAlternateItem({ item: it, section: s })}
-                                      >
-                                        + OR Choice
-                                      </button>
-                                    )
-                                  ) : (
-                                    <>
-                                      {slotChoiceReq.forbidden && (
-                                        <span className="badge !bg-red-100 !text-red-800 border border-red-200 text-[10px] font-bold" title={slotChoiceReq.reason}>
-                                          ⚠ Forbidden Choice
-                                        </span>
-                                      )}
-                                      <button
-                                        className="btn btn-sm border-purple-200 bg-white text-purple-700 hover:bg-purple-50 font-medium"
-                                        title="Edit the alternate (OR) question's text, options or answer"
-                                        onClick={() => setEditingItem({ item: it, section: s, target: "or" })}
-                                      >
-                                        <Pencil size={12} className="text-purple-500" /> Edit OR
-                                      </button>
-                                      <button
-                                        className="btn btn-sm border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 font-medium"
-                                        title="Change alternate question"
-                                        onClick={() => setAlternateItem({ item: it, section: s })}
-                                      >
-                                        Change OR
-                                      </button>
-                                      <button
-                                        className="btn btn-sm text-red-600 hover:bg-red-50 font-medium"
-                                        title="Remove alternate question"
-                                        onClick={() => removeOrQuestion(it)}
-                                      >
-                                        Unlink OR
-                                      </button>
-                                    </>
-                                  )}
-
-                                  {it.question.imagePath ? (
-                                    <div className="flex flex-wrap items-center gap-1 rounded-md border border-slate-200/90 bg-slate-50/80 p-0.5">
-                                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
-                                        <Printer size={11} className="text-slate-400" />
-                                        Diagram
-                                      </span>
-                                      <button
-                                        className="btn btn-xs border-slate-200 bg-white text-slate-700 hover:bg-slate-100 shadow-2xs font-medium"
-                                        title="Swap diagram with another from educational library"
-                                        onClick={() => setDiagramModalItem({ item: it, section: s })}
-                                      >
-                                        <RefreshCw size={11} className="text-slate-500" /> Swap
-                                      </button>
-                                      <button
-                                        className="btn btn-xs border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 shadow-2xs font-medium"
-                                        title="Edit or mask labels in Figure Studio"
-                                        onClick={() =>
-                                          setStudioItem({
-                                            item: it,
-                                            section: s,
-                                            initialUrl: it.question.imagePath ? imageUrl(it.question.imagePath) : null,
-                                          })
-                                        }
-                                      >
-                                        <PencilRuler size={11} className="text-indigo-600" /> Studio
-                                      </button>
-                                      <button
-                                        className={`btn btn-xs font-medium ${
-                                          bwPreviewIds[it.question.id]
-                                            ? "bg-slate-800 text-white border-slate-700 shadow-2xs"
-                                            : "border-slate-200 bg-white text-slate-700 hover:bg-slate-100 shadow-2xs"
-                                        }`}
-                                        title="Preview how this figure looks on B&W photocopier"
-                                        onClick={() =>
-                                          setBwPreviewIds((prev) => ({
-                                            ...prev,
-                                            [it.question.id]: !prev[it.question.id],
-                                          }))
-                                        }
-                                      >
-                                        <Printer size={11} />
-                                        {bwPreviewIds[it.question.id] ? "B&W On" : "B&W Test"}
-                                      </button>
-                                      <button
-                                        className="btn btn-xs border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 shadow-2xs font-medium"
-                                        title="Remove diagram from this question"
-                                        onClick={() =>
-                                          call(
-                                            async () => {
-                                              await api(`/api/questions/${it.question.id}`, {
-                                                method: "PATCH",
-                                                json: { imagePath: null },
-                                              });
-                                              return api<PaperData>(`/api/papers/${id}`);
-                                            },
-                                            adopt,
-                                          )
-                                        }
-                                      >
-                                        <X size={11} className="text-amber-600" /> Remove
-                                      </button>
-                                    </div>
-                                  ) : (
+                                  {actions.includes("edit") && (
                                     <button
-                                      className="btn btn-sm border-slate-200 bg-white text-slate-600 hover:text-indigo-700 hover:border-indigo-200 hover:bg-indigo-50/50 shadow-2xs font-medium"
-                                      title="Add educational diagram or vector figure to this question"
-                                      onClick={() => setDiagramModalItem({ item: it, section: s })}
-                                    >
-                                      <ImagePlus size={12} className="text-slate-400" /> + Diagram
-                                    </button>
-                                  )}
-
-                                  <button
-                                    className="btn btn-sm border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-2xs font-medium"
-                                    title="Edit question text or options"
-                                    onClick={() => setEditingItem({ item: it, section: s, target: "primary" })}
-                                  >
-                                    <Pencil size={12} className="text-slate-500" /> Edit
-                                  </button>
-
-                                  <button
-                                    className="btn btn-sm border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-2xs font-medium"
-                                    title="Replace with another question from bank"
-                                    onClick={() => setReplacingItem({ item: it, section: s })}
-                                  >
-                                    <RefreshCw size={12} className="text-slate-400" /> Replace
-                                  </button>
-
-                                  {/* Quick Swap Popover */}
-                                  <div className="relative">
-                                    <button
-                                      type="button"
-                                      className={`btn btn-sm font-medium ${
-                                        quickSwapItemId === it.id
-                                          ? "bg-indigo-100 text-indigo-900 border-indigo-300 shadow-2xs"
-                                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-2xs"
-                                      }`}
-                                      title="1-click Quick Swap with a sibling question from the same chapter"
+                                      className="btn btn-sm border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-2xs font-medium"
+                                      title="Edit question text or options"
                                       onClick={() => {
-                                        if (quickSwapItemId === it.id) {
-                                          setQuickSwapItemId(null);
-                                        } else {
-                                          handleOpenQuickSwap(it.id);
-                                        }
+                                        setOpenRowMenu(null);
+                                        setEditingItem({ item: it, section: s, target: "primary" });
                                       }}
                                     >
-                                      <RefreshCw size={11} className={`text-indigo-600 ${quickSwapItemId === it.id ? "rotate-180 transition-transform" : ""}`} />
-                                      <span>Quick Swap</span>
+                                      <Pencil size={12} className="text-slate-500" /> Edit
                                     </button>
-
+                                  )}
+                                  {actions.includes("replace") && (
+                                    <button
+                                      className="btn btn-sm border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-2xs font-medium"
+                                      title="Replace with another question from bank"
+                                      onClick={() => {
+                                        setOpenRowMenu(null);
+                                        setReplacingItem({ item: it, section: s });
+                                      }}
+                                    >
+                                      <RefreshCw size={12} className="text-slate-400" /> Replace
+                                    </button>
+                                  )}
+                                  {actions.includes("or") &&
+                                    (!it.orQuestion ? (
+                                      <button
+                                        className="btn btn-sm border-slate-200 bg-white text-slate-600 hover:text-purple-700 hover:border-purple-200 hover:bg-purple-50/50 shadow-2xs font-medium"
+                                        title="Add an OR question: a second question the student may answer instead"
+                                        onClick={() => {
+                                          setOpenRowMenu(null);
+                                          setAlternateItem({ item: it, section: s });
+                                        }}
+                                      >
+                                        Add OR
+                                      </button>
+                                    ) : (
+                                      <>
+                                        {slotChoiceReq.forbidden && (
+                                          <span className="badge !bg-red-100 !text-red-800 border border-red-200 text-[10px] font-bold" title={slotChoiceReq.reason}>
+                                            OR not allowed here
+                                          </span>
+                                        )}
+                                        <RowMenu
+                                          label="OR"
+                                          ariaLabel="OR question actions"
+                                          items={orMenuItems(true)}
+                                          open={openRowMenu?.itemId === it.id && openRowMenu.kind === "or"}
+                                          onOpenChange={(o) => setOpenRowMenu(o ? { itemId: it.id, kind: "or" } : null)}
+                                          buttonClassName="btn btn-sm border-purple-200 bg-white text-purple-700 hover:bg-purple-50 shadow-2xs font-medium"
+                                          onSelect={(key) => {
+                                            setOpenRowMenu(null);
+                                            if (key === "editOr") setEditingItem({ item: it, section: s, target: "or" });
+                                            else if (key === "changeOr") setAlternateItem({ item: it, section: s });
+                                            else if (key === "removeOr") void removeOrQuestion(it);
+                                          }}
+                                        />
+                                      </>
+                                    ))}
+                                  {actions.includes("delete") && (
+                                    <button
+                                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition ml-0.5"
+                                      title="Remove question from paper"
+                                      aria-label="Remove question from paper"
+                                      onClick={() => {
+                                        setOpenRowMenu(null);
+                                        void removeQuestion(it);
+                                      }}
+                                    >
+                                      <Trash2 size={13} />
+                                    </button>
+                                  )}
+                                  {actions.includes("more") && (
+                                    <div className="relative">
+                                      <RowMenu
+                                        label="More"
+                                        ariaLabel="More actions"
+                                        items={rowMenuItems({
+                                          hasFigure: Boolean(it.question.imagePath),
+                                          pageBreakBefore: Boolean(it.pageBreakBefore),
+                                          index: idx,
+                                          total: items.length,
+                                          moving: movingItemId !== null,
+                                        })}
+                                        open={openRowMenu?.itemId === it.id && openRowMenu.kind === "more"}
+                                        onOpenChange={(o) => setOpenRowMenu(o ? { itemId: it.id, kind: "more" } : null)}
+                                        onSelect={(key) => {
+                                          setOpenRowMenu(null);
+                                          handleMoreSelect(key, it, s);
+                                        }}
+                                      />
                                     {quickSwapItemId === it.id && (
                                       <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 rounded-xl border border-slate-200 bg-white p-3 shadow-xl z-30 space-y-2">
                                         <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
@@ -2162,50 +2133,8 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                         )}
                                       </div>
                                     )}
-                                  </div>
-
-                                  {/* Page Break Toggle */}
-                                  <button
-                                    type="button"
-                                    className={`btn btn-sm font-medium ${
-                                      it.pageBreakBefore
-                                        ? "bg-amber-100 text-amber-900 border-amber-300 shadow-2xs"
-                                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-2xs"
-                                    }`}
-                                    title={it.pageBreakBefore ? "Remove forced page break before this question" : "Force page break before this question in print & export"}
-                                    onClick={() => handleTogglePageBreak(it.id, !it.pageBreakBefore)}
-                                  >
-                                    <Scissors size={11} className={it.pageBreakBefore ? "text-amber-700" : "text-slate-400"} />
-                                    <span>{it.pageBreakBefore ? "Page Break ✓" : "Page Break"}</span>
-                                  </button>
-
-                                  <div className="inline-flex items-center rounded-md border border-slate-200 bg-white shadow-2xs overflow-hidden">
-                                    <button
-                                      className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-50 disabled:opacity-30 disabled:hover:bg-white"
-                                      disabled={idx === 0 || movingItemId !== null}
-                                      title="Move question up"
-                                      onClick={() => handleMoveQuestion(it.id, "up")}
-                                    >
-                                      <ArrowUp size={12} />
-                                    </button>
-                                    <div className="h-3 w-px bg-slate-200" />
-                                    <button
-                                      className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-50 disabled:opacity-30 disabled:hover:bg-white"
-                                      disabled={idx === items.length - 1 || movingItemId !== null}
-                                      title="Move question down"
-                                      onClick={() => handleMoveQuestion(it.id, "down")}
-                                    >
-                                      <ArrowDown size={12} />
-                                    </button>
-                                  </div>
-
-                                  <button
-                                    className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition ml-0.5"
-                                    title="Remove question from paper"
-                                    onClick={() => removeQuestion(it)}
-                                  >
-                                    <Trash2 size={13} />
-                                  </button>
+                                    </div>
+                                  )}
                                 </div>
                               )}
                             </div>

@@ -307,10 +307,13 @@ test.describe("3. Double-Click Locks & Action Integrity", () => {
     await paperLink.click();
     await page.waitForURL(/\/papers\/[a-z0-9]+/);
 
-    // Unconditionally assert the first Move Down button is visible and enabled
-    const moveDownBtn = page.locator('button[title="Move question down"]').first();
-    await expect(moveDownBtn).toBeVisible({ timeout: 10000 });
-    await expect(moveDownBtn).toBeEnabled();
+    // Unconditionally assert the first row's More menu offers an enabled "Move down"
+    const moreBtn = page.getByRole("button", { name: "More actions" }).first();
+    await expect(moreBtn).toBeVisible({ timeout: 10000 });
+    await moreBtn.click();
+    const moveDownItem = page.getByRole("menuitem", { name: "Move down" });
+    await expect(moveDownItem).toBeEnabled();
+    await moreBtn.click(); // close again
 
     // Intercept PATCH to simulate network latency
     await page.route("**/api/papers/*/questions/*", async (route) => {
@@ -322,9 +325,12 @@ test.describe("3. Double-Click Locks & Action Integrity", () => {
       } catch {}
     });
 
-    await moveDownBtn.click();
-    // Button must immediately become disabled while mutation is in-flight
-    await expect(moveDownBtn).toBeDisabled();
+    await moreBtn.click();
+    await moveDownItem.click();
+    // The item must be disabled while the mutation is in flight
+    await moreBtn.click();
+    await expect(moveDownItem).toBeDisabled();
+    await page.keyboard.press("Escape");
 
     // Once mutation finishes, wait for response
     await page.waitForResponse(
