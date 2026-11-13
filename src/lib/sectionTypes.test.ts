@@ -88,7 +88,10 @@ describe("school pattern defaults by subject", () => {
   it("gives English grammar, passage and writing at the right marks", () => {
     expect(defaultAllowedTypes("MCQ", 1, "English")).toContain("GRAMMAR");
     expect(defaultAllowedTypes("SHORT", 3, "English")).toEqual(["SHORT", "LONG", "GRAMMAR", "REFERENCE_CONTEXT", "UNSEEN_PASSAGE"]);
-    expect(defaultAllowedTypes("LONG", 5, "English")).toEqual(["LONG", "SHORT", "WRITING_SKILL", "UNSEEN_PASSAGE"]);
+    expect(defaultAllowedTypes("LONG", 5, "English")).toEqual(["LONG", "SHORT", "WRITING_SKILL", "UNSEEN_PASSAGE", "GRAMMAR"]);
+    // "One word" (VERY_SHORT) fits a one-mark slot in every subject
+    expect(defaultAllowedTypes("MCQ", 1, "Science")).toEqual(["MCQ", "FILL_BLANK", "TRUE_FALSE", "MATCH_COLUMN", "VERY_SHORT"]);
+    expect(defaultAllowedTypes("LONG", 5, "Science")).not.toContain("GRAMMAR");
   });
 
   it("gives SST maps, Science diagrams and Maths case studies, not grammar", () => {

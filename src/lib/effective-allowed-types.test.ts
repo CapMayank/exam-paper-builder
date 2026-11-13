@@ -69,12 +69,13 @@ describe("effectiveAllowedTypesJson", () => {
     expect(classNumberOf(null)).toBeNull();
   });
 
-  it("a 1-mark MCQ section in class 5 Science takes the objective forms", () => {
+  it("a 1-mark MCQ section in class 5 Science takes the objective forms and one word", () => {
     expect(parsed(effectiveAllowedTypesJson({ type: "MCQ", marksEach: 1, allowedTypesJson: "[]" }, { className: "Class 5", subject: "Science" }))).toEqual([
       "MCQ",
       "FILL_BLANK",
       "TRUE_FALSE",
       "MATCH_COLUMN",
+      "VERY_SHORT",
     ]);
   });
 

@@ -102,7 +102,8 @@ export function defaultAllowedTypes(type: string, marksEach: number, subject: st
   const fam = subjectFamily(subject);
   const list: string[] = [];
   if (marksEach === 1) {
-    list.push("MCQ", "FILL_BLANK", "TRUE_FALSE", "MATCH_COLUMN");
+    // "One word" is the VERY_SHORT form: a one-mark slot takes it beside the objective forms
+    list.push("MCQ", "FILL_BLANK", "TRUE_FALSE", "MATCH_COLUMN", "VERY_SHORT");
     if (fam === "LANGUAGE") list.push("GRAMMAR");
   } else if (marksEach === 2) {
     list.push("VERY_SHORT");
@@ -115,7 +116,7 @@ export function defaultAllowedTypes(type: string, marksEach: number, subject: st
     if (fam === "SST") list.push("MAP_WORK");
   } else {
     list.push("LONG", "SHORT");
-    if (fam === "LANGUAGE") list.push("WRITING_SKILL", "UNSEEN_PASSAGE");
+    if (fam === "LANGUAGE") list.push("WRITING_SKILL", "UNSEEN_PASSAGE", "GRAMMAR");
     if (fam === "SCIENCE") list.push("DRAW");
     if (fam === "SST") list.push("MAP_WORK");
     if (fam === "MATHS") list.push("CASE_STUDY");
