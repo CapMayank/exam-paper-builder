@@ -382,9 +382,10 @@ test.describe("3. Double-Click Locks & Action Integrity", () => {
       } catch {}
     });
 
+    const rowsBefore = await pickerModal.locator('button:has-text("Add to Slot")').count();
     await addBtn.click();
-    // Button must immediately disable while adding
-    await expect(addBtn).toBeDisabled();
+    // The picker removes the row on click, so the same question cannot be added twice
+    await expect(pickerModal.locator('button:has-text("Add to Slot")')).toHaveCount(rowsBefore - 1);
 
     await page.waitForResponse(
       (res) => res.url().includes("/questions") && res.request().method() === "POST",
