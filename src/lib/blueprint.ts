@@ -336,6 +336,7 @@ export function spansSlots(
 ): boolean {
   return (
     !!section.flexible &&
+    section.type !== "MATCH_COLUMN" &&
     section.marksEach === 1 &&
     section.count > 1 &&
     isTypeAllowed({ type: section.type ?? "", marksEach: section.marksEach, allowedTypesJson: section.allowedTypesJson }, "MATCH_COLUMN")

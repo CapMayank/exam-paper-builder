@@ -280,6 +280,8 @@ export type BlueprintSectionDef = {
   type: string;
   count: number;
   marksEach: number;
+  /** class 8 and below: a match question may span slots, so a replacement must keep its pair count */
+  flexible?: boolean;
 };
 
 export type TargetSetItemPlan = {
@@ -410,7 +412,7 @@ export function planMultiSetDistribution(params: {
 
     // Score items by available candidate inventory in bank
     const scored = items.map((it) => {
-      pairsWanted = pairsOfMatch(it.question);
+      pairsWanted = sec.flexible ? pairsOfMatch(it.question) : undefined;
       const exact = getEligible(it.question.chapterId, it.question.type, it.question.difficulty, sec.marksEach);
       const total = getEligible(it.question.chapterId, it.question.type, undefined, sec.marksEach);
       const score = exact.length * 100 + total.length;
@@ -454,7 +456,7 @@ export function planMultiSetDistribution(params: {
 
       // 2. Process variant slots
       for (const item of alloc.variantSlots) {
-        pairsWanted = pairsOfMatch(item.question);
+        pairsWanted = sec.flexible ? pairsOfMatch(item.question) : undefined;
         // Priority 1: Exact difficulty match
         let chosenPrimary: CandidateQuestionDef | null = null;
         let isFallback = false;

@@ -2,6 +2,8 @@ import { z } from "zod";
 import { body, HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { permuteMcqOptions, planMultiSetDistribution } from "@/lib/multiset";
+import { applySlotDeltas } from "@/lib/sectionPools";
+import { withEffectiveAllowedTypes } from "@/lib/sectionTypes";
 import { assertCanCopyPaper, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { isQuestionContaminated } from "@/lib/questionValidator";
@@ -76,7 +78,11 @@ export const POST = route(async (req, params, user) => {
 
   // 3. Run pure multi-set distribution planner
   const planResult = planMultiSetDistribution({
-    sections: source.blueprint.sections,
+    // each section as the paper uses it: flexible flag and the slots this paper moved
+    sections: applySlotDeltas(
+      source.blueprint.sections.map((s) => withEffectiveAllowedTypes(s, source.blueprint.book)),
+      source.slotMoves,
+    ),
     sourceItems: source.items,
     candidatePool: bankQuestions,
     targetSets: input.sets,

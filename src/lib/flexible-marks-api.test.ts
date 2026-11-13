@@ -7,6 +7,8 @@ vi.mock("@/lib/session", () => ({
   endSession: () => Promise.resolve(),
 }));
 
+import { GET as listPapers } from "@/app/api/papers/route";
+import { loadPaperView } from "./papers";
 import { POST as aiCommit } from "@/app/api/papers/[id]/ai-commit-section/route";
 import { POST as aiGenerate } from "@/app/api/papers/[id]/ai-generate-section/route";
 import { createElement } from "react";
@@ -54,6 +56,7 @@ describe("flexible marks through the API", () => {
           create: [
             { position: 1, title: "Section A", instructions: "", type: "MCQ", count: 5, marksEach: 1, allowedTypesJson: allowed },
             { position: 2, title: "Section B", instructions: "", type: "FILL_BLANK", count: 5, marksEach: 1, allowedTypesJson: allowed },
+            { position: 3, title: "Section C", instructions: "", type: "MATCH_COLUMN", count: 4, marksEach: 1, allowedTypesJson: "[]" },
           ],
         },
       },
@@ -73,7 +76,7 @@ describe("flexible marks through the API", () => {
     const patch = (itemId: string, json: unknown) => call(patchItem, `/api/papers/${paperId}/questions/${itemId}`, "PATCH", { id: paperId, itemId }, json);
     const move = (fromSectionId: string, toSectionId: string, slots: number) =>
       call(rebalance, `/api/papers/${paperId}/rebalance`, "POST", { id: paperId }, { fromSectionId, toSectionId, slots });
-    return { paperId, a: bp.sections[0].id, b: bp.sections[1].id, mk, add, patch, move };
+    return { paperId, a: bp.sections[0].id, b: bp.sections[1].id, c: bp.sections[2].id, ch, bookId: book.id, mk, add, patch, move };
   }
 
   beforeAll(async () => {
@@ -221,7 +224,7 @@ describe("flexible marks through the API", () => {
       const text = xml.replace(/<[^>]+>/g, "");
       expect(text).toMatch(/\[2 Marks?\]/);
       expect(text).toContain("½ mark for each pair");
-      expect(text).not.toMatch(/\[4 Marks?\]/);
+    expect(text).not.toMatch(/\[\s*4 Marks?\s*\]/);
       expect(text).toMatch(/4 Questions? · 5 Marks?/i);
     }
   });
@@ -243,6 +246,61 @@ describe("flexible marks through the API", () => {
     expect(text).toMatch(/4 Questions? · 5 Marks?/i);
     expect(text).toContain("½ mark for each pair");
     expect(text).toMatch(/\[?\s*2 Marks?\s*\]?/);
-    expect(text).not.toMatch(/\[?\s*4 Marks?\s*\]?/);
+    expect(text).not.toMatch(/\[\s*4 Marks?\s*\]/);
+  });
+
+  describe("review fixes", () => {
+    it("editing a match in a section that borrowed slots counts all its slots", async () => {
+      const t = await setup("Class 6");
+      expect((await t.move(t.b, t.a, 2)).status).toBe(200); // A now has 7 slots
+      const added = (await (await t.add(t.a, (await t.mk(6)).id)).json()) as View;
+      expect(sec(added, t.a)).toMatchObject({ filled: 6, needed: 7 });
+      const id = added.items[0].id;
+      expect(sec((await (await t.patch(id, { pairMarks: 0.5 })).json()) as View, t.a).filled).toBe(3);
+      const back = await t.patch(id, { pairMarks: 1 });
+      expect(back.status).toBe(200);
+      expect(sec((await back.json()) as View, t.a).filled).toBe(6);
+    });
+
+    it("half a mark per pair is refused for a match section, which has its own marks rule", async () => {
+      const t = await setup("Class 6");
+      const added = (await (await t.add(t.c, (await t.mk(4)).id)).json()) as View;
+      expect((await t.patch(added.items[0].id, { pairMarks: 0.5 })).status).toBe(400);
+    });
+
+    it("a stale half-mark value (pairs edited to an odd count) is not reported or printed", async () => {
+      const t = await setup("Class 6");
+      const m = await t.mk(4);
+      const added = (await (await t.add(t.a, m.id)).json()) as View;
+      await t.patch(added.items[0].id, { pairMarks: 0.5 });
+      await prisma.question.update({ where: { id: m.id }, data: { optionsJson: pairs(3) } });
+      const view = (await loadPaperView(t.paperId)) as unknown as View;
+      expect(view.items[0].question.pairMarks ?? null).toBeNull();
+      expect(sec(view, t.a).filled).toBe(3);
+    });
+
+    it("the paper list reports the same slot counts as the builder after slots moved", async () => {
+      const t = await setup("Class 6");
+      await t.move(t.a, t.b, 2); // A 3 slots, B 7 slots
+      const ch = t.ch;
+      for (const [section, n] of [[t.a, 3], [t.b, 7]] as const) {
+        for (let i = 0; i < n; i++) {
+          const q = await prisma.question.create({ data: { bookId: t.bookId, chapterId: ch, type: "MCQ", text: `List ${section}${i}?`, optionsJson: JSON.stringify(["a", "b", "c", "d"]), answer: "a", createdById: userId } });
+          expect((await t.add(section, q.id)).status).toBe(200);
+        }
+      }
+      const list = (await (await (listPapers as unknown as (r: Request) => Promise<Response>)(new Request("http://localhost/api/papers"))).json()) as Array<{ id: string; filled: number; needed: number }>;
+      const mine = list.find((p) => p.id === t.paperId)!;
+      expect(mine.filled).toBe(10);
+    });
+
+    it("two slot moves at once are both kept", async () => {
+      const t = await setup("Class 6");
+      const results = await Promise.all([t.move(t.a, t.b, 1), t.move(t.a, t.b, 1)]);
+      expect(results.map((r) => r.status)).toEqual([200, 200]);
+      const rows = await prisma.paperSectionSlots.findMany({ where: { paperId: t.paperId } });
+      expect(rows.find((r) => r.sectionId === t.a)?.delta).toBe(-2);
+      expect(rows.find((r) => r.sectionId === t.b)?.delta).toBe(2);
+    });
   });
 });

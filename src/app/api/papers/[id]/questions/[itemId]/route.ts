@@ -1,5 +1,6 @@
 import { isTypeAllowed, orTypeRefusal, withEffectiveAllowedTypes } from "@/lib/sectionTypes";
 import { body, HttpError, route, type SessionUser } from "@/lib/api";
+import { applySlotDeltas } from "@/lib/sectionPools";
 import { pairMarksProblem, slotPlacement, subpartsMarksProblem, whyCannotAdd } from "@/lib/blueprint";
 import { parseMatchColumnPairs } from "@/lib/constants";
 import {
@@ -39,8 +40,10 @@ async function editableItem(paperId: string, itemId: string, user: SessionUser) 
   if (!item || item.paperId !== paperId) throw new HttpError(404, "Item not found");
   assertCanModifyPaper(user, item.paper);
   if (item.paper.status === "FINAL") throw new HttpError(409, "This paper is finalised. Reopen it to make changes.");
-  // the slot's effective allowed types, exactly as the paper view gives them
-  return { ...item, section: withEffectiveAllowedTypes(item.section, item.paper.blueprint.book) };
+  // the slot as the paper view gives it: effective allowed types, and the slots this paper moved in or out
+  const moves = await prisma.paperSectionSlots.findMany({ where: { paperId } });
+  const [section] = applySlotDeltas([withEffectiveAllowedTypes(item.section, item.paper.blueprint.book)], moves);
+  return { ...item, section };
 }
 
 export const DELETE = route(async (_req, { id, itemId }, user) => {

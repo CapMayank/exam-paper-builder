@@ -19,24 +19,26 @@ export const POST = route(async (req, { id }, user) => {
   const problem = rebalanceProblem(paper.blueprint.sections, filled, input.fromSectionId, input.toSectionId, input.slots);
   if (problem) throw new HttpError(400, problem);
 
-  const existing = await prisma.paperSectionSlots.findMany({ where: { paperId: id } });
-  const current = (sectionId: string) => existing.find((d) => d.sectionId === sectionId)?.delta ?? 0;
-  const next: Array<[string, number]> = [
-    [input.fromSectionId, current(input.fromSectionId) - input.slots],
-    [input.toSectionId, current(input.toSectionId) + input.slots],
-  ];
-  await prisma.$transaction([
-    ...next.map(([sectionId, delta]) =>
-      delta === 0
-        ? prisma.paperSectionSlots.deleteMany({ where: { paperId: id, sectionId } })
-        : prisma.paperSectionSlots.upsert({
-            where: { paperId_sectionId: { paperId: id, sectionId } },
-            create: { paperId: id, sectionId, delta },
-            update: { delta },
-          }),
-    ),
-    prisma.paper.update({ where: { id }, data: { updatedAt: new Date() } }),
-  ]);
+  // read and write inside one transaction, so two moves at once both count
+  await prisma.$transaction(async (tx) => {
+    const existing = await tx.paperSectionSlots.findMany({ where: { paperId: id } });
+    const current = (sectionId: string) => existing.find((d) => d.sectionId === sectionId)?.delta ?? 0;
+    const next: Array<[string, number]> = [
+      [input.fromSectionId, current(input.fromSectionId) - input.slots],
+      [input.toSectionId, current(input.toSectionId) + input.slots],
+    ];
+    for (const [sectionId, delta] of next) {
+      if (delta === 0) await tx.paperSectionSlots.deleteMany({ where: { paperId: id, sectionId } });
+      else {
+        await tx.paperSectionSlots.upsert({
+          where: { paperId_sectionId: { paperId: id, sectionId } },
+          create: { paperId: id, sectionId, delta },
+          update: { delta },
+        });
+      }
+    }
+    await tx.paper.update({ where: { id }, data: { updatedAt: new Date() } });
+  });
   await recordAudit(user, "PAPER_UPDATE", "PAPER", id, { action: "PAPER_SLOTS_MOVED", ...input });
   return loadPaperView(id);
 });

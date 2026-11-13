@@ -5,6 +5,7 @@ import { paperStatus } from "@/lib/blueprint";
 import { resolvePaperExamType } from "@/lib/constants";
 import { resolveBoardAndSubjectCode } from "@/lib/curriculumContract";
 import { detectPaperLanguage, type PaperLanguage } from "@/lib/localization";
+import { applySlotDeltas } from "@/lib/sectionPools";
 import { withEffectiveAllowedTypes } from "@/lib/sectionTypes";
 import { assertCanManageScope, loadPaperView, toPlacedItems } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
@@ -15,6 +16,7 @@ export const GET = route(async (req) => {
   const allPapers = await prisma.paper.findMany({
     orderBy: { updatedAt: "desc" },
     include: {
+      slotMoves: true,
       blueprint: {
         select: {
           name: true,
@@ -28,6 +30,7 @@ export const GET = route(async (req) => {
       items: {
         select: {
           sectionId: true,
+          pairMarks: true,
           question: {
             select: {
               chapterId: true,
@@ -45,7 +48,7 @@ export const GET = route(async (req) => {
   return papers.map(({ blueprint, items, ...p }) => {
     const resolvedExamType = resolvePaperExamType({ ...p, blueprint });
     // the same flexible-marks view of each section as the builder, so the list and the builder never disagree
-    const sections = blueprint.sections.map((sec) => withEffectiveAllowedTypes(sec, blueprint.book));
+    const sections = applySlotDeltas(blueprint.sections.map((sec) => withEffectiveAllowedTypes(sec, blueprint.book)), p.slotMoves);
     const placedItems = toPlacedItems(sections, items);
     const status = paperStatus(
       {

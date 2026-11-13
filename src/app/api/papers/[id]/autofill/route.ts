@@ -383,7 +383,7 @@ export const POST = route(async (req, { id }, user) => {
             plannedItems.push({ sectionId: sec.id, chapterId: chosenBpChapter.chapterId, ...slotPlacement(sec, grounded) });
 
             const cur = (chapterRemainingMarks.get(rep(chosenBpChapter.chapterId)) ?? 0);
-            chapterRemainingMarks.set(rep(chosenBpChapter.chapterId), cur - (collapsedMatch ? u.count * sec.marksEach : sec.marksEach));
+            chapterRemainingMarks.set(rep(chosenBpChapter.chapterId), cur - (collapsedMatch ? u.count * sec.marksEach : slotPlacement(sec, grounded).marks));
           }
         }
       }

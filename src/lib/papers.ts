@@ -2,8 +2,9 @@ import "server-only";
 import { HttpError, type SessionUser } from "./api";
 import { resolvePaperExamType } from "./constants";
 import { toQuestionDto } from "./dto";
+import { parseMatchColumnPairs } from "./constants";
 import { applySlotDeltas } from "./sectionPools";
-import { diagnosePaperImplications, paperStatus, questionSlotMarks, slotPlacement, subpartsMarksProblem, toPlacedItems } from "./blueprint";
+import { diagnosePaperImplications, paperStatus, questionSlotMarks, slotPlacement, spansSlots, subpartsMarksProblem, toPlacedItems } from "./blueprint";
 import { isTypeAllowed, orTypeRefusal, withEffectiveAllowedTypes } from "./sectionTypes";
 import { componentImplications, parseComponents } from "./languageComponents";
 import { blueprintInclude } from "./blueprints";
@@ -136,6 +137,20 @@ const paperInclude = {
 } as const;
 
 
+/** The pair value to count and print: half a mark only while it still fits (flexible section, even pair count). */
+function effectivePairMarks(
+  section: Parameters<typeof spansSlots>[0] | undefined,
+  item: { pairMarks: number | null; question: { type: string; optionsJson: string; text: string; explanation?: string | null } },
+): number | null {
+  if (item.pairMarks !== 0.5 || !section || item.question.type !== "MATCH_COLUMN" || !spansSlots(section)) return null;
+  let opts: string[] = [];
+  try {
+    const parsed = JSON.parse(item.question.optionsJson || "[]");
+    opts = Array.isArray(parsed) ? parsed : [];
+  } catch {}
+  return parseMatchColumnPairs(opts, item.question.text, item.question.explanation).length % 2 === 0 ? 0.5 : null;
+}
+
 /** Everything the builder and print views need, with progress computed server-side. */
 export async function loadPaperView(id: string) {
   const paper = await prisma.paper.findUnique({ where: { id }, include: paperInclude });
@@ -203,7 +218,7 @@ export async function loadPaperView(id: string) {
     componentKey: i.componentKey || "",
     instruction: i.instruction || "",
     // the slot's pair value rides on the question so every reader of the view counts marks the same way
-    question: { ...toQuestionDto(i.question), pairMarks: i.pairMarks ?? null },
+    question: { ...toQuestionDto(i.question), pairMarks: effectivePairMarks(blueprint.sections.find((x) => x.id === i.sectionId), i) },
     orQuestion: i.orQuestion ? toQuestionDto(i.orQuestion) : null,
   }));
 
