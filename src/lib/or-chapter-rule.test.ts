@@ -8,16 +8,28 @@ vi.mock("@/lib/session", () => ({
 }));
 
 import { PATCH as patchItem, PUT as editItem } from "@/app/api/papers/[id]/questions/[itemId]/route";
-import { evaluatePaperInternalChoiceCompliance, OR_CHAPTER_REQUIRED, orChapterRule } from "./internalChoiceRules";
+import { evaluatePaperInternalChoiceCompliance, OR_CHAPTER_REQUIRED, orChapterRequired, orChapterRule } from "./internalChoiceRules";
 import { prisma } from "./prisma";
 
 describe("orChapterRule", () => {
   it("is a guideline up to class 8 and for a class it cannot read as a number", () => {
     for (const c of ["Class 1", "Class 8", "8th", "Class VIII", "Nursery", "KG", "", null, undefined]) expect(orChapterRule(c)).toBe("guideline");
+    for (const c of ["Class8", "Class 8B", "class viii", "Class 5 Section V", "Class 8 I-term", "LKG", "UKG", "Class 2025", "Mix", "Classic"]) {
+      expect(orChapterRule(c), c).toBe("guideline");
+    }
   });
 
   it("is required from class 9, in digits, ordinals or Roman numerals", () => {
     for (const c of ["Class 9", "Class 10", "10th", "Class 12 (Science)", "Class X", "Class IX", "XII"]) expect(orChapterRule(c)).toBe("required");
+    for (const c of ["Class10", "Class 10A", "10A", "XIIth", "Class x", "class xi", "Std. IX", "Grade 12", "Class XA", "कक्षा X"]) {
+      expect(orChapterRule(c), c).toBe("required");
+    }
+  });
+
+  it("orChapterRequired is true exactly when the rule is required", () => {
+    expect(orChapterRequired("Class 10")).toBe(true);
+    expect(orChapterRequired("Class 8")).toBe(false);
+    expect(orChapterRequired(null)).toBe(false);
   });
 });
 

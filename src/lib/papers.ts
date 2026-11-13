@@ -9,7 +9,7 @@ import { blueprintInclude } from "./blueprints";
 import {
   evaluatePaperInternalChoiceCompliance,
   orChapterRefusal,
-  orChapterRule,
+  orChapterRequired,
   paperSectionChoiceRequirement,
 } from "./internalChoiceRules";
 import {
@@ -330,7 +330,7 @@ export async function assertValidOrChoice(
     throw new HttpError(400, allowed.length === 1 ? `Alternate question must be of type ${allowed[0]}` : `Alternate question must be one of: ${allowed.join(", ")}`);
   }
   // up to class 8 the same chapter is only a guideline; from class 9 it is required
-  if (candidate.chapterId !== primary.chapterId && orChapterRule(paper.blueprint.book.className) === "required") {
+  if (candidate.chapterId !== primary.chapterId && orChapterRequired(paper.blueprint.book.className)) {
     throw new HttpError(400, orChapterRefusal(paper.blueprint.chapters.find((c) => c.chapterId === primary.chapterId)?.chapter));
   }
   const marksProblem = subpartsMarksProblem(section, candidate);

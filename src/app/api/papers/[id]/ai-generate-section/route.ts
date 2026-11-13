@@ -9,7 +9,7 @@ import {
 import {
   isParaphraseOrDuplicateChoice,
   orChapterRefusal,
-  orChapterRule,
+  orChapterRequired,
   resolveInternalChoiceRequirement,
 } from "@/lib/internalChoiceRules";
 import { detectPaperLanguage, type PaperLanguage } from "@/lib/localization";
@@ -84,7 +84,7 @@ export const POST = route(async (req, { id }, user) => {
   if (
     alternateFor &&
     (slots as GeneratePaperSectionSlot[])[0].chapterId !== alternateFor.question.chapterId &&
-    orChapterRule(paper.blueprint.book.className) === "required"
+    orChapterRequired(paper.blueprint.book.className)
   ) {
     throw new HttpError(422, orChapterRefusal(alternateFor.question.chapter));
   }

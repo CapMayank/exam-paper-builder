@@ -142,6 +142,7 @@ describe("AI replace and OR alternative use the section pipeline", () => {
     const slot = generateMock.mock.calls[0][0].slots[0];
     expect(slot.topicFocus).toContain(primaryText);
     expect(slot.topicFocus).toMatch(/NOT be a paraphrase/);
+    expect(slot.topicFocus).toContain("Write an equivalent question: same chapter,");
     expect(slot.requiresInternalChoice).toBe(false);
     const body = await res.json();
     expect(body.questions[0].orQuestion).toBeUndefined();
@@ -180,7 +181,11 @@ describe("AI replace and OR alternative use the section pipeline", () => {
     );
     expect((await res.clone().json()).error).toBeUndefined();
     expect(res.status).toBe(200);
-    expect(generateMock.mock.calls[0][0].slots[0].chapterId).toBe(ch2);
+    const slot = generateMock.mock.calls[0][0].slots[0];
+    expect(slot.chapterId).toBe(ch2);
+    // the model is pointed at the slot's chapter, not told to keep the main question's chapter
+    expect(slot.topicFocus).toContain("Write an equivalent question: the chapter named for this slot,");
+    expect(slot.topicFocus).not.toMatch(/same chapter/);
   });
 
   it("refuses an alternative for a question that is not in the paper", async () => {

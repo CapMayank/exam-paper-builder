@@ -9,7 +9,7 @@ import {
   loadPaperView,
   toPlacedItems,
 } from "@/lib/papers";
-import { orChapterRefusal, orChapterRule } from "@/lib/internalChoiceRules";
+import { orChapterRefusal, orChapterRequired } from "@/lib/internalChoiceRules";
 import { parseComponents } from "@/lib/languageComponents";
 import { prisma } from "@/lib/prisma";
 import { questionColumns, questionCopyData } from "@/lib/questionWrite";
@@ -122,7 +122,7 @@ export const PATCH = route(async (req, { id, itemId }, user) => {
       updateData.orQuestionId = null;
     } else if (orQuestionId !== undefined) {
       updateData.orQuestionId = orQuestionId;
-    } else if (item.orQuestionId && candidate.chapterId !== item.question.chapterId && orChapterRequired(item)) {
+    } else if (item.orQuestionId && candidate.chapterId !== item.question.chapterId && orChapterRequiredFor(item)) {
       updateData.orQuestionId = null;
     }
     await prisma.paperQuestion.update({ where: { id: itemId }, data: updateData });
@@ -170,8 +170,8 @@ type EditableItem = Awaited<ReturnType<typeof editableItem>>;
 type EditedQuestion = z.infer<typeof editPaperItemSchema>["question"];
 
 /** From class 9 an OR must share the main question's chapter; up to class 8 that is only a guideline. */
-function orChapterRequired(item: EditableItem) {
-  return orChapterRule(item.paper.blueprint.book.className) === "required";
+function orChapterRequiredFor(item: EditableItem) {
+  return orChapterRequired(item.paper.blueprint.book.className);
 }
 
 /**
@@ -182,7 +182,7 @@ function orChapterRequired(item: EditableItem) {
 async function editOrQuestion(item: EditableItem, mode: "UPDATE_MASTER" | "FORK_COPY", qInput: EditedQuestion, user: SessionUser, paperId: string) {
   const or = item.orQuestion;
   if (!item.orQuestionId || !or) throw new HttpError(400, "This slot has no alternate (OR) question to edit.");
-  if (qInput.chapterId !== item.question.chapterId && orChapterRequired(item)) {
+  if (qInput.chapterId !== item.question.chapterId && orChapterRequiredFor(item)) {
     throw new HttpError(400, orChapterRefusal(item.question.chapter));
   }
   if (!isTypeAllowed(item.section, qInput.type)) {
@@ -279,7 +279,7 @@ export const PUT = route(async (req, { id, itemId }, user) => {
       );
     }
     await prisma.question.update({ where: { id: item.questionId }, data });
-    if (item.orQuestionId && item.orQuestion && item.orQuestion.chapterId !== qInput.chapterId && orChapterRequired(item)) {
+    if (item.orQuestionId && item.orQuestion && item.orQuestion.chapterId !== qInput.chapterId && orChapterRequiredFor(item)) {
       await prisma.paperQuestion.update({
         where: { id: itemId },
         data: { orQuestionId: null },
@@ -292,7 +292,7 @@ export const PUT = route(async (req, { id, itemId }, user) => {
       data: { ...questionCopyData(item.question), ...data, createdById: user.id },
     });
     const updateData: { questionId: string; orQuestionId?: null } = { questionId: forked.id };
-    if (item.orQuestionId && item.orQuestion && item.orQuestion.chapterId !== qInput.chapterId && orChapterRequired(item)) {
+    if (item.orQuestionId && item.orQuestion && item.orQuestion.chapterId !== qInput.chapterId && orChapterRequiredFor(item)) {
       updateData.orQuestionId = null;
     }
     await prisma.paperQuestion.update({

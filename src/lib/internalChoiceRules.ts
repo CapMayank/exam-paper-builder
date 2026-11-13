@@ -286,12 +286,27 @@ export const OR_CHAPTER_REQUIRED = "An OR question must be from the same chapter
 
 const ROMAN_CLASS: Record<string, number> = { I: 1, II: 2, III: 3, IV: 4, V: 5, VI: 6, VII: 7, VIII: 8, IX: 9, X: 10, XI: 11, XII: 12 };
 
-/** The class number in a class name: Arabic digits ("Class 10", "10th") or a whole-word Roman numeral I to XII ("Class X"). */
+/** A Roman numeral in any case right after a class word: "Class x", "class viii", "Std. IX", "कक्षा X", "Class XA". */
+const CLASS_WORD_ROMAN = /(?:^|[^A-Za-z])(?:class|std|standard|grade|कक्षा)\.?\s*[-:]?\s*([ivx]+)([a-z]*)/gi;
+/** An upper-case Roman numeral standing alone, with an optional ordinal: "XII", "XIIth", "Class IX". */
+const BARE_ROMAN = /(?<![A-Za-z])(XII|XI|IX|X|VIII|VII|VI|IV|V|III|II|I)(?:st|nd|rd|th)?(?![A-Za-z])/;
+
+/**
+ * The class number in a class name, or null when none can be read. Digits win over Roman numerals ("Class 5 Section V"
+ * is 5). Digits need no word boundary ("Class10", "10A") but a longer number such as a year ("2025") is not a class.
+ * A Roman numeral is read in any case after a class word, and otherwise only in upper case, so a stray "i" or "x"
+ * in other text is not a class. After a class word it may carry an ordinal or one upper-case section letter A to D.
+ */
 function orRuleClassNumber(className: string): number | null {
-  const digits = className.match(/\b(1[0-2]|[1-9])(?:st|nd|rd|th)?\b/i);
+  const digits = className.match(/(?<!\d)(1[0-2]|[1-9])(?!\d)/);
   if (digits) return Number(digits[1]);
-  const roman = className.match(/\b(XII|XI|IX|X|VIII|VII|VI|IV|V|III|II|I)\b/);
-  return roman ? ROMAN_CLASS[roman[1]] : null;
+  for (const m of className.matchAll(CLASS_WORD_ROMAN)) {
+    const [, numeral, suffix] = m;
+    const n = ROMAN_CLASS[numeral.toUpperCase()];
+    if (n && (suffix === "" || /^(st|nd|rd|th)$/i.test(suffix) || /^[A-D]$/.test(suffix))) return n;
+  }
+  const bare = className.match(BARE_ROMAN);
+  return bare ? ROMAN_CLASS[bare[1]] : null;
 }
 
 /**
@@ -301,6 +316,11 @@ function orRuleClassNumber(className: string): number | null {
 export function orChapterRule(className?: string | null): OrChapterRule {
   const n = className ? orRuleClassNumber(className.trim()) : null;
   return n !== null && n >= 9 ? "required" : "guideline";
+}
+
+/** True when an OR question from another chapter must be refused (from class 9). */
+export function orChapterRequired(className?: string | null): boolean {
+  return orChapterRule(className) === "required";
 }
 
 /** The refusal for an OR from another chapter where the rule is required, naming the main question's chapter. */
@@ -1276,7 +1296,7 @@ export function evaluatePaperInternalChoiceCompliance(params: {
           orQ.chapterId &&
           item.question.chapterId &&
           orQ.chapterId !== item.question.chapterId &&
-          orChapterRule(params.className) === "required"
+          orChapterRequired(params.className)
         ) {
           allSlots.push({
             itemId: item.id,
