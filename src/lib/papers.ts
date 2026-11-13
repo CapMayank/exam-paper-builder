@@ -22,6 +22,7 @@ import {
   type QuestionRef,
 } from "./permissions";
 import { prisma } from "./prisma";
+import { marksMismatchMessage } from "./preflightChecks";
 
 export { toPlacedItems };
 
@@ -286,6 +287,8 @@ export function snapshotItems(items: PaperView["items"]) {
  */
 export function finaliseBlocker(view: Pick<PaperView, "progress" | "internalChoiceAudit" | "implications">): string | null {
   if (!view.progress.complete) return "The paper doesn't match its blueprint yet, so it can't be finalised.";
+  const marks = marksMismatchMessage(view.progress);
+  if (marks) return `${marks} It can't be finalised until they match.`;
   if (view.implications.some((i) => i.code === "TYPE_MISMATCH" || i.code === "ORPHANED_SECTION" || i.code === "SECTION_OVERFILLED")) {
     return "The paper has questions that no longer fit its blueprint, so it can't be finalised.";
   }

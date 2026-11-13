@@ -1,4 +1,6 @@
 import { questionInstruction } from "./sectionTypes";
+import { loadPaperView } from "./papers";
+import { isDraftPaper } from "./preflightChecks";
 import { questionSlotMarks } from "@/lib/blueprint";
 import { partsAttemptCount, resolveMarksStyle, showPartMarks } from "@/lib/marksDisplay";
 import fs from "node:fs";
@@ -1190,7 +1192,9 @@ export async function buildPaperDocx(
   }
 }
 
-  const docHeaderTitle = `${paper.title} · ${paper.paperSet ? `${locale.header.set} ${paper.paperSet} · ` : ""}${
+  const draftView = await loadPaperView(paperId);
+  const isDraft = draftView ? isDraftPaper(draftView) : false;
+  const docHeaderTitle = `${isDraft ? "DRAFT — INCOMPLETE PAPER · " : ""}${paper.title} · ${paper.paperSet ? `${locale.header.set} ${paper.paperSet} · ` : ""}${
     isMarkingScheme
       ? (isSanskrit ? "गोपनीय-अङ्कयोजना" : isHindi ? "गोपनीय अंक योजना" : "Confidential Marking Scheme")
       : (isSanskrit ? "प्रश्नपत्रम्" : isHindi ? "प्रश्न पत्र" : "Examination Paper")

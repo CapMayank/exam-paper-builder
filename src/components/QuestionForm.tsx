@@ -1,5 +1,6 @@
 "use client";
 
+import { findPlaceholder } from "@/lib/preflightChecks";
 import {
   ArrowDown,
   ArrowUp,
@@ -467,6 +468,8 @@ export function QuestionForm({
     }
 
     if (!text.trim()) return "Enter the question text.";
+    const leftover = findPlaceholder(text) ?? subparts.map((sp) => findPlaceholder(sp.text)).find(Boolean);
+    if (leftover) return `Replace the placeholder text before saving: ${leftover}`;
     return null;
   }
 

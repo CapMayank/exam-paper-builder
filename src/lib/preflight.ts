@@ -1,10 +1,14 @@
 import { cleanOptionText, isMcqLikeType } from "./constants";
-import { evaluatePaperInternalChoiceCompliance } from "./internalChoiceRules";
+import { evaluatePaperInternalChoiceCompliance, orChapterRequired } from "./internalChoiceRules";
 import { computeDisplayedPaperNumbering } from "./layout";
+import { isTemplateFiller } from "./templateFiller";
+import { findPlaceholder, marksMismatchMessage, plainText } from "./preflightChecks";
 import { attemptedSubpartsMarks, unequalAnyKOfN, unequalAnyKOfNMessage, validateSubPartsSum, type PaperData } from "./types";
 
 export type PreflightIssue = {
   code: string;
+  /** Short heading for the issue; the message explains it. */
+  title?: string;
   severity: "error" | "warning" | "info";
   message: string;
   questionNumber?: number;
@@ -31,9 +35,16 @@ export function validatePaperPreflight(paper: PaperData): PreflightReport {
     const targetQuestions = paper.blueprint.sections.reduce((s, x) => s + x.count, 0);
     issues.push({
       code: "BLUEPRINT_INCOMPLETE",
+      title: "Questions missing",
       severity: "error",
       message: `Paper does not match blueprint quotas (${paper.items.length}/${targetQuestions} questions, ${paper.progress.usedMarks}/${paper.progress.totalMarks} marks).`,
     });
+  }
+
+  // 1a. Slots full but marks off
+  if (paper.progress.complete) {
+    const marksMsg = marksMismatchMessage(paper.progress);
+    if (marksMsg) issues.push({ code: "MARKS_MISMATCH", title: "Marks do not add up", severity: "error", message: marksMsg });
   }
 
   // 1b. Chapter coverage is a guide: report the difference, never block on it
@@ -71,6 +82,8 @@ export function validatePaperPreflight(paper: PaperData): PreflightReport {
 
   // 4. Duplicate Question Text within Paper
   const seenTexts = new Map<string, number>();
+  const seenIds = new Map<string, number>();
+  const blueprintChapters = new Set(paper.blueprint.chapters.map((c) => c.chapterId));
   // numbered as on the printed paper: section by section, not by raw position
   const numbering = computeDisplayedPaperNumbering(paper.blueprint.sections, paper.items, paper.numberingStyle || "CONTINUOUS");
   const sectionOrder = new Map(paper.blueprint.sections.map((s, i) => [s.id, i]));
@@ -85,7 +98,75 @@ export function validatePaperPreflight(paper: PaperData): PreflightReport {
     const q = item.question;
     const normText = q.text.trim().toLowerCase().replace(/\s+/g, " ");
 
-    if (seenTexts.has(normText)) {
+    const idOf = (id: string, num: number) => {
+      if (seenIds.has(id)) {
+        issues.push({
+          code: "DUPLICATE_QUESTION_ID",
+          title: "Same question used twice",
+          severity: "error",
+          message: `Question ${num} is the same bank question as Question ${seenIds.get(id)}.`,
+          questionNumber: num,
+          questionId: id,
+        });
+      } else seenIds.set(id, num);
+    };
+    idOf(q.id, qNum);
+    if (item.orQuestion) idOf(item.orQuestion.id, qNum);
+
+    // empty or placeholder text, in the question, its OR and its parts
+    const textsOf = (x: typeof q, label: string) => {
+      if (!plainText(x.text)) {
+        issues.push({ code: "EMPTY_QUESTION_TEXT", title: "Empty question", severity: "error", message: `${label} has no question text.`, questionNumber: qNum, questionId: q.id });
+      }
+      const ph = findPlaceholder(x.text);
+      if (ph) {
+        issues.push({ code: "PLACEHOLDER_TEXT", title: "Placeholder text left in", severity: "error", message: `${label} still contains placeholder text: ${ph}`, questionNumber: qNum, questionId: q.id });
+      }
+      for (const sp of x.subparts ?? []) {
+        if (!plainText(sp.text)) {
+          issues.push({ code: "EMPTY_PART_TEXT", title: "Empty part", severity: "error", message: `${label}, part ${sp.label || "?"} has no text.`, questionNumber: qNum, questionId: q.id });
+        }
+      }
+    };
+    textsOf(q, `Question ${qNum}`);
+    if (item.orQuestion) textsOf(item.orQuestion, `Question ${qNum} (OR)`);
+
+    if (isTemplateFiller(q) || (item.orQuestion && isTemplateFiller(item.orQuestion))) {
+      issues.push({
+        code: "TEMPLATE_FILLER",
+        title: "Generic template question",
+        severity: "warning",
+        message: `Question ${qNum} is a generic template question that needs a teacher's review.`,
+        questionNumber: qNum,
+        questionId: q.id,
+      });
+    }
+
+    if (item.orQuestion && (!item.orQuestion.answer || item.orQuestion.answer.trim() === "")) {
+      issues.push({
+        code: "MISSING_OR_ANSWER",
+        title: "OR question has no answer",
+        severity: "warning",
+        message: `Question ${qNum} (OR) has no model answer recorded.`,
+        questionNumber: qNum,
+        questionId: item.orQuestion.id,
+      });
+    }
+
+    for (const cq of [q, item.orQuestion]) {
+      if (cq && cq.chapterId && blueprintChapters.size > 0 && !blueprintChapters.has(cq.chapterId)) {
+        issues.push({
+          code: "CHAPTER_OUTSIDE_BLUEPRINT",
+          title: "Chapter not in the blueprint",
+          severity: "warning",
+          message: `Question ${qNum}${cq === q ? "" : " (OR)"} is from a chapter that is not in the blueprint.`,
+          questionNumber: qNum,
+          questionId: cq.id,
+        });
+      }
+    }
+
+    if (seenTexts.has(normText) && normText) {
       const priorNum = seenTexts.get(normText)!;
       issues.push({
         code: "DUPLICATE_QUESTION_TEXT",
@@ -94,8 +175,21 @@ export function validatePaperPreflight(paper: PaperData): PreflightReport {
         questionNumber: qNum,
         questionId: q.id,
       });
-    } else {
+    } else if (normText) {
       seenTexts.set(normText, qNum);
+    }
+    if (item.orQuestion) {
+      const orNorm = item.orQuestion.text.trim().toLowerCase().replace(/\s+/g, " ");
+      if (orNorm && (orNorm === normText || seenTexts.has(orNorm))) {
+        issues.push({
+          code: "DUPLICATE_QUESTION_TEXT",
+          title: "Repeated wording",
+          severity: "warning",
+          message: `Question ${qNum} (OR) has identical wording to ${orNorm === normText ? "its main question" : `Question ${seenTexts.get(orNorm)}`}.`,
+          questionNumber: qNum,
+          questionId: item.orQuestion.id,
+        });
+      } else if (orNorm) seenTexts.set(orNorm, qNum);
     }
 
     // 5. Answer Key Validation for Objective Questions
@@ -137,7 +231,8 @@ export function validatePaperPreflight(paper: PaperData): PreflightReport {
       if (orQ.chapterId !== q.chapterId) {
         issues.push({
           code: "OR_CHAPTER_MISMATCH",
-          severity: "info",
+          title: "OR question from another chapter",
+          severity: orChapterRequired(paper.blueprint.book.className) ? "error" : "info",
           message: `Question ${qNum} alternate (OR) choice is from Chapter ${orQ.chapter?.number || "?"}, differing from primary Question Chapter ${q.chapter?.number || "?"}.`,
           questionNumber: qNum,
           questionId: orQ.id,

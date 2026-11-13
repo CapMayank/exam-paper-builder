@@ -78,7 +78,7 @@ export function PaperPreflightModal({
             <div className="rounded-xl border border-rose-200 bg-rose-50/80 p-4 text-xs text-rose-900">
               <div className="font-semibold text-rose-950 flex items-center gap-1.5 mb-1">
                 <AlertCircle size={15} className="text-rose-600" />
-                <span>Cannot Finalise Yet &mdash; Blueprint Incomplete</span>
+                <span>Cannot Finalise Yet</span>
               </div>
               <p>
                 The paper has {report.errors.length} blocking requirement(s) that must be fulfilled before it can be finalized.
@@ -117,20 +117,22 @@ export function PaperPreflightModal({
                 {report.errors.map((err, idx) => (
                   <div key={idx} className="flex items-start justify-between gap-3 rounded-lg border border-rose-100 bg-rose-50/40 p-3 text-xs text-rose-900">
                     <div className="flex-1">
-                      <span className="font-semibold text-rose-950 block">{err.message}</span>
+                      {err.title && <span className="font-bold text-rose-950 block">{err.title}</span>}
+                      <span className="font-medium text-rose-900 block">{err.message}</span>
                     </div>
-                    {onGoToTab && (
+                    {(err.questionId && onJumpToQuestion) || onGoToTab ? (
                       <button
                         type="button"
                         onClick={() => {
-                          onGoToTab("questions");
+                          if (err.questionId && onJumpToQuestion) onJumpToQuestion(err.questionId, err.questionNumber);
+                          else onGoToTab?.("questions");
                           onClose();
                         }}
                         className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-700 hover:underline shrink-0"
                       >
                         Fix Now <ArrowUpRight size={12} />
                       </button>
-                    )}
+                    ) : null}
                   </div>
                 ))}
               </div>
@@ -154,6 +156,8 @@ export function PaperPreflightModal({
                             Q{warn.questionNumber}
                           </span>
                         )}
+                        {warn.title && <span className="font-bold text-amber-950">{warn.title}:</span>}
+                        {warn.title && <span className="font-bold text-amber-950">{warn.title}:</span>}
                         <span className="font-medium text-amber-950">{warn.message}</span>
                       </div>
                     </div>

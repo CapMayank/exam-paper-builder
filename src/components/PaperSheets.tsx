@@ -1,4 +1,5 @@
 "use client";
+import { isDraftPaper } from "@/lib/preflightChecks";
 import { questionSlotMarks } from "@/lib/blueprint";
 import { groupedItemInstruction, questionInstruction } from "@/lib/sectionTypes";
 import { BOOKLET_MAX_PAGES, chooseFitLevel, describeFit, FIT_LEVELS, fitMm, getFit, MIN_QUESTION_GAP_MM, nextFitLevel, sheetCost, WORKSHEET_FIT_LEVELS, WORKSHEET_MAX_PAGES, type FitStatus, type PrintFit } from "@/lib/printFit";
@@ -740,6 +741,7 @@ function Page({
   continuationKeys,
   watermark,
   watermarkText,
+  draft,
   lang = "en",
   zoom = 1,
   fit,
@@ -751,6 +753,7 @@ function Page({
   continuationKeys?: Set<string>;
   watermark?: boolean;
   watermarkText?: string;
+  draft?: boolean;
   lang?: PaperLanguage;
   zoom?: number;
   fit?: PrintFit;
@@ -762,6 +765,41 @@ function Page({
       className={`${isA5 ? "a5" : "a4"} paper-font relative overflow-hidden`}
       style={isA5 && fit ? ({ "--pad-x": `${fit.padX}mm`, "--pad-t": `${fit.padTop}mm`, "--pad-b": `${fit.padBottom}mm` } as React.CSSProperties) : undefined}
     >
+      {draft && (
+        <div
+          aria-hidden="true"
+          data-draft-mark
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            pointerEvents: "none",
+            zIndex: 0,
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              transform: "rotate(-35deg)",
+              fontSize: isA5 ? "48pt" : "72pt",
+              fontWeight: 800,
+              color: "rgba(220, 38, 38, 0.18)",
+              letterSpacing: "0.2em",
+              whiteSpace: "nowrap",
+              userSelect: "none",
+              WebkitPrintColorAdjust: "exact",
+              printColorAdjust: "exact",
+            }}
+          >
+            DRAFT
+          </div>
+        </div>
+      )}
       {watermark && (
         <div
           className="watermark-overlay"
@@ -1063,6 +1101,7 @@ export function PaperSheets({
         continuationKeys={continuationKeys}
         watermark={effectiveWatermark}
         watermarkText={effectiveWatermarkText}
+        draft={isDraftPaper(paper)}
         lang={paperLang}
         zoom={fit.zoom}
         fit={fit}
