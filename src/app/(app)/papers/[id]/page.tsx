@@ -49,7 +49,7 @@ import { SectionAiModal } from "@/components/SectionAiModal";
 import { KeyDisputesBanner } from "@/components/KeyDisputesBanner";
 import { slotPlanSummary } from "@/lib/slotPlan";
 import { answerStageSummary, runAnswerStages } from "@/lib/answerStage";
-import { QuestionForm } from "@/components/QuestionForm";
+import { PaperQuestionEditModal } from "@/components/PaperQuestionEditModal";
 import { QuestionPicker } from "@/components/QuestionPicker";
 import { toleratesType } from "@/lib/sectionTypes";
 import { isExhaustedUsage, QuestionFreshnessAlert, QuestionUsagePills } from "@/components/QuestionUsageHistory";
@@ -371,32 +371,6 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
       const res = await api<{ assigned: number; paper: PaperData }>(`/api/papers/${id}/suggest-components`, { method: "POST", json: {} });
       adopt(res.paper);
       toast.success(`Suggested a component for ${res.assigned} question(s). You can change any of them.`);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
-
-  async function handleSetInstruction(itemId: string, instruction: string) {
-    cancelAutosave();
-    try {
-      const updated = await api<PaperData>(`/api/papers/${id}/questions/${itemId}`, {
-        method: "PATCH",
-        json: { instruction },
-      });
-      adopt(updated);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
-
-  async function handleSetComponent(itemId: string, componentKey: string) {
-    cancelAutosave();
-    try {
-      const updated = await api<PaperData>(`/api/papers/${id}/questions/${itemId}`, {
-        method: "PATCH",
-        json: { componentKey },
-      });
-      adopt(updated);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -2022,43 +1996,17 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                               </div>
                             )}
 
-                            {blueprintComponents.length > 0 && (
-                              <label className="mb-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600">
-                                <span className="font-semibold">Syllabus component:</span>
-                                <select
-                                  className="input !py-0.5 !text-[11px]"
-                                  value={it.componentKey || ""}
-                                  disabled={!canEditPaper || final}
-                                  onChange={(e) => handleSetComponent(it.id, e.target.value)}
-                                  aria-label="Syllabus component"
-                                >
-                                  <option value="">Not assigned</option>
-                                  {blueprintComponents.map((c) => (
-                                    <option key={c.key} value={c.key}>
-                                      {c.title} ({c.marks})
-                                    </option>
-                                  ))}
-                                </select>
-                              </label>
+                            {/* the slot's paper fields are edited in the Edit modal; the row only shows them when set */}
+                            {(it.instruction ?? "").trim() !== "" && (
+                              <p className="mb-1.5 text-[11px] text-slate-600">
+                                <span className="font-semibold">Instruction:</span> <span className="italic">&ldquo;{it.instruction!.trim()}&rdquo;</span>
+                              </p>
                             )}
-
-                            {(it.question.type !== s.type || (it.instruction ?? "") !== "") && (
-                              <label className="mb-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600">
-                                <span className="font-semibold">Printed instruction:</span>
-                                <input
-                                  key={`${it.id}:${it.instruction ?? ""}`}
-                                  className="input !py-0.5 !text-[11px] min-w-0 flex-1 italic"
-                                  defaultValue={it.instruction ?? ""}
-                                  placeholder="Optional line printed above this question"
-                                  disabled={!canEditPaper || final}
-                                  aria-label="Printed instruction"
-                                  maxLength={300}
-                                  onBlur={(e) => {
-                                    const next = e.target.value.trim();
-                                    if (next !== (it.instruction ?? "")) void handleSetInstruction(it.id, next);
-                                  }}
-                                />
-                              </label>
+                            {blueprintComponents.length > 0 && (it.componentKey ?? "") !== "" && (
+                              <p className="mb-1.5 text-[11px] text-slate-600">
+                                <span className="font-semibold">Component:</span>{" "}
+                                {blueprintComponents.find((c) => c.key === it.componentKey)?.title ?? it.componentKey}
+                              </p>
                             )}
 
                             {/* Question Content View */}
@@ -2593,68 +2541,23 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
         />
       )}
 
-      {editingItem && (() => {
-        const { item: editItem, section: editSection } = editingItem;
-        const orQ = editItem.orQuestion ?? null;
-        const target = editingItem.target === "or" && orQ ? "or" : "primary";
-        const editing = target === "or" && orQ ? orQ : editItem.question;
-        return (
-          <Modal
-            title={`Edit ${target === "or" ? "OR (alternate) question" : "Question"} in ${editSection.title} — ${
-              QUESTION_TYPE_LABEL[editSection.type as keyof typeof QUESTION_TYPE_LABEL]
-            }`}
-            onClose={() => setEditingItem(null)}
-            wide
-          >
-            {orQ && (
-              <div className="mb-3 space-y-1.5">
-                <div className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-0.5 text-xs font-semibold" role="tablist" aria-label="Question of this slot">
-                  {(["primary", "or"] as const).map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      role="tab"
-                      aria-selected={target === t}
-                      className={`rounded-md px-3 py-1.5 transition ${
-                        target === t ? (t === "or" ? "bg-white text-purple-700 shadow-xs" : "bg-white text-indigo-700 shadow-xs") : "text-slate-600 hover:text-slate-900"
-                      }`}
-                      onClick={() => setEditingItem({ ...editingItem, target: t })}
-                    >
-                      {t === "primary" ? "Main question" : "OR question (alternative)"}
-                    </button>
-                  ))}
-                </div>
-                {target === "or" && (
-                  <p className="text-[11px] text-slate-500">
-                    The OR question must stay in the main question&apos;s chapter (Ch {editItem.question.chapter?.number}) and carry the same {editSection.marksEach} mark(s).
-                  </p>
-                )}
-              </div>
-            )}
-            <QuestionForm
-              // remount when switching between the main and the OR question, so the form shows the right one
-              key={`${editItem.id}-${target}-${editing.id}`}
-              books={books}
-              initial={editing}
-              fixedBookId={paper.blueprint.bookId}
-              fixedType={editSection.type}
-              targetMarks={editSection.marksEach}
-              allowedChapterIds={target === "or" ? [editItem.question.chapterId] : undefined}
-              showPaperEditModes={true}
-              submitLabel={target === "or" ? "Save OR Question" : "Save Changes"}
-              onCancel={() => setEditingItem(null)}
-              customSaveHandler={async (payload, mode) => {
-                const updated = await api<PaperData>(`/api/papers/${id}/questions/${editItem.id}`, {
-                  method: "PUT",
-                  json: { mode, target, question: payload },
-                });
-                adopt(updated);
-                setEditingItem(null);
-              }}
-            />
-          </Modal>
-        );
-      })()}
+      {editingItem && (
+        <PaperQuestionEditModal
+          key={editingItem.item.id}
+          paper={paper}
+          books={books}
+          item={editingItem.item}
+          section={editingItem.section}
+          target={editingItem.target}
+          canEdit={canEditPaper}
+          // switching tabs reads the slot afresh, in case a save in this modal already changed it
+          onTarget={(t) =>
+            setEditingItem({ ...editingItem, item: paper.items.find((i) => i.id === editingItem.item.id) ?? editingItem.item, target: t })
+          }
+          onPaper={adopt}
+          onClose={() => setEditingItem(null)}
+        />
+      )}
 
       {replacingItem && (
         <QuestionPicker

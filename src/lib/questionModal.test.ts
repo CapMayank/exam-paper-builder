@@ -8,6 +8,7 @@ import {
   difficultyLabel,
   modalTitle,
   openingTab,
+  paperFieldsPatch,
   showTypeChips,
   skillLabel,
 } from "./questionModal";
@@ -134,5 +135,48 @@ describe("canPasteSeveral", () => {
     expect(canPasteSeveral({ mode: "add", type: "SHORT", slotsLeft: 0 })).toBe(false);
     expect(canPasteSeveral({ mode: "add", type: "MATCH_COLUMN", slotsLeft: 2 })).toBe(false);
     expect(canPasteSeveral({ mode: "replace", type: "SHORT", slotsLeft: 2 })).toBe(false);
+  });
+});
+
+describe("paperFieldsPatch", () => {
+  it("is null when nothing changed", () => {
+    expect(paperFieldsPatch({ instruction: "Answer briefly", componentKey: "read" }, { instruction: "Answer briefly", componentKey: "read" })).toBeNull();
+  });
+
+  it("sends only the instruction when only it changed, trimmed", () => {
+    expect(paperFieldsPatch({ instruction: "Old", componentKey: "read" }, { instruction: "  New line  ", componentKey: "read" })).toEqual({
+      instruction: "New line",
+    });
+  });
+
+  it("sends only the component when only it changed", () => {
+    expect(paperFieldsPatch({ instruction: "", componentKey: "read" }, { instruction: "", componentKey: "write" })).toEqual({
+      componentKey: "write",
+    });
+  });
+
+  it("sends both when both changed", () => {
+    expect(paperFieldsPatch({ instruction: "A", componentKey: "" }, { instruction: "B", componentKey: "write" })).toEqual({
+      instruction: "B",
+      componentKey: "write",
+    });
+  });
+
+  it("treats a whitespace-only instruction as empty", () => {
+    expect(paperFieldsPatch({ instruction: "", componentKey: "" }, { instruction: "   ", componentKey: "" })).toBeNull();
+    expect(paperFieldsPatch({ instruction: "Old", componentKey: "" }, { instruction: "   ", componentKey: "" })).toEqual({ instruction: "" });
+  });
+
+  it("treats null and a missing value as empty", () => {
+    expect(paperFieldsPatch({ instruction: null, componentKey: null }, { instruction: "", componentKey: "" })).toBeNull();
+    expect(paperFieldsPatch({}, { instruction: "", componentKey: "" })).toBeNull();
+    expect(paperFieldsPatch({ instruction: null, componentKey: undefined }, { instruction: "Say why", componentKey: "read" })).toEqual({
+      instruction: "Say why",
+      componentKey: "read",
+    });
+  });
+
+  it("can clear a stored component", () => {
+    expect(paperFieldsPatch({ componentKey: "read" }, { instruction: "", componentKey: "" })).toEqual({ componentKey: "" });
   });
 });

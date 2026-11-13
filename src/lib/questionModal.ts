@@ -105,3 +105,22 @@ export function chapterChoice(a: {
 export function canPasteSeveral(a: { mode: ModalMode; type: string; slotsLeft: number }): boolean {
   return a.mode === "add" && a.slotsLeft > 0 && PASTEABLE_TYPES.has(a.type);
 }
+
+export type PaperFields = { instruction?: string; componentKey?: string };
+
+/**
+ * The paper-only fields of a slot (its printed instruction and syllabus component) that the edit modal changed,
+ * trimmed, as the body for PATCH /api/papers/{id}/questions/{itemId}; null when nothing changed. A missing, null
+ * or whitespace-only value counts as empty, and an empty instruction prints nothing.
+ */
+export function paperFieldsPatch(
+  before: { instruction?: string | null; componentKey?: string | null },
+  after: { instruction: string; componentKey: string },
+): PaperFields | null {
+  const patch: PaperFields = {};
+  const instruction = after.instruction.trim();
+  if (instruction !== (before.instruction ?? "").trim()) patch.instruction = instruction;
+  const componentKey = after.componentKey.trim();
+  if (componentKey !== (before.componentKey ?? "").trim()) patch.componentKey = componentKey;
+  return Object.keys(patch).length > 0 ? patch : null;
+}
