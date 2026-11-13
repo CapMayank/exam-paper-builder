@@ -78,7 +78,8 @@ export const POST = route(async (req, { id }, user) => {
 
   if (targetSectionId) {
     const sec = paper.blueprint.sections.find((s) => s.id === targetSectionId);
-    const placed = paper.items.filter((i) => i.sectionId === targetSectionId).length;
+    // slots, not rows: a match question in a flexible section fills one per pair
+    const placed = paper.progress.sections.find((s) => s.id === targetSectionId)?.filled ?? 0;
     if (sec && placed >= sec.count && itemsToRepairChoice.length === 0) {
       return {
         success: true,

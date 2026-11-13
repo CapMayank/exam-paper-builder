@@ -46,7 +46,9 @@ export const POST = route(async (req, { id }, user) => {
 
   // Determine starting position and verify section capacity
   const existingSectionItems = paper.items.filter((i) => i.sectionId === sectionId);
-  const remainingCapacity = section.count - existingSectionItems.length;
+  // slots, not rows: a match question in a flexible section fills one slot per pair
+  const sectionProgress = paper.progress.sections.find((s) => s.id === sectionId);
+  const remainingCapacity = sectionProgress ? sectionProgress.needed - sectionProgress.filled : section.count - existingSectionItems.length;
   if (remainingCapacity <= 0) {
     throw new HttpError(400, `Section "${section.title}" is already full (${section.count}/${section.count}).`);
   }

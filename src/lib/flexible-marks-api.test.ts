@@ -7,6 +7,9 @@ vi.mock("@/lib/session", () => ({
   endSession: () => Promise.resolve(),
 }));
 
+import { POST as aiCommit } from "@/app/api/papers/[id]/ai-commit-section/route";
+import { POST as aiGenerate } from "@/app/api/papers/[id]/ai-generate-section/route";
+import { planPaperSlotAssignments } from "./paperAutogen";
 import { POST as duplicatePaper } from "@/app/api/papers/[id]/duplicate/route";
 import { PATCH as patchItem } from "@/app/api/papers/[id]/questions/[itemId]/route";
 import { POST as addItem } from "@/app/api/papers/[id]/questions/route";
@@ -161,5 +164,37 @@ describe("flexible marks through the API", () => {
     expect(sec(copy, t.a).needed).toBe(7);
     expect(sec(copy, t.b)).toMatchObject({ needed: 3, filled: 2 });
     expect(copy.items[0].question.pairMarks).toBe(0.5);
+  });
+
+  it("AI plan, AI generate and AI commit count a spanning match the way the builder does", async () => {
+    const t = await setup("Class 6");
+    const view = (await (await t.add(t.a, (await t.mk(4)).id)).json()) as View;
+    // the planner sees one free slot in Section A, not four (and not zero)
+    const plan = planPaperSlotAssignments(view as never);
+    const planned = plan.sections.filter((p) => p.sectionId === t.a).reduce((n, p) => n + p.slots.length, 0);
+    expect(planned).toBe(1);
+
+    const gen = (marksEach: number, slots = 1) =>
+      call(aiGenerate, `/api/papers/${t.paperId}/ai-generate-section`, "POST", { id: t.paperId }, {
+        sectionId: t.a,
+        sectionTitle: "Section A",
+        sectionType: "MATCH_COLUMN",
+        marksEach,
+        slots: Array.from({ length: slots }, (_, i) => ({ slotIndex: i, chapterId: "x", chapterNumber: 1, chapterTitle: "C", marks: marksEach })),
+      });
+    const tooMany = await gen(2);
+    expect(tooMany.status).toBe(422);
+    expect(((await tooMany.json()) as { error: string }).error).toMatch(/1 free slot/);
+    const tooFew = await gen(1);
+    expect(tooFew.status).toBe(422);
+    expect(((await tooFew.json()) as { error: string }).error).toMatch(/at least 2/);
+
+    // committing a 3-pair AI match into the single free slot is refused with the slot reason, nothing is saved
+    const commit = await call(aiCommit, `/api/papers/${t.paperId}/ai-commit-section`, "POST", { id: t.paperId }, {
+      sectionId: t.a,
+      questions: [{ type: "MATCH_COLUMN", text: "Match the following", options: ["A ||| 1", "B ||| 2", "C ||| 3"], answer: "A-1", chapterId: view.progress.sections.length ? undefined : undefined }],
+    });
+    expect([400, 409, 422]).toContain(commit.status);
+    expect(await prisma.paperQuestion.count({ where: { paperId: t.paperId } })).toBe(1);
   });
 });

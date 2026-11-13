@@ -8,6 +8,7 @@ import {
   resolveInternalChoiceRequirement,
   type InternalChoiceRequirement,
 } from "./internalChoiceRules";
+import { questionSlotMarks } from "./blueprint";
 import { componentTitle, slotComponentKey, suggestSlotComponents } from "./componentSuggestion";
 import { parseComponents } from "./languageComponents";
 import { detectPaperLanguage, type PaperLanguage } from "./localization";
@@ -247,8 +248,10 @@ export function planPaperSlotAssignments(paper: PaperAutogenInput): PaperAutogen
     const sectionMarks = marksBySection.get(item.sectionId) ?? 0;
     const chapId = item.question.chapterId;
     if (isMatch) {
-      const units = sec?.count ?? 1;
-      placedMarksByChapter.set(chapId, (placedMarksByChapter.get(chapId) ?? 0) + sectionMarks * units);
+      // a match question counts as the slots and marks it is really worth (one per pair, or half a mark per pair),
+      // the same figures the builder, print and the server use
+      const { marks, units } = questionSlotMarks(sec ?? { count: 1, marksEach: sectionMarks || 1 }, item.question as never);
+      placedMarksByChapter.set(chapId, (placedMarksByChapter.get(chapId) ?? 0) + marks);
       placedCountBySection.set(item.sectionId, (placedCountBySection.get(item.sectionId) ?? 0) + units);
     } else {
       placedMarksByChapter.set(chapId, (placedMarksByChapter.get(chapId) ?? 0) + sectionMarks);

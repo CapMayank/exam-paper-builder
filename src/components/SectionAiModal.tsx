@@ -32,6 +32,7 @@ import {
 } from "@/lib/constants";
 import type { GeneratedPaperQuestion } from "@/lib/gemini";
 import { planPaperSlotAssignments, slotFitsRole, slotRowRole } from "@/lib/paperAutogen";
+import { spansSlots } from "@/lib/blueprint";
 import { allowedTypesFor } from "@/lib/sectionTypes";
 import { type PaperData, type Section, subpartsTotalMarks, normalizeSubpartMarks } from "@/lib/types";
 
@@ -105,13 +106,14 @@ export function SectionAiModal({
     ? paper.items.filter((item) => item.sectionId === section.id)
     : [];
 
-  const placedUnits = sectionItems.reduce((sum, it) => {
-    if (isMultiUnitMatch) {
-      const pairs = parseMatchColumnPairs(it.question.options, it.question.text, (it.question as any).explanation);
-      return sum + (pairs.length > 0 ? Math.min(pairs.length, section.count) : section.count);
-    }
-    return sum + 1;
-  }, 0);
+  // the server's own count of this section's filled slots: a match question in a flexible section fills one per pair
+  const serverProgress = section ? paper.progress.sections.find((s) => s.id === section.id) : undefined;
+  const placedUnits = isMultiUnitMatch
+    ? sectionItems.reduce((sum, it) => {
+        const pairs = parseMatchColumnPairs(it.question.options, it.question.text, (it.question as any).explanation);
+        return sum + (pairs.length > 0 ? Math.min(pairs.length, section.count) : section.count);
+      }, 0)
+    : (serverProgress?.filled ?? sectionItems.length);
 
   const remainingUnits = section ? Math.max(0, section.count - placedUnits) : 0;
   const remainingQuestions = isMultiUnitMatch ? (sectionItems.length === 0 ? 1 : 0) : remainingUnits;
@@ -205,14 +207,21 @@ export function SectionAiModal({
       // Determine slot targets
       const slots: { chapterId: string; chapterNumber: number; chapterTitle: string; marks: number }[] = [];
 
-      for (let i = 0; i < questionCount; i++) {
+      // flexible marks: a match question in another form's one-mark section is one combined question over the free slots
+      const spanMatch = (aiType || section.type) === "MATCH_COLUMN" && section.type !== "MATCH_COLUMN" && spansSlots(section);
+      if (spanMatch && remainingUnits < 2) {
+        throw new Error("A match question needs at least 2 free slots in this section.");
+      }
+      const slotMarks = spanMatch ? Math.min(remainingUnits, 10) : targetSlotMarks;
+
+      for (let i = 0; i < (spanMatch ? 1 : questionCount); i++) {
         if (chapterMode === "specific" && selectedChapterId) {
           const chap = availableChapters.find((c) => c.id === selectedChapterId);
           slots.push({
             chapterId: selectedChapterId,
             chapterNumber: chap?.number ?? 0,
             chapterTitle: chap?.title || "General",
-            marks: targetSlotMarks,
+            marks: slotMarks,
           });
         } else {
           const planned = plannedChapterAllocations[i];
@@ -220,7 +229,7 @@ export function SectionAiModal({
             chapterId: planned?.id || availableChapters[0]?.id || "",
             chapterNumber: planned?.number ?? availableChapters[0]?.number ?? 0,
             chapterTitle: planned?.title || "General",
-            marks: targetSlotMarks,
+            marks: slotMarks,
           });
         }
       }
@@ -244,7 +253,7 @@ export function SectionAiModal({
           sectionTitle: section.title,
           sectionType: aiType || section.type,
           sectionInstructions: section.instructions,
-          marksEach: targetSlotMarks,
+          marksEach: slotMarks,
           language,
           difficulty,
           teacherFocus,
