@@ -843,7 +843,6 @@ export function QuestionPicker({
                 paper.blueprint.chapters.map((c) => c.chapterId),
                 isAlternate ? activeItem?.question.chapterId : null,
               )}
-              hideChapter
               openMarks={chapterGaps}
               submitLabel={
                 isAlternate

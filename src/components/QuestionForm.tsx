@@ -58,11 +58,10 @@ import {
   DIFFICULTY_LABEL,
   SKILLS,
   skillOf,
-  assignChapter,
-  suggestChapter,
   suggestDifficulty,
   suggestSkill,
 } from "@/lib/questionTagging";
+import { chapterChoice, detailsSummary } from "@/lib/questionModal";
 import { MathRichEditor, type MathRichEditorHandle } from "./MathRichEditor";
 import { MathToolbar } from "./MathToolbar";
 import { DiagramSearchModal } from "./DiagramSearchModal";
@@ -208,8 +207,10 @@ export function QuestionForm({
   fixedType,
   targetMarks,
   allowedChapterIds,
-  hideChapter,
   openMarks,
+  typeFromParent,
+  detailsExtra,
+  chapterHint,
   submitLabel = "Save question",
   showPaperEditModes,
   customSaveHandler,
@@ -219,13 +220,18 @@ export function QuestionForm({
   books: Book[];
   initial?: QuestionDto;
   fixedBookId?: string;
+  /** The starting type, locked (no type dropdown). A caller passing `typeFromParent` does not also pass this. */
   fixedType?: string;
   targetMarks?: number;
   allowedChapterIds?: string[];
-  /** Do not ask for a chapter: a new question gets the one `assignChapter` picks (an edited one keeps its own). */
-  hideChapter?: boolean;
   /** Marks still open per chapter in the paper's blueprint; a new question's chapter is suggested from these. */
   openMarks?: Record<string, number>;
+  /** The parent owns the type (picker chips, edit on a paper): no type dropdown is rendered. When it changes, the form switches type and keeps the typed text. */
+  typeFromParent?: string;
+  /** Rendered at the top of "More details" (paper-only fields). */
+  detailsExtra?: React.ReactNode;
+  /** A line under the Chapter select (the OR chapter rule). */
+  chapterHint?: string;
   submitLabel?: string;
   showPaperEditModes?: boolean;
   customSaveHandler?: (payload: unknown, mode: "UPDATE_MASTER" | "FORK_COPY") => Promise<void>;
@@ -245,7 +251,7 @@ export function QuestionForm({
   const [chapterId, setChapterId] = useState(
     initialChapterBelongs ? initial!.chapterId : (chapters[0]?.id ?? "")
   );
-  const resolvedInitialType = initial?.type ?? fixedType ?? "SHORT";
+  const resolvedInitialType = initial?.type ?? typeFromParent ?? fixedType ?? "SHORT";
   const [type, setType] = useState(resolvedInitialType);
   const [text, setText] = useState(() => {
     if (initial?.type === "MATCH_COLUMN" && initial.text) {
@@ -412,9 +418,16 @@ export function QuestionForm({
 
   const tagMarks = targetMarks ?? (subparts.length > 0 ? attemptedSubpartsMarks(subparts, attemptCount) : undefined);
   const hasText = text.replace(/<[^>]+>/g, "").trim().length > 0;
-  const chapterSuggestion = autoTag && !touched.chapter && !hideChapter ? suggestChapter(text, chapters, openMarks, chapterBank) : null;
-  const autoChapterId = hideChapter && autoTag && chapters.length > 0 ? assignChapter(text, chapters, openMarks ?? {}, chapterBank) : null;
-  const effChapterId = autoChapterId ?? chapterSuggestion?.chapterId ?? chapterId;
+  const chapterPick = chapterChoice({
+    isNew: !initial,
+    touched: touched.chapter,
+    chosenId: chapterId,
+    text,
+    chapters,
+    openMarks,
+    bank: chapterBank,
+  });
+  const effChapterId = chapterPick.chapterId;
   const difficultySuggested = autoTag && !touched.difficulty && hasText;
   const effDifficulty = difficultySuggested ? suggestDifficulty(text, type, tagMarks) : difficulty;
   const skillSuggested = autoTag && !touched.skill && hasText;
@@ -679,21 +692,27 @@ export function QuestionForm({
     }
   }
 
+  // The parent's type control (picker chips) switches the type in place, so the typed question text is kept.
+  // Runs only when the parent's value changes; on first mount the type already matches and nothing happens.
+  // Deliberate sync from a prop: changeType sets several fields together, so the switch runs as one effect.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (typeFromParent && typeFromParent !== type) changeType(typeFromParent);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [typeFromParent]);
+
   const templates = templatesFor(type, targetMarks, { setText, setOptions, setAnswer, setSubparts, setMatchPairs });
-  const chapterNote = chapterSuggestion
-    ? chapterSuggestion.reason === "title"
-      ? "Picked for you: the question matches this chapter"
-      : chapterSuggestion.reason === "bank"
-      ? "Picked for you: like questions already in this chapter"
-      : "Picked for you: the chapter with the most marks left"
-    : null;
+  const chapterNote = chapterHint ?? (chapterPick.suggested ? "Suggested — change it if this is the wrong chapter." : null);
+  // The type field: none when the parent owns the type; plain text when the type is locked; else a dropdown.
+  const typeField = typeFromParent ? null : typeLocked ? "text" : "select";
+  const rowColumns = (bookLocked ? 1 : 2) + (typeField ? 1 : 0);
 
   return (
     <form onSubmit={submit} className="space-y-4">
       <ErrorBanner message={error} />
 
       {/* 1. Where the question goes */}
-      <div className={`grid gap-3 ${(bookLocked ? 2 : 3) - (hideChapter ? 1 : 0) === 1 ? "sm:grid-cols-1" : (bookLocked ? 2 : 3) - (hideChapter ? 1 : 0) === 2 ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
+      <div className={`grid gap-3 ${rowColumns === 1 ? "sm:grid-cols-1" : rowColumns === 2 ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
         {!bookLocked && (
           <Field label="Book">
             <select
@@ -714,8 +733,17 @@ export function QuestionForm({
             </select>
           </Field>
         )}
+        {typeField === "text" && (
+          <div className="text-sm text-slate-700 sm:pt-6">
+            Question type:{" "}
+            <span className="font-semibold text-slate-900">
+              {QUESTION_TYPE_LABEL[type as keyof typeof QUESTION_TYPE_LABEL] || type}
+            </span>
+          </div>
+        )}
+        {typeField === "select" && (
         <Field label="Question type">
-          <select className="input" value={type} disabled={typeLocked} onChange={(e) => changeType(e.target.value)}>
+          <select className="input" value={type} onChange={(e) => changeType(e.target.value)}>
             {prePrimary ? (
               <>
                 <optgroup label="Kindergarten & Pre-Primary Activities">
@@ -742,12 +770,13 @@ export function QuestionForm({
             )}
           </select>
         </Field>
-        {!hideChapter && (
+        )}
         <Field label="Chapter">
           <select
             className="input"
             value={effChapterId}
             required
+            disabled={chapters.length === 1}
             onChange={(e) => {
               setChapterId(e.target.value);
               setTouched((t) => ({ ...t, chapter: true }));
@@ -761,10 +790,9 @@ export function QuestionForm({
           </select>
           {chapterNote && <SuggestedNote>{chapterNote}</SuggestedNote>}
         </Field>
-        )}
       </div>
 
-      {isPrePrimaryClass(book?.className) && (
+      {prePrimary && !typeFromParent && !typeLocked && (
         <div className="p-3 bg-gradient-to-r from-amber-50 to-indigo-50 border border-amber-200 rounded-2xl">
           <div className="text-xs font-black text-amber-900 uppercase tracking-wider mb-2 flex items-center justify-between">
             <span>🎨 Preschool Activity Types ({book?.className})</span>
@@ -1354,52 +1382,7 @@ export function QuestionForm({
         </Field>
       )}
 
-      {/* 3. Figure */}
-      <div>
-        <span className="label">
-          Figure <span className="font-normal text-slate-500">· optional</span>
-        </span>
-        {imagePath ? (
-          <div className="flex flex-wrap items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={imageUrl(imagePath)} alt="Figure" className="max-h-36 max-w-xs rounded-lg border border-slate-200 bg-white object-contain shadow-2xs" />
-            <div className="flex flex-col gap-2">
-              <button type="button" className="btn btn-sm" onClick={() => setSketching(true)}>
-                <PencilRuler size={14} aria-hidden /> Edit
-              </button>
-              <button type="button" className="btn btn-sm" onClick={() => setDiagramSearchOpen(true)}>
-                <RefreshCw size={14} aria-hidden /> Replace
-              </button>
-              <button type="button" className="btn btn-sm btn-danger" onClick={() => setImagePath(null)}>
-                <X size={14} aria-hidden /> Remove
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            <button type="button" className="btn btn-sm" onClick={() => setDiagramSearchOpen(true)}>
-              <Library size={14} aria-hidden /> From library
-            </button>
-            <label className="btn btn-sm cursor-pointer">
-              <ImagePlus size={14} aria-hidden /> Upload
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/webp,image/gif"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  e.target.value = "";
-                  if (f) void attach(f);
-                }}
-              />
-            </label>
-            <button type="button" className="btn btn-sm" onClick={() => setSketching(true)}>
-              <PencilRuler size={14} aria-hidden /> Draw
-            </button>
-          </div>
-        )}
-      </div>
-
+      {/* Drawing and map boxes are the question itself, so their height stays here, not under "More details". */}
       {isDrawingType(type) && (
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label={type === "DRAW" ? "Drawing box height (mm)" : "Map box height (mm)"}>
@@ -1423,103 +1406,152 @@ export function QuestionForm({
       </>
       )}
 
-      {/* 4. Tags: filled in from the question, one click to change */}
-      <div className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-2">
-        <PillGroup
-          label="Difficulty"
-          auto={difficultySuggested}
-          value={effDifficulty}
-          options={DIFFICULTIES.map((d) => ({ value: d, label: DIFFICULTY_LABEL[d] }))}
-          onChange={(v) => {
-            setDifficulty(v);
-            setTouched((t) => ({ ...t, difficulty: true }));
-          }}
-        />
-        <PillGroup
-          label="Skill"
-          auto={skillSuggested}
-          value={effSkill}
-          options={SKILLS.map((s) => ({ value: s.value, label: s.label }))}
-          onChange={(v) => {
-            setSkill(v);
-            setTouched((t) => ({ ...t, skill: true }));
-          }}
-        />
-      </div>
+      {/* 3. Rarely needed settings, one collapsed row */}
+      <details className="group rounded-xl border border-slate-200 bg-white" open={initial?.imagePath ? true : undefined}>
+        <summary className="flex min-h-11 cursor-pointer select-none items-center justify-between gap-2 rounded-xl px-3.5 text-sm font-medium text-slate-700 hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
+          <span>
+            More details{" "}
+            <span className="font-normal text-slate-500">· {detailsSummary(effDifficulty, effSkill)}</span>
+          </span>
+          <ChevronDown size={16} className="shrink-0 text-slate-400 transition-transform group-open:rotate-180" aria-hidden />
+        </summary>
+        <div className="space-y-4 border-t border-slate-200 px-3.5 py-3.5">
+          {detailsExtra}
 
-      {/* 5. Rarely needed settings */}
-      {!isKindergartenType(type) && (
-        <details className="group rounded-xl border border-slate-200 bg-white">
-          <summary className="flex min-h-11 cursor-pointer select-none items-center justify-between gap-2 rounded-xl px-3.5 text-sm font-medium text-slate-700 hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
-            <span>
-              More options{" "}
-              <span className="font-normal text-slate-500">
-                · {showAnswerSpace ? "answer space, " : ""}passage group, Hindi translation
+          {!isKindergartenType(type) && (
+            <div>
+              <span className="label">
+                Figure <span className="font-normal text-slate-500">· optional</span>
               </span>
-            </span>
-            <ChevronDown size={16} className="shrink-0 text-slate-400 transition-transform group-open:rotate-180" aria-hidden />
-          </summary>
-          <div className="space-y-4 border-t border-slate-200 px-3.5 py-3.5">
-            {showAnswerSpace && (
+              {imagePath ? (
+                <div className="flex flex-wrap items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={imageUrl(imagePath)} alt="Figure" className="max-h-36 max-w-xs rounded-lg border border-slate-200 bg-white object-contain shadow-2xs" />
+                  <div className="flex flex-col gap-2">
+                    <button type="button" className="btn btn-sm" onClick={() => setSketching(true)}>
+                      <PencilRuler size={14} aria-hidden /> Edit
+                    </button>
+                    <button type="button" className="btn btn-sm" onClick={() => setDiagramSearchOpen(true)}>
+                      <RefreshCw size={14} aria-hidden /> Replace
+                    </button>
+                    <button type="button" className="btn btn-sm btn-danger" onClick={() => setImagePath(null)}>
+                      <X size={14} aria-hidden /> Remove
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" className="btn btn-sm" onClick={() => setDiagramSearchOpen(true)}>
+                    <Library size={14} aria-hidden /> From library
+                  </button>
+                  <label className="btn btn-sm cursor-pointer">
+                    <ImagePlus size={14} aria-hidden /> Upload
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/gif"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        e.target.value = "";
+                        if (f) void attach(f);
+                      }}
+                    />
+                  </label>
+                  <button type="button" className="btn btn-sm" onClick={() => setSketching(true)}>
+                    <PencilRuler size={14} aria-hidden /> Draw
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Tags: filled in from the question, one click to change */}
+          <div className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-2">
+            <PillGroup
+              label="Difficulty"
+              auto={difficultySuggested}
+              value={effDifficulty}
+              options={DIFFICULTIES.map((d) => ({ value: d, label: DIFFICULTY_LABEL[d] }))}
+              onChange={(v) => {
+                setDifficulty(v);
+                setTouched((t) => ({ ...t, difficulty: true }));
+              }}
+            />
+            <PillGroup
+              label="Skill"
+              auto={skillSuggested}
+              value={effSkill}
+              options={SKILLS.map((s) => ({ value: s.value, label: s.label }))}
+              onChange={(v) => {
+                setSkill(v);
+                setTouched((t) => ({ ...t, skill: true }));
+              }}
+            />
+          </div>
+
+          {!isKindergartenType(type) && (
+            <>
+              {showAnswerSpace && (
+                <Field
+                  label="Blank answer space (mm)"
+                  helper={
+                    prePrimary
+                      ? "Room left under the question for the child to write."
+                      : "Classes 1 to 12 answer in a separate copy: set 0 to leave no space."
+                  }
+                >
+                  <input
+                    type="number"
+                    min={0}
+                    max={250}
+                    className="input sm:max-w-40"
+                    value={spaceMm}
+                    onChange={(e) => setSpaceMm(Math.max(0, Math.min(250, Number(e.target.value) || 0)))}
+                  />
+                </Field>
+              )}
               <Field
-                label="Blank answer space (mm)"
-                helper={
-                  prePrimary
-                    ? "Room left under the question for the child to write."
-                    : "Classes 1 to 12 answer in a separate copy: set 0 to leave no space."
-                }
+                label="Passage group"
+                helper="Questions with the same value belong to one passage and are placed together in a passage section."
               >
                 <input
-                  type="number"
-                  min={0}
-                  max={250}
-                  className="input sm:max-w-40"
-                  value={spaceMm}
-                  onChange={(e) => setSpaceMm(Math.max(0, Math.min(250, Number(e.target.value) || 0)))}
+                  className="input"
+                  maxLength={64}
+                  placeholder="e.g. unseen-1"
+                  value={passageGroupId}
+                  onChange={(e) => setPassageGroupId(e.target.value)}
                 />
               </Field>
-            )}
-            <Field
-              label="Passage group"
-              helper="Questions with the same value belong to one passage and are placed together in a passage section."
-            >
-              <input
-                className="input"
-                maxLength={64}
-                placeholder="e.g. unseen-1"
-                value={passageGroupId}
-                onChange={(e) => setPassageGroupId(e.target.value)}
-              />
-            </Field>
-            <div>
-              <div className="mb-1.5 flex items-center justify-between gap-2">
-                <span className="label !mb-0">Hindi / regional translation</span>
-                <button
-                  type="button"
-                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 disabled:opacity-40"
-                  disabled={!secondaryText.trim()}
-                  onClick={() => {
-                    if (secondaryText.trim()) {
-                      setText((prev) => prev + (prev.includes(" / ") ? "" : " / ") + secondaryText.trim());
-                      setSecondaryText("");
-                    }
-                  }}
-                >
-                  + Add to question
-                </button>
+              <div>
+                <div className="mb-1.5 flex items-center justify-between gap-2">
+                  <span className="label !mb-0">Hindi / regional translation</span>
+                  <button
+                    type="button"
+                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 disabled:opacity-40"
+                    disabled={!secondaryText.trim()}
+                    onClick={() => {
+                      if (secondaryText.trim()) {
+                        setText((prev) => prev + (prev.includes(" / ") ? "" : " / ") + secondaryText.trim());
+                        setSecondaryText("");
+                      }
+                    }}
+                  >
+                    + Add to question
+                  </button>
+                </div>
+                <MathRichEditor
+                  multiline
+                  className="!min-h-14 text-sm leading-relaxed"
+                  placeholder="e.g. प्रकाश संश्लेषण को परिभाषित कीजिए।"
+                  value={secondaryText}
+                  onActivate={activate({ type: "secondary" })}
+                  onChange={setSecondaryText}
+                />
               </div>
-              <MathRichEditor
-                multiline
-                className="!min-h-14 text-sm leading-relaxed"
-                placeholder="e.g. प्रकाश संश्लेषण को परिभाषित कीजिए।"
-                value={secondaryText}
-                onActivate={activate({ type: "secondary" })}
-                onChange={setSecondaryText}
-              />
-            </div>
-          </div>
-        </details>
-      )}
+            </>
+          )}
+        </div>
+      </details>
 
       {showPaperEditModes && (
         <div className="rounded-md border border-indigo-200 bg-indigo-50/60 p-3 space-y-1.5 text-xs text-slate-700">
