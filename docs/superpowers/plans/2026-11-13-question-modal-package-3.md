@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** One add/edit question modal with a single type control, an always-visible chapter, three sources, a predictable opening tab, and one difficulty/skill vocabulary.
+**Goal:** One add/edit question modal with a single type control, an always-visible chapter, three sources, Write as the opening tab, and one difficulty/skill vocabulary.
 
 **Architecture:** `QuestionPicker.tsx` and `QuestionForm.tsx` are restructured in place; no new modal component. Every rule that decides what the modal shows (opening tab, title, type control, chapter choice, labels, AI payload) moves to pure functions in `src/lib/questionModal.ts` and `src/lib/aiQuestionPayload.ts`, which carry the unit tests. Components only call them.
 
@@ -64,7 +64,7 @@ export function canPasteSeveral(a: { mode: ModalMode; type: string; slotsLeft: n
 ```
 
 Rules the signatures do not decide:
-- `openingTab`: `add` and `edit` → `"write"`; `replace` and `or` → `"bank"`. (Owner's decision, 2026-11-13: adding opens on Write by default.)
+- `openingTab`: every mode → `"write"`. (Owner's decision, 2026-11-13: the modal always opens on Write, for add, replace, OR and edit. The function stays as the one place this is decided.)
 - `showTypeChips`: more than one allowed type and mode is not `edit`.
 - `modalTitle` (marks word is "mark" for 1, "marks" otherwise; type shown through `QUESTION_TYPE_LABEL`, raw type when unknown):
   - add, no chips: `Add to {section} — {Type} · {n} marks`; with chips: `Add to {section} · {n} marks`
@@ -83,8 +83,8 @@ Rules the signatures do not decide:
 ```ts
 expect(openingTab("add")).toBe("write");
 expect(openingTab("edit")).toBe("write");
-expect(openingTab("replace")).toBe("bank");
-expect(openingTab("or")).toBe("bank");
+expect(openingTab("replace")).toBe("write");
+expect(openingTab("or")).toBe("write");
 expect(showTypeChips(["SHORT"], "add")).toBe(false);
 expect(showTypeChips(["SHORT", "LONG"], "add")).toBe(true);
 expect(showTypeChips(["SHORT", "LONG"], "edit")).toBe(false);
@@ -200,7 +200,7 @@ chapterHint?: string;
 - Consumes: `openingTab`, `showTypeChips`, `modalTitle`, `canPasteSeveral`, `difficultyLabel`, `SourceTab` (Task 1); `orChapterRule`, `OR_CHAPTER_GUIDELINE`, `OR_CHAPTER_REQUIRED` (Task 2); `typeFromParent`, `chapterHint` (Task 3).
 - Produces: `PasteQuestionsPanel` prop `type: string`; picker tab labels `From bank ({n})`, `Write`, `Generate with AI`; button text `Paste several` and `Back to one question`.
 
-- [ ] **Step 1: Tabs.** `PickerTab` becomes `SourceTab`. Delete `PICKER_TAB_KEY` and both `localStorage` uses. Tab state starts as `openingTab(mode)`: Write for add, From bank for replace and OR. The bank still loads in the background so the From bank tab can show its count.
+- [ ] **Step 1: Tabs.** `PickerTab` becomes `SourceTab`. Delete `PICKER_TAB_KEY` and both `localStorage` uses. Tab state starts as `openingTab(mode)`, which is Write in every mode. The bank still loads in the background so the From bank tab can show its count.
 - [ ] **Step 2: Type.** Chips render when `showTypeChips(allowedTypes, mode)`; remove the " (default)" suffix. Title and subtitle come from `modalTitle` with `chips` set accordingly; delete the per-tab subtitle sentence and keep `{section}: x of y slots filled.` for add mode only. Pass `typeFromParent={pickType}` to `QuestionForm` and drop `fixedType`; a chip click no longer bumps `formKey` (the form switches type itself and keeps the text). It still clears `aiGenerated`.
 - [ ] **Step 3: Paste inside Write.** Remove the "Paste several" tab. In the Write tab, when `canPasteSeveral({ mode, type: pickType, slotsLeft })`, show a `Paste several` button above the form; it swaps the form for `PasteQuestionsPanel` (passing `type={pickType}`), with a `Back to one question` button. The full-section message is unchanged.
 - [ ] **Step 4: Vocabulary in the bank tab.** Difficulty filter options and the per-question badge use `difficultyLabel`; option values stay the enum. Delete the "Board Guardrail" banner. For an OR, read `orChapterRule(paper.blueprint.book.className)` (Task 2):
@@ -306,4 +306,4 @@ expect(aiQuestionPayload({ ...base, generated: { text: "Q", attemptCount: 2, sub
 
 ## After the tasks
 
-The controller checks in the running app (`preview_start {name:"dev"}`, Browser pane shown): add on a single-type section (no chips, no type dropdown, chapter visible with "Suggested"), add on a multi-type section (chips only; text survives a chip switch), add opens on Write, replace and OR open on From bank, an OR from another chapter is accepted on a class 6 to 8 paper and refused on a class 9 to 12 paper, Paste several inside Write, edit shows the question's own type and saves instruction and component, bank "New question" keeps one enabled type dropdown. Then a whole-branch review.
+The controller checks in the running app (`preview_start {name:"dev"}`, Browser pane shown): add on a single-type section (no chips, no type dropdown, chapter visible with "Suggested"), add on a multi-type section (chips only; text survives a chip switch), add, replace and OR all open on Write, an OR from another chapter is accepted on a class 6 to 8 paper and refused on a class 9 to 12 paper, Paste several inside Write, edit shows the question's own type and saves instruction and component, bank "New question" keeps one enabled type dropdown. Then a whole-branch review.
