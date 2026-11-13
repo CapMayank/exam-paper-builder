@@ -17,7 +17,7 @@ import {
   Wand2,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { api, imageUrl, uploadImage } from "@/lib/client";
 import {
   canHaveSubparts,
@@ -242,6 +242,7 @@ export function QuestionForm({
   onCancel: () => void;
 }) {
   const [paperEditMode, setPaperEditMode] = useState<"UPDATE_MASTER" | "FORK_COPY">("FORK_COPY");
+  const chapterNoteId = useId();
   const [bookId, setBookId] = useState(initial?.bookId ?? fixedBookId ?? books[0]?.id ?? "");
   const book = books.find((b) => b.id === bookId);
   const allowedKey = allowedChapterIds?.join(",");
@@ -677,7 +678,8 @@ export function QuestionForm({
         }
       }
     } else if (newType === "ASSERTION_REASON") {
-      setOptions([...DEFAULT_ASSERTION_OPTIONS_EN]);
+      // keep options the teacher already typed; only an empty set gets the standard A/R choices
+      if (options.every((o) => !o.trim())) setOptions([...DEFAULT_ASSERTION_OPTIONS_EN]);
       if (!text.trim()) {
         setText(
           "Assertion (A): [Enter statement here]\nReason (R): [Enter reason here]\n\nDirection: In the following question, a statement of Assertion (A) is followed by a statement of Reason (R). Choose the correct option."
@@ -698,16 +700,18 @@ export function QuestionForm({
   }
 
   // The parent's type control (picker chips) switches the type in place, so the typed question text is kept.
-  // Runs only when the parent's value changes; on first mount the type already matches and nothing happens.
-  // Deliberate sync from a prop: changeType sets several fields together, so the switch runs as one effect.
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+  // Only a CHANGE of the prop after mount switches the type: on mount nothing happens, so an edited question keeps
+  // `initial.type` even when the parent passes a different one. Previous prop kept in state, compared during render.
+  const [seenTypeFromParent, setSeenTypeFromParent] = useState(typeFromParent);
+  if (typeFromParent !== seenTypeFromParent) {
+    setSeenTypeFromParent(typeFromParent);
     if (typeFromParent && typeFromParent !== type) changeType(typeFromParent);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [typeFromParent]);
+  }
 
   const templates = templatesFor(type, targetMarks, { setText, setOptions, setAnswer, setSubparts, setMatchPairs });
-  const chapterNote = chapterHint ?? (chapterPick.suggested ? "Suggested — change it if this is the wrong chapter." : null);
+  const chapterNote =
+    chapterHint ??
+    (chapterPick.suggested && chapters.length !== 1 ? "Suggested — change it if this is the wrong chapter." : null);
   // The type field: none when the parent owns the type; plain text when the type is locked; else a dropdown.
   const typeField = typeFromParent ? null : typeLocked ? "text" : "select";
   const rowColumns = (bookLocked ? 1 : 2) + (typeField ? 1 : 0);
@@ -782,6 +786,7 @@ export function QuestionForm({
             value={effChapterId}
             required
             disabled={chapters.length === 1}
+            aria-describedby={chapterNote ? chapterNoteId : undefined}
             onChange={(e) => {
               setChapterId(e.target.value);
               setTouched((t) => ({ ...t, chapter: true }));
@@ -793,7 +798,7 @@ export function QuestionForm({
               </option>
             ))}
           </select>
-          {chapterNote && <SuggestedNote>{chapterNote}</SuggestedNote>}
+          {chapterNote && <SuggestedNote id={chapterNoteId}>{chapterNote}</SuggestedNote>}
         </Field>
       </div>
 
@@ -1656,8 +1661,12 @@ export function QuestionForm({
   );
 }
 
-function SuggestedNote({ children }: { children: React.ReactNode }) {
-  return <span className="mt-1 block text-[11px] text-indigo-700">{children}</span>;
+function SuggestedNote({ children, id }: { children: React.ReactNode; id?: string }) {
+  return (
+    <span id={id} className="mt-1 block text-[11px] text-indigo-700">
+      {children}
+    </span>
+  );
 }
 
 type TemplateSetters = {
