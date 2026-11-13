@@ -48,10 +48,11 @@ import { SubjectWorkspaceDrawer } from "@/components/subject-workspace/SubjectWo
 import { SectionAiModal } from "@/components/SectionAiModal";
 import { KeyDisputesBanner } from "@/components/KeyDisputesBanner";
 import { slotPlanSummary } from "@/lib/slotPlan";
+import { choicePolicyNote, sectionStatusLine, sectionWarning } from "@/lib/workbenchView";
 import { answerStageSummary, runAnswerStages } from "@/lib/answerStage";
 import { PaperQuestionEditModal } from "@/components/PaperQuestionEditModal";
 import { QuestionPicker } from "@/components/QuestionPicker";
-import { toleratesType } from "@/lib/sectionTypes";
+import { toleratesType, typeLabel } from "@/lib/sectionTypes";
 import { isExhaustedUsage, QuestionFreshnessAlert, QuestionUsagePills } from "@/components/QuestionUsageHistory";
 import { QuestionView } from "@/components/QuestionView";
 import { ErrorBanner, Field, Modal, Spinner, useConfirm, useToast } from "@/components/ui";
@@ -192,7 +193,6 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
     });
   const [movingItemId, setMovingItemId] = useState<string | null>(null);
   const [exportingDocx, setExportingDocx] = useState(false);
-  const [createdPaperLink, setCreatedPaperLink] = useState<{ id: string; title: string } | null>(null);
   const [multiSetModalOpen, setMultiSetModalOpen] = useState(false);
   const [createdPaperLinks, setCreatedPaperLinks] = useState<Array<{ id: string; title: string; setCode: string }>>([]);
   const [aiAuditOpen, setAiAuditOpen] = useState(false);
@@ -988,19 +988,10 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                 ))}
               </div>
             )}
-            {createdPaperLink && (
-              <Link
-                href={`/papers/${createdPaperLink.id}`}
-                className="ml-6 font-bold underline text-emerald-950 hover:text-emerald-700"
-              >
-                Open {createdPaperLink.title} &rarr;
-              </Link>
-            )}
           </div>
           <button
             onClick={() => {
               setInfoMessage(null);
-              setCreatedPaperLink(null);
               setCreatedPaperLinks([]);
             }}
             className="font-bold text-emerald-700 hover:text-emerald-950 px-1 self-start"
@@ -1582,6 +1573,13 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                     {noticeOpen ? <ChevronUp size={14} aria-hidden /> : <ChevronDown size={14} aria-hidden />}
                   </span>
                 </button>
+                {canEditPaper &&
+                  noticeItems.some(
+                    (i) =>
+                      i.code === "SECTION_UNDERFILLED" ||
+                      i.code === "MISSING_INTERNAL_CHOICE" ||
+                      i.code === "FORBIDDEN_INTERNAL_CHOICE",
+                  ) && <span className="text-xs text-amber-900">Use Bank Auto-Fill above to fix these.</span>}
               </div>
               {noticeOpen && (
               <div id="paper-notice-details" className="space-y-3.5">
@@ -1589,14 +1587,6 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                 {onlyProgressGaps
                   ? "Nothing is wrong, these slots are simply not filled yet:"
                   : "The blueprint linked to this paper was modified. Below is a breakdown of what needs adjustment to maintain examination standards:"}
-                {canEditPaper &&
-                  noticeItems.some(
-                    (i) =>
-                      i.code === "SECTION_UNDERFILLED" ||
-                      i.code === "MISSING_INTERNAL_CHOICE" ||
-                      i.code === "FORBIDDEN_INTERNAL_CHOICE",
-                  ) &&
-                  " Use Bank Auto-Fill above to fix these."}
               </p>
               <div className="grid gap-2.5 sm:grid-cols-2">
                 {noticeItems.map((imp, idx) => (
@@ -1692,12 +1682,30 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
             const targetSectionMarks = s.count * s.marksEach;
             const isOverfilled = effectiveUnits > s.count;
             const isSectionFull = effectiveUnits === s.count;
-            const isMarksMismatch = isSectionFull && placedSectionMarks !== targetSectionMarks;
             const emptySlots = Math.max(0, s.count - effectiveUnits);
             const isCollapsed = !!collapsedSections[s.id];
 
             // the same rule the server audits with, including the blueprint's own "OR required / no OR" setting
             const secChoiceReq = paperSectionChoiceRequirement(paper, s);
+            const statusText = sectionStatusLine({
+              type: s.type,
+              count: s.count,
+              filledUnits: effectiveUnits,
+              itemCount: items.length,
+              placedMarks: placedSectionMarks,
+              targetMarks: targetSectionMarks,
+              matchPairs:
+                items.length === 1 && s.type === "MATCH_COLUMN"
+                  ? parseMatchColumnPairs(items[0].question.options, items[0].question.text, (items[0].question as any).explanation).length || s.count
+                  : undefined,
+            });
+            const choiceNote = choicePolicyNote(secChoiceReq.policy, secChoiceReq.forbidden);
+            const warningText = sectionWarning({
+              count: s.count,
+              filledUnits: effectiveUnits,
+              placedMarks: placedSectionMarks,
+              targetMarks: targetSectionMarks,
+            });
 
             return (
               <section
@@ -1708,82 +1716,28 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-base font-bold text-slate-900">
-                        {s.title}
-                        {blueprint.sections.filter((x) => x.title.trim().toLowerCase() === s.title.trim().toLowerCase()).length > 1 && (
-                          <span className="ml-2 font-semibold text-indigo-700 text-sm">
-                            · {QUESTION_TYPE_LABEL[s.type as keyof typeof QUESTION_TYPE_LABEL] || s.type}
-                          </span>
-                        )}
-                      </h2>
-                      <span
-                        className={`badge ${
-                          isOverfilled
-                            ? "!bg-red-100 !text-red-800 border border-red-300 font-bold"
-                            : isSectionFull
-                            ? "!bg-emerald-50 !text-emerald-800 border border-emerald-200"
-                            : "!bg-amber-50 !text-amber-800 border border-amber-200"
-                        }`}
-                      >
-                        {items.length === 1 && s.type === "MATCH_COLUMN"
-                          ? `1 question (${parseMatchColumnPairs(items[0].question.options, items[0].question.text, (items[0].question as any).explanation).length || s.count} pairs)`
-                          : items.length === 1 && effectiveUnits > 1
-                          ? `1 question (${effectiveUnits} subparts)`
-                          : s.type === "MATCH_COLUMN" && items.length === 0
-                          ? `0/1 question (${s.count} pairs)`
-                          : `${effectiveUnits}/${s.count} questions`}{" "}
-                        {isOverfilled ? `(${effectiveUnits - s.count} excess!)` : ""}
-                      </span>
-
-                      {/* Live Placed Marks vs Section Target */}
-                      <span
-                        className={`badge font-semibold ${
-                          isMarksMismatch
-                            ? "!bg-amber-100 !text-amber-900 border border-amber-300"
-                            : placedSectionMarks === targetSectionMarks
-                            ? "!bg-emerald-50 !text-emerald-800 border border-emerald-200"
-                            : placedSectionMarks > targetSectionMarks
-                            ? "!bg-red-100 !text-red-800 border border-red-200"
-                            : "!bg-slate-100 !text-slate-700 border border-slate-200"
-                        }`}
-                        title="Placed Marks / Target Section Marks"
-                      >
-                        {placedSectionMarks} / {targetSectionMarks} Marks
-                      </span>
-
-                      {/* Internal Choice Policy Badge */}
-                      {secChoiceReq.policy === "MANDATORY_EVERY_SLOT" && (
-                        <span className="badge font-bold !bg-purple-100 !text-purple-800 border border-purple-200 text-[10px]">
-                          100% Internal Choice (OR / अथवा)
-                        </span>
-                      )}
-                      {secChoiceReq.forbidden && (
-                        <span
-                          className="badge font-medium !bg-slate-100 !text-slate-600 border border-slate-200 text-[10px]"
-                          title={secChoiceReq.reason}
-                        >
-                          {secChoiceReq.policy === "FORBIDDEN" && s.marksEach === 2
-                            ? "No Internal Choice (MPBSE 2026–27 Rule)"
-                            : "No Internal Choice"}
-                        </span>
-                      )}
-                      {secChoiceReq.policy === "OPTIONAL" && (
-                        <span className="badge font-medium !bg-slate-100 !text-slate-600 border border-slate-200 text-[10px]">
-                          Optional Internal Choice
-                        </span>
-                      )}
+                      <h2 className="text-base font-bold text-slate-900">{s.title}</h2>
                     </div>
-                    <div className="text-xs text-slate-500 mt-0.5">
-                      {QUESTION_TYPE_LABEL[s.type as keyof typeof QUESTION_TYPE_LABEL]} · {s.count} slot(s) ×{" "}
-                      {s.marksEach} mark(s) ={" "}
-                      <span className="font-semibold text-slate-700">{targetSectionMarks} marks</span>
+                    <div
+                      className="mt-0.5 text-xs text-slate-500"
+                      title={secChoiceReq.forbidden ? secChoiceReq.reason : undefined}
+                    >
+                      <span
+                        className={`font-semibold ${
+                          isOverfilled ? "text-red-700" : isSectionFull ? "text-emerald-700" : "text-amber-700"
+                        }`}
+                      >
+                        {statusText}
+                      </span>
+                      {` · ${typeLabel(s.type)} · ${s.marksEach} ${s.marksEach === 1 ? "mark" : "marks"} each`}
+                      {choiceNote && ` · ${choiceNote}`}
                       {slotPlanSummary(s) && <span className="ml-1.5 text-indigo-700">({slotPlanSummary(s)})</span>}
-                      {isMarksMismatch && (
-                        <span className="ml-2 font-bold text-amber-700">
-                          ⚠ Placed marks ({placedSectionMarks}m) do not match target ({targetSectionMarks}m)
-                        </span>
-                      )}
                     </div>
+                    {warningText && (
+                      <div className={`mt-0.5 text-xs font-semibold ${isOverfilled ? "text-red-700" : "text-amber-700"}`}>
+                        {warningText}
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-1.5">
@@ -1838,15 +1792,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                 </div>
 
                 {isCollapsed ? (
-                  <div className="flex items-center justify-between pt-1 text-xs text-slate-500">
-                    <span>
-                      {items.length === 0
-                        ? "No questions added yet."
-                        : (() => {
-                            const secMarksTotal = placedSectionMarks;
-                            return `${items.length} question(s) placed (${secMarksTotal} marks).`;
-                          })()}
-                    </span>
+                  <div className="flex items-center justify-end pt-1 text-xs text-slate-500">
                     <button
                       type="button"
                       onClick={() => setCollapsedSections((prev) => ({ ...prev, [s.id]: false }))}
@@ -2273,9 +2219,6 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                         length: s.type === "MATCH_COLUMN" ? (items.length === 0 ? 1 : 0) : emptySlots,
                       }).map((_, i) => {
                         const slotNum = effectiveUnits + i + 1;
-                        const targetMarksForSlot = s.type === "MATCH_COLUMN" && s.count > 1 && s.marksEach === 1
-                          ? s.count * s.marksEach
-                          : s.marksEach;
                         const topChapters = coverage.underCovered.slice(0, 3);
 
                         return (
@@ -2288,13 +2231,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                       <span className="font-bold text-xs text-slate-800">
                                         {s.type === "MATCH_COLUMN"
                                           ? `Match the Columns Set (${s.count} Pairs)`
-                                          : `Empty Slot ${slotNum} of ${s.count}`}
-                                      </span>
-                                      <span className="rounded bg-indigo-50 border border-indigo-200/60 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700">
-                                        {targetMarksForSlot} Mark{targetMarksForSlot > 1 ? "s" : ""}
-                                      </span>
-                                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
-                                        {QUESTION_TYPE_LABEL[s.type as keyof typeof QUESTION_TYPE_LABEL] || s.type}
+                                          : `Empty slot ${slotNum} of ${s.count}`}
                                       </span>
                                     </div>
 
@@ -2315,18 +2252,6 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                   </div>
 
                                   <div className="flex items-center gap-2 ml-auto">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setCollapsedSections((prev) => ({ ...prev, [s.id]: false }));
-                                        setSectionAiModalSection(s);
-                                      }}
-                                      className="btn btn-sm border border-indigo-200 bg-white text-indigo-700 hover:bg-indigo-50 shadow-2xs flex items-center gap-1.5 text-xs font-semibold"
-                                      title="Generate matching question with AI"
-                                    >
-                                      <Sparkles size={12} className="text-indigo-600" />
-                                      <span>AI Fill</span>
-                                    </button>
                                     <button
                                       type="button"
                                       onClick={() => {
