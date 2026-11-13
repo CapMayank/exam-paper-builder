@@ -9,8 +9,9 @@ import { DIFFICULTY_LABEL, SKILLS, suggestDifficulty, suggestSkill } from "@/lib
 import type { ChapterLite } from "@/lib/questionTagging";
 import type { PaperData, QuestionDto, Section } from "@/lib/types";
 
-/** Section types whose questions are a plain text (plus options for MCQ) and can be pasted in a list. */
-export const PASTEABLE_TYPES = new Set(["MCQ", "TRUE_FALSE", "FILL_BLANK", "VERY_SHORT", "SHORT", "LONG"]);
+import { PASTEABLE_TYPES } from "@/lib/questionModal";
+
+export { PASTEABLE_TYPES };
 
 // Classes 1–12 answer in a separate copy: only drawing and map questions take room on the paper.
 const SPACE: Record<string, number> = { DRAW: 70, MAP_WORK: 70 };
