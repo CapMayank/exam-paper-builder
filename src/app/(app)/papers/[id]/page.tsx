@@ -167,11 +167,9 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   // (declared before the autosave effect, which only saves for a user who can edit the paper)
   const [currentUser, setCurrentUser] = useState<Actor & { name: string; email: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // The error banner sits at the top of a long page; an action far down (move, swap, replace) would fail silently
-  // off-screen. Also raise it as a toast, which is visible wherever the teacher is scrolled to.
-  useEffect(() => {
-    if (error) toast.error(error);
-  }, [error]);
+  // `error` is only the "paper failed to load" page. An action error is a toast, shown straight away so the same
+  // message twice in a row still appears twice, and visible wherever the teacher has scrolled to.
+  const showError = useCallback((message: string) => toast.error(message), [toast]);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [autofilling, setAutofilling] = useState(false);
   // The "paper not complete" notice stays a one-line bar until the teacher opens it (remembered per browser).
@@ -192,13 +190,6 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
       }
       return !open;
     });
-  const [duplicatingSet, setDuplicatingSet] = useState(false);
-  const [duplicateForm, setDuplicateForm] = useState({
-    targetSet: "SET B",
-    shuffleQuestions: true,
-    shuffleMcqOptions: true,
-  });
-  const [duplicatingBusy, setDuplicatingBusy] = useState(false);
   const [movingItemId, setMovingItemId] = useState<string | null>(null);
   const [exportingDocx, setExportingDocx] = useState(false);
   const [createdPaperLink, setCreatedPaperLink] = useState<{ id: string; title: string } | null>(null);
@@ -310,7 +301,6 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
     if (movingItemId) return;
     cancelAutosave();
     setMovingItemId(itemId);
-    setError(null);
     try {
       const updated = await api<PaperData>(`/api/papers/${id}/questions/${itemId}`, {
         method: "PATCH",
@@ -318,7 +308,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
       });
       adopt(updated);
     } catch (e) {
-      setError((e as Error).message);
+      showError((e as Error).message);
     } finally {
       setMovingItemId(null);
     }
@@ -362,7 +352,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
       });
       adopt(updated);
     } catch (e) {
-      setError((e as Error).message);
+      showError((e as Error).message);
     }
   }
 
@@ -373,7 +363,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
       adopt(res.paper);
       toast.success(`Suggested a component for ${res.assigned} question(s). You can change any of them.`);
     } catch (e) {
-      setError((e as Error).message);
+      showError((e as Error).message);
     }
   }
 
@@ -387,7 +377,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
       );
       setSiblingQuestions(Array.isArray(list) ? list : []);
     } catch (e) {
-      setError((e as Error).message);
+      showError((e as Error).message);
     } finally {
       setSiblingLoading(false);
     }
@@ -396,7 +386,6 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   async function handleExecuteQuickSwap(itemId: string, replacementQuestionId: string) {
     cancelAutosave();
     setSwappingBusy(true);
-    setError(null);
     try {
       const updated = await api<PaperData>(`/api/papers/${id}/questions/${itemId}`, {
         method: "PATCH",
@@ -405,7 +394,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
       adopt(updated);
       setQuickSwapItemId(null);
     } catch (e) {
-      setError((e as Error).message);
+      showError((e as Error).message);
     } finally {
       setSwappingBusy(false);
     }
@@ -413,7 +402,6 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
 
   async function handleSectionAutofill(sectionId: string) {
     cancelAutosave();
-    setError(null);
     setInfoMessage(null);
     setSectionAutofilling(sectionId);
     try {
@@ -429,7 +417,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
       if (res.paper) adopt(res.paper);
       setInfoMessage(res.message);
     } catch (e) {
-      setError((e as Error).message);
+      showError((e as Error).message);
     } finally {
       setSectionAutofilling(null);
     }
@@ -437,7 +425,6 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
 
   async function handleAutofill() {
     cancelAutosave();
-    setError(null);
     setInfoMessage(null);
     setAutofilling(true);
     try {
@@ -456,31 +443,9 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
       if (res.paper) adopt(res.paper);
       setInfoMessage(res.message);
     } catch (e) {
-      setError((e as Error).message);
+      showError((e as Error).message);
     } finally {
       setAutofilling(false);
-    }
-  }
-
-  async function handleDuplicateSet(e: React.FormEvent) {
-    e.preventDefault();
-    setDuplicatingBusy(true);
-    setError(null);
-    try {
-      const res = await api<{ success: boolean; paper: PaperData; message: string }>(
-        `/api/papers/${id}/duplicate-set`,
-        {
-          method: "POST",
-          json: duplicateForm,
-        },
-      );
-      setDuplicatingSet(false);
-      setCreatedPaperLink({ id: res.paper.id, title: res.paper.title });
-      setInfoMessage(`${res.message} You can open it anytime from your Papers dashboard.`);
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setDuplicatingBusy(false);
     }
   }
 
@@ -492,9 +457,9 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
     try {
       adopt(await api<PaperData>(`/api/papers/${id}`));
     } catch (e) {
-      setError((e as Error).message);
+      showError((e as Error).message);
     }
-  }, [id, adopt]);
+  }, [id, adopt, showError]);
 
   useEffect(() => {
     Promise.all([api<PaperData>(`/api/papers/${id}`), api<Book[]>("/api/books")]).then(
@@ -508,13 +473,37 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
 
   async function call<T = PaperData>(fn: () => Promise<T>, then?: (r: T) => void) {
     cancelAutosave();
-    setError(null);
     try {
       const r = await fn();
       then?.(r);
     } catch (e) {
-      setError((e as Error).message);
+      showError((e as Error).message);
     }
+  }
+
+  async function removeQuestion(item: PaperItem) {
+    const ok = await confirm({
+      title: "Remove this question from the paper?",
+      message: "It stays in the question bank.",
+      confirmLabel: "Remove",
+      tone: "danger",
+    });
+    if (!ok) return;
+    await call(() => api<PaperData>(`/api/papers/${id}/questions/${item.id}`, { method: "DELETE" }), adopt);
+  }
+
+  async function removeOrQuestion(item: PaperItem) {
+    const ok = await confirm({
+      title: "Remove the OR question from this slot?",
+      message: "It stays in the question bank.",
+      confirmLabel: "Remove",
+      tone: "danger",
+    });
+    if (!ok) return;
+    await call(
+      () => api<PaperData>(`/api/papers/${id}/questions/${item.id}`, { method: "PATCH", json: { orQuestionId: null } }),
+      adopt,
+    );
   }
 
   const patch = (json: Record<string, unknown>) => {
@@ -522,7 +511,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
     const isAdm = currentUser?.role === "ADMIN" || currentUser?.role === "SUPER_ADMIN";
     const canEdit = !isFin && Boolean(paper) && canModifyPaper(currentUser, paper!);
     if (!canEdit && !(isFin && isAdm && json.status === "DRAFT")) {
-      setError("Forbidden: You do not have permission to modify this paper.");
+      showError("Forbidden: You do not have permission to modify this paper.");
       return;
     }
     call(() => api<PaperData>(`/api/papers/${id}`, { method: "PATCH", json }), adopt);
@@ -976,8 +965,6 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
           </div>
         </div>
       </div>
-
-      <ErrorBanner message={error} />
 
       <KeyDisputesBanner key={paper.id} paperId={paper.id} canEdit={canModifyPaper(currentUser, paper)} onPaper={adopt} />
 
@@ -2105,16 +2092,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                       <button
                                         className="btn btn-sm text-red-600 hover:bg-red-50 font-medium"
                                         title="Remove alternate question"
-                                        onClick={() =>
-                                          call(
-                                            () =>
-                                              api<PaperData>(`/api/papers/${id}/questions/${it.id}`, {
-                                                method: "PATCH",
-                                                json: { orQuestionId: null },
-                                              }),
-                                            adopt,
-                                          )
-                                        }
+                                        onClick={() => removeOrQuestion(it)}
                                       >
                                         Unlink OR
                                       </button>
@@ -2337,15 +2315,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                   <button
                                     className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition ml-0.5"
                                     title="Remove question from paper"
-                                    onClick={() =>
-                                      call(
-                                        () =>
-                                          api<PaperData>(`/api/papers/${id}/questions/${it.id}`, {
-                                            method: "DELETE",
-                                          }),
-                                        adopt,
-                                      )
-                                    }
+                                    onClick={() => removeQuestion(it)}
                                   >
                                     <Trash2 size={13} />
                                   </button>
@@ -2582,62 +2552,6 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
         />
       )}
 
-      {duplicatingSet && (
-        <Modal
-          title="Generate Parallel Exam Set"
-          subtitle="Generate Set B, Set C, or Set D with shuffled questions and permutation of MCQ options."
-          onClose={() => setDuplicatingSet(false)}
-        >
-          <form onSubmit={handleDuplicateSet} className="space-y-4">
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Instantly create a new exam paper set based on this paper. Questions will be grouped in the exact same
-              sections, adhering to all blueprint marks and chapter weightages.
-            </p>
-            <Field label="Set Identifier / Name">
-              <input
-                className="input"
-                required
-                value={duplicateForm.targetSet}
-                placeholder="e.g. SET B, SET 2, SET C"
-                onChange={(e) => setDuplicateForm({ ...duplicateForm, targetSet: e.target.value })}
-              />
-            </Field>
-
-            <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 text-xs text-slate-700">
-              <div className="font-semibold text-slate-900">Anti-Cheating &amp; Shuffling Options:</div>
-              <label className="flex items-center gap-2 cursor-pointer font-medium">
-                <input
-                  type="checkbox"
-                  checked={duplicateForm.shuffleQuestions}
-                  onChange={(e) => setDuplicateForm({ ...duplicateForm, shuffleQuestions: e.target.checked })}
-                />
-                <span>Shuffle question order within each section</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer font-medium">
-                <input
-                  type="checkbox"
-                  checked={duplicateForm.shuffleMcqOptions}
-                  onChange={(e) => setDuplicateForm({ ...duplicateForm, shuffleMcqOptions: e.target.checked })}
-                />
-                <span>Shuffle MCQ options (A, B, C, D) and recalculate answer keys</span>
-              </label>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-              <button type="button" className="btn" onClick={() => setDuplicatingSet(false)}>
-                Cancel
-              </button>
-              <button
-                className="btn btn-primary"
-                disabled={duplicatingBusy || !duplicateForm.targetSet.trim()}
-              >
-                {duplicatingBusy ? "Generating…" : "Generate Parallel Set"}
-              </button>
-            </div>
-          </form>
-        </Modal>
-      )}
-
       {/* Controlled Multi-Set Suite Generator (CBSE 60/40 Overlap) */}
       {multiSetModalOpen && (
         <MultiSetGeneratorModal
@@ -2696,7 +2610,6 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
           onSelectDiagram={async ({ imagePath }) => {
             const currentItem = diagramModalItem;
             setDiagramModalItem(null);
-            setError(null);
             try {
               await api(`/api/questions/${currentItem.item.question.id}`, {
                 method: "PATCH",
@@ -2704,7 +2617,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
               });
               await reloadPaper();
             } catch (e) {
-              setError((e as Error).message);
+              showError((e as Error).message);
             }
           }}
           onOpenInStudio={(imgUrl) => {
@@ -2727,7 +2640,6 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
           onDone={async (png) => {
             const currentItem = studioItem;
             setStudioItem(null);
-            setError(null);
             try {
               const fd = new FormData();
               fd.append("file", png, "diagram.png");
@@ -2741,7 +2653,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
               });
               await reloadPaper();
             } catch (e) {
-              setError((e as Error).message);
+              showError((e as Error).message);
             }
           }}
         />
