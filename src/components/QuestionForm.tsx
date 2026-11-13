@@ -211,6 +211,7 @@ export function QuestionForm({
   typeFromParent,
   detailsExtra,
   chapterHint,
+  preferredChapterId,
   submitLabel = "Save question",
   showPaperEditModes,
   customSaveHandler,
@@ -232,6 +233,8 @@ export function QuestionForm({
   detailsExtra?: React.ReactNode;
   /** A line under the Chapter select (the OR chapter rule). */
   chapterHint?: string;
+  /** A new question starts on this chapter (an OR question on its main question's) instead of a suggested one. */
+  preferredChapterId?: string;
   submitLabel?: string;
   showPaperEditModes?: boolean;
   customSaveHandler?: (payload: unknown, mode: "UPDATE_MASTER" | "FORK_COPY") => Promise<void>;
@@ -248,8 +251,9 @@ export function QuestionForm({
     [book, allowedKey],
   );
   const initialChapterBelongs = chapters.some((c) => c.id === initial?.chapterId);
+  const preferredChapterBelongs = !!preferredChapterId && chapters.some((c) => c.id === preferredChapterId);
   const [chapterId, setChapterId] = useState(
-    initialChapterBelongs ? initial!.chapterId : (chapters[0]?.id ?? "")
+    initialChapterBelongs ? initial!.chapterId : preferredChapterBelongs ? preferredChapterId! : (chapters[0]?.id ?? "")
   );
   const resolvedInitialType = initial?.type ?? typeFromParent ?? fixedType ?? "SHORT";
   const [type, setType] = useState(resolvedInitialType);
@@ -321,7 +325,8 @@ export function QuestionForm({
   const [skill, setSkill] = useState<string>(skillOf(initial?.cognitiveLevel) ?? "");
   // A new question gets its chapter, difficulty and skill filled in from its text until the teacher picks them.
   const autoTag = !initial;
-  const [touched, setTouched] = useState({ chapter: false, difficulty: false, skill: false });
+  // a preferred chapter counts as chosen, so the text-based suggestion does not replace it
+  const [touched, setTouched] = useState({ chapter: preferredChapterBelongs, difficulty: false, skill: false });
   // How this book's questions were filed before: lets the chapter suggestion go beyond chapter titles.
   const [bankOf, setBankOf] = useState<{ bookId: string; bank: ChapterBank } | null>(null);
   const chapterBank = bankOf?.bookId === bookId ? bankOf.bank : undefined;

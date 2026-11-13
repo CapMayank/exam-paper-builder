@@ -352,13 +352,16 @@ test.describe("3. Double-Click Locks & Action Integrity", () => {
     await createBtn.click();
     await page.waitForURL(/\/papers\/[a-z0-9]+/, { timeout: 15000 });
 
-    // Look for empty slot "Pick from Bank" button
-    const pickBtn = page.locator('button:has-text("Pick from Bank")').first();
+    // An empty slot's "Add question" button (exact, so the section header's "Add Question" is not matched)
+    const pickBtn = page.getByRole("button", { name: "Add question", exact: true }).first();
     await expect(pickBtn).toBeVisible({ timeout: 10000 });
     await pickBtn.click();
 
     const pickerModal = page.locator('div[role="dialog"]').filter({ hasText: "Add to" }).first();
     await expect(pickerModal).toBeVisible();
+
+    // The picker opens on Write; the bank is its own tab
+    await pickerModal.getByRole("button", { name: /^From bank/ }).click();
 
     const addBtn = pickerModal.locator('button:has-text("Add to Slot")').first();
     await expect(addBtn).toBeVisible({ timeout: 10000 });

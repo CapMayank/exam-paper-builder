@@ -25,6 +25,7 @@ type Override = { difficulty?: string; skill?: string; skip?: boolean };
 export function PasteQuestionsPanel({
   paper,
   section,
+  type,
   chapters,
   gaps,
   slotsLeft,
@@ -33,6 +34,8 @@ export function PasteQuestionsPanel({
 }: {
   paper: PaperData;
   section: Section;
+  /** The question type being pasted: the type chosen in the picker, which may differ from the section's default. */
+  type: string;
   /** Blueprint chapters of this paper's book. */
   chapters: ChapterLite[];
   /** How far each chapter is below its target (negative when over); questions are spread over the neediest. */
@@ -46,7 +49,7 @@ export function PasteQuestionsPanel({
   const [overrides, setOverrides] = useState<Record<number, Override>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const isMcq = section.type === "MCQ";
+  const isMcq = type === "MCQ";
 
   const parsed = useMemo(() => splitPastedQuestions(raw, isMcq), [raw, isMcq]);
 
@@ -69,8 +72,8 @@ export function PasteQuestionsPanel({
       ...q,
       chapterId,
       chapterReason: auto?.reason ?? null,
-      difficulty: o.difficulty ?? suggestDifficulty(q.text, section.type, section.marksEach),
-      skill: o.skill ?? suggestSkill(q.text, section.type),
+      difficulty: o.difficulty ?? suggestDifficulty(q.text, type, section.marksEach),
+      skill: o.skill ?? suggestSkill(q.text, type),
       skip: Boolean(o.skip),
       problem,
     };
@@ -91,13 +94,13 @@ export function PasteQuestionsPanel({
           json: {
             bookId: paper.blueprint.bookId,
             chapterId: r.chapterId,
-            type: section.type,
+            type,
             text: r.text,
             options: isMcq ? r.options : [],
             answer: r.answer,
             difficulty: r.difficulty,
             cognitiveLevel: r.skill,
-            spaceMm: SPACE[section.type] ?? 0,
+            spaceMm: SPACE[type] ?? 0,
           },
         });
         ids.push(q.id);
@@ -116,11 +119,11 @@ export function PasteQuestionsPanel({
     }
   }
 
-  if (!PASTEABLE_TYPES.has(section.type)) {
+  if (!PASTEABLE_TYPES.has(type)) {
     return (
       <p className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-        {QUESTION_TYPE_LABEL[section.type as keyof typeof QUESTION_TYPE_LABEL] ?? section.type} questions have parts, so write them one at a
-        time under “Compose new question”.
+        {QUESTION_TYPE_LABEL[type as keyof typeof QUESTION_TYPE_LABEL] ?? type} questions have parts, so write them one at a
+        time.
       </p>
     );
   }

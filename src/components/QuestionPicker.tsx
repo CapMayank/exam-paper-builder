@@ -25,13 +25,19 @@ import {
   serializeMatchColumnPair,
 } from "@/lib/constants";
 import { type Book, type PaperData, type QuestionDto, type Section, subpartsTotalMarks, normalizeSubpartMarks } from "@/lib/types";
-import { paperSectionChoiceRequirement } from "@/lib/internalChoiceRules";
+import { OR_CHAPTER_GUIDELINE, OR_CHAPTER_REQUIRED, orChapterRule, paperSectionChoiceRequirement } from "@/lib/internalChoiceRules";
+import {
+  canPasteSeveral,
+  difficultyLabel,
+  modalTitle as buildModalTitle,
+  openingTab,
+  showTypeChips,
+  type ModalMode,
+  type SourceTab,
+} from "@/lib/questionModal";
 import { MathText } from "./MathText";
 import { QuestionContent } from "./QuestionContent";
 import type { GeneratedPaperQuestion, GeneratedQuestionItem } from "@/lib/gemini";
-
-type PickerTab = "bank" | "new" | "paste" | "ai";
-const PICKER_TAB_KEY = "paperbuilder.picker.tab";
 
 /**
  * Adds questions to one blueprint section, either from the bank (smartly ordered) or by writing a new one,
@@ -64,29 +70,22 @@ export function QuestionPicker({
   const activeItemId = replacingItemId ?? alternateTargetItemId;
   const activeItem = activeItemId ? paper.items.find((i) => i.id === activeItemId) : null;
 
-  // Opens on the tab the teacher used last (composing a new question the first time), not always the bank.
-  const [tab, setTabState] = useState<PickerTab>(() => {
-    let saved: string | null = null;
-    try {
-      saved = typeof window === "undefined" ? null : window.localStorage.getItem(PICKER_TAB_KEY);
-    } catch {
-      /* storage blocked: fall back to the default */
-    }
-    const allowed: PickerTab[] = isReplacing || isAlternate ? ["bank", "new", "ai"] : ["bank", "new", "paste", "ai"];
-    return allowed.includes(saved as PickerTab) ? (saved as PickerTab) : "new";
-  });
-  const setTab = (next: PickerTab) => {
-    setTabState(next);
-    try {
-      window.localStorage.setItem(PICKER_TAB_KEY, next);
-    } catch {
-      /* ignore */
-    }
-  };
+  const mode: ModalMode = isAlternate ? "or" : isReplacing ? "replace" : "add";
+  // The same tab every time (Write), so the modal is usable at once; the bank list loads in the background.
+  const [tab, setTab] = useState<SourceTab>(() => openingTab(mode));
+  // Inside Write: several questions pasted at once instead of the one-question form.
+  const [pasting, setPasting] = useState(false);
+  // An OR question's chapter: from class 9 it must be the main question's ("required"); below that it is advice.
+  const orRule = isAlternate ? orChapterRule(paper.blueprint.book.className) : null;
+  const mainChapterId = isAlternate && activeItem ? activeItem.question.chapterId : null;
+  const orChapterLocked = orRule === "required" && Boolean(mainChapterId);
   // A slot is a marks contract; the teacher picks which of its allowed forms to fill it with.
   const allowedTypes = useMemo(() => allowedTypesFor(section), [section]);
+  // memoized with the list it reads, so the React Compiler can keep this component's other memos
+  const chips = useMemo(() => showTypeChips(allowedTypes, mode), [allowedTypes, mode]);
   const [pickType, setPickType] = useState<string>(section.type);
   const [bank, setBank] = useState<QuestionDto[]>([]);
+  const [bankError, setBankError] = useState<string | null>(null);
   const [filters, setFilters] = useState({
     chapterId: isAlternate && activeItem ? activeItem.question.chapterId : "",
     difficulty: "",
@@ -101,7 +100,8 @@ export function QuestionPicker({
 
   // AI Generator state
   const [initialForEdit, setInitialForEdit] = useState<QuestionDto | undefined>(undefined);
-  const [aiChapterId, setAiChapterId] = useState<string>("");
+  // an OR question starts on its main question's chapter (replaced by the neediest one if the blueprint lacks it)
+  const [aiChapterId, setAiChapterId] = useState<string>(mainChapterId ?? "");
   const [aiDifficulty, setAiDifficulty] = useState<"EASY" | "MEDIUM" | "HARD">("MEDIUM");
   const [aiCognitiveLevel, setAiCognitiveLevel] = useState<string>("APPLYING");
   const [aiLanguage, setAiLanguage] = useState<PaperLanguage>(() => detectPaperLanguage(paper, paper.items));
@@ -137,9 +137,9 @@ export function QuestionPicker({
   const full = !isReplacing && !isAlternate && sectionStatus.filled >= sectionStatus.needed;
 
   // Every blueprint chapter may take this section's question: weightage is a guide, not a gate
-  // (locked to the primary question's chapter for an alternate choice).
-  const openChapters = isAlternate
-    ? paper.blueprint.chapters.filter((c) => (activeItem ? c.chapterId === activeItem.question.chapterId : true))
+  // (locked to the main question's chapter for an OR question where the same chapter is required).
+  const openChapters = orChapterLocked
+    ? paper.blueprint.chapters.filter((c) => c.chapterId === mainChapterId)
     : paper.blueprint.chapters;
 
   // How far each chapter is below its target (negative when above); the replaced question's marks do not count.
@@ -159,17 +159,19 @@ export function QuestionPicker({
   useEffect(() => {
     const sp = new URLSearchParams({ bookId: paper.blueprint.bookId, type: pickType, excludePaperId: paper.id });
     Object.entries(filters).forEach(([k, v]) => v && sp.set(k, v));
-    if (isAlternate && activeItem) {
-      sp.set("chapterId", activeItem.question.chapterId);
+    // where the same chapter is only a guideline the chapter follows the filter
+    if (orChapterLocked && mainChapterId) {
+      sp.set("chapterId", mainChapterId);
     }
     const t = setTimeout(() => {
       setLoading(true);
+      setBankError(null);
       api<QuestionDto[]>(`/api/questions?${sp}`)
-        .then(setBank, (e) => setError(e.message))
+        .then(setBank, (e) => setBankError(e.message))
         .finally(() => setLoading(false));
     }, 150);
     return () => clearTimeout(t);
-  }, [paper.id, paper.blueprint.bookId, pickType, filters, isAlternate, activeItem]);
+  }, [paper.id, paper.blueprint.bookId, pickType, filters, orChapterLocked, mainChapterId]);
 
   // Smart assist: questions that fit the blueprint come first, then least-used, then newest.
   const ranked = useMemo(() => {
@@ -183,7 +185,7 @@ export function QuestionPicker({
             why = "Already used in this paper.";
           } else if (!isTypeAllowed(section, q.type)) {
             why = `Must be a type this section accepts (${allowedTypes.join(", ")}).`;
-          } else if (activeItem && q.chapterId !== activeItem.question.chapterId) {
+          } else if (orChapterLocked && activeItem && q.chapterId !== activeItem.question.chapterId) {
             why = `Must match primary question chapter (Ch ${activeItem.question.chapter?.number}).`;
           } else if (subpartsMarksProblem(section, q)) {
             why = `Its parts: ${subpartsMarksProblem(section, q)}`;
@@ -209,16 +211,18 @@ export function QuestionPicker({
         }
         return { q, why };
       })
-      // questions that fit come first, those from the most under-covered chapters first among them, then the least used and newest
+      // questions that fit come first (for an OR, those from the main question's chapter first among them), then those
+      // from the most under-covered chapters, then the least used and newest
       .sort(
         (a, b) =>
           Number(!!a.why) - Number(!!b.why) ||
+          (mainChapterId ? Number(b.q.chapterId === mainChapterId) - Number(a.q.chapterId === mainChapterId) : 0) ||
           (chapterGaps[b.q.chapterId] ?? 0) - (chapterGaps[a.q.chapterId] ?? 0) ||
           (a.q.timesUsed ?? 0) - (b.q.timesUsed ?? 0) ||
           Date.parse(b.q.createdAt ?? "") - Date.parse(a.q.createdAt ?? "") ||
           0,
       );
-  }, [chapterGaps, bank, placed, def, section.id, isAlternate, activeItem, paper.items, pickType, targetSlotMarks, isMultiUnitMatch, replacingItemId]);
+  }, [chapterGaps, bank, placed, def, section.id, isAlternate, activeItem, paper.items, pickType, targetSlotMarks, isMultiUnitMatch, replacingItemId, orChapterLocked, mainChapterId]);
 
   /** Resolves true when the question was placed; false when it was refused (the error is shown in the banner). */
   async function add(questionId: string, orQuestionId?: string | null): Promise<boolean> {
@@ -517,27 +521,25 @@ export function QuestionPicker({
         : undefined,
     };
     setInitialForEdit(dummyDto);
-    setTab("new");
+    setPasting(false);
+    setTab("write");
   }
 
-  const modalTitle = isAlternate
-    ? `Select Alternate Choice (OR) in ${section.title} — (${marksToGenerate}m)`
-    : isReplacing
-    ? `Replace Question in ${section.title} — ${QUESTION_TYPE_LABEL[pickType as keyof typeof QUESTION_TYPE_LABEL]} (${marksToGenerate}m)`
-    : `Add to ${section.title} — ${QUESTION_TYPE_LABEL[pickType as keyof typeof QUESTION_TYPE_LABEL]} · ${marksToGenerate} mark(s)`;
+  const modalTitle = buildModalTitle({ mode, sectionTitle: section.title, type: pickType, marks: marksToGenerate, chips });
+  const slotsLeft = Math.max(0, sectionStatus.needed - sectionStatus.filled);
+  const pasteOffered = canPasteSeveral({ mode, type: pickType, slotsLeft });
+  const showPaste = pasting && pasteOffered;
+  const orRuleLine = orRule === "required" ? OR_CHAPTER_REQUIRED : orRule === "guideline" ? OR_CHAPTER_GUIDELINE : null;
+  // the bank's chapter filter lists the blueprint's chapters, plus the main question's own when the blueprint lacks it
+  const mainChapterOutsideBlueprint =
+    orRule === "guideline" && activeItem && !paper.blueprint.chapters.some((c) => c.chapterId === mainChapterId)
+      ? activeItem.question.chapter
+      : null;
 
   return (
     <Modal
       title={modalTitle}
-      subtitle={
-        isAlternate
-          ? "Add an internal choice alternate for students (does not consume blueprint chapter marks)."
-          : isReplacing
-          ? "Replace the current slot."
-          : `${section.title}: ${sectionStatus.filled} of ${sectionStatus.needed} slots filled. ${
-              tab === "bank" ? "Pick from the bank." : tab === "new" ? "Write a new question; it is saved to the bank too." : tab === "paste" ? "Paste several at once." : "Generate with AI."
-            }`
-      }
+      subtitle={mode === "add" ? `${section.title}: ${sectionStatus.filled} of ${sectionStatus.needed} slots filled.` : undefined}
       onClose={onClose}
       wide
     >
@@ -554,33 +556,22 @@ export function QuestionPicker({
                 : "text-slate-600 hover:text-slate-900"
             }`}
           >
-            Choose from Question Bank ({ranked.length})
+            From bank ({ranked.length})
           </button>
           <button
             type="button"
             onClick={() => {
-              setInitialForEdit(undefined);
-              setTab("new");
+              if (tab !== "write") setInitialForEdit(undefined);
+              setTab("write");
             }}
             className={`flex-1 rounded-lg py-2 transition ${
-              tab === "new"
+              tab === "write"
                 ? "bg-white text-indigo-700 shadow-xs"
                 : "text-slate-600 hover:text-slate-900"
             }`}
           >
-            + Compose New Question
+            Write
           </button>
-          {!isReplacing && !isAlternate && (
-            <button
-              type="button"
-              onClick={() => setTab("paste")}
-              className={`flex-1 rounded-lg py-2 transition ${
-                tab === "paste" ? "bg-white text-indigo-700 shadow-xs" : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              Paste several
-            </button>
-          )}
           <button
             type="button"
             onClick={() => setTab("ai")}
@@ -595,13 +586,7 @@ export function QuestionPicker({
           </button>
         </div>
 
-        {isAlternate && (
-          <div className="rounded-lg border border-purple-200 bg-purple-50 p-3 text-xs text-purple-900 font-medium flex items-center gap-2">
-            <span className="font-bold">Board Guardrail:</span> Alternate (OR) choices must match the primary question&apos;s chapter and mark value.
-          </div>
-        )}
-
-        {allowedTypes.length > 1 && (
+        {chips && (
           <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Question type">
             <span className="text-xs font-medium text-slate-500">Question type:</span>
             {allowedTypes.map((t) => (
@@ -610,14 +595,13 @@ export function QuestionPicker({
                 type="button"
                 aria-pressed={pickType === t}
                 onClick={() => {
+                  // the Write form switches type itself and keeps the typed text, so it is not remounted
                   setPickType(t);
                   setAiGenerated(null);
-                  setFormKey((k) => k + 1);
                 }}
                 className={`rounded-full border px-2.5 py-0.5 text-xs ${pickType === t ? "border-indigo-500 bg-indigo-50 font-semibold text-indigo-700" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"}`}
               >
                 {QUESTION_TYPE_LABEL[t as keyof typeof QUESTION_TYPE_LABEL] ?? t}
-                {t === section.type ? " (default)" : ""}
               </button>
             ))}
           </div>
@@ -628,14 +612,14 @@ export function QuestionPicker({
             <div className="grid gap-2.5 sm:grid-cols-3">
               <select
                 className="input text-xs"
-                value={isAlternate && activeItem ? activeItem.question.chapterId : filters.chapterId}
-                disabled={isAlternate}
+                value={orChapterLocked && mainChapterId ? mainChapterId : filters.chapterId}
+                disabled={orChapterLocked}
                 onChange={(e) => setFilters({ ...filters, chapterId: e.target.value })}
                 aria-label="Chapter"
               >
-                {isAlternate && activeItem ? (
+                {orChapterLocked && activeItem ? (
                   <option value={activeItem.question.chapterId}>
-                    Ch {activeItem.question.chapter?.number}. {activeItem.question.chapter?.title} (Locked — Board Guardrail)
+                    Ch {activeItem.question.chapter?.number}. {activeItem.question.chapter?.title} (same as main question)
                   </option>
                 ) : (
                   <>
@@ -645,6 +629,11 @@ export function QuestionPicker({
                         Ch {c.chapter.number}. {c.chapter.title}
                       </option>
                     ))}
+                    {mainChapterOutsideBlueprint && mainChapterId && (
+                      <option value={mainChapterId}>
+                        Ch {mainChapterOutsideBlueprint.number}. {mainChapterOutsideBlueprint.title}
+                      </option>
+                    )}
                   </>
                 )}
               </select>
@@ -657,7 +646,9 @@ export function QuestionPicker({
               >
                 <option value="">Any difficulty</option>
                 {DIFFICULTIES.map((d) => (
-                  <option key={d}>{d}</option>
+                  <option key={d} value={d}>
+                    {difficultyLabel(d)}
+                  </option>
                 ))}
               </select>
 
@@ -669,7 +660,16 @@ export function QuestionPicker({
               />
             </div>
 
+            {orRuleLine && <p className="text-xs text-slate-600">{orRuleLine}</p>}
+
+            <ErrorBanner message={bankError} />
+
             <ul className="max-h-[55vh] space-y-2.5 overflow-y-auto pr-1">
+              {loading && ranked.length === 0 && !bankError && (
+                <li className="flex items-center justify-center gap-2 p-8 text-sm text-slate-500">
+                  <Spinner size="sm" /> Loading questions…
+                </li>
+              )}
               {ranked.map(({ q, why }, idx) => (
                 <li
                   key={q.id}
@@ -705,7 +705,7 @@ export function QuestionPicker({
                           🎨 {QUESTION_TYPE_LABEL[q.type as keyof typeof QUESTION_TYPE_LABEL]?.split(" (")[0] || "Activity"}
                         </span>
                       )}
-                      <span className="badge font-semibold">{q.difficulty}</span>
+                      <span className="badge font-semibold">{difficultyLabel(q.difficulty)}</span>
                       <span className="badge !bg-slate-100 text-slate-700 font-medium">
                         Ch {q.chapter?.number}. {q.chapter?.title}
                       </span>
@@ -764,10 +764,10 @@ export function QuestionPicker({
                   </div>
                 </li>
               ))}
-              {!loading && ranked.length === 0 && (
+              {!loading && !bankError && ranked.length === 0 && (
                 <li className="p-8 text-center text-sm text-slate-500">
                   No matching {QUESTION_TYPE_LABEL[pickType as keyof typeof QUESTION_TYPE_LABEL]} questions found.
-                  Switch to the other tab to write a new one.
+                  Switch to Write to add a new one.
                 </li>
               )}
             </ul>
@@ -809,17 +809,7 @@ export function QuestionPicker({
               </button>
             </div>
           </>
-        ) : tab === "paste" ? (
-          <PasteQuestionsPanel
-            paper={paper}
-            section={section}
-            chapters={paper.blueprint.chapters.map((c) => c.chapter)}
-            gaps={chapterGaps}
-            slotsLeft={Math.max(0, sectionStatus.needed - sectionStatus.filled)}
-            onPaper={onPaper}
-            onClose={onClose}
-          />
-        ) : tab === "new" ? (
+        ) : tab === "write" ? (
           full ? (
             <div className="space-y-3">
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-xs text-emerald-800">
@@ -832,38 +822,72 @@ export function QuestionPicker({
               </div>
             </div>
           ) : (
-            <QuestionForm
-              key={formKey}
-              books={books}
-              initial={initialForEdit}
-              fixedBookId={paper.blueprint.bookId}
-              fixedType={pickType}
-              targetMarks={section.marksEach}
-              allowedChapterIds={composerChapterIds(
-                paper.blueprint.chapters.map((c) => c.chapterId),
-                isAlternate ? activeItem?.question.chapterId : null,
+            <div className="space-y-3">
+              {showPaste ? (
+                <div className="flex justify-end">
+                  <button type="button" className="btn btn-sm" onClick={() => setPasting(false)}>
+                    Back to one question
+                  </button>
+                </div>
+              ) : (
+                pasteOffered && (
+                  <div className="flex justify-end">
+                    <button type="button" className="btn btn-sm" onClick={() => setPasting(true)}>
+                      Paste several
+                    </button>
+                  </div>
+                )
               )}
-              openMarks={chapterGaps}
-              submitLabel={
-                isAlternate
-                  ? "Save to Bank & Set as Alternate"
-                  : isReplacing
-                  ? "Save to Bank & Use as Replacement"
-                  : "Save to Bank & Add to Paper"
-              }
-              onCancel={() => {
-                setInitialForEdit(undefined);
-                onClose();
-              }}
-              onSaved={async (q) => {
-                // The question is already in the bank. Clear the form only once it is on the paper; if the paper
-                // refused it, keep the text on screen so the teacher can fix the marks/chapter instead of retyping.
-                // Reopen it as an edit of the saved question so the next try updates it instead of saving a duplicate.
-                const placedOk = await add(q.id);
-                setInitialForEdit(placedOk ? undefined : q);
-                setFormKey((k) => k + 1);
-              }}
-            />
+              {showPaste && (
+                <PasteQuestionsPanel
+                  paper={paper}
+                  section={section}
+                  type={pickType}
+                  chapters={paper.blueprint.chapters.map((c) => c.chapter)}
+                  gaps={chapterGaps}
+                  slotsLeft={slotsLeft}
+                  onPaper={onPaper}
+                  onClose={onClose}
+                />
+              )}
+              {/* hidden, not unmounted, while pasting, so going back keeps what was typed */}
+              <div hidden={showPaste}>
+                <QuestionForm
+                  key={formKey}
+                  books={books}
+                  initial={initialForEdit}
+                  fixedBookId={paper.blueprint.bookId}
+                  typeFromParent={pickType}
+                  targetMarks={section.marksEach}
+                  allowedChapterIds={composerChapterIds(
+                    paper.blueprint.chapters.map((c) => c.chapterId),
+                    orChapterLocked ? mainChapterId : null,
+                  )}
+                  preferredChapterId={orRule === "guideline" ? (mainChapterId ?? undefined) : undefined}
+                  chapterHint={orRuleLine ?? undefined}
+                  openMarks={chapterGaps}
+                  submitLabel={
+                    isAlternate
+                      ? "Save to Bank & Set as Alternate"
+                      : isReplacing
+                      ? "Save to Bank & Use as Replacement"
+                      : "Save to Bank & Add to Paper"
+                  }
+                  onCancel={() => {
+                    setInitialForEdit(undefined);
+                    onClose();
+                  }}
+                  onSaved={async (q) => {
+                    // The question is already in the bank. Clear the form only once it is on the paper; if the paper
+                    // refused it, keep the text on screen so the teacher can fix the marks/chapter instead of retyping.
+                    // Reopen it as an edit of the saved question so the next try updates it instead of saving a duplicate.
+                    const placedOk = await add(q.id);
+                    setInitialForEdit(placedOk ? undefined : q);
+                    setFormKey((k) => k + 1);
+                  }}
+                />
+              </div>
+            </div>
           )
         ) : (
           /* tab === "ai" */
@@ -915,7 +939,7 @@ export function QuestionPicker({
                     <select
                       className="input text-xs"
                       value={aiChapterId}
-                      disabled={isAlternate && Boolean(activeItem)}
+                      disabled={orChapterLocked}
                       onChange={(e) => setAiChapterId(e.target.value)}
                     >
                       {openChapters.map((c) => {
