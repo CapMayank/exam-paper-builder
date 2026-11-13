@@ -5,6 +5,7 @@ import { paperStatus } from "@/lib/blueprint";
 import { resolvePaperExamType } from "@/lib/constants";
 import { resolveBoardAndSubjectCode } from "@/lib/curriculumContract";
 import { detectPaperLanguage, type PaperLanguage } from "@/lib/localization";
+import { withEffectiveAllowedTypes } from "@/lib/sectionTypes";
 import { assertCanManageScope, loadPaperView, toPlacedItems } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { paperCreateSchema } from "@/lib/schemas";
@@ -20,7 +21,7 @@ export const GET = route(async (req) => {
           examType: true,
           curriculumMode: true,
           book: { select: { title: true, subject: true, className: true } },
-          sections: { select: { id: true, title: true, type: true, count: true, marksEach: true } },
+          sections: { select: { id: true, title: true, type: true, count: true, marksEach: true, allowedTypesJson: true } },
           chapters: { select: { chapterId: true, marks: true, unitKey: true, unitTitle: true } },
         },
       },
@@ -43,10 +44,12 @@ export const GET = route(async (req) => {
   const papers = keepActive(allPapers, (p) => p.blueprint.book, scope);
   return papers.map(({ blueprint, items, ...p }) => {
     const resolvedExamType = resolvePaperExamType({ ...p, blueprint });
-    const placedItems = toPlacedItems(blueprint.sections, items);
+    // the same flexible-marks view of each section as the builder, so the list and the builder never disagree
+    const sections = blueprint.sections.map((sec) => withEffectiveAllowedTypes(sec, blueprint.book));
+    const placedItems = toPlacedItems(sections, items);
     const status = paperStatus(
       {
-        sections: blueprint.sections,
+        sections,
         chapters: blueprint.chapters.map((c) => ({ chapterId: c.chapterId, marks: c.marks, unitKey: c.unitKey, unitTitle: c.unitTitle })),
       },
       placedItems,

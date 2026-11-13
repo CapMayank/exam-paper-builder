@@ -15,6 +15,8 @@ export interface PaperCompletenessInput {
       count: number;
       marksEach: number;
       orChoiceMode?: string;
+      allowedTypesJson?: string | null;
+      flexible?: boolean;
     }>;
     chapters?: Array<{
       chapterId: string;
