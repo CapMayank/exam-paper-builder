@@ -6,7 +6,12 @@ import { diagnosePaperImplications, paperStatus, questionSlotMarks, subpartsMark
 import { allowedTypesFor, isTypeAllowed } from "./sectionTypes";
 import { componentImplications, parseComponents } from "./languageComponents";
 import { blueprintInclude } from "./blueprints";
-import { evaluatePaperInternalChoiceCompliance, paperSectionChoiceRequirement } from "./internalChoiceRules";
+import {
+  evaluatePaperInternalChoiceCompliance,
+  orChapterRefusal,
+  orChapterRule,
+  paperSectionChoiceRequirement,
+} from "./internalChoiceRules";
 import {
   bookScope,
   canManageScope,
@@ -324,12 +329,9 @@ export async function assertValidOrChoice(
     const allowed = allowedTypesFor(section);
     throw new HttpError(400, allowed.length === 1 ? `Alternate question must be of type ${allowed[0]}` : `Alternate question must be one of: ${allowed.join(", ")}`);
   }
-  if (candidate.chapterId !== primary.chapterId) {
-    const ch = paper.blueprint.chapters.find((c) => c.chapterId === primary.chapterId)?.chapter;
-    throw new HttpError(
-      400,
-      `Board Guardrail Violation: Alternate (OR) choice must match primary question chapter (${ch ? `Chapter ${ch.number}: ${ch.title}` : "the same chapter"}).`,
-    );
+  // up to class 8 the same chapter is only a guideline; from class 9 it is required
+  if (candidate.chapterId !== primary.chapterId && orChapterRule(paper.blueprint.book.className) === "required") {
+    throw new HttpError(400, orChapterRefusal(paper.blueprint.chapters.find((c) => c.chapterId === primary.chapterId)?.chapter));
   }
   const marksProblem = subpartsMarksProblem(section, candidate);
   if (marksProblem) throw new HttpError(400, `Board Guardrail Violation: Alternate (OR) choice ${marksProblem.replace("total subpart marks", "total marks")}`);

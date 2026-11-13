@@ -17,6 +17,7 @@ vi.mock("@/lib/gemini", async (importOriginal) => {
 
 import { POST as generateSection } from "@/app/api/papers/[id]/ai-generate-section/route";
 import { DEFAULT_GENERATION_MODEL } from "./gemini";
+import { OR_CHAPTER_REQUIRED } from "./internalChoiceRules";
 import { prisma } from "./prisma";
 
 /** Replace-with-AI and Change-OR-with-AI go through POST /api/papers/:id/ai-generate-section with one slot. */
@@ -158,12 +159,28 @@ describe("AI replace and OR alternative use the section pipeline", () => {
     }
   });
 
-  it("refuses an alternative from another chapter before calling the model", async () => {
+  it("from class 9, refuses an alternative from another chapter before calling the model", async () => {
+    // the same-chapter rule is required from class 9 only, so this check runs on a class 10 book
+    await prisma.book.update({ where: { id: bookId }, data: { className: "Class 10" } });
+    try {
+      const res = await post(
+        oneSlot({ alternateForItemId: itemId, slots: [{ slotIndex: 0, chapterId: ch2, chapterNumber: 2, chapterTitle: "Sound", marks: 3 }] }),
+      );
+      expect(res.status).toBe(422);
+      expect((await res.json()).error).toBe(`${OR_CHAPTER_REQUIRED} (Chapter 1: Light)`);
+      expect(generateMock).not.toHaveBeenCalled();
+    } finally {
+      await prisma.book.update({ where: { id: bookId }, data: { className: "Class 8" } });
+    }
+  });
+
+  it("up to class 8, writes an alternative from another chapter", async () => {
     const res = await post(
       oneSlot({ alternateForItemId: itemId, slots: [{ slotIndex: 0, chapterId: ch2, chapterNumber: 2, chapterTitle: "Sound", marks: 3 }] }),
     );
-    expect(res.status).toBe(422);
-    expect(generateMock).not.toHaveBeenCalled();
+    expect((await res.clone().json()).error).toBeUndefined();
+    expect(res.status).toBe(200);
+    expect(generateMock.mock.calls[0][0].slots[0].chapterId).toBe(ch2);
   });
 
   it("refuses an alternative for a question that is not in the paper", async () => {

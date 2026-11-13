@@ -51,7 +51,7 @@ describe("edit the OR question of a paper slot", () => {
       data: { name: `OR edit ${stamp}`, email: `or-edit-${stamp}@test.internal`, passwordHash: "hash", role: "TEACHER", active: true },
     });
     userId = user.id;
-    const book = await prisma.book.create({ data: { title: `OR edit ${stamp}`, subject: "Science", className: "Class 8", academicSession: "2026–27" } });
+    const book = await prisma.book.create({ data: { title: `OR edit ${stamp}`, subject: "Science", className: "Class 10", academicSession: "2026–27" } });
     bookId = book.id;
     ch1 = (await prisma.chapter.create({ data: { bookId, number: 1, title: "Light" } })).id;
     ch2 = (await prisma.chapter.create({ data: { bookId, number: 2, title: "Sound" } })).id;
@@ -134,10 +134,10 @@ describe("edit the OR question of a paper slot", () => {
     expect(slot.orQuestion.text).toMatch(/^Edited OR/);
   });
 
-  it("refuses an OR question moved to another chapter", async () => {
+  it("refuses an OR question moved to another chapter (class 9 and above)", async () => {
     const res = await put({ mode: "UPDATE_MASTER", target: "or", question: question({ chapterId: ch2 }) });
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toMatch(/must match primary question chapter/);
+    expect((await res.json()).error).toMatch(/must be from the same chapter as the main question/);
     expect((await prisma.question.findUnique({ where: { id: orId } }))?.text).toMatch(/^Original OR/);
   });
 

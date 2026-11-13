@@ -319,7 +319,7 @@ describe("Milestone 2 Empirical Stress Tests: Route Guardrails & Subparts Logic"
       expect(res.status).toBe(400);
 
       const data = await res.json();
-      expect(data.error).toContain("Board Guardrail Violation: Alternate (OR) choice must match primary question chapter");
+      expect(data.error).toContain("An OR question must be from the same chapter as the main question.");
       expect(data.error).toContain("Chapter 101: Stress Ch 1");
 
       // Verify DB state remained uncorrupted

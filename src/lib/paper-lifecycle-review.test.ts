@@ -243,24 +243,30 @@ describe("paper lifecycle review", () => {
 
   describe("internal choice (OR)", () => {
     it("an OR sent with add or replace is checked like any other OR", async () => {
-      const primary = await mk("LONG", ch1, "Primary long question on light");
-      const otherChapter = await mk("LONG", ch2, "A long question from another chapter");
-      const add = await call(addItem as Handler, "POST", `${P()}/questions`, { id: paperId }, { sectionId: sec.LONG, questionId: primary.id, orQuestionId: otherChapter.id });
-      expect(add.status).toBe(400);
-      expect(add.data.error).toMatch(/must match primary question chapter/);
-      expect(await prisma.paperQuestion.count({ where: { paperId } })).toBe(0);
+      // the same-chapter rule is required from class 9 only, so this check runs on a class 10 book
+      await prisma.book.update({ where: { id: bookId }, data: { className: "Class 10" } });
+      try {
+        const primary = await mk("LONG", ch1, "Primary long question on light");
+        const otherChapter = await mk("LONG", ch2, "A long question from another chapter");
+        const add = await call(addItem as Handler, "POST", `${P()}/questions`, { id: paperId }, { sectionId: sec.LONG, questionId: primary.id, orQuestionId: otherChapter.id });
+        expect(add.status).toBe(400);
+        expect(add.data.error).toMatch(/must be from the same chapter as the main question/);
+        expect(await prisma.paperQuestion.count({ where: { paperId } })).toBe(0);
 
-      const item = await place(sec.LONG, primary.id, 0);
-      const replacement = await mk("LONG", ch1, "Replacement long question on light");
-      const rep = await call(patchItem as Handler, "PATCH", `${P()}/questions/${item.id}`, { id: paperId, itemId: item.id }, {
-        replaceWithQuestionId: replacement.id,
-        orQuestionId: otherChapter.id,
-      });
-      expect(rep.status).toBe(400);
-      expect((await prisma.paperQuestion.findUnique({ where: { id: item.id } }))?.questionId).toBe(primary.id);
+        const item = await place(sec.LONG, primary.id, 0);
+        const replacement = await mk("LONG", ch1, "Replacement long question on light");
+        const rep = await call(patchItem as Handler, "PATCH", `${P()}/questions/${item.id}`, { id: paperId, itemId: item.id }, {
+          replaceWithQuestionId: replacement.id,
+          orQuestionId: otherChapter.id,
+        });
+        expect(rep.status).toBe(400);
+        expect((await prisma.paperQuestion.findUnique({ where: { id: item.id } }))?.questionId).toBe(primary.id);
 
-      const missing = await call(addItem as Handler, "POST", `${P()}/questions`, { id: paperId }, { sectionId: sec.LONG, questionId: replacement.id, orQuestionId: "no-such-question" });
-      expect(missing.status).toBe(404);
+        const missing = await call(addItem as Handler, "POST", `${P()}/questions`, { id: paperId }, { sectionId: sec.LONG, questionId: replacement.id, orQuestionId: "no-such-question" });
+        expect(missing.status).toBe(404);
+      } finally {
+        await prisma.book.update({ where: { id: bookId }, data: { className: "Class 8" } });
+      }
     });
 
     it("a section the blueprint marks 'OR required' accepts an OR, and reports the same thing everywhere", async () => {

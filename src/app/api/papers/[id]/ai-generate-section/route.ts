@@ -6,7 +6,12 @@ import {
   quotaErrorText,
   type GeneratePaperSectionSlot,
 } from "@/lib/gemini";
-import { isParaphraseOrDuplicateChoice, resolveInternalChoiceRequirement } from "@/lib/internalChoiceRules";
+import {
+  isParaphraseOrDuplicateChoice,
+  orChapterRefusal,
+  orChapterRule,
+  resolveInternalChoiceRequirement,
+} from "@/lib/internalChoiceRules";
 import { detectPaperLanguage, type PaperLanguage } from "@/lib/localization";
 import { DEFAULT_DIFFICULTY_PROFILE } from "@/lib/difficultyProfiles";
 import { slotRowRole, slotTaskDirective } from "@/lib/paperAutogen";
@@ -75,16 +80,20 @@ export const POST = route(async (req, { id }, user) => {
     throw new HttpError(422, "The alternative (OR) must be generated in the main question's own section.");
   }
   if (alternateFor && slots.length !== 1) throw new HttpError(400, "An alternative (OR) question is generated one at a time.");
-  if (alternateFor && (slots as GeneratePaperSectionSlot[])[0].chapterId !== alternateFor.question.chapterId) {
-    const ch = alternateFor.question.chapter;
-    throw new HttpError(
-      422,
-      `Board Guardrail Violation: Alternate (OR) choice must match primary question chapter (Chapter ${ch?.number}: ${ch?.title}).`,
-    );
+  // up to class 8 the same chapter is only a guideline; from class 9 it is required
+  if (
+    alternateFor &&
+    (slots as GeneratePaperSectionSlot[])[0].chapterId !== alternateFor.question.chapterId &&
+    orChapterRule(paper.blueprint.book.className) === "required"
+  ) {
+    throw new HttpError(422, orChapterRefusal(alternateFor.question.chapter));
   }
   // the model sees the main question, so it writes an equivalent alternative instead of guessing (or paraphrasing)
+  // up to class 8 the teacher may ask for the alternative from another chapter: the slot's chapter is then the one to use
+  const alternateChapter =
+    alternateFor && (slots as GeneratePaperSectionSlot[])[0].chapterId !== alternateFor.question.chapterId ? "the chapter named for this slot" : "same chapter";
   const alternateDirective = alternateFor
-    ? `This question will be printed as the internal-choice alternative (OR) to the main question below. Write an equivalent question: same chapter, same marks and marking depth, same difficulty, but testing a different subtopic, method or example. It must NOT be a paraphrase or a reworded copy of the main question, and must not reuse its numbers or scenario. Main question: """${alternateFor.question.text.slice(0, 1500)}"""`
+    ? `This question will be printed as the internal-choice alternative (OR) to the main question below. Write an equivalent question: ${alternateChapter}, same marks and marking depth, same difficulty, but testing a different subtopic, method or example. It must NOT be a paraphrase or a reworded copy of the main question, and must not reuse its numbers or scenario. Main question: """${alternateFor.question.text.slice(0, 1500)}"""`
     : "";
 
   const validBookChapterIds = new Set(paper.blueprint.chapters.map((c) => c.chapterId));

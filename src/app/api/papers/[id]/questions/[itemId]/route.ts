@@ -9,6 +9,7 @@ import {
   loadPaperView,
   toPlacedItems,
 } from "@/lib/papers";
+import { orChapterRefusal, orChapterRule } from "@/lib/internalChoiceRules";
 import { parseComponents } from "@/lib/languageComponents";
 import { prisma } from "@/lib/prisma";
 import { questionColumns, questionCopyData } from "@/lib/questionWrite";
@@ -121,7 +122,7 @@ export const PATCH = route(async (req, { id, itemId }, user) => {
       updateData.orQuestionId = null;
     } else if (orQuestionId !== undefined) {
       updateData.orQuestionId = orQuestionId;
-    } else if (item.orQuestionId && candidate.chapterId !== item.question.chapterId) {
+    } else if (item.orQuestionId && candidate.chapterId !== item.question.chapterId && orChapterRequired(item)) {
       updateData.orQuestionId = null;
     }
     await prisma.paperQuestion.update({ where: { id: itemId }, data: updateData });
@@ -168,20 +169,21 @@ export const PATCH = route(async (req, { id, itemId }, user) => {
 type EditableItem = Awaited<ReturnType<typeof editableItem>>;
 type EditedQuestion = z.infer<typeof editPaperItemSchema>["question"];
 
+/** From class 9 an OR must share the main question's chapter; up to class 8 that is only a guideline. */
+function orChapterRequired(item: EditableItem) {
+  return orChapterRule(item.paper.blueprint.book.className) === "required";
+}
+
 /**
  * Edits the slot's alternate (OR) question in place, under the same rules as linking one (PATCH orQuestionId):
- * same chapter as the main question, a type the section accepts, subparts adding up to the slot's marks, and not
- * the main question itself. An OR does not use up chapter marks, so there is no quota check.
+ * same chapter as the main question (from class 9), a type the section accepts, subparts adding up to the slot's
+ * marks, and not the main question itself. An OR does not use up chapter marks, so there is no quota check.
  */
 async function editOrQuestion(item: EditableItem, mode: "UPDATE_MASTER" | "FORK_COPY", qInput: EditedQuestion, user: SessionUser, paperId: string) {
   const or = item.orQuestion;
   if (!item.orQuestionId || !or) throw new HttpError(400, "This slot has no alternate (OR) question to edit.");
-  if (qInput.chapterId !== item.question.chapterId) {
-    const ch = item.question.chapter;
-    throw new HttpError(
-      400,
-      `Board Guardrail Violation: Alternate (OR) choice must match primary question chapter (Chapter ${ch.number}: ${ch.title}).`,
-    );
+  if (qInput.chapterId !== item.question.chapterId && orChapterRequired(item)) {
+    throw new HttpError(400, orChapterRefusal(item.question.chapter));
   }
   if (!isTypeAllowed(item.section, qInput.type)) {
     const allowed = allowedTypesFor(item.section);
@@ -277,7 +279,7 @@ export const PUT = route(async (req, { id, itemId }, user) => {
       );
     }
     await prisma.question.update({ where: { id: item.questionId }, data });
-    if (item.orQuestionId && item.orQuestion && item.orQuestion.chapterId !== qInput.chapterId) {
+    if (item.orQuestionId && item.orQuestion && item.orQuestion.chapterId !== qInput.chapterId && orChapterRequired(item)) {
       await prisma.paperQuestion.update({
         where: { id: itemId },
         data: { orQuestionId: null },
@@ -290,7 +292,7 @@ export const PUT = route(async (req, { id, itemId }, user) => {
       data: { ...questionCopyData(item.question), ...data, createdById: user.id },
     });
     const updateData: { questionId: string; orQuestionId?: null } = { questionId: forked.id };
-    if (item.orQuestionId && item.orQuestion && item.orQuestion.chapterId !== qInput.chapterId) {
+    if (item.orQuestionId && item.orQuestion && item.orQuestion.chapterId !== qInput.chapterId && orChapterRequired(item)) {
       updateData.orQuestionId = null;
     }
     await prisma.paperQuestion.update({

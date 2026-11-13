@@ -279,6 +279,35 @@ export function parseClassNumber(className?: string | null): number | null {
   return m ? Number(m[1]) : null;
 }
 
+export type OrChapterRule = "required" | "guideline";
+
+export const OR_CHAPTER_GUIDELINE = "An OR question is usually from the same chapter as the main question.";
+export const OR_CHAPTER_REQUIRED = "An OR question must be from the same chapter as the main question.";
+
+const ROMAN_CLASS: Record<string, number> = { I: 1, II: 2, III: 3, IV: 4, V: 5, VI: 6, VII: 7, VIII: 8, IX: 9, X: 10, XI: 11, XII: 12 };
+
+/** The class number in a class name: Arabic digits ("Class 10", "10th") or a whole-word Roman numeral I to XII ("Class X"). */
+function orRuleClassNumber(className: string): number | null {
+  const digits = className.match(/\b(1[0-2]|[1-9])(?:st|nd|rd|th)?\b/i);
+  if (digits) return Number(digits[1]);
+  const roman = className.match(/\b(XII|XI|IX|X|VIII|VII|VI|IV|V|III|II|I)\b/);
+  return roman ? ROMAN_CLASS[roman[1]] : null;
+}
+
+/**
+ * Whether an OR question must share the main question's chapter: "required" for classes 9 to 12; "guideline" for
+ * classes 1 to 8 and for any class name without a readable number ("Nursery", "KG"), where the app only advises.
+ */
+export function orChapterRule(className?: string | null): OrChapterRule {
+  const n = className ? orRuleClassNumber(className.trim()) : null;
+  return n !== null && n >= 9 ? "required" : "guideline";
+}
+
+/** The refusal for an OR from another chapter where the rule is required, naming the main question's chapter. */
+export function orChapterRefusal(chapter?: { number: number; title: string } | null): string {
+  return chapter ? `${OR_CHAPTER_REQUIRED} (Chapter ${chapter.number}: ${chapter.title})` : OR_CHAPTER_REQUIRED;
+}
+
 export function detectExaminationBoard(context: {
   board?: string | null;
   schoolName?: string | null;
@@ -1242,7 +1271,13 @@ export function evaluatePaperInternalChoiceCompliance(params: {
           continue;
         }
 
-        if (orQ.chapterId && item.question.chapterId && orQ.chapterId !== item.question.chapterId) {
+        // up to class 8 the same chapter is only a guideline, so it does not make the OR invalid
+        if (
+          orQ.chapterId &&
+          item.question.chapterId &&
+          orQ.chapterId !== item.question.chapterId &&
+          orChapterRule(params.className) === "required"
+        ) {
           allSlots.push({
             itemId: item.id,
             questionNumber: currentQNum,
