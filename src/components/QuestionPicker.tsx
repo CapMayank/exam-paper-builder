@@ -9,7 +9,8 @@ import { QuestionView } from "@/components/QuestionView";
 import { ErrorBanner, Modal, Spinner } from "@/components/ui";
 import { slotPlacement, subpartsMarksProblem, toPlacedItems, whyCannotAdd, type BlueprintDef } from "@/lib/blueprint";
 import { allowedTypesFor, isTypeAllowed } from "@/lib/sectionTypes";
-import { composerChapterIds } from "@/lib/questionTagging";
+import { composerChapterIds, SKILLS } from "@/lib/questionTagging";
+import { aiQuestionPayload } from "@/lib/aiQuestionPayload";
 import { api, retryTransient } from "@/lib/client";
 import {
   cleanMatchItem,
@@ -22,13 +23,13 @@ import {
   PaperLanguage,
   parseMatchColumnPairs,
   QUESTION_TYPE_LABEL,
-  serializeMatchColumnPair,
 } from "@/lib/constants";
-import { type Book, type PaperData, type QuestionDto, type Section, subpartsTotalMarks, normalizeSubpartMarks } from "@/lib/types";
+import { type Book, type PaperData, type QuestionDto, type Section, subpartsTotalMarks } from "@/lib/types";
 import { OR_CHAPTER_GUIDELINE, OR_CHAPTER_REQUIRED, orChapterRule, paperSectionChoiceRequirement } from "@/lib/internalChoiceRules";
 import {
   canPasteSeveral,
   difficultyLabel,
+  skillLabel,
   modalTitle as buildModalTitle,
   openingTab,
   showTypeChips,
@@ -43,11 +44,6 @@ import type { GeneratedPaperQuestion, GeneratedQuestionItem } from "@/lib/gemini
  * Adds questions to one blueprint section, either from the bank (smartly ordered) or by writing a new one,
  * which is saved to the bank first so it's reusable later.
  */
-/** "Answer any N of these" survives only when it really is a choice among the parts. */
-function keptAttemptCount(n: unknown, parts: number): { attemptCount?: number } {
-  return typeof n === "number" && Number.isInteger(n) && n > 0 && n < parts ? { attemptCount: n } : {};
-}
-
 export function QuestionPicker({
   paper,
   section,
@@ -103,7 +99,7 @@ export function QuestionPicker({
   // an OR question starts on its main question's chapter (replaced by the neediest one if the blueprint lacks it)
   const [aiChapterId, setAiChapterId] = useState<string>(mainChapterId ?? "");
   const [aiDifficulty, setAiDifficulty] = useState<"EASY" | "MEDIUM" | "HARD">("MEDIUM");
-  const [aiCognitiveLevel, setAiCognitiveLevel] = useState<string>("APPLYING");
+  const [aiCognitiveLevel, setAiCognitiveLevel] = useState<string>("UNDERSTANDING");
   const [aiLanguage, setAiLanguage] = useState<PaperLanguage>(() => detectPaperLanguage(paper, paper.items));
   const [aiTopicContext, setAiTopicContext] = useState<string>("");
   const [aiBusy, setAiBusy] = useState(false);
@@ -400,37 +396,16 @@ export function QuestionPicker({
 
       const choiceReq = paperSectionChoiceRequirement(paper, section);
 
-      const isMatch = pickType === "MATCH_COLUMN";
-      let processedOptions = aiGenerated.options || [];
-      if (isMatch) {
-        const pairs = parseMatchColumnPairs(aiGenerated.options || [], aiGenerated.text, aiGenerated.explanation);
-        if (pairs.length > 0 && pairs.some((p) => p.left && p.right)) {
-          processedOptions = pairs.map((p) => serializeMatchColumnPair(p.left, p.right));
-        }
-      }
-
-      const rawSubparts = (aiGenerated.subparts || []).map((sp, idx) => ({
-        label: sp.label || `(${idx + 1})`,
-        text: sp.text,
-        marks: Number(sp.marks) || 1,
-        answer: sp.answer || "",
-        options: Array.isArray(sp.options) && sp.options.length > 0 ? sp.options.map((o: string) => cleanOptionText(String(o))) : undefined,
-      }));
-      const normalizedSubparts = rawSubparts.length > 0 ? normalizeSubpartMarks(rawSubparts, marksToGenerate, (aiGenerated as any).attemptCount) : [];
-
-      const payload = {
-        bookId: paper.blueprint.bookId,
+      const bookId = paper.blueprint.bookId;
+      const payload = aiQuestionPayload({
+        generated: aiGenerated,
+        bookId,
         chapterId: aiChapterId,
         type: pickType,
-        text: aiGenerated.text,
-        options: processedOptions,
-        subparts: normalizedSubparts,
-        ...keptAttemptCount((aiGenerated as { attemptCount?: number }).attemptCount, normalizedSubparts.length),
-        answer: aiGenerated.answer || "",
+        slotMarks: marksToGenerate,
         difficulty: aiDifficulty,
-        spaceMm: 0, // classes 1–12 answer in a separate copy
-        showGrid: false,
-      };
+        skill: aiCognitiveLevel,
+      });
 
       const created = await api<QuestionDto>("/api/questions", {
         method: "POST",
@@ -439,28 +414,15 @@ export function QuestionPicker({
 
       let createdOrId: string | null = null;
       if (!isAlternate && !choiceReq.forbidden && aiGenerated.orQuestion && aiGenerated.orQuestion.text?.trim()) {
-        const orProcessedOptions = aiGenerated.orQuestion.options || [];
-        const orRawSubparts = (aiGenerated.orQuestion.subparts || []).map((sp, idx) => ({
-          label: sp.label || `(${idx + 1})`,
-          text: sp.text,
-          marks: Number(sp.marks) || 1,
-          answer: sp.answer || "",
-          options: Array.isArray(sp.options) && sp.options.length > 0 ? sp.options.map((o: string) => cleanOptionText(String(o))) : undefined,
-        }));
-        const orNormalizedSubparts = orRawSubparts.length > 0 ? normalizeSubpartMarks(orRawSubparts, marksToGenerate, (aiGenerated.orQuestion as any).attemptCount) : [];
-        const orPayload = {
-          bookId: paper.blueprint.bookId,
+        const orPayload = aiQuestionPayload({
+          generated: aiGenerated.orQuestion,
+          bookId,
           chapterId: aiChapterId,
           type: aiGenerated.orQuestion.type || pickType,
-          text: aiGenerated.orQuestion.text,
-          options: orProcessedOptions,
-          subparts: orNormalizedSubparts,
-          ...keptAttemptCount((aiGenerated.orQuestion as { attemptCount?: number }).attemptCount, orNormalizedSubparts.length),
-          answer: aiGenerated.orQuestion.answer || "",
-          difficulty: aiGenerated.orQuestion.difficulty || aiDifficulty,
-          spaceMm: 0, // classes 1–12 answer in a separate copy
-          showGrid: false,
-        };
+          slotMarks: marksToGenerate,
+          difficulty: aiDifficulty,
+          skill: aiCognitiveLevel,
+        });
         const createdOr = await api<QuestionDto>("/api/questions", {
           method: "POST",
           json: orPayload,
@@ -479,38 +441,18 @@ export function QuestionPicker({
   function handleEditAiQuestion() {
     if (!aiGenerated) return;
     const selectedChapter = paper.blueprint.chapters.find((c) => c.chapterId === aiChapterId)?.chapter;
-    const isMatch = pickType === "MATCH_COLUMN";
-    let processedOptions = aiGenerated.options || [];
-    if (isMatch) {
-      const pairs = parseMatchColumnPairs(aiGenerated.options || [], aiGenerated.text, aiGenerated.explanation);
-      if (pairs.length > 0 && pairs.some((p) => p.left && p.right)) {
-        processedOptions = pairs.map((p) => serializeMatchColumnPair(p.left, p.right));
-      }
-    }
-
-    const rawSubparts = (aiGenerated.subparts || []).map((sp, idx) => ({
-      label: sp.label || `(${idx + 1})`,
-      text: sp.text,
-      marks: Number(sp.marks) || 1,
-      answer: sp.answer || "",
-      options: Array.isArray(sp.options) && sp.options.length > 0 ? sp.options.map((o: string) => cleanOptionText(String(o))) : undefined,
-    }));
-    const normalizedSubparts = rawSubparts.length > 0 ? normalizeSubpartMarks(rawSubparts, marksToGenerate, (aiGenerated as any).attemptCount) : [];
-
     const dummyDto: QuestionDto = {
       id: "",
-      bookId: paper.blueprint.bookId,
-      chapterId: aiChapterId,
-      type: pickType,
-      text: aiGenerated.text,
-      options: processedOptions,
-      subparts: normalizedSubparts,
-      ...keptAttemptCount((aiGenerated as { attemptCount?: number }).attemptCount, normalizedSubparts.length),
-      answer: aiGenerated.answer || "",
-      difficulty: aiDifficulty,
+      ...aiQuestionPayload({
+        generated: aiGenerated,
+        bookId: paper.blueprint.bookId,
+        chapterId: aiChapterId,
+        type: pickType,
+        slotMarks: marksToGenerate,
+        difficulty: aiDifficulty,
+        skill: aiCognitiveLevel,
+      }),
       imagePath: null,
-      spaceMm: 0, // classes 1–12 answer in a separate copy
-      showGrid: false,
       createdAt: new Date().toISOString(),
       chapter: selectedChapter
         ? {
@@ -964,7 +906,19 @@ export function QuestionPicker({
                     >
                       {DIFFICULTIES.map((d) => (
                         <option key={d} value={d}>
-                          {d}
+                          {difficultyLabel(d)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Skill */}
+                  <div>
+                    <label className="label text-[11px]">Skill</label>
+                    <select className="input text-xs" value={aiCognitiveLevel} onChange={(e) => setAiCognitiveLevel(e.target.value)}>
+                      {SKILLS.map((s) => (
+                        <option key={s.value} value={s.value}>
+                          {s.label}
                         </option>
                       ))}
                     </select>
@@ -1035,8 +989,10 @@ export function QuestionPicker({
                       )}
                     </div>
                     <div className="flex items-center gap-1.5 text-xs">
-                      <span className="badge font-bold">{aiGenerated.difficulty}</span>
-                      <span className="badge badge-indigo font-bold">{aiGenerated.cognitiveLevel}</span>
+                      <span className="badge font-bold">{difficultyLabel(aiGenerated.difficulty)}</span>
+                      {skillLabel(aiGenerated.cognitiveLevel) && (
+                        <span className="badge badge-indigo font-bold">{skillLabel(aiGenerated.cognitiveLevel)}</span>
+                      )}
                       <span className="badge badge-emerald font-bold">
                         {aiGenerated.subparts && aiGenerated.subparts.length > 0
                           ? `${subpartsTotalMarks(aiGenerated.subparts)} Mark(s)`
