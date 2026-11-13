@@ -7,6 +7,12 @@ describe("aiDraftType", () => {
     expect(aiDraftType("MCQ", ["a", "b"])).toBe("MCQ");
     expect(aiDraftType("CASE_STUDY", [])).toBe("CASE_STUDY");
   });
+  it("ignores case and surrounding spaces, and accepts a type's label", () => {
+    expect(aiDraftType("mcq", [])).toBe("MCQ");
+    expect(aiDraftType(" short ", [])).toBe("SHORT");
+    expect(aiDraftType("Long Answer", [])).toBe("LONG");
+    expect(aiDraftType("Short Answer", [])).toBe("SHORT");
+  });
   it("falls back to SHORT for a type the app does not have", () => {
     expect(aiDraftType("NUMERICAL", [])).toBe("SHORT");
     expect(aiDraftType("", undefined)).toBe("SHORT");

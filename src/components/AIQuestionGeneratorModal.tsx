@@ -16,7 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { Modal, Spinner, useToast } from "@/components/ui";
-import { cleanOptionText, type PaperLanguage } from "@/lib/constants";
+import { cleanOptionText, QUESTION_TYPE_LABEL, type PaperLanguage, type QuestionType } from "@/lib/constants";
 import { api, retryTransient } from "@/lib/client";
 import { MathText } from "./MathText";
 import { QuestionContent } from "./QuestionContent";
@@ -535,7 +535,7 @@ export function AIQuestionGeneratorModal({
             <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
               <div className="flex items-center gap-2">
                 <span className="rounded bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-800">
-                  {activeQuestion.type} · {activeQuestion.marks} Mark{activeQuestion.marks > 1 ? "s" : ""}
+                  {QUESTION_TYPE_LABEL[activeQuestion.type as QuestionType] ?? activeQuestion.type} · {activeQuestion.marks} Mark{activeQuestion.marks > 1 ? "s" : ""}
                 </span>
                 <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
                   {difficultyLabel(activeQuestion.difficulty)}
