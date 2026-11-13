@@ -1582,38 +1582,6 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                     {noticeOpen ? <ChevronUp size={14} aria-hidden /> : <ChevronDown size={14} aria-hidden />}
                   </span>
                 </button>
-                <div className="flex items-center gap-2">
-                  {canEditPaper && (
-                    <>
-                      {noticeItems.some((i) => i.code === "SECTION_UNDERFILLED") && (
-                        <button
-                          type="button"
-                          className="btn btn-xs !bg-indigo-600 !text-white hover:!bg-indigo-700 shadow-2xs font-semibold"
-                          disabled={autofilling}
-                          onClick={handleAutofill}
-                          title="Automatically fill empty question slots from existing question bank"
-                        >
-                          <Sparkles size={12} className={autofilling ? "animate-spin" : ""} />
-                          <span>{autofilling ? "Auto-Filling..." : "Auto-Fill Missing Slots"}</span>
-                        </button>
-                      )}
-                      {noticeItems.some(
-                        (i) => i.code === "MISSING_INTERNAL_CHOICE" || i.code === "FORBIDDEN_INTERNAL_CHOICE",
-                      ) && (
-                        <button
-                          type="button"
-                          className="btn btn-xs !bg-purple-600 !text-white hover:!bg-purple-700 shadow-2xs font-semibold"
-                          disabled={autofilling}
-                          onClick={handleAutofill}
-                          title="Automatically generate or pair missing OR choices and unlink forbidden choices to comply with blueprint rules"
-                        >
-                          <Sparkles size={12} className={autofilling ? "animate-spin" : ""} />
-                          <span>{autofilling ? "Fixing Choices..." : "Auto-Fix Internal Choices"}</span>
-                        </button>
-                      )}
-                    </>
-                  )}
-                </div>
               </div>
               {noticeOpen && (
               <div id="paper-notice-details" className="space-y-3.5">
@@ -1621,6 +1589,14 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                 {onlyProgressGaps
                   ? "Nothing is wrong, these slots are simply not filled yet:"
                   : "The blueprint linked to this paper was modified. Below is a breakdown of what needs adjustment to maintain examination standards:"}
+                {canEditPaper &&
+                  noticeItems.some(
+                    (i) =>
+                      i.code === "SECTION_UNDERFILLED" ||
+                      i.code === "MISSING_INTERNAL_CHOICE" ||
+                      i.code === "FORBIDDEN_INTERNAL_CHOICE",
+                  ) &&
+                  " Use Bank Auto-Fill above to fix these."}
               </p>
               <div className="grid gap-2.5 sm:grid-cols-2">
                 {noticeItems.map((imp, idx) => (
@@ -1671,49 +1647,14 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                       Welcome to your Exam Paper Workbench
                     </h3>
                     <p className="text-xs text-slate-600 leading-relaxed mt-0.5">
-                      This paper follows the <strong>{blueprint.name}</strong> blueprint ({progress.totalMarks} marks). Here is the fastest way to get started:
+                      This paper follows the <strong>{blueprint.name}</strong> blueprint ({progress.totalMarks} marks).
                     </p>
                   </div>
-                  <div className="grid gap-2.5 sm:grid-cols-3 text-xs pt-1">
-                    <div className="rounded-lg bg-slate-50 p-3 border border-slate-200/80 space-y-1.5">
-                      <div className="font-semibold text-slate-900 flex items-center justify-between gap-1.5">
-                        <div className="flex items-center gap-1.5">
-                          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[11px] font-bold text-white">1</span>
-                          <span>Generate or Pick</span>
-                        </div>
-                      </div>
-                      <p className="text-[11px] text-slate-600 leading-normal">
-                        Generate complete paper using AI according to blueprint quotas, or pick from bank.
-                      </p>
-                      {canEditPaper && (
-                        <button
-                          type="button"
-                          onClick={() => setAiGeneratorOpen(true)}
-                          className="btn bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] py-1 px-2.5 rounded-md font-bold inline-flex items-center gap-1 shadow-2xs mt-1"
-                        >
-                          <Sparkles size={11} /> Generate with AI
-                        </button>
-                      )}
-                    </div>
-                    <div className="rounded-lg bg-slate-50 p-3 border border-slate-200/80 space-y-1">
-                      <div className="font-semibold text-slate-900 flex items-center gap-1.5">
-                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-200 text-[11px] font-bold text-slate-800">2</span>
-                        <span>Print &amp; School Setup</span>
-                      </div>
-                      <p className="text-[11px] text-slate-600 leading-normal">
-                        Switch to the <strong>Print Setup</strong> tab on the left to customize the Sarvodaya header, exam date, booklet layout, and instructions.
-                      </p>
-                    </div>
-                    <div className="rounded-lg bg-slate-50 p-3 border border-slate-200/80 space-y-1">
-                      <div className="font-semibold text-slate-900 flex items-center gap-1.5">
-                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-200 text-[11px] font-bold text-slate-800">3</span>
-                        <span>Export &amp; Finalize</span>
-                      </div>
-                      <p className="text-[11px] text-slate-600 leading-normal">
-                        Use <strong>Export &amp; Print</strong> to print folded A3/A4 booklets, export Word .docx papers, and generate marking schemes.
-                      </p>
-                    </div>
-                  </div>
+                  <ol className="list-decimal space-y-1 pl-4 text-xs text-slate-700">
+                    <li>Fill the paper with Generate with AI or Bank Auto-Fill above, or add questions from a section.</li>
+                    <li>Open the Print Setup tab on the left to set the school header, exam date and instructions.</li>
+                    <li>Use Export &amp; Print when the paper is ready.</li>
+                  </ol>
                 </div>
               </div>
             </div>
@@ -1742,7 +1683,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
             </div>
           )}
 
-          {blueprint.sections.map((s, si) => {
+          {blueprint.sections.map((s) => {
             const items = paper.items.filter((i) => i.sectionId === s.id);
             const st = progress.sections.find((x) => x.id === s.id)!;
             const slotValues = items.map((it) => questionSlotMarks(s, it.question as never));
@@ -2412,16 +2353,6 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                         );
                       })}
                     </ol>
-
-                    {si === blueprint.sections.length - 1 && !progress.complete && (
-                      <div className="rounded-lg bg-indigo-50/60 border border-indigo-100 p-3 text-xs text-indigo-800 flex items-center gap-2 mt-2">
-                        <Sparkles size={15} className="text-indigo-600 shrink-0" />
-                        <span>
-                          Tip: Use <strong>Smart Auto-Fill</strong> at the top to automatically pick suitable questions from
-                          your bank that satisfy all remaining chapter marks!
-                        </span>
-                      </div>
-                    )}
                   </>
                 )}
               </section>
