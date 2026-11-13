@@ -37,7 +37,7 @@ import { distributeMarksByRole, missingUnitRoles } from "@/lib/roleMarks";
 import { rowAllowedTypes } from "@/lib/blueprintSetupPlan";
 import { rowSlotSpecs, slotsWithRoles, templateSlots } from "@/lib/slotPlan";
 import { getLanguageNonChapterUnits } from "@/lib/syllabusImport";
-import { allowedTypesFor, subjectFamily } from "@/lib/sectionTypes";
+import { allowedTypesFor, parseAllowedTypes, subjectFamily, typeLabels, withEffectiveAllowedTypes } from "@/lib/sectionTypes";
 import type { AcademicClassDto, Blueprint, Book, PaperData } from "@/lib/types";
 
 let qtSeq = 0;
@@ -1452,6 +1452,8 @@ function BlueprintEditor({ params, searchParams }: PageProps<"/blueprints/[id]">
                             {/* Other forms this slot may take at the same marks (e.g. grammar in an English 3-mark section) */}
                             {(() => {
                               const accepted = allowedTypesFor(qt);
+                              // with nothing ticked, a class 1 to 8 section still takes the school's usual forms (read-only hint)
+                              const byDefault = parseAllowedTypes(qt.allowedTypesJson).length === 0 ? allowedTypesFor(withEffectiveAllowedTypes(qt, book)).slice(1) : [];
                               const pool = (isPrePrimary ? [...KINDERGARTEN_QUESTION_TYPES, ...STANDARD_QUESTION_TYPES] : STANDARD_QUESTION_TYPES).filter((t) => t !== qt.type);
                               const toggle = (t: string) => {
                                 const next = accepted.includes(t) ? accepted.filter((x) => x !== t) : [...accepted, t];
@@ -1480,6 +1482,11 @@ function BlueprintEditor({ params, searchParams }: PageProps<"/blueprints/[id]">
                                       );
                                     })}
                                   </div>
+                                  {byDefault.length > 0 && (
+                                    <div className="text-[10.5px] text-slate-500">
+                                      Also accepts by default: {typeLabels(byDefault)}. Ticking a form above replaces this list.
+                                    </div>
+                                  )}
                                 </div>
                               );
                             })()}

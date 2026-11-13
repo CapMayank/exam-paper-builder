@@ -2,7 +2,8 @@
 // default form, and `allowedTypesJson` lists the other forms a teacher may use instead at the same marks
 // (e.g. a grammar or passage question in an English paper's 3-mark section). Pure: no I/O.
 
-import { QUESTION_TYPE_LABEL } from "./constants";
+import { isKindergartenType, QUESTION_TYPE_LABEL } from "./constants";
+import { classNumberOf } from "./internalChoiceRules";
 
 /** A question type as the teacher reads it; the stored value when the type has no label. */
 export function typeLabel(type: string): string {
@@ -120,6 +121,29 @@ export function defaultAllowedTypes(type: string, marksEach: number, subject: st
     if (fam === "MATHS") list.push("CASE_STUDY");
   }
   return [type, ...list.filter((t) => t !== type)];
+}
+
+/** The class and subject of the book a blueprint is for: all the widening rule below needs to know. */
+export type SectionBook = { className?: string | null; subject?: string | null };
+
+/**
+ * The allowed-types list a section has in use, as JSON. A stored non-empty list is the admin's and always wins.
+ * Up to class 8, or for a class with no readable number (Nursery, KG), a section with no stored list is an
+ * umbrella ("Short answer, 3 marks") and takes the school's usual forms at its marks (`defaultAllowedTypes`), so a
+ * teacher can put a passage or grammar question in it. From class 9 board patterns keep strict section types, and a
+ * kindergarten section is never widened. Applied where sections are loaded for papers, never written back.
+ */
+export function effectiveAllowedTypesJson(section: TypedSection, book: SectionBook | null | undefined): string {
+  if (parseAllowedTypes(section.allowedTypesJson).length > 0) return section.allowedTypesJson as string;
+  if (isKindergartenType(section.type)) return "[]";
+  const n = classNumberOf(book?.className);
+  if (n !== null && n > 8) return "[]";
+  return JSON.stringify(defaultAllowedTypes(section.type, section.marksEach, book?.subject));
+}
+
+/** The section as papers use it: the same row with its effective allowed-types list. */
+export function withEffectiveAllowedTypes<T extends TypedSection>(section: T, book: SectionBook | null | undefined): T {
+  return { ...section, allowedTypesJson: effectiveAllowedTypesJson(section, book) };
 }
 
 /** The instruction line to print for a placed question: only what the teacher typed; nothing when they typed none. */

@@ -1,4 +1,4 @@
-import { isTypeAllowed } from "@/lib/sectionTypes";
+import { isTypeAllowed, withEffectiveAllowedTypes } from "@/lib/sectionTypes";
 import { body, HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { toQuestionDto } from "@/lib/dto";
@@ -67,14 +67,20 @@ export const PATCH = route(async (req, { id }, user) => {
   return toQuestionDto(updated);
 });
 
+/** A paper slot a bank question sits in: the paper's status, its book (for the section's effective types) and the section. */
+const placedInSelect = {
+  paper: { select: { status: true, blueprint: { select: { book: { select: { className: true, subject: true } } } } } },
+  section: { select: { type: true, marksEach: true, allowedTypesJson: true } },
+} as const;
+
 export const PUT = route(async (req, { id }, user) => {
   const input = await body(req, questionSchema);
   const existing = await prisma.question.findUnique({
     where: { id },
     include: {
       book: { select: { className: true, subject: true } },
-      paperQuestions: { select: { paper: { select: { status: true } }, section: { select: { type: true, marksEach: true, allowedTypesJson: true } } } },
-      orPaperQuestions: { select: { paper: { select: { status: true } }, section: { select: { type: true, marksEach: true, allowedTypesJson: true } } } },
+      paperQuestions: { select: placedInSelect },
+      orPaperQuestions: { select: placedInSelect },
     },
   });
   if (!existing) throw new HttpError(404, "Question not found");
@@ -87,8 +93,9 @@ export const PUT = route(async (req, { id }, user) => {
   }
   // A question already placed in a section must keep a type that section accepts.
   if (
-    existing.paperQuestions.some((p) => !isTypeAllowed(p.section, input.type)) ||
-    existing.orPaperQuestions.some((p) => !isTypeAllowed(p.section, input.type))
+    [...existing.paperQuestions, ...existing.orPaperQuestions].some(
+      (p) => !isTypeAllowed(withEffectiveAllowedTypes(p.section, p.paper.blueprint.book), input.type),
+    )
   ) {
     throw new HttpError(409, "This question is used in a paper section that needs its current type.");
   }

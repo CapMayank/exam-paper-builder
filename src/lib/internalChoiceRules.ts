@@ -314,8 +314,16 @@ function orRuleClassNumber(className: string): number | null {
  * classes 1 to 8 and for any class name without a readable number ("Nursery", "KG"), where the app only advises.
  */
 export function orChapterRule(className?: string | null): OrChapterRule {
-  const n = className ? orRuleClassNumber(className.trim()) : null;
+  const n = classNumberOf(className);
   return n !== null && n >= 9 ? "required" : "guideline";
+}
+
+/**
+ * The class number (1 to 12) a class name gives, read as the OR rule reads it; null when it has none
+ * ("Nursery", "KG"). "Up to class 8" across the app means this is null or at most 8.
+ */
+export function classNumberOf(className?: string | null): number | null {
+  return className ? orRuleClassNumber(className.trim()) : null;
 }
 
 /** True when an OR question from another chapter must be refused (from class 9). */

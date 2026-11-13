@@ -17,6 +17,7 @@ import { missingUnitRoles } from "@/lib/roleMarks";
 import { getLanguageNonChapterUnits } from "@/lib/syllabusImport";
 import { presetSections } from "@/lib/blueprintSetupPlan";
 import { slotsWithRoles } from "@/lib/slotPlan";
+import { withEffectiveAllowedTypes, type SectionBook } from "@/lib/sectionTypes";
 
 const DOMAIN_OF = { PASSAGE: "reading", WRITING: "writing", GRAMMAR: "grammar" } as const;
 
@@ -137,7 +138,7 @@ async function existingFor(bookId: string, exam: SetupExam) {
 type ExistingBlueprint = Awaited<ReturnType<typeof existingFor>>[number];
 
 /** What updating `bp` to `input` would do to its papers, without changing anything. */
-async function updateImpact(bp: ExistingBlueprint, input: BlueprintInput, user: SessionUser): Promise<UpdateImpact> {
+async function updateImpact(bp: ExistingBlueprint, input: BlueprintInput, book: SectionBook, user: SessionUser): Promise<UpdateImpact> {
   const finalised = bp.papers.filter((p) => p.status === "FINAL").length;
   const { sections, removedIds } = matchSectionIds(bp.sections, input.sections);
   const impact: UpdateImpact = { papers: bp.papers.length, finalised, archivedQuestions: 0, papersNeedingReview: 0, revertToDraft: 0 };
@@ -147,7 +148,8 @@ async function updateImpact(bp: ExistingBlueprint, input: BlueprintInput, user: 
   const absorbed = absorbingRows(bp.sections.filter((s) => removedIds.includes(s.id)), sections);
   const removed = new Set(removedIds.filter((rid) => !absorbed.has(rid)));
   const def = {
-    sections: sections.map((s, i) => ({ ...s, id: s.id ?? `new-${i}` })),
+    // judged with each section's effective allowed types, as the paper itself will be
+    sections: sections.map((s, i) => withEffectiveAllowedTypes({ ...s, id: s.id ?? `new-${i}` }, book)),
     chapters: input.chapters.map((c) => ({ chapterId: c.chapterId, marks: c.marks, unitKey: c.unitKey, unitTitle: c.unitTitle })),
   };
   const items = await prisma.paperQuestion.findMany({
@@ -206,7 +208,7 @@ export async function planSetup(exam: SetupExam, rows: SetupRowInput[], user: Se
         name: bp.name,
         totalMarks: totalOf(bp.sections),
         updatedAt: bp.updatedAt.toISOString(),
-        impact: await updateImpact(bp, input, user),
+        impact: await updateImpact(bp, input, book, user),
       });
     }
     out.push(base);

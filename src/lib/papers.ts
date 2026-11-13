@@ -3,7 +3,7 @@ import { HttpError, type SessionUser } from "./api";
 import { resolvePaperExamType } from "./constants";
 import { toQuestionDto } from "./dto";
 import { diagnosePaperImplications, paperStatus, questionSlotMarks, subpartsMarksProblem, toPlacedItems } from "./blueprint";
-import { isTypeAllowed, orTypeRefusal } from "./sectionTypes";
+import { isTypeAllowed, orTypeRefusal, withEffectiveAllowedTypes } from "./sectionTypes";
 import { componentImplications, parseComponents } from "./languageComponents";
 import { blueprintInclude } from "./blueprints";
 import {
@@ -137,7 +137,10 @@ const paperInclude = {
 export async function loadPaperView(id: string) {
   const paper = await prisma.paper.findUnique({ where: { id }, include: paperInclude });
   if (!paper) return null;
-  const { blueprint, items, ...rest } = paper;
+  const { blueprint: stored, items, ...rest } = paper;
+  // every check that reads the view (picker, add, edit, autofill, AI, mismatch flags) sees each section's effective
+  // allowed types; the blueprint row itself is never changed
+  const blueprint = { ...stored, sections: stored.sections.map((s) => withEffectiveAllowedTypes(s, stored.book)) };
   const placedItems = toPlacedItems(blueprint.sections, items);
   const progress = paperStatus(
     {

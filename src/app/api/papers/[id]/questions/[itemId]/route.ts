@@ -1,4 +1,4 @@
-import { isTypeAllowed, orTypeRefusal } from "@/lib/sectionTypes";
+import { isTypeAllowed, orTypeRefusal, withEffectiveAllowedTypes } from "@/lib/sectionTypes";
 import { body, HttpError, route, type SessionUser } from "@/lib/api";
 import { slotPlacement, subpartsMarksProblem, whyCannotAdd } from "@/lib/blueprint";
 import {
@@ -29,7 +29,8 @@ async function editableItem(paperId: string, itemId: string, user: SessionUser) 
   if (!item || item.paperId !== paperId) throw new HttpError(404, "Item not found");
   assertCanModifyPaper(user, item.paper);
   if (item.paper.status === "FINAL") throw new HttpError(409, "This paper is finalised. Reopen it to make changes.");
-  return item;
+  // the slot's effective allowed types, exactly as the paper view gives them
+  return { ...item, section: withEffectiveAllowedTypes(item.section, item.paper.blueprint.book) };
 }
 
 export const DELETE = route(async (_req, { id, itemId }, user) => {
