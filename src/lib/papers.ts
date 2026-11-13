@@ -2,7 +2,9 @@ import "server-only";
 import { HttpError, type SessionUser } from "./api";
 import { resolvePaperExamType } from "./constants";
 import { toQuestionDto } from "./dto";
-import { diagnosePaperImplications, paperStatus, questionSlotMarks, subpartsMarksProblem, toPlacedItems } from "./blueprint";
+import { parseMatchColumnPairs } from "./constants";
+import { applySlotDeltas } from "./sectionPools";
+import { diagnosePaperImplications, paperStatus, questionSlotMarks, slotPlacement, spansSlots, subpartsMarksProblem, toPlacedItems } from "./blueprint";
 import { isTypeAllowed, orTypeRefusal, withEffectiveAllowedTypes } from "./sectionTypes";
 import { componentImplications, parseComponents } from "./languageComponents";
 import { blueprintInclude } from "./blueprints";
@@ -124,6 +126,7 @@ const questionUsageInclude = {
 
 const paperInclude = {
   blueprint: { include: blueprintInclude },
+  slotMoves: true,
   items: {
     orderBy: { position: "asc" },
     include: {
@@ -134,6 +137,20 @@ const paperInclude = {
 } as const;
 
 
+/** The pair value to count and print: half a mark only while it still fits (flexible section, even pair count). */
+function effectivePairMarks(
+  section: Parameters<typeof spansSlots>[0] | undefined,
+  item: { pairMarks: number | null; question: { type: string; optionsJson: string; text: string; explanation?: string | null } },
+): number | null {
+  if (item.pairMarks !== 0.5 || !section || item.question.type !== "MATCH_COLUMN" || !spansSlots(section)) return null;
+  let opts: string[] = [];
+  try {
+    const parsed = JSON.parse(item.question.optionsJson || "[]");
+    opts = Array.isArray(parsed) ? parsed : [];
+  } catch {}
+  return parseMatchColumnPairs(opts, item.question.text, item.question.explanation).length % 2 === 0 ? 0.5 : null;
+}
+
 /** Everything the builder and print views need, with progress computed server-side. */
 export async function loadPaperView(id: string) {
   const paper = await prisma.paper.findUnique({ where: { id }, include: paperInclude });
@@ -141,7 +158,14 @@ export async function loadPaperView(id: string) {
   const { blueprint: stored, items, ...rest } = paper;
   // every check that reads the view (picker, add, edit, autofill, AI, mismatch flags) sees each section's effective
   // allowed types; the blueprint row itself is never changed
-  const blueprint = { ...stored, sections: stored.sections.map((s) => withEffectiveAllowedTypes(s, stored.book)) };
+  // slots this paper moved between same-mark sections (flexible marks): the section counts every consumer reads
+  const blueprint = {
+    ...stored,
+    sections: applySlotDeltas(
+      stored.sections.map((s) => withEffectiveAllowedTypes(s, stored.book)),
+      paper.slotMoves,
+    ),
+  };
   const placedItems = toPlacedItems(blueprint.sections, items);
   const progress = paperStatus(
     {
@@ -163,9 +187,7 @@ export async function loadPaperView(id: string) {
     },
     items.map((i) => {
       const sec = blueprint.sections.find((x) => x.id === i.sectionId) ?? { count: 1, marksEach: 1 };
-      const { marks, units } = questionSlotMarks(sec, i.question as never);
-      const multiUnitMatch =
-        i.question.type === "MATCH_COLUMN" && (sec as { type?: string }).type === "MATCH_COLUMN" && sec.count > 1;
+      const { marks, subpartsCount } = slotPlacement(sec, { ...i.question, pairMarks: i.pairMarks } as never);
       return {
         id: i.id,
         sectionId: i.sectionId,
@@ -173,7 +195,7 @@ export async function loadPaperView(id: string) {
         type: i.question.type,
         text: i.question.text,
         marks,
-        subpartsCount: multiUnitMatch ? units : undefined,
+        subpartsCount,
       };
     }),
   );
@@ -195,7 +217,8 @@ export async function loadPaperView(id: string) {
     pageBreakBefore: Boolean(i.pageBreakBefore),
     componentKey: i.componentKey || "",
     instruction: i.instruction || "",
-    question: toQuestionDto(i.question),
+    // the slot's pair value rides on the question so every reader of the view counts marks the same way
+    question: { ...toQuestionDto(i.question), pairMarks: effectivePairMarks(blueprint.sections.find((x) => x.id === i.sectionId), i) },
     orQuestion: i.orQuestion ? toQuestionDto(i.orQuestion) : null,
   }));
 
@@ -278,6 +301,7 @@ export function snapshotItems(items: PaperView["items"]) {
     pageBreakBefore: it.pageBreakBefore,
     componentKey: it.componentKey,
     instruction: it.instruction,
+    pairMarks: it.question.pairMarks ?? null,
   }));
 }
 

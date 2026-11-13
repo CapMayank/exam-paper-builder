@@ -71,6 +71,7 @@ export const POST = route(async (req, params, user) => {
     showCandidateDetails: current.showCandidateDetails,
     showSignatures: current.showSignatures,
     items: snapshotItems(current.items),
+    slotMoves: current.slotMoves.map((m) => ({ sectionId: m.sectionId, delta: m.delta })),
     timestamp: now.toISOString(),
   };
 

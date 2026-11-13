@@ -1,4 +1,4 @@
-import { cleanOptionText, normalizeMcqAnswer } from "./constants";
+import { cleanOptionText, normalizeMcqAnswer, parseMatchColumnPairs } from "./constants";
 import { isParaphraseOrDuplicateChoice } from "./internalChoiceRules";
 import { attemptedSubpartsMarks, parseSubparts, parseSubpartsPayload, subpartsTotalMarks, type SubPart } from "./types";
 
@@ -261,6 +261,7 @@ export type SourceItemDef = {
     difficulty: string;
     text?: string;
     subpartsJson?: string | null;
+    optionsJson?: string | null;
     chapter?: { id: string; number: number; title: string };
   };
   orQuestion?: {
@@ -279,6 +280,8 @@ export type BlueprintSectionDef = {
   type: string;
   count: number;
   marksEach: number;
+  /** class 8 and below: a match question may span slots, so a replacement must keep its pair count */
+  flexible?: boolean;
 };
 
 export type TargetSetItemPlan = {
@@ -336,6 +339,19 @@ export function planMultiSetDistribution(params: {
     if (it.orQuestionId) usedQuestionIds.add(it.orQuestionId);
   }
 
+  // A match question may span several slots of its section (flexible marks), so a replacement match must have as many
+  // pairs as the one it replaces or the set would no longer fill its slots. Set per source item before it is searched.
+  let pairsWanted: number | undefined;
+  const pairsOfMatch = (q: { type: string; optionsJson?: string | null; text?: string }): number | undefined => {
+    if (q.type !== "MATCH_COLUMN") return undefined;
+    let opts: string[] = [];
+    try {
+      const parsed = JSON.parse(q.optionsJson || "[]");
+      opts = Array.isArray(parsed) ? parsed : [];
+    } catch {}
+    return parseMatchColumnPairs(opts, q.text ?? "").length;
+  };
+
   // Pre-filter candidate bank questions helper
   function getEligible(
     chapterId: string,
@@ -351,6 +367,7 @@ export function planMultiSetDistribution(params: {
       // an OR alternative that merely rephrases its primary question is not a real choice
       if (notSimilarToText && q.text && isParaphraseOrDuplicateChoice(notSimilarToText, q.text).isDuplicateOrParaphrase) return false;
       if (q.chapterId !== chapterId || q.type !== type) return false;
+      if (pairsWanted !== undefined && pairsOfMatch(q) !== pairsWanted) return false;
       if (difficulty && q.difficulty !== difficulty) return false;
       if (marksEach !== undefined) {
         if (q.marks !== undefined && q.marks !== marksEach) return false;
@@ -395,6 +412,7 @@ export function planMultiSetDistribution(params: {
 
     // Score items by available candidate inventory in bank
     const scored = items.map((it) => {
+      pairsWanted = sec.flexible ? pairsOfMatch(it.question) : undefined;
       const exact = getEligible(it.question.chapterId, it.question.type, it.question.difficulty, sec.marksEach);
       const total = getEligible(it.question.chapterId, it.question.type, undefined, sec.marksEach);
       const score = exact.length * 100 + total.length;
@@ -438,6 +456,7 @@ export function planMultiSetDistribution(params: {
 
       // 2. Process variant slots
       for (const item of alloc.variantSlots) {
+        pairsWanted = sec.flexible ? pairsOfMatch(item.question) : undefined;
         // Priority 1: Exact difficulty match
         let chosenPrimary: CandidateQuestionDef | null = null;
         let isFallback = false;

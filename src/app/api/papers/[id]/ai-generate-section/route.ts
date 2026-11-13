@@ -16,6 +16,7 @@ import { detectPaperLanguage, type PaperLanguage } from "@/lib/localization";
 import { DEFAULT_DIFFICULTY_PROFILE } from "@/lib/difficultyProfiles";
 import { slotRowRole, slotTaskDirective } from "@/lib/paperAutogen";
 import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
+import { spansSlots } from "@/lib/blueprint";
 import { allowedTypesFor, isTypeAllowed } from "@/lib/sectionTypes";
 
 export const POST = route(async (req, { id }, user) => {
@@ -62,6 +63,20 @@ export const POST = route(async (req, { id }, user) => {
     );
   }
   const effectiveType = String(sectionType || matchedSection?.type || "MCQ");
+  // flexible marks: a match question in another form's one-mark section is one combined question that takes one slot
+  // per pair, so it needs as many free slots as it has pairs (the AI writes one pair per mark it is given)
+  if (matchedSection && effectiveType === "MATCH_COLUMN" && matchedSection.type !== "MATCH_COLUMN" && spansSlots(matchedSection)) {
+    const pairs = Number(marksEach) || 0;
+    const st = paper.progress.sections.find((s) => s.id === matchedSection.id);
+    const free = st ? Math.max(0, st.needed - st.filled) : 0;
+    if (slots.length !== 1) {
+      throw new HttpError(422, `${matchedSection.title}: a match question is generated as one combined question covering several slots.`);
+    }
+    if (pairs < 2) throw new HttpError(422, "A match question needs at least 2 pairs, so at least 2 free slots.");
+    if (pairs > free) {
+      throw new HttpError(422, `${matchedSection.title} has ${free} free slot${free === 1 ? "" : "s"}, but a match question with ${pairs} pairs needs ${pairs}.`);
+    }
+  }
   if (
     matchedSection &&
     (matchedSection as { role?: string }).role === "PASSAGE" &&

@@ -1,5 +1,8 @@
 import { questionInstruction } from "./sectionTypes";
 import { loadPaperView } from "./papers";
+import { sectionItemsFormula, withPairMarksNote } from "./flexibleMarksPrint";
+import { applySlotDeltas } from "./sectionPools";
+import { withEffectiveAllowedTypes } from "./sectionTypes";
 import { isDraftPaper } from "./preflightChecks";
 import { questionSlotMarks } from "@/lib/blueprint";
 import { partsAttemptCount, resolveMarksStyle, showPartMarks } from "@/lib/marksDisplay";
@@ -296,6 +299,7 @@ export async function buildPaperDocx(
   const loaded = await prisma.paper.findUnique({
     where: { id: paperId },
     include: {
+      slotMoves: true,
       blueprint: {
         include: {
           book: true,
@@ -315,7 +319,14 @@ export async function buildPaperDocx(
 
   if (!loaded) throw new HttpError(404, "Paper not found");
   // exported as printed: rows of one form under one heading are one run (one sub-heading, one numbering)
-  const view = mergeSameFormRows(loaded.blueprint.sections, loaded.items);
+  // the same flexible-marks view as the builder and the printed sheet: slots this paper moved between sections, and
+  // each match question's pair value, so the exported marks are the marks the paper was built with
+  const flexSections = applySlotDeltas(
+    loaded.blueprint.sections.map((s) => withEffectiveAllowedTypes(s, loaded.blueprint.book)),
+    loaded.slotMoves,
+  );
+  const flexItems = loaded.items.map((i) => ({ ...i, question: { ...i.question, pairMarks: i.pairMarks } }));
+  const view = mergeSameFormRows(flexSections, flexItems);
   const paper = { ...loaded, blueprint: { ...loaded.blueprint, sections: view.sections }, items: view.items };
 
   const marksStyle = resolveMarksStyle(paper.marksStyle);
@@ -614,7 +625,12 @@ export async function buildPaperDocx(
 
     if (hasMultipleTypes) {
       const typeLabel = getQuestionTypeLabel(section.type, paperLang);
-      const formula = formatExerciseFormula(section.count, section.marksEach, paperLang);
+      const formula = sectionItemsFormula(
+        section,
+        items.map((x) => x.question as never),
+        formatExerciseFormula(section.count, section.marksEach, paperLang),
+        paperLang,
+      );
       paragraphs.push(
         new Paragraph({
           alignment: AlignmentType.CENTER,
@@ -643,7 +659,12 @@ export async function buildPaperDocx(
         hasMultipleTypes,
         paperLang
       );
-      const exerciseFormula = formatExerciseFormula(items.length, section.marksEach, paperLang);
+      const exerciseFormula = sectionItemsFormula(
+        section,
+        items.map((x) => x.question as never),
+        formatExerciseFormula(items.length, section.marksEach, paperLang),
+        paperLang,
+      );
 
       paragraphs.push(
         new Paragraph({
@@ -714,7 +735,7 @@ export async function buildPaperDocx(
       const isMatch = q.type === "MATCH_COLUMN";
       const { subparts: rawSubparts, attemptCount } = parseSubpartsPayload(q.subpartsJson);
       let parsedSubparts = canHaveSubparts(q.type) ? rawSubparts : [];
-      let baseQText = isMatch ? getMatchColumnInstruction(q.text) : q.text;
+      let baseQText = isMatch ? withPairMarksNote(getMatchColumnInstruction(q.text), (q as { pairMarks?: number | null }).pairMarks) : q.text;
       let decomp: ReturnType<typeof decomposeForSlot> = null;
       if (parsedSubparts.length === 0 && canHaveSubparts(q.type)) {
         decomp = decomposeForSlot(baseQText, section.marksEach);

@@ -19,7 +19,7 @@ export function typeLabels(types: string[]): string {
 const OBJECTIVE_TYPES = ["MCQ", "FILL_BLANK", "TRUE_FALSE", "MATCH_COLUMN", "ONE_WORD"];
 const SUBJECTIVE_TYPES = ["SHORT", "LONG"];
 
-export type TypedSection = { type: string; marksEach: number; allowedTypesJson?: string | null };
+export type TypedSection = { type: string; marksEach: number; allowedTypesJson?: string | null; flexible?: boolean };
 
 export function parseAllowedTypes(json: string | null | undefined): string[] {
   if (!json) return [];
@@ -142,9 +142,23 @@ export function effectiveAllowedTypesJson(section: TypedSection, book: SectionBo
   return JSON.stringify(defaultAllowedTypes(section.type, section.marksEach, book?.subject));
 }
 
-/** The section as papers use it: the same row with its effective allowed-types list. */
+/**
+ * Flexible marks (a match question spanning slots, same-mark sections lending slots) apply up to class 8, and to a
+ * class with no readable number (Nursery, KG) except kindergarten-typed sections. Classes 9 to 12 stay rigid.
+ */
+export function isFlexibleClass(className: string | null | undefined, sectionType: string): boolean {
+  if (isKindergartenType(sectionType)) return false;
+  const n = classNumberOf(className);
+  return n === null || n <= 8;
+}
+
+/** The section as papers use it: the same row with its effective allowed-types list and its flexible flag. */
 export function withEffectiveAllowedTypes<T extends TypedSection>(section: T, book: SectionBook | null | undefined): T {
-  return { ...section, allowedTypesJson: effectiveAllowedTypesJson(section, book) };
+  return {
+    ...section,
+    allowedTypesJson: effectiveAllowedTypesJson(section, book),
+    flexible: isFlexibleClass(book?.className, section.type),
+  };
 }
 
 /** The instruction line to print for a placed question: only what the teacher typed; nothing when they typed none. */

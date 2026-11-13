@@ -78,7 +78,8 @@ export const POST = route(async (req, { id }, user) => {
 
   if (targetSectionId) {
     const sec = paper.blueprint.sections.find((s) => s.id === targetSectionId);
-    const placed = paper.items.filter((i) => i.sectionId === targetSectionId).length;
+    // slots, not rows: a match question in a flexible section fills one per pair
+    const placed = paper.progress.sections.find((s) => s.id === targetSectionId)?.filled ?? 0;
     if (sec && placed >= sec.count && itemsToRepairChoice.length === 0) {
       return {
         success: true,
@@ -382,7 +383,7 @@ export const POST = route(async (req, { id }, user) => {
             plannedItems.push({ sectionId: sec.id, chapterId: chosenBpChapter.chapterId, ...slotPlacement(sec, grounded) });
 
             const cur = (chapterRemainingMarks.get(rep(chosenBpChapter.chapterId)) ?? 0);
-            chapterRemainingMarks.set(rep(chosenBpChapter.chapterId), cur - (collapsedMatch ? u.count * sec.marksEach : sec.marksEach));
+            chapterRemainingMarks.set(rep(chosenBpChapter.chapterId), cur - (collapsedMatch ? u.count * sec.marksEach : slotPlacement(sec, grounded).marks));
           }
         }
       }

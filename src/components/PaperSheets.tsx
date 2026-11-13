@@ -1,6 +1,7 @@
 "use client";
 import { isDraftPaper } from "@/lib/preflightChecks";
 import { questionSlotMarks } from "@/lib/blueprint";
+import { sectionItemsFormula } from "@/lib/flexibleMarksPrint";
 import { groupedItemInstruction, questionInstruction } from "@/lib/sectionTypes";
 import { BOOKLET_MAX_PAGES, chooseFitLevel, describeFit, FIT_LEVELS, fitMm, getFit, MIN_QUESTION_GAP_MM, nextFitLevel, sheetCost, WORKSHEET_FIT_LEVELS, WORKSHEET_MAX_PAGES, type FitStatus, type PrintFit } from "@/lib/printFit";
 
@@ -467,7 +468,12 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
     // If section has multiple question types, render a clean sub-heading for this question type!
     if (!isWorksheet && hasMultipleTypes) {
       const typeLabel = getQuestionTypeLabel(s.type, paperLang);
-      const typeFormula = locale.section.formatTypeFormula(s.count, s.marksEach, s.type);
+      const typeFormula = sectionItemsFormula(
+        s,
+        sectionItems.map((x) => x.question as never),
+        locale.section.formatTypeFormula(s.count, s.marksEach, s.type),
+        paperLang,
+      );
 
       blocks.push({
         key: `sec-sub-${s.id}`,
@@ -508,7 +514,12 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
         hasMultipleTypes,
         paperLang
       );
-      const formulaText = formatExerciseFormula(sectionItems.length, s.marksEach, paperLang);
+      const formulaText = sectionItemsFormula(
+        s,
+        sectionItems.map((x) => x.question as never),
+        formatExerciseFormula(sectionItems.length, s.marksEach, paperLang),
+        paperLang,
+      );
 
       blocks.push({
         key: `exercise-head-${s.id}`,

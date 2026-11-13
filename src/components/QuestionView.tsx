@@ -1,3 +1,4 @@
+import { withPairMarksNote } from "@/lib/flexibleMarksPrint";
 import { imageUrl } from "@/lib/client";
 import {
   canHaveSubparts,
@@ -66,7 +67,7 @@ export function OptionFlow({ options, forceSingle, isA5, fontSize, marginTop }: 
 /** The stem as printed: a match question shows only its instruction, a decomposable one only its lead-in. */
 export function questionStemText(q: QuestionDto, slotMarks?: number): string {
   const pairs = q.type === "MATCH_COLUMN" ? parseMatchColumnPairs(q.options, q.text, (q as { explanation?: string }).explanation) : [];
-  const base = q.type === "MATCH_COLUMN" && pairs.length > 0 ? getMatchColumnInstruction(q.text) : q.text;
+  const base = q.type === "MATCH_COLUMN" && pairs.length > 0 ? withPairMarksNote(getMatchColumnInstruction(q.text), (q as { pairMarks?: number | null }).pairMarks) : q.text;
   const decomposed = (!q.subparts || q.subparts.length === 0) && canHaveSubparts(q.type) ? decomposeForSlot(base, slotMarks) : null;
   return decomposed ? decomposed.stem : base;
 }
@@ -236,7 +237,7 @@ function SingleQuestionBody({
 
   const normalizedMcq = isMcq ? normalizeMcqAnswer(q.answer, q.options) : null;
   const matchPairs = q.type === "MATCH_COLUMN" ? parseMatchColumnPairs(q.options, q.text, (q as any).explanation) : [];
-  const baseStemText = q.type === "MATCH_COLUMN" && matchPairs.length > 0 ? getMatchColumnInstruction(q.text) : q.text;
+  const baseStemText = q.type === "MATCH_COLUMN" && matchPairs.length > 0 ? withPairMarksNote(getMatchColumnInstruction(q.text), (q as { pairMarks?: number | null }).pairMarks) : q.text;
 
   const decomposed = (!q.subparts || q.subparts.length === 0) && canHaveSubparts(q.type)
     ? decomposeForSlot(baseStemText, slotMarks)

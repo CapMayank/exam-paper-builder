@@ -2,7 +2,7 @@
 
 import { parseMatchColumnPairs } from "./constants";
 import { attemptedSubpartsMarks, parseSubpartsPayload, unequalAnyKOfN, unequalAnyKOfNMessage, validateSubPartsSum } from "./types";
-import { toleratesType, typeRejection } from "./sectionTypes";
+import { isTypeAllowed, toleratesType, typeRejection } from "./sectionTypes";
 
 export type SectionDef = {
   id: string;
@@ -21,6 +21,8 @@ export type SectionDef = {
   /** Examination purpose of the slot; placement honours it, not just type + marks. */
   role?: SectionRole | string | null;
   groupKey?: string | null;
+  /** Class 8 and below: flexible marks apply (see sectionTypes.isFlexibleClass). */
+  flexible?: boolean;
 };
 
 export const SECTION_ROLES = ["STANDARD", "PASSAGE", "GRAMMAR", "WRITING", "LITERATURE"] as const;
@@ -325,6 +327,27 @@ function spillMatchOverflow(
   }
 }
 
+/**
+ * Flexible marks: in a class 8 or lower one-mark section with several slots that allows match questions, a match
+ * question takes one slot (and one mark) per pair instead of counting as a single question.
+ */
+export function spansSlots(
+  section: { type?: string; count: number; marksEach: number; allowedTypesJson?: string | null; flexible?: boolean },
+): boolean {
+  return (
+    !!section.flexible &&
+    section.type !== "MATCH_COLUMN" &&
+    section.marksEach === 1 &&
+    section.count > 1 &&
+    isTypeAllowed({ type: section.type ?? "", marksEach: section.marksEach, allowedTypesJson: section.allowedTypesJson }, "MATCH_COLUMN")
+  );
+}
+
+/** A multi-slot match section (always so) or a flexible section a match question spans. */
+function matchTakesSlots(section: { type?: string; count: number; marksEach: number; allowedTypesJson?: string | null; flexible?: boolean }): boolean {
+  return (section.type === "MATCH_COLUMN" && section.count > 1) || spansSlots(section);
+}
+
 export function paperStatus(bp: BlueprintDef, items: PlacedItem[]): PaperStatus {
   const sectionById = new Map(bp.sections.map((s) => [s.id, s]));
   const sections = bp.sections.map((s) => {
@@ -380,14 +403,15 @@ export function whyCannotAdd(
 ): string | null {
   const section = bp.sections.find((s) => s.id === candidate.sectionId);
   if (!section) return "That section is not part of this paper's blueprint.";
-  const typeReason = typeRejection(section, candidate.type, candidate.marks);
+  const spanning = candidate.type === "MATCH_COLUMN" && section.type !== "MATCH_COLUMN" && spansSlots(section);
+  const typeReason = typeRejection(section, candidate.type, spanning ? null : candidate.marks);
   if (typeReason) return typeReason;
   const roleReason = roleMismatchReason(section, candidate);
   if (roleReason) return roleReason;
   const status = paperStatus(bp, items);
   const sec = status.sections.find((s) => s.id === section.id)!;
   if (sec.filled >= sec.needed) return `${section.title} is already full (${sec.needed} questions).`;
-  const isMultiUnitMatch = section.type === "MATCH_COLUMN" && section.count > 1 && section.marksEach === 1;
+  const isMultiUnitMatch = (section.type === "MATCH_COLUMN" && section.count > 1 && section.marksEach === 1) || spansSlots(section);
   const candidateUnits = isMultiUnitMatch && candidate.subpartsCount && candidate.subpartsCount > 1 && section.count >= candidate.subpartsCount
     ? candidate.subpartsCount
     : 1;
@@ -576,7 +600,7 @@ export function diagnosePaperImplications(
  *  - Otherwise: the slot's marks.
  */
 export function questionSlotMarks(
-  section: { type?: string; count: number; marksEach: number },
+  section: { type?: string; count: number; marksEach: number; allowedTypesJson?: string | null; flexible?: boolean },
   q: {
     type: string;
     text?: string;
@@ -586,12 +610,15 @@ export function questionSlotMarks(
     subparts?: Array<{ marks: number }> | null;
     subpartsJson?: string | null;
     attemptCount?: number | null;
+    /** match question in a flexible section: marks per pair, 1 (default) or 0.5 (even pair counts only) */
+    pairMarks?: number | null;
   },
 ): { marks: number; units: number } {
   const secMarksEach = section.marksEach ?? 1;
   const secCount = section.count ?? 1;
   const isMatch = q.type === "MATCH_COLUMN";
   const secIsMatch = section.type === "MATCH_COLUMN";
+  const spans = !secIsMatch && spansSlots(section);
   if (isMatch) {
     let opts: string[] = [];
     if (Array.isArray(q.options)) opts = q.options;
@@ -606,6 +633,11 @@ export function questionSlotMarks(
       const units = Math.min(pairs > 0 ? pairs : secCount, secCount);
       return { marks: units * secMarksEach, units };
     }
+    if (spans && pairs > 0) {
+      const half = q.pairMarks === 0.5 && pairs % 2 === 0;
+      const units = Math.min(half ? pairs / 2 : pairs, secCount);
+      return { marks: units, units };
+    }
     return { marks: secMarksEach, units: 1 };
   }
   const payload = parseSubpartsPayload(q.subpartsJson);
@@ -618,6 +650,23 @@ export function questionSlotMarks(
   return { marks, units: 1 };
 }
 
+/**
+ * Why a match question with `pairs` pairs cannot carry `pairMarks` marks per pair in this section; null when it can.
+ * Only 1 or 1/2 are offered, 1/2 needs an even pair count so the question's marks stay whole, and only flexible
+ * (class 8 and below) one-mark sections take it.
+ */
+export function pairMarksProblem(
+  section: { type?: string; count: number; marksEach: number; allowedTypesJson?: string | null; flexible?: boolean },
+  pairs: number,
+  pairMarks: number,
+): string | null {
+  if (pairMarks !== 1 && pairMarks !== 0.5) return "Marks per pair must be 1 or 1/2.";
+  if (pairMarks === 1) return null;
+  if (!spansSlots(section)) return "Half a mark per pair is only for class 8 and below, in a one-mark section that takes match questions.";
+  if (pairs % 2 !== 0) return "1/2 mark per pair needs an even number of pairs, so the question's marks stay whole.";
+  return null;
+}
+
 type PlaceableQuestion = Parameters<typeof questionSlotMarks>[1];
 
 /**
@@ -626,11 +675,11 @@ type PlaceableQuestion = Parameters<typeof questionSlotMarks>[1];
  * question asks here, so a question is never counted one way when added and another way when edited.
  */
 export function slotPlacement(
-  section: { type?: string; count: number; marksEach: number },
+  section: { type?: string; count: number; marksEach: number; allowedTypesJson?: string | null; flexible?: boolean },
   q: PlaceableQuestion,
 ): { marks: number; subpartsCount?: number } {
   const { marks, units } = questionSlotMarks(section, q);
-  const isMultiUnitMatch = q.type === "MATCH_COLUMN" && section.type === "MATCH_COLUMN" && section.count > 1;
+  const isMultiUnitMatch = q.type === "MATCH_COLUMN" && matchTakesSlots(section) && (section.type === "MATCH_COLUMN" || units > 1);
   return { marks, subpartsCount: isMultiUnitMatch ? units : undefined };
 }
 
@@ -660,6 +709,8 @@ export function toPlacedItems(
   items: {
     sectionId: string;
     questionId?: string;
+    /** marks per pair of a match question in a flexible section (null = 1) */
+    pairMarks?: number | null;
     question: {
       id?: string;
       chapterId: string;
@@ -681,6 +732,7 @@ export function toPlacedItems(
       ...i.question,
       explanation: (i.question as { explanation?: string | null }).explanation,
       attemptCount: (i.question as { attemptCount?: number | null }).attemptCount,
+      pairMarks: i.pairMarks ?? (i.question as { pairMarks?: number | null }).pairMarks,
     });
     return {
       sectionId: i.sectionId,

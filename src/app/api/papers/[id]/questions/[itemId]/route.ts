@@ -1,6 +1,8 @@
 import { isTypeAllowed, orTypeRefusal, withEffectiveAllowedTypes } from "@/lib/sectionTypes";
 import { body, HttpError, route, type SessionUser } from "@/lib/api";
-import { slotPlacement, subpartsMarksProblem, whyCannotAdd } from "@/lib/blueprint";
+import { applySlotDeltas } from "@/lib/sectionPools";
+import { pairMarksProblem, slotPlacement, subpartsMarksProblem, whyCannotAdd } from "@/lib/blueprint";
+import { parseMatchColumnPairs } from "@/lib/constants";
 import {
   assertCanModifyPaper,
   assertCanModifyQuestion,
@@ -16,6 +18,15 @@ import { questionColumns, questionCopyData } from "@/lib/questionWrite";
 import { editPaperItemSchema, moveItemSchema, replaceItemSchema } from "@/lib/schemas";
 import type { z } from "zod";
 
+function safeJsonArray(json: string | null | undefined): string[] {
+  try {
+    const v = JSON.parse(json || "[]");
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
+
 async function editableItem(paperId: string, itemId: string, user: SessionUser) {
   const item = await prisma.paperQuestion.findUnique({
     where: { id: itemId },
@@ -29,8 +40,10 @@ async function editableItem(paperId: string, itemId: string, user: SessionUser) 
   if (!item || item.paperId !== paperId) throw new HttpError(404, "Item not found");
   assertCanModifyPaper(user, item.paper);
   if (item.paper.status === "FINAL") throw new HttpError(409, "This paper is finalised. Reopen it to make changes.");
-  // the slot's effective allowed types, exactly as the paper view gives them
-  return { ...item, section: withEffectiveAllowedTypes(item.section, item.paper.blueprint.book) };
+  // the slot as the paper view gives it: effective allowed types, and the slots this paper moved in or out
+  const moves = await prisma.paperSectionSlots.findMany({ where: { paperId } });
+  const [section] = applySlotDeltas([withEffectiveAllowedTypes(item.section, item.paper.blueprint.book)], moves);
+  return { ...item, section };
 }
 
 export const DELETE = route(async (_req, { id, itemId }, user) => {
@@ -58,6 +71,38 @@ export const PATCH = route(async (req, { id, itemId }, user) => {
   if ("instruction" in raw) {
     const instruction = String(raw.instruction ?? "").trim().slice(0, 300);
     await prisma.paperQuestion.update({ where: { id: itemId }, data: { instruction } });
+    await prisma.paper.update({ where: { id }, data: { updatedAt: new Date() } });
+    return loadPaperView(id);
+  }
+
+  if ("pairMarks" in raw) {
+    if (item.question.type !== "MATCH_COLUMN") throw new HttpError(400, "Marks per pair only applies to a match question.");
+    const pairMarks = Number(raw.pairMarks);
+    const pairs = parseMatchColumnPairs(
+      safeJsonArray(item.question.optionsJson),
+      item.question.text,
+      (item.question as { explanation?: string | null }).explanation,
+    ).length;
+    const problem = pairMarksProblem(item.section, pairs, pairMarks);
+    if (problem) throw new HttpError(400, problem);
+    const paper = await loadPaperView(id);
+    if (!paper) throw new HttpError(404, "Paper not found");
+    // going back to 1 per pair needs more slots than 1/2 did: it must still fit beside the other questions
+    const reason = whyCannotAdd(
+      {
+        sections: paper.blueprint.sections,
+        chapters: paper.blueprint.chapters.map((c) => ({ chapterId: c.chapterId, marks: c.marks, unitKey: c.unitKey, unitTitle: c.unitTitle })),
+      },
+      toPlacedItems(paper.blueprint.sections, paper.items.filter((i) => i.id !== itemId)),
+      {
+        sectionId: item.sectionId,
+        chapterId: item.question.chapterId,
+        type: item.question.type,
+        ...slotPlacement(item.section, { ...item.question, options: safeJsonArray(item.question.optionsJson), pairMarks } as never),
+      },
+    );
+    if (reason) throw new HttpError(409, reason);
+    await prisma.paperQuestion.update({ where: { id: itemId }, data: { pairMarks: pairMarks === 1 ? null : pairMarks } });
     await prisma.paper.update({ where: { id }, data: { updatedAt: new Date() } });
     return loadPaperView(id);
   }
@@ -118,7 +163,8 @@ export const PATCH = route(async (req, { id, itemId }, user) => {
       await assertValidOrChoice(paper, { sectionId: item.sectionId, itemId }, candidate, orQuestionId);
     }
 
-    const updateData: { questionId: string; orQuestionId?: string | null } = { questionId: candidate.id };
+    // a different question has its own pairs, so the old pair value does not carry over
+    const updateData: { questionId: string; orQuestionId?: string | null; pairMarks: null } = { questionId: candidate.id, pairMarks: null };
     if (choiceReq.forbidden) {
       updateData.orQuestionId = null;
     } else if (orQuestionId !== undefined) {

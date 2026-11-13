@@ -150,7 +150,7 @@ export function paperCopyData(p: PaperRow) {
   };
 }
 
-type ItemRow = { sectionId: string; position: number; pageBreakBefore?: boolean | null; componentKey?: string | null; instruction?: string | null };
+type ItemRow = { sectionId: string; position: number; pageBreakBefore?: boolean | null; componentKey?: string | null; instruction?: string | null; pairMarks?: number | null };
 
 /** What a placed question carries besides the question itself: its slot and its per-paper settings. */
 export function itemCopyData(it: ItemRow) {
@@ -160,5 +160,6 @@ export function itemCopyData(it: ItemRow) {
     pageBreakBefore: Boolean(it.pageBreakBefore),
     componentKey: it.componentKey || "",
     instruction: it.instruction || "",
+    pairMarks: it.pairMarks ?? null,
   };
 }

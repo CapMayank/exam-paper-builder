@@ -2,6 +2,8 @@ import { z } from "zod";
 import { body, HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { permuteMcqOptions, planMultiSetDistribution } from "@/lib/multiset";
+import { applySlotDeltas } from "@/lib/sectionPools";
+import { withEffectiveAllowedTypes } from "@/lib/sectionTypes";
 import { assertCanCopyPaper, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { isQuestionContaminated } from "@/lib/questionValidator";
@@ -31,6 +33,7 @@ export const POST = route(async (req, params, user) => {
           chapters: { include: { chapter: true } },
         },
       },
+      slotMoves: true,
       items: {
         orderBy: { position: "asc" },
         include: {
@@ -75,7 +78,11 @@ export const POST = route(async (req, params, user) => {
 
   // 3. Run pure multi-set distribution planner
   const planResult = planMultiSetDistribution({
-    sections: source.blueprint.sections,
+    // each section as the paper uses it: flexible flag and the slots this paper moved
+    sections: applySlotDeltas(
+      source.blueprint.sections.map((s) => withEffectiveAllowedTypes(s, source.blueprint.book)),
+      source.slotMoves,
+    ),
     sourceItems: source.items,
     candidatePool: bankQuestions,
     targetSets: input.sets,
@@ -103,7 +110,15 @@ export const POST = route(async (req, params, user) => {
         const newTitle = input.prefixTitle ? `${baseTitle} (${formattedSet})` : `${source.title} - ${formattedSet}`;
 
         const createdPaper = await tx.paper.create({
-          data: { ...paperCopyData(source), title: newTitle, paperSet: formattedSet, status: "DRAFT", createdById: user.id },
+          data: {
+            ...paperCopyData(source),
+            title: newTitle,
+            paperSet: formattedSet,
+            status: "DRAFT",
+            createdById: user.id,
+            // every set keeps the source's slot layout, so its marks add up the same way
+            slotMoves: { create: source.slotMoves.map((m) => ({ sectionId: m.sectionId, delta: m.delta })) },
+          },
         });
 
         /** The set's own copy of an MCQ with its options mixed; the question itself when it cannot be shuffled. */
@@ -158,6 +173,8 @@ export const POST = route(async (req, params, user) => {
               instruction: itemPlan.questionId === itemPlan.originalQuestionId ? from?.instruction ?? "" : "",
               // a page break belongs to a place on the sheet, not to a question that has just moved
               pageBreakBefore: input.shufflePositions ? false : Boolean(from?.pageBreakBefore),
+              // a replacement match has as many pairs as the one it replaces (see multiset), so the pair value carries over
+              pairMarks: from?.pairMarks ?? null,
             },
           });
         }

@@ -20,6 +20,7 @@ export const POST = route(async (req, params, user) => {
     where: { id },
     include: {
       blueprint: { select: { book: { select: { className: true, subject: true } } } },
+      slotMoves: true,
       items: {
         include: {
           question: true,
@@ -50,7 +51,14 @@ export const POST = route(async (req, params, user) => {
   const newPaper = await prisma.$transaction(
     async (tx) => {
       const created = await tx.paper.create({
-        data: { ...paperCopyData(source), title: newTitle, paperSet: formattedSet, status: "DRAFT", createdById: user.id },
+        data: {
+          ...paperCopyData(source),
+          title: newTitle,
+          paperSet: formattedSet,
+          status: "DRAFT",
+          createdById: user.id,
+          slotMoves: { create: source.slotMoves.map((m) => ({ sectionId: m.sectionId, delta: m.delta })) },
+        },
       });
 
       /** The set's own copy of an MCQ with its options mixed; the original when it cannot be shuffled. */

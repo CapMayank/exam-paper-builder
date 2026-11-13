@@ -18,6 +18,7 @@ export const POST = route(async (req, params, user) => {
     include: {
       blueprint: { select: { book: { select: { className: true, subject: true } } } },
       items: true,
+      slotMoves: true,
     },
   });
 
@@ -41,6 +42,7 @@ export const POST = route(async (req, params, user) => {
       status: "DRAFT",
       createdById: user.id,
       // the placements, with each question's own page break, instruction and syllabus component
+      slotMoves: { create: source.slotMoves.map((m) => ({ sectionId: m.sectionId, delta: m.delta })) },
       items: {
         create: source.items.map((it) => ({ ...itemCopyData(it), questionId: it.questionId, orQuestionId: it.orQuestionId })),
       },

@@ -7,7 +7,7 @@ import { PasteQuestionsPanel } from "@/components/PasteQuestionsPanel";
 import { isExhaustedUsage, QuestionFreshnessAlert, QuestionUsagePills } from "@/components/QuestionUsageHistory";
 import { QuestionView } from "@/components/QuestionView";
 import { ErrorBanner, Modal, Spinner } from "@/components/ui";
-import { slotPlacement, subpartsMarksProblem, toPlacedItems, whyCannotAdd, type BlueprintDef } from "@/lib/blueprint";
+import { slotPlacement, spansSlots, subpartsMarksProblem, toPlacedItems, whyCannotAdd, type BlueprintDef } from "@/lib/blueprint";
 import { allowedTypesFor, isTypeAllowed, typeLabels } from "@/lib/sectionTypes";
 import { SKILLS } from "@/lib/questionTagging";
 import { aiQuestionPayload } from "@/lib/aiQuestionPayload";
@@ -130,9 +130,11 @@ export function QuestionPicker({
   // counted exactly as the server counts it
   const activeItemMarks = activeItem ? slotPlacement(section, activeItem.question).marks : 0;
 
-  const marksToGenerate = targetSlotMarks;
-
   const sectionStatus = paper.progress.sections.find((s) => s.id === section.id)!;
+  // flexible marks: an AI match in another form's one-mark section covers the free slots, one pair per slot
+  const spanningMatchPick = pickType === "MATCH_COLUMN" && section.type !== "MATCH_COLUMN" && spansSlots(section);
+  const marksToGenerate = spanningMatchPick ? Math.min(10, Math.max(2, sectionStatus.needed - sectionStatus.filled)) : targetSlotMarks;
+
   const full = !isReplacing && !isAlternate && sectionStatus.filled >= sectionStatus.needed;
 
   // Every blueprint chapter may take this section's question: weightage is a guide, not a gate

@@ -151,6 +151,7 @@ model BlueprintSection {
   slotPlanJson       String          @default("[]") // per-slot role (and form): which slots of the row are grammar, passage or writing; "[]" = all the row's role (see slotPlan.ts)
   blueprint          Blueprint       @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
   paperQuestions PaperQuestion[]
+  paperSlotMoves PaperSectionSlots[]
 }
 
 model Question {
@@ -217,6 +218,7 @@ model Paper {
   blueprint            Blueprint       @relation(fields: [blueprintId], references: [id], onDelete: Restrict)
   createdBy            User            @relation(fields: [createdById], references: [id])
   items                PaperQuestion[]
+  slotMoves            PaperSectionSlots[]
   snapshots            PaperSnapshot[]
 }
 
@@ -230,12 +232,25 @@ model PaperQuestion {
   pageBreakBefore Boolean      @default(false)
   componentKey String          @default("") // blueprint component this question counts toward
   instruction  String          @default("") // printed above the question; "" = print nothing
+  pairMarks    Float?          // match question in a flexible section: marks per pair (1 or 0.5); null = 1
   paper        Paper            @relation(fields: [paperId], references: [id], onDelete: Cascade)
   section      BlueprintSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   question     Question         @relation("PrimaryQuestion", fields: [questionId], references: [id], onDelete: Restrict)
   orQuestion   Question?        @relation("OrQuestion", fields: [orQuestionId], references: [id], onDelete: SetNull)
 
   @@unique([paperId, questionId])
+}
+
+/// Flexible marks: slots a paper moved into (+) or out of (-) one of its sections; the blueprint stays as it is.
+model PaperSectionSlots {
+  id        String           @id @default(cuid())
+  paperId   String
+  sectionId String
+  delta     Int
+  paper     Paper            @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  section   BlueprintSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@unique([paperId, sectionId])
 }
 
 model PaperSnapshot {

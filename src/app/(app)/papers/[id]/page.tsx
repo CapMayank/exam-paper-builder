@@ -80,7 +80,8 @@ import {
   type ExamType,
   type PaperLanguage,
 } from "@/lib/constants";
-import { questionSlotMarks } from "@/lib/blueprint";
+import { questionSlotMarks, spansSlots } from "@/lib/blueprint";
+import { poolOf } from "@/lib/sectionPools";
 import { resolveMarksStyle } from "@/lib/marksDisplay";
 import { coverageRows } from "@/lib/coverage";
 import { componentCoverage, parseComponents } from "@/lib/languageComponents";
@@ -202,6 +203,8 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   const [toolkitDrawerOpen, setToolkitDrawerOpen] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<"quotas" | "settings">("quotas");
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+  // flexible marks: the section whose "Move slots" form is open, and what it will move
+  const [slotMover, setSlotMover] = useState<{ fromId: string; toId: string; slots: number } | null>(null);
   const [showAllChapters, setShowAllChapters] = useState(false);
   const [dismissOnboarding, setDismissOnboarding] = useState(false);
 
@@ -347,6 +350,34 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
       const updated = await api<PaperData>(`/api/papers/${id}/questions/${itemId}`, {
         method: "PATCH",
         json: { pageBreakBefore },
+      });
+      adopt(updated);
+    } catch (e) {
+      showError((e as Error).message);
+    }
+  }
+
+  async function handleMoveSlots() {
+    if (!slotMover) return;
+    cancelAutosave();
+    try {
+      const updated = await api<PaperData>(`/api/papers/${id}/rebalance`, {
+        method: "POST",
+        json: { fromSectionId: slotMover.fromId, toSectionId: slotMover.toId, slots: slotMover.slots },
+      });
+      adopt(updated);
+      setSlotMover(null);
+    } catch (e) {
+      showError((e as Error).message);
+    }
+  }
+
+  async function handleSetPairMarks(itemId: string, pairMarks: number) {
+    cancelAutosave();
+    try {
+      const updated = await api<PaperData>(`/api/papers/${id}/questions/${itemId}`, {
+        method: "PATCH",
+        json: { pairMarks },
       });
       adopt(updated);
     } catch (e) {
@@ -1804,6 +1835,58 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                   </div>
                 </div>
 
+                {canEditPaper && poolOf(s, blueprint.sections).length > 1 && (
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                    {slotMover?.fromId === s.id ? (
+                      <>
+                        <span>Move</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={Math.max(1, emptySlots)}
+                          value={slotMover.slots}
+                          onChange={(e) => setSlotMover({ ...slotMover, slots: Math.max(1, Number(e.target.value) || 1) })}
+                          className="w-14 rounded border border-slate-300 px-1.5 py-0.5"
+                          aria-label="Slots to move"
+                        />
+                        <span>free slot(s) to</span>
+                        <select
+                          value={slotMover.toId}
+                          onChange={(e) => setSlotMover({ ...slotMover, toId: e.target.value })}
+                          className="rounded border border-slate-300 px-1.5 py-0.5"
+                          aria-label="Move slots to section"
+                        >
+                          {poolOf(s, blueprint.sections)
+                            .filter((pid) => pid !== s.id)
+                            .map((pid) => (
+                              <option key={pid} value={pid}>
+                                {blueprint.sections.find((x) => x.id === pid)?.title} ({blueprint.sections.find((x) => x.id === pid)?.type})
+                              </option>
+                            ))}
+                        </select>
+                        <button type="button" onClick={handleMoveSlots} className="rounded border border-indigo-300 bg-indigo-50 px-2 py-0.5 font-semibold text-indigo-800">
+                          Move
+                        </button>
+                        <button type="button" onClick={() => setSlotMover(null)} className="font-semibold text-slate-500 hover:underline">
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={emptySlots < 1 || s.count < 2}
+                        onClick={() =>
+                          setSlotMover({ fromId: s.id, toId: poolOf(s, blueprint.sections).find((pid) => pid !== s.id) ?? "", slots: 1 })
+                        }
+                        className="font-semibold text-indigo-700 hover:underline disabled:cursor-not-allowed disabled:text-slate-400 disabled:no-underline"
+                        title="Give some of this section's free slots to another section with the same marks per question. The paper's total marks do not change."
+                      >
+                        Move slots to another section
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 {isCollapsed ? (
                   <div className="flex items-center justify-end pt-1 text-xs text-slate-500">
                     <button
@@ -1839,7 +1922,11 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
 
                         const isMatchQ = it.question.type === "MATCH_COLUMN" || s.type === "MATCH_COLUMN";
                         const questionTotalMarks = questionSlotMarks(s, it.question as never).marks;
-                        const targetSlotMarksForQ = isMatchQ && s.count > 1
+                        // a match in a flexible section takes as many slots as it is worth, so it always fits its own slots
+                        const spanningMatch = it.question.type === "MATCH_COLUMN" && s.type !== "MATCH_COLUMN" && spansSlots(s);
+                        const targetSlotMarksForQ = spanningMatch
+                          ? questionTotalMarks
+                          : isMatchQ && s.count > 1
                           ? s.count * s.marksEach
                           : s.marksEach;
                         const isQuestionMarksMismatch = questionTotalMarks !== targetSlotMarksForQ;
@@ -1915,6 +2002,32 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                 lang={paper ? detectPaperLanguage(paper, paper.items) : "en"}
                               />
                             </div>
+
+                            {spanningMatch && (
+                              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                                <span className="font-semibold">
+                                  Uses {questionTotalMarks} of {s.count} slots ({questionTotalMarks} mark{questionTotalMarks === 1 ? "" : "s"})
+                                </span>
+                                {canEditPaper && (
+                                  <span className="inline-flex items-center gap-1">
+                                    <span>Marks per pair:</span>
+                                    {[1, 0.5].map((v) => {
+                                      const current = (it.question as { pairMarks?: number | null }).pairMarks === 0.5 ? 0.5 : 1;
+                                      return (
+                                        <button
+                                          key={v}
+                                          type="button"
+                                          onClick={() => current !== v && handleSetPairMarks(it.id, v)}
+                                          className={`rounded border px-1.5 py-0.5 font-semibold ${current === v ? "border-indigo-400 bg-indigo-50 text-indigo-800" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                                        >
+                                          {v === 1 ? "1" : "1/2"}
+                                        </button>
+                                      );
+                                    })}
+                                  </span>
+                                )}
+                              </div>
+                            )}
 
                             {/* Question Usage History & Freshness Alerts */}
                             {((it.question.usages && it.question.usages.length > 0) ||
