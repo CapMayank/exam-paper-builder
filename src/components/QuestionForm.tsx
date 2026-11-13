@@ -62,6 +62,12 @@ import {
   suggestSkill,
 } from "@/lib/questionTagging";
 import { chapterChoice, detailsSummary, samePayload } from "@/lib/questionModal";
+import {
+  DEFAULT_ASSERTION_OPTIONS_EN,
+  DEFAULT_ASSERTION_OPTIONS_HI,
+  getDefaultSubpartsForType,
+  switchTypeFields,
+} from "@/lib/typeSwitch";
 import { MathRichEditor, type MathRichEditorHandle } from "./MathRichEditor";
 import { MathToolbar } from "./MathToolbar";
 import { DiagramSearchModal } from "./DiagramSearchModal";
@@ -87,20 +93,6 @@ function defaultSpaceMm(type: string, className?: string): number {
 }
 const LETTERS = "ABCDEF";
 const ROMAN_LABELS = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(viii)"];
-
-const DEFAULT_ASSERTION_OPTIONS_EN = [
-  "Both Assertion (A) and Reason (R) are true and Reason (R) is the correct explanation of Assertion (A).",
-  "Both Assertion (A) and Reason (R) are true but Reason (R) is not the correct explanation of Assertion (A).",
-  "Assertion (A) is true but Reason (R) is false.",
-  "Assertion (A) is false but Reason (R) is true.",
-];
-
-const DEFAULT_ASSERTION_OPTIONS_HI = [
-  "अभिकथन (A) और कारण (R) दोनों सही हैं तथा कारण (R), अभिकथन (A) की सही व्याख्या करता है।",
-  "अभिकथन (A) और कारण (R) दोनों सही हैं, परन्तु कारण (R), अभिकथन (A) की सही व्याख्या नहीं करता है।",
-  "अभिकथन (A) सही है, किंतु कारण (R) गलत है।",
-  "अभिकथन (A) गलत है, किंतु कारण (R) सही है।",
-];
 
 /** The ways a question's parts are lettered; picking one relabels every part in order. */
 const PART_LABEL_STYLES: { id: string; name: string; labels: string[] }[] = [
@@ -149,54 +141,6 @@ function PartMarksInput({ value, onChange }: { value: number; onChange: (marks: 
       onBlur={() => setDraft(null)}
     />
   );
-}
-
-function getDefaultSubpartsForType(qType?: string, targetMarks?: number): SubPart[] {
-  const total = targetMarks && targetMarks >= 2 ? targetMarks : 4;
-  if (qType === "REFERENCE_CONTEXT") {
-    if (total === 5) {
-      return [
-        { label: "(क)", text: "सन्दर्भ (Reference): पाठ एवं कवि/लेखक का नाम लिखिए।", marks: 1, answer: "" },
-        { label: "(ख)", text: "प्रसंग (Context): पंक्तियों का मुख्य प्रसंग स्पष्ट कीजिए।", marks: 1, answer: "" },
-        { label: "(ग)", text: "व्याख्या (Explanation): प्रस्तुत अंश की सप्रसंग व्याख्या कीजिए।", marks: 2, answer: "" },
-        { label: "(घ)", text: "विशेष / काव्य-सौन्दर्य (Literary Beauty): भाषा, शैली, रस एवं अलंकार लिखिए।", marks: 1, answer: "" },
-      ];
-    }
-    if (total === 3) {
-      return [
-        { label: "(क)", text: "सन्दर्भ एवं प्रसंग (Reference & Context)", marks: 1, answer: "" },
-        { label: "(ख)", text: "व्याख्या एवं विशेष (Explanation & Literary Note)", marks: 2, answer: "" },
-      ];
-    }
-    return [
-      { label: "(क)", text: "सन्दर्भ एवं प्रसंग (Reference & Context)", marks: 1, answer: "" },
-      { label: "(ख)", text: "व्याख्या (Explanation)", marks: Math.max(1, total - 2), answer: "" },
-      { label: "(ग)", text: "विशेष / काव्य-सौन्दर्य (Poetic / Literary Beauty)", marks: 1, answer: "" },
-    ];
-  }
-  if (qType === "UNSEEN_PASSAGE") {
-    if (total === 5) {
-      return [
-        { label: "(i)", text: "उपर्युक्त गद्यांश का उपयुक्त शीर्षक लिखिए। / Give a suitable title to the passage.", marks: 1, answer: "" },
-        { label: "(ii)", text: "", marks: 1, answer: "" },
-        { label: "(iii)", text: "", marks: 1, answer: "" },
-        { label: "(iv)", text: "", marks: 2, answer: "" },
-      ];
-    }
-    return [
-      { label: "(i)", text: "", marks: 1, answer: "" },
-      { label: "(ii)", text: "", marks: 1, answer: "" },
-      { label: "(iii)", text: "", marks: Math.max(1, total - 2), answer: "" },
-    ];
-  }
-  if (qType === "CASE_STUDY") {
-    return [
-      { label: "(i)", text: "", marks: 1, answer: "" },
-      { label: "(ii)", text: "", marks: 1, answer: "" },
-      { label: "(iii)", text: "", marks: Math.max(1, total - 2), answer: "" },
-    ];
-  }
-  return [];
 }
 
 /** Create or edit a question. Saving always writes it to the question bank. */
@@ -679,36 +623,23 @@ export function QuestionForm({
   }
 
   function changeType(newType: string) {
+    // the old type's untouched defaults are cleared, the new type's own defaults filled in, typed work kept
+    const next = switchTypeFields(type, newType, { text, subparts, options, answer }, targetMarks);
     setType(newType);
     if (!initial) setSpaceMm(defaultSpaceMm(newType, book?.className));
+    setText(next.text);
+    setSubparts(next.subparts);
+    setOptions(next.options);
+    setAnswer(next.answer);
     if (isKindergartenType(newType)) {
       const plugin = getKindergartenActivity(newType);
       if (plugin) {
         const defCfg = plugin.defaultConfig(book?.subject);
         setKdgConfig(defCfg);
-        if (!text.trim() || isKindergartenType(type)) {
+        if (!next.text.trim() || isKindergartenType(type)) {
           setText(defCfg.instruction);
         }
       }
-    } else if (newType === "ASSERTION_REASON") {
-      // keep options the teacher already typed; only an empty set gets the standard A/R choices
-      if (options.every((o) => !o.trim())) setOptions([...DEFAULT_ASSERTION_OPTIONS_EN]);
-      if (!text.trim()) {
-        setText(
-          "Assertion (A): [Enter statement here]\nReason (R): [Enter reason here]\n\nDirection: In the following question, a statement of Assertion (A) is followed by a statement of Reason (R). Choose the correct option."
-        );
-      }
-      if (!answer) setAnswer("A");
-    } else if (newType === "MATCH_COLUMN") {
-      if (!text.trim()) {
-        setText("Match Column A with Column B and choose the correct match: / सही जोड़ी मिलाइए (स्तम्भ 'अ' को स्तम्भ 'ब' से सुमेलित कीजिए):");
-      }
-    } else if (isSubpartQuestionType(newType)) {
-      if (subparts.length === 0) {
-        setSubparts(getDefaultSubpartsForType(newType, targetMarks));
-      }
-    } else if (!canHaveSubparts(newType)) {
-      setSubparts([]);
     }
   }
 
