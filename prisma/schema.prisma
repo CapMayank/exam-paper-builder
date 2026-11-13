@@ -230,6 +230,7 @@ model PaperQuestion {
   pageBreakBefore Boolean      @default(false)
   componentKey String          @default("") // blueprint component this question counts toward
   instruction  String          @default("") // printed above the question; "" = print nothing
+  pairMarks    Float?          // match question in a flexible section: marks per pair (1 or 0.5); null = 1
   paper        Paper            @relation(fields: [paperId], references: [id], onDelete: Cascade)
   section      BlueprintSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   question     Question         @relation("PrimaryQuestion", fields: [questionId], references: [id], onDelete: Restrict)

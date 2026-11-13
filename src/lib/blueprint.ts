@@ -609,6 +609,8 @@ export function questionSlotMarks(
     subparts?: Array<{ marks: number }> | null;
     subpartsJson?: string | null;
     attemptCount?: number | null;
+    /** match question in a flexible section: marks per pair, 1 (default) or 0.5 (even pair counts only) */
+    pairMarks?: number | null;
   },
 ): { marks: number; units: number } {
   const secMarksEach = section.marksEach ?? 1;
@@ -631,7 +633,8 @@ export function questionSlotMarks(
       return { marks: units * secMarksEach, units };
     }
     if (spans && pairs > 0) {
-      const units = Math.min(pairs, secCount);
+      const half = q.pairMarks === 0.5 && pairs % 2 === 0;
+      const units = Math.min(half ? pairs / 2 : pairs, secCount);
       return { marks: units, units };
     }
     return { marks: secMarksEach, units: 1 };
@@ -644,6 +647,23 @@ export function questionSlotMarks(
   const submarks = attemptedSubpartsMarks(subparts as never, attemptCount);
   const marks = submarks > 0 ? (secMarksEach > 0 ? Math.min(submarks, secMarksEach) : submarks) : secMarksEach;
   return { marks, units: 1 };
+}
+
+/**
+ * Why a match question with `pairs` pairs cannot carry `pairMarks` marks per pair in this section; null when it can.
+ * Only 1 or 1/2 are offered, 1/2 needs an even pair count so the question's marks stay whole, and only flexible
+ * (class 8 and below) one-mark sections take it.
+ */
+export function pairMarksProblem(
+  section: { type?: string; count: number; marksEach: number; allowedTypesJson?: string | null; flexible?: boolean },
+  pairs: number,
+  pairMarks: number,
+): string | null {
+  if (pairMarks !== 1 && pairMarks !== 0.5) return "Marks per pair must be 1 or 1/2.";
+  if (pairMarks === 1) return null;
+  if (!spansSlots(section)) return "Half a mark per pair is only for class 8 and below, in a one-mark section that takes match questions.";
+  if (pairs % 2 !== 0) return "1/2 mark per pair needs an even number of pairs, so the question's marks stay whole.";
+  return null;
 }
 
 type PlaceableQuestion = Parameters<typeof questionSlotMarks>[1];
@@ -688,6 +708,8 @@ export function toPlacedItems(
   items: {
     sectionId: string;
     questionId?: string;
+    /** marks per pair of a match question in a flexible section (null = 1) */
+    pairMarks?: number | null;
     question: {
       id?: string;
       chapterId: string;
@@ -709,6 +731,7 @@ export function toPlacedItems(
       ...i.question,
       explanation: (i.question as { explanation?: string | null }).explanation,
       attemptCount: (i.question as { attemptCount?: number | null }).attemptCount,
+      pairMarks: i.pairMarks ?? (i.question as { pairMarks?: number | null }).pairMarks,
     });
     return {
       sectionId: i.sectionId,

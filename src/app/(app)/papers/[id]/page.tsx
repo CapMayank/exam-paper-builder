@@ -80,7 +80,7 @@ import {
   type ExamType,
   type PaperLanguage,
 } from "@/lib/constants";
-import { questionSlotMarks } from "@/lib/blueprint";
+import { questionSlotMarks, spansSlots } from "@/lib/blueprint";
 import { resolveMarksStyle } from "@/lib/marksDisplay";
 import { coverageRows } from "@/lib/coverage";
 import { componentCoverage, parseComponents } from "@/lib/languageComponents";
@@ -347,6 +347,19 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
       const updated = await api<PaperData>(`/api/papers/${id}/questions/${itemId}`, {
         method: "PATCH",
         json: { pageBreakBefore },
+      });
+      adopt(updated);
+    } catch (e) {
+      showError((e as Error).message);
+    }
+  }
+
+  async function handleSetPairMarks(itemId: string, pairMarks: number) {
+    cancelAutosave();
+    try {
+      const updated = await api<PaperData>(`/api/papers/${id}/questions/${itemId}`, {
+        method: "PATCH",
+        json: { pairMarks },
       });
       adopt(updated);
     } catch (e) {
@@ -1839,7 +1852,11 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
 
                         const isMatchQ = it.question.type === "MATCH_COLUMN" || s.type === "MATCH_COLUMN";
                         const questionTotalMarks = questionSlotMarks(s, it.question as never).marks;
-                        const targetSlotMarksForQ = isMatchQ && s.count > 1
+                        // a match in a flexible section takes as many slots as it is worth, so it always fits its own slots
+                        const spanningMatch = it.question.type === "MATCH_COLUMN" && s.type !== "MATCH_COLUMN" && spansSlots(s);
+                        const targetSlotMarksForQ = spanningMatch
+                          ? questionTotalMarks
+                          : isMatchQ && s.count > 1
                           ? s.count * s.marksEach
                           : s.marksEach;
                         const isQuestionMarksMismatch = questionTotalMarks !== targetSlotMarksForQ;
@@ -1915,6 +1932,32 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                 lang={paper ? detectPaperLanguage(paper, paper.items) : "en"}
                               />
                             </div>
+
+                            {spanningMatch && (
+                              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                                <span className="font-semibold">
+                                  Uses {questionTotalMarks} of {s.count} slots ({questionTotalMarks} mark{questionTotalMarks === 1 ? "" : "s"})
+                                </span>
+                                {canEditPaper && (
+                                  <span className="inline-flex items-center gap-1">
+                                    <span>Marks per pair:</span>
+                                    {[1, 0.5].map((v) => {
+                                      const current = (it.question as { pairMarks?: number | null }).pairMarks === 0.5 ? 0.5 : 1;
+                                      return (
+                                        <button
+                                          key={v}
+                                          type="button"
+                                          onClick={() => current !== v && handleSetPairMarks(it.id, v)}
+                                          className={`rounded border px-1.5 py-0.5 font-semibold ${current === v ? "border-indigo-400 bg-indigo-50 text-indigo-800" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                                        >
+                                          {v === 1 ? "1" : "1/2"}
+                                        </button>
+                                      );
+                                    })}
+                                  </span>
+                                )}
+                              </div>
+                            )}
 
                             {/* Question Usage History & Freshness Alerts */}
                             {((it.question.usages && it.question.usages.length > 0) ||

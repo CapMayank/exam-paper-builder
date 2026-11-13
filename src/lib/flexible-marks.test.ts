@@ -94,3 +94,43 @@ describe("printed section formula with a spanning match", () => {
     expect(sectionItemsFormula(mcqSection(false), [match(4), mcq], "usual")).toBe("usual");
   });
 });
+
+import { pairMarksProblem } from "./blueprint";
+
+describe("pair value (1 or 1/2 mark per pair)", () => {
+  const withPm = (n: number, pairMarks: number | null) => ({ ...match(n), pairMarks });
+  it("4 pairs at 1/2 take 2 marks and 2 slots", () => {
+    expect(slotPlacement(mcqSection(true), withPm(4, 0.5))).toEqual({ marks: 2, subpartsCount: 2 });
+  });
+  it("2 pairs at 1/2 take 1 mark, 1 slot (counts as an ordinary slot)", () => {
+    expect(slotPlacement(mcqSection(true), withPm(2, 0.5))).toEqual({ marks: 1, subpartsCount: undefined });
+  });
+  it("pairMarks 1 or null equals today's result", () => {
+    expect(slotPlacement(mcqSection(true), withPm(4, 1))).toEqual({ marks: 4, subpartsCount: 4 });
+    expect(slotPlacement(mcqSection(true), withPm(4, null))).toEqual({ marks: 4, subpartsCount: 4 });
+  });
+  it("an odd pair count at 1/2 falls back to 1 per pair rather than a fractional mark", () => {
+    expect(slotPlacement(mcqSection(true), withPm(3, 0.5))).toEqual({ marks: 3, subpartsCount: 3 });
+  });
+  it("class 9 ignores pairMarks", () => {
+    expect(slotPlacement(mcqSection(false), withPm(4, 0.5))).toEqual({ marks: 1, subpartsCount: undefined });
+  });
+  it("pairMarksProblem refuses odd pairs at 1/2, other values, and rigid sections", () => {
+    expect(pairMarksProblem(mcqSection(true), 4, 0.5)).toBeNull();
+    expect(pairMarksProblem(mcqSection(true), 4, 1)).toBeNull();
+    expect(pairMarksProblem(mcqSection(true), 3, 0.5)).toMatch(/even/);
+    expect(pairMarksProblem(mcqSection(true), 4, 0.25)).toMatch(/1 or 1\/2/);
+    expect(pairMarksProblem(mcqSection(false), 4, 0.5)).toMatch(/class 8/i);
+  });
+});
+
+import { withPairMarksNote } from "./flexibleMarksPrint";
+
+describe("printed pair value note", () => {
+  it("only a half-mark match gets a note, in the instruction's script", () => {
+    expect(withPairMarksNote("Match the following.", 0.5)).toBe("Match the following. (½ mark for each pair)");
+    expect(withPairMarksNote("सही जोड़ी मिलाइए।", 0.5)).toBe("सही जोड़ी मिलाइए। (प्रत्येक जोड़ी ½ अंक)");
+    expect(withPairMarksNote("Match the following.", 1)).toBe("Match the following.");
+    expect(withPairMarksNote("Match the following.", null)).toBe("Match the following.");
+  });
+});

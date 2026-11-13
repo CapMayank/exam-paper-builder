@@ -1,6 +1,6 @@
 import { questionInstruction } from "./sectionTypes";
 import { loadPaperView } from "./papers";
-import { sectionItemsFormula } from "./flexibleMarksPrint";
+import { sectionItemsFormula, withPairMarksNote } from "./flexibleMarksPrint";
 import { isDraftPaper } from "./preflightChecks";
 import { questionSlotMarks } from "@/lib/blueprint";
 import { partsAttemptCount, resolveMarksStyle, showPartMarks } from "@/lib/marksDisplay";
@@ -725,7 +725,7 @@ export async function buildPaperDocx(
       const isMatch = q.type === "MATCH_COLUMN";
       const { subparts: rawSubparts, attemptCount } = parseSubpartsPayload(q.subpartsJson);
       let parsedSubparts = canHaveSubparts(q.type) ? rawSubparts : [];
-      let baseQText = isMatch ? getMatchColumnInstruction(q.text) : q.text;
+      let baseQText = isMatch ? withPairMarksNote(getMatchColumnInstruction(q.text), (q as { pairMarks?: number | null }).pairMarks) : q.text;
       let decomp: ReturnType<typeof decomposeForSlot> = null;
       if (parsedSubparts.length === 0 && canHaveSubparts(q.type)) {
         decomp = decomposeForSlot(baseQText, section.marksEach);

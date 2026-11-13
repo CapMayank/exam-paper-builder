@@ -163,7 +163,7 @@ export async function loadPaperView(id: string) {
     },
     items.map((i) => {
       const sec = blueprint.sections.find((x) => x.id === i.sectionId) ?? { count: 1, marksEach: 1 };
-      const { marks, subpartsCount } = slotPlacement(sec, i.question as never);
+      const { marks, subpartsCount } = slotPlacement(sec, { ...i.question, pairMarks: i.pairMarks } as never);
       return {
         id: i.id,
         sectionId: i.sectionId,
@@ -193,7 +193,8 @@ export async function loadPaperView(id: string) {
     pageBreakBefore: Boolean(i.pageBreakBefore),
     componentKey: i.componentKey || "",
     instruction: i.instruction || "",
-    question: toQuestionDto(i.question),
+    // the slot's pair value rides on the question so every reader of the view counts marks the same way
+    question: { ...toQuestionDto(i.question), pairMarks: i.pairMarks ?? null },
     orQuestion: i.orQuestion ? toQuestionDto(i.orQuestion) : null,
   }));
 

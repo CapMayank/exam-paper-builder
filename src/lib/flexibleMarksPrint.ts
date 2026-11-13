@@ -35,3 +35,13 @@ export function sectionItemsFormula(
     type: section.type,
   });
 }
+
+/**
+ * The match instruction as printed. A match worth half a mark per pair says so, in the instruction's own script, so
+ * the paper's marks are never a surprise to the student.
+ */
+export function withPairMarksNote(instruction: string, pairMarks: number | null | undefined): string {
+  if (pairMarks !== 0.5) return instruction;
+  const note = /[ऀ-ॿ]/.test(instruction) ? "(प्रत्येक जोड़ी ½ अंक)" : "(½ mark for each pair)";
+  return instruction.includes(note) ? instruction : `${instruction.trim()} ${note}`;
+}
