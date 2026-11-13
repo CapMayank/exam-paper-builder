@@ -148,7 +148,6 @@ export function QuestionForm({
   books,
   initial,
   fixedBookId,
-  fixedType,
   targetMarks,
   allowedChapterIds,
   openMarks,
@@ -165,8 +164,6 @@ export function QuestionForm({
   books: Book[];
   initial?: QuestionDto;
   fixedBookId?: string;
-  /** The starting type, locked (no type dropdown). A caller passing `typeFromParent` does not also pass this. */
-  fixedType?: string;
   targetMarks?: number;
   allowedChapterIds?: string[];
   /** Marks still open per chapter in the paper's blueprint; a new question's chapter is suggested from these. */
@@ -201,7 +198,7 @@ export function QuestionForm({
   const [chapterId, setChapterId] = useState(
     initialChapterBelongs ? initial!.chapterId : preferredChapterBelongs ? preferredChapterId! : (chapters[0]?.id ?? "")
   );
-  const resolvedInitialType = initial?.type ?? typeFromParent ?? fixedType ?? "SHORT";
+  const resolvedInitialType = initial?.type ?? typeFromParent ?? "SHORT";
   const [type, setType] = useState(resolvedInitialType);
   const [text, setText] = useState(() => {
     if (initial?.type === "MATCH_COLUMN" && initial.text) {
@@ -524,7 +521,7 @@ export function QuestionForm({
     setAnswer(keyParts.join(", "));
   }
 
-  const typeLocked = !!fixedType || (!!initial && (initial.timesUsed ?? 0) > 0);
+  const typeLocked = !!initial && (initial.timesUsed ?? 0) > 0;
   const bookLocked = !!fixedBookId || (!!initial && (initial.timesUsed ?? 0) > 0);
   const isMcq = isMcqLikeType(type);
   const usesSubparts = isSubpartQuestionType(type) || (subparts && subparts.length > 0);
@@ -917,6 +914,7 @@ export function QuestionForm({
               onChange={setText}
               onActivate={activate({ type: "text" })}
               placeholder="Type the question here."
+              autoFocus
             />
           </div>
 

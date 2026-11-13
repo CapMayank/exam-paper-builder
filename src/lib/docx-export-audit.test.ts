@@ -601,7 +601,7 @@ In crystal field theory, the interaction between transition metal d-orbitals and
       const res = await putQuestionItem(req, { params: Promise.resolve({ id: paperId, itemId: caseItemId }) } as any);
       expect(res.status).toBe(400);
       const data = await res.json();
-      expect(data.error).toMatch(/Board Guardrail Violation.*must match section marks/i);
+      expect(data.error).toMatch(/^Edited question .*must match section marks/i);
     });
 
     it("rejects POST addition if candidate question subpart marks sum does not match target section marksEach", async () => {
@@ -631,7 +631,7 @@ In crystal field theory, the interaction between transition metal d-orbitals and
       const res = await postQuestion(req, { params: Promise.resolve({ id: paperId }) } as any);
       expect(res.status).toBe(400);
       const data = await res.json();
-      expect(data.error).toMatch(/Board Guardrail Violation.*must match section marks/i);
+      expect(data.error).toMatch(/^Question .*must match section marks/i);
 
       // Cleanup candidate
       await prisma.question.delete({ where: { id: mismatchedQ.id } });

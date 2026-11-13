@@ -90,6 +90,7 @@ import { builderQuestionLabel, computeDisplayedPaperNumbering } from "@/lib/layo
 import { nextSetIdentifier } from "@/lib/multiset";
 import { paperSectionChoiceRequirement } from "@/lib/internalChoiceRules";
 import { autosavePatch } from "@/lib/paperAutosave";
+import { difficultyLabel } from "@/lib/questionModal";
 import type { Book, PaperData, PaperItem, Section, MarksStyle, NumberingStyle, PrintDensity } from "@/lib/types";
 
 function Bar({ used, target, isComplete }: { used: number; target: number; isComplete?: boolean }) {
@@ -2057,7 +2058,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                   {questionTotalMarks} Mark{questionTotalMarks > 1 ? "s" : ""}
                                   {canHaveSubparts(it.question.type) && it.question.subparts && it.question.subparts.length > 0 && ` (${it.question.subparts.length} parts)`}
                                 </span>
-                                <span className="badge font-semibold !bg-slate-100 !text-slate-700 border border-slate-200">{it.question.difficulty}</span>
+                                <span className="badge font-semibold !bg-slate-100 !text-slate-700 border border-slate-200">{difficultyLabel(it.question.difficulty)}</span>
                                 <span className="badge !bg-slate-100 text-slate-700 font-medium border border-slate-200">
                                   Ch {it.question.chapter?.number}. {it.question.chapter?.title}
                                 </span>
@@ -2279,7 +2280,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                                 </div>
                                                 <div className="flex items-center justify-between text-[10px] text-slate-500 pt-0.5">
                                                   <span className="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-600">
-                                                    {sib.difficulty || "MEDIUM"}
+                                                    {difficultyLabel(sib.difficulty)}
                                                   </span>
                                                   <button
                                                     type="button"

@@ -339,7 +339,7 @@ describe("Milestone 2 Empirical Stress Tests: Route Guardrails & Subparts Logic"
 
       const data = await res.json();
       expect(data.error).toBe(
-        "Board Guardrail Violation: Alternate (OR) choice total marks (3) must match section marks (4)."
+        "Alternate (OR) choice total marks (3) must match section marks (4)."
       );
 
       // Verify DB state: orQuestionId remains null
@@ -477,7 +477,7 @@ describe("Milestone 2 Empirical Stress Tests: Route Guardrails & Subparts Logic"
       const res = await PATCH(req, { params: Promise.resolve({ id: paperId, itemId: shortItemId }) });
       expect(res.status).toBe(400);
       const data = await res.json();
-      expect(data.error).toBe("Alternate question must be of type SHORT");
+      expect(data.error).toBe("The OR question must be of type Short answer.");
     });
 
     it("strictly rejects attaching alternate question from different book (HTTP 400)", async () => {

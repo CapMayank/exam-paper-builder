@@ -1,4 +1,4 @@
-import { allowedTypesFor, isTypeAllowed } from "@/lib/sectionTypes";
+import { isTypeAllowed, orTypeRefusal } from "@/lib/sectionTypes";
 import { body, HttpError, route, type SessionUser } from "@/lib/api";
 import { slotPlacement, subpartsMarksProblem, whyCannotAdd } from "@/lib/blueprint";
 import {
@@ -94,7 +94,7 @@ export const PATCH = route(async (req, { id, itemId }, user) => {
     );
 
     const marksProblem = subpartsMarksProblem(item.section, candidate);
-    if (marksProblem) throw new HttpError(400, `Board Guardrail Violation: Replacement question ${marksProblem}`);
+    if (marksProblem) throw new HttpError(400, `Replacement question ${marksProblem}`);
 
     const reason = whyCannotAdd(
       {
@@ -186,11 +186,10 @@ async function editOrQuestion(item: EditableItem, mode: "UPDATE_MASTER" | "FORK_
     throw new HttpError(400, orChapterRefusal(item.question.chapter));
   }
   if (!isTypeAllowed(item.section, qInput.type)) {
-    const allowed = allowedTypesFor(item.section);
-    throw new HttpError(400, allowed.length === 1 ? `Alternate question must be of type ${allowed[0]}` : `Alternate question must be one of: ${allowed.join(", ")}`);
+    throw new HttpError(400, orTypeRefusal(item.section));
   }
   const marksProblem = subpartsMarksProblem(item.section, qInput);
-  if (marksProblem) throw new HttpError(400, `Board Guardrail Violation: Alternate (OR) choice ${marksProblem.replace("total subpart marks", "total marks")}`);
+  if (marksProblem) throw new HttpError(400, `Alternate (OR) choice ${marksProblem.replace("total subpart marks", "total marks")}`);
   if (qInput.text.trim() === item.question.text.trim()) {
     throw new HttpError(400, "Alternate question cannot be identical to the primary question");
   }
@@ -206,7 +205,7 @@ async function editOrQuestion(item: EditableItem, mode: "UPDATE_MASTER" | "FORK_
       },
     });
     if (inFinalPapers > 0) {
-      throw new HttpError(409, "This question is part of another finalised paper. Choose 'Save as copy for this paper only' instead.");
+      throw new HttpError(409, "This question is part of another finalised paper. Choose 'This paper only' instead.");
     }
     await prisma.question.update({ where: { id: or.id }, data });
     return;
@@ -241,7 +240,7 @@ export const PUT = route(async (req, { id, itemId }, user) => {
   );
 
   const marksProblem = subpartsMarksProblem(item.section, qInput);
-  if (marksProblem) throw new HttpError(400, `Board Guardrail Violation: Edited question ${marksProblem}`);
+  if (marksProblem) throw new HttpError(400, `Edited question ${marksProblem}`);
 
   const reason = whyCannotAdd(
     {
@@ -275,7 +274,7 @@ export const PUT = route(async (req, { id, itemId }, user) => {
     if (inFinalPapers > 0) {
       throw new HttpError(
         409,
-        "This question is part of another finalised paper. Choose 'Save as copy for this paper only' instead.",
+        "This question is part of another finalised paper. Choose 'This paper only' instead.",
       );
     }
     await prisma.question.update({ where: { id: item.questionId }, data });

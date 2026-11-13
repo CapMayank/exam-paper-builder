@@ -151,13 +151,13 @@ export function PaperQuestionEditModal({
                 }`}
                 onClick={() => onTarget(t)}
               >
-                {t === "primary" ? "Main question" : "OR question (alternative)"}
+                {t === "primary" ? "Main question" : "OR question"}
               </button>
             ))}
           </div>
           {target === "or" && (
             <p className="text-[11px] text-slate-500">
-              {orRule} It carries the same {section.marksEach} mark(s).
+              It carries the same {section.marksEach} mark(s) as the main question.
             </p>
           )}
         </div>

@@ -23,7 +23,7 @@ export const POST = route(async (req, { id }, user) => {
   if (!targetSection) throw new HttpError(404, "Section not found");
 
   const marksProblem = subpartsMarksProblem(targetSection, question);
-  if (marksProblem) throw new HttpError(400, `Board Guardrail Violation: Question ${marksProblem}`);
+  if (marksProblem) throw new HttpError(400, `Question ${marksProblem}`);
 
   const reason = whyCannotAdd(
     {

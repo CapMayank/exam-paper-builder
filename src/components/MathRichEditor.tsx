@@ -76,6 +76,7 @@ export function MathRichEditor({
   placeholder,
   className = "",
   onActivate,
+  autoFocus = false,
 }: {
   value: string;
   onChange: (next: string) => void;
@@ -83,6 +84,8 @@ export function MathRichEditor({
   placeholder?: string;
   className?: string;
   onActivate?: (handle: MathRichEditorHandle) => void;
+  /** Take the focus once the editor is ready, if nothing else holds it (only the page or its dialog) and it is shown. */
+  autoFocus?: boolean;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const mfRef = useRef<MathfieldCtor | null>(null);
@@ -105,6 +108,19 @@ export function MathRichEditor({
       cancelled = true;
     };
   }, []);
+
+  // The editor only becomes editable once MathLive has loaded, after the dialog chose its initial focus.
+  const autoFocusDone = useRef(false);
+  useEffect(() => {
+    if (!autoFocus || !ready || autoFocusDone.current) return;
+    autoFocusDone.current = true;
+    const root = rootRef.current;
+    // a form mounted hidden or inert (another tab open) never steals the focus
+    if (!root || root.offsetParent === null || root.closest("[inert]")) return;
+    const active = document.activeElement as HTMLElement | null;
+    const free = !active || active === document.body || active.getAttribute("role") === "dialog";
+    if (free) root.focus({ preventScroll: true });
+  }, [autoFocus, ready]);
 
   function markEmpty(root: HTMLElement, text: string) {
     if (text) root.removeAttribute("data-empty");
@@ -314,6 +330,7 @@ export function MathRichEditor({
       spellCheck
       data-empty="true"
       data-placeholder={placeholder}
+      data-autofocus={autoFocus || undefined}
       onFocus={() => onActivate?.(api)}
       onKeyDown={onKeyDown}
       onPaste={onPaste}

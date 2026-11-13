@@ -1,14 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { autoFillPaper } from "./autofill";
 import { whyCannotAdd, type BlueprintDef } from "./blueprint";
+import { QUESTION_TYPE_LABEL } from "./constants";
 import {
   allowedTypesFor,
   defaultAllowedTypes,
   groupedItemInstruction,
   isTypeAllowed,
+  orTypeRefusal,
   questionInstruction,
   subjectFamily,
   toleratesType,
+  typeLabel,
+  typeLabels,
   typeRejection,
 } from "./sectionTypes";
 
@@ -51,6 +55,24 @@ describe("allowed types of a blueprint slot", () => {
     expect(typeRejection(s, "GRAMMAR", 3)).toBeNull();
     expect(typeRejection(s, "GRAMMAR", 4)).toMatch(/3-mark/);
     expect(typeRejection(s, "MAP_WORK", 3)).toMatch(/only accepts/);
+  });
+
+  it("names types by their labels, never the raw value", () => {
+    const s = sec("SHORT", 3, ["GRAMMAR"]);
+    const L = QUESTION_TYPE_LABEL;
+    expect(typeRejection(s, "MAP_WORK", 3)).toBe(`Section SHORT only accepts ${L.SHORT}; ${L.GRAMMAR} questions, not ${L.MAP_WORK}.`);
+    expect(typeRejection(s, "GRAMMAR", 4)).toBe(`Section SHORT takes 3-mark questions; this ${L.GRAMMAR} question is worth 4.`);
+  });
+
+  it("a type without a label shows its stored value", () => {
+    expect(typeLabel("MCQ")).toBe("Multiple choice");
+    expect(typeLabel("SOMETHING_NEW")).toBe("SOMETHING_NEW");
+    expect(typeLabels(["MCQ", "FILL_BLANK", "SOMETHING_NEW"])).toBe("Multiple choice; Fill in the blank; SOMETHING_NEW");
+  });
+
+  it("an OR question of a type the section does not take is refused in plain words", () => {
+    expect(orTypeRefusal(sec("SHORT", 3))).toBe("The OR question must be of type Short answer.");
+    expect(orTypeRefusal(sec("MCQ", 1, ["FILL_BLANK"]))).toBe("The OR question must be one of: Multiple choice; Fill in the blank.");
   });
 });
 

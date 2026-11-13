@@ -75,12 +75,12 @@ describe("Milestone 2: Board Choice Parity Guardrails Logic", () => {
       return { valid: false, error: "Alternate question cannot be identical to the primary question" };
     }
     if (candidate.type !== section.type) {
-      return { valid: false, error: `Alternate question must be of type ${section.type}` };
+      return { valid: false, error: `The OR question must be of type ${section.type === "SHORT" ? "Short answer" : section.type}.` };
     }
     if (candidate.chapterId !== primary.chapterId) {
       return {
         valid: false,
-        error: `Board Guardrail Violation: Alternate (OR) choice must match primary question chapter (Chapter ${primary.chapter.number}: ${primary.chapter.title}).`,
+        error: `Alternate (OR) choice must match primary question chapter (Chapter ${primary.chapter.number}: ${primary.chapter.title}).`,
       };
     }
     if (candidate.subpartsJson && candidate.subpartsJson !== "[]") {
@@ -90,7 +90,7 @@ describe("Milestone 2: Board Choice Parity Guardrails Logic", () => {
         if (total !== section.marksEach) {
           return {
             valid: false,
-            error: `Board Guardrail Violation: Alternate (OR) choice total marks (${total}) must match section marks (${section.marksEach}).`,
+            error: `Alternate (OR) choice total marks (${total}) must match section marks (${section.marksEach}).`,
           };
         }
       }
@@ -108,7 +108,7 @@ describe("Milestone 2: Board Choice Parity Guardrails Logic", () => {
     const res = validateChoiceParity(primaryQuestion, differentChapterCandidate, { marksEach: 2, type: "SHORT" }, "book_math_10");
     expect(res.valid).toBe(false);
     expect(res.error).toBe(
-      "Board Guardrail Violation: Alternate (OR) choice must match primary question chapter (Chapter 1: Real Numbers).",
+      "Alternate (OR) choice must match primary question chapter (Chapter 1: Real Numbers).",
     );
   });
 
@@ -129,7 +129,7 @@ describe("Milestone 2: Board Choice Parity Guardrails Logic", () => {
     const typeMismatchCandidate = { ...sameChapterCandidate, type: "LONG" };
     const res = validateChoiceParity(primaryQuestion, typeMismatchCandidate, { marksEach: 2, type: "SHORT" }, "book_math_10");
     expect(res.valid).toBe(false);
-    expect(res.error).toBe("Alternate question must be of type SHORT");
+    expect(res.error).toBe("The OR question must be of type Short answer.");
   });
 
   it("validates subpart marks sum equality for multi-part alternate candidates", () => {
@@ -142,7 +142,7 @@ describe("Milestone 2: Board Choice Parity Guardrails Logic", () => {
     );
     expect(mismatchRes.valid).toBe(false);
     expect(mismatchRes.error).toBe(
-      "Board Guardrail Violation: Alternate (OR) choice total marks (3) must match section marks (4).",
+      "Alternate (OR) choice total marks (3) must match section marks (4).",
     );
 
     // 4m subparts candidate paired in 4m section -> accept

@@ -8,7 +8,7 @@ import { isExhaustedUsage, QuestionFreshnessAlert, QuestionUsagePills } from "@/
 import { QuestionView } from "@/components/QuestionView";
 import { ErrorBanner, Modal, Spinner } from "@/components/ui";
 import { slotPlacement, subpartsMarksProblem, toPlacedItems, whyCannotAdd, type BlueprintDef } from "@/lib/blueprint";
-import { allowedTypesFor, isTypeAllowed } from "@/lib/sectionTypes";
+import { allowedTypesFor, isTypeAllowed, typeLabels } from "@/lib/sectionTypes";
 import { SKILLS } from "@/lib/questionTagging";
 import { aiQuestionPayload } from "@/lib/aiQuestionPayload";
 import { api, retryTransient } from "@/lib/client";
@@ -179,11 +179,11 @@ export function QuestionPicker({
         let why: string | null = null;
         if (isAlternate) {
           if (activeItem && q.id === activeItem.question.id) {
-            why = "Cannot pick the same question as primary.";
+            why = "This is the main question of this slot.";
           } else if (paper.items.some((i) => i.question.id === q.id || i.orQuestion?.id === q.id)) {
             why = "Already used in this paper.";
           } else if (!isTypeAllowed(section, q.type)) {
-            why = `Must be a type this section accepts (${allowedTypes.join(", ")}).`;
+            why = `Must be a type this section accepts (${typeLabels(allowedTypes)}).`;
           } else if (orChapterLocked && activeItem && q.chapterId !== activeItem.question.chapterId) {
             why = `Must be from the same chapter as the main question (Ch ${activeItem.question.chapter?.number}).`;
           } else if (subpartsMarksProblem(section, q)) {
@@ -193,7 +193,7 @@ export function QuestionPicker({
           if (paper.items.some((i) => (i.question.id === q.id || i.orQuestion?.id === q.id) && i.id !== replacingItemId)) {
             why = "Already used in this paper.";
           } else if (isReplacing && activeItem?.orQuestion?.id === q.id) {
-            why = "Cannot be identical to the alternate (OR) choice of this slot.";
+            why = "This is the OR question of this slot.";
           } else {
             // the same two checks the server makes when the question is added
             const marksProblem = subpartsMarksProblem(section, q);
@@ -707,7 +707,7 @@ export function QuestionPicker({
                               <Plus size={13} />
                             )}{" "}
                             {isAlternate
-                              ? "Set as Alternate (OR)"
+                              ? "Set as OR question"
                               : isReplacing
                               ? "Use as Replacement"
                               : "Add to Slot"}
@@ -836,7 +836,7 @@ export function QuestionPicker({
                   openMarks={chapterGaps}
                   submitLabel={
                     isAlternate
-                      ? "Save to Bank & Set as Alternate"
+                      ? "Save to Bank & Set as OR question"
                       : isReplacing
                       ? "Save to Bank & Use as Replacement"
                       : "Save to Bank & Add to Paper"
@@ -1168,7 +1168,7 @@ export function QuestionPicker({
                     <div className="space-y-2.5 rounded-lg border border-indigo-200 bg-indigo-50/40 p-3">
                       <div className="flex items-center justify-center">
                         <span className="px-2.5 py-0.5 rounded-full bg-indigo-100 border border-indigo-300 text-indigo-900 font-bold text-xs tracking-wide">
-                          OR (अथवा) Alternative
+                          OR question (अथवा)
                         </span>
                       </div>
                       <div className="font-medium text-slate-900 leading-relaxed text-xs">

@@ -74,7 +74,7 @@ export const POST = route(async (req, params, user) => {
   for (const q of ordered) {
     const marksProblem = subpartsMarksProblem(section, q);
     if (marksProblem) {
-      throw new HttpError(400, `Board Guardrail Violation: Question "${q.text.slice(0, 30)}…" ${marksProblem}`);
+      throw new HttpError(400, `Question "${q.text.slice(0, 30)}…" ${marksProblem}`);
     }
 
     const candidate = {

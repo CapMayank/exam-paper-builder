@@ -79,9 +79,15 @@ export function Modal({
     const previouslyFocused = document.activeElement as HTMLElement | null;
     lockScroll();
     const dialog = dialogRef.current;
-    // Focus the first field, otherwise the dialog itself (never the close button, to avoid accidental Enter-closes).
-    const first = dialog?.querySelector<HTMLElement>(`[data-autofocus],${FIELDS}`);
-    (first ?? dialog)?.focus({ preventScroll: true });
+    // Focus a visible [data-autofocus] element, else the first field, otherwise the dialog itself (never the close
+    // button, to avoid accidental Enter-closes). An autofocus element that cannot take focus yet (an editor still
+    // loading) leaves focus on the dialog, and the element takes it itself once ready.
+    const marked = Array.from(dialog?.querySelectorAll<HTMLElement>("[data-autofocus]") ?? []).find(
+      (el) => el.offsetParent !== null && !el.closest("[inert]"),
+    );
+    const first = marked ?? dialog?.querySelector<HTMLElement>(FIELDS);
+    first?.focus({ preventScroll: true });
+    if (!first || document.activeElement !== first) dialog?.focus({ preventScroll: true });
 
     const onKey = (e: KeyboardEvent) => {
       if (modalStack[modalStack.length - 1] !== id) return;

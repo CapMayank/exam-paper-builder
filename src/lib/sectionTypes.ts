@@ -2,6 +2,18 @@
 // default form, and `allowedTypesJson` lists the other forms a teacher may use instead at the same marks
 // (e.g. a grammar or passage question in an English paper's 3-mark section). Pure: no I/O.
 
+import { QUESTION_TYPE_LABEL } from "./constants";
+
+/** A question type as the teacher reads it; the stored value when the type has no label. */
+export function typeLabel(type: string): string {
+  return (QUESTION_TYPE_LABEL as Record<string, string>)[type] ?? type;
+}
+
+/** Several types as the teacher reads them. Labels hold commas of their own, so they are joined with "; ". */
+export function typeLabels(types: string[]): string {
+  return types.map(typeLabel).join("; ");
+}
+
 /** One-mark objective forms that have always been interchangeable in a one-mark section. */
 const OBJECTIVE_TYPES = ["MCQ", "FILL_BLANK", "TRUE_FALSE", "MATCH_COLUMN", "ONE_WORD"];
 const SUBJECTIVE_TYPES = ["SHORT", "LONG"];
@@ -57,12 +69,20 @@ export function typeRejection(
 ): string | null {
   if (!type || type === section.type) return null;
   if (!isTypeAllowed(section, type)) {
-    return `${section.title} only accepts ${allowedTypesFor(section).join(", ")} questions, not ${type}.`;
+    return `${section.title} only accepts ${typeLabels(allowedTypesFor(section))} questions, not ${typeLabel(type)}.`;
   }
   if (marks && marks > 0 && marks !== section.marksEach) {
-    return `${section.title} takes ${section.marksEach}-mark questions; this ${type} question is worth ${marks}.`;
+    return `${section.title} takes ${section.marksEach}-mark questions; this ${typeLabel(type)} question is worth ${marks}.`;
   }
   return null;
+}
+
+/** Why an OR question of a type this section does not take is refused. */
+export function orTypeRefusal(section: TypedSection): string {
+  const allowed = allowedTypesFor(section);
+  return allowed.length === 1
+    ? `The OR question must be of type ${typeLabel(allowed[0])}.`
+    : `The OR question must be one of: ${typeLabels(allowed)}.`;
 }
 
 export type SubjectFamily = "LANGUAGE" | "SCIENCE" | "SST" | "MATHS" | "OTHER";

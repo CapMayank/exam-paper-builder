@@ -3,7 +3,7 @@ import { HttpError, type SessionUser } from "./api";
 import { resolvePaperExamType } from "./constants";
 import { toQuestionDto } from "./dto";
 import { diagnosePaperImplications, paperStatus, questionSlotMarks, subpartsMarksProblem, toPlacedItems } from "./blueprint";
-import { allowedTypesFor, isTypeAllowed } from "./sectionTypes";
+import { isTypeAllowed, orTypeRefusal } from "./sectionTypes";
 import { componentImplications, parseComponents } from "./languageComponents";
 import { blueprintInclude } from "./blueprints";
 import {
@@ -318,7 +318,7 @@ export async function assertValidOrChoice(
   if (choiceReq.forbidden) {
     throw new HttpError(
       400,
-      `Board Guardrail Violation: Internal choices (OR / अथवा) are forbidden for this section (${choiceReq.rationale}).`,
+      `Internal choices (OR / अथवा) are forbidden for this section (${choiceReq.rationale}).`,
     );
   }
   const candidate = await prisma.question.findUnique({ where: { id: orQuestionId }, include: { chapter: true } });
@@ -326,15 +326,14 @@ export async function assertValidOrChoice(
   if (candidate.bookId !== paper.blueprint.bookId) throw new HttpError(400, "Alternate question is from a different book");
   if (candidate.id === primary.id) throw new HttpError(400, "Alternate question cannot be identical to the primary question");
   if (!isTypeAllowed(section, candidate.type)) {
-    const allowed = allowedTypesFor(section);
-    throw new HttpError(400, allowed.length === 1 ? `Alternate question must be of type ${allowed[0]}` : `Alternate question must be one of: ${allowed.join(", ")}`);
+    throw new HttpError(400, orTypeRefusal(section));
   }
   // up to class 8 the same chapter is only a guideline; from class 9 it is required
   if (candidate.chapterId !== primary.chapterId && orChapterRequired(paper.blueprint.book.className)) {
     throw new HttpError(400, orChapterRefusal(paper.blueprint.chapters.find((c) => c.chapterId === primary.chapterId)?.chapter));
   }
   const marksProblem = subpartsMarksProblem(section, candidate);
-  if (marksProblem) throw new HttpError(400, `Board Guardrail Violation: Alternate (OR) choice ${marksProblem.replace("total subpart marks", "total marks")}`);
+  if (marksProblem) throw new HttpError(400, `Alternate (OR) choice ${marksProblem.replace("total subpart marks", "total marks")}`);
   if (paper.items.some((i) => i.id !== slot.itemId && (i.question.id === candidate.id || i.orQuestion?.id === candidate.id))) {
     throw new HttpError(409, "This question is already used in this paper");
   }
