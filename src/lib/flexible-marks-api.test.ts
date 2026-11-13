@@ -9,6 +9,9 @@ vi.mock("@/lib/session", () => ({
 
 import { POST as aiCommit } from "@/app/api/papers/[id]/ai-commit-section/route";
 import { POST as aiGenerate } from "@/app/api/papers/[id]/ai-generate-section/route";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { PaperSheets } from "@/components/PaperSheets";
 import { buildPaperDocx } from "./paperDocx";
 import { planPaperSlotAssignments } from "./paperAutogen";
 import { POST as duplicatePaper } from "@/app/api/papers/[id]/duplicate/route";
@@ -221,5 +224,25 @@ describe("flexible marks through the API", () => {
       expect(text).not.toMatch(/\[4 Marks?\]/);
       expect(text).toMatch(/4 Questions? · 5 Marks?/i);
     }
+  });
+
+  it("the printed sheet (PaperSheets) shows the same true marks as the DOCX, with a Section total that adds up", async () => {
+    const t = await setup("Class 6");
+    const added = (await (await t.add(t.a, (await t.mk(4)).id)).json()) as View;
+    await t.patch(added.items[0].id, { pairMarks: 0.5 });
+    const ch = (await prisma.chapter.findFirst({ where: { bookId: { in: bookIds } }, orderBy: { id: "desc" } }))!;
+    let last: View | undefined;
+    for (let i = 0; i < 3; i++) {
+      const q = await prisma.question.create({
+        data: { bookId: ch.bookId, chapterId: ch.id, type: "MCQ", text: `Sheet filler ${i}?`, optionsJson: JSON.stringify(["a", "b", "c", "d"]), answer: "a", createdById: userId },
+      });
+      last = (await (await t.add(t.a, q.id)).json()) as View;
+    }
+    const html = renderToStaticMarkup(createElement(PaperSheets, { paper: last as never, view: "reading" }));
+    const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+    expect(text).toMatch(/4 Questions? · 5 Marks?/i);
+    expect(text).toContain("½ mark for each pair");
+    expect(text).toMatch(/\[?\s*2 Marks?\s*\]?/);
+    expect(text).not.toMatch(/\[?\s*4 Marks?\s*\]?/);
   });
 });
