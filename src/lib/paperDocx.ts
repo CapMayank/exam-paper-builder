@@ -1,5 +1,6 @@
 import { questionInstruction } from "./sectionTypes";
 import { loadPaperView } from "./papers";
+import { sectionItemsFormula } from "./flexibleMarksPrint";
 import { isDraftPaper } from "./preflightChecks";
 import { questionSlotMarks } from "@/lib/blueprint";
 import { partsAttemptCount, resolveMarksStyle, showPartMarks } from "@/lib/marksDisplay";
@@ -614,7 +615,12 @@ export async function buildPaperDocx(
 
     if (hasMultipleTypes) {
       const typeLabel = getQuestionTypeLabel(section.type, paperLang);
-      const formula = formatExerciseFormula(section.count, section.marksEach, paperLang);
+      const formula = sectionItemsFormula(
+        section,
+        items.map((x) => x.question as never),
+        formatExerciseFormula(section.count, section.marksEach, paperLang),
+        paperLang,
+      );
       paragraphs.push(
         new Paragraph({
           alignment: AlignmentType.CENTER,
@@ -643,7 +649,12 @@ export async function buildPaperDocx(
         hasMultipleTypes,
         paperLang
       );
-      const exerciseFormula = formatExerciseFormula(items.length, section.marksEach, paperLang);
+      const exerciseFormula = sectionItemsFormula(
+        section,
+        items.map((x) => x.question as never),
+        formatExerciseFormula(items.length, section.marksEach, paperLang),
+        paperLang,
+      );
 
       paragraphs.push(
         new Paragraph({

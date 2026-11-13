@@ -2,7 +2,7 @@ import "server-only";
 import { HttpError, type SessionUser } from "./api";
 import { resolvePaperExamType } from "./constants";
 import { toQuestionDto } from "./dto";
-import { diagnosePaperImplications, paperStatus, questionSlotMarks, subpartsMarksProblem, toPlacedItems } from "./blueprint";
+import { diagnosePaperImplications, paperStatus, questionSlotMarks, slotPlacement, subpartsMarksProblem, toPlacedItems } from "./blueprint";
 import { isTypeAllowed, orTypeRefusal, withEffectiveAllowedTypes } from "./sectionTypes";
 import { componentImplications, parseComponents } from "./languageComponents";
 import { blueprintInclude } from "./blueprints";
@@ -163,9 +163,7 @@ export async function loadPaperView(id: string) {
     },
     items.map((i) => {
       const sec = blueprint.sections.find((x) => x.id === i.sectionId) ?? { count: 1, marksEach: 1 };
-      const { marks, units } = questionSlotMarks(sec, i.question as never);
-      const multiUnitMatch =
-        i.question.type === "MATCH_COLUMN" && (sec as { type?: string }).type === "MATCH_COLUMN" && sec.count > 1;
+      const { marks, subpartsCount } = slotPlacement(sec, i.question as never);
       return {
         id: i.id,
         sectionId: i.sectionId,
@@ -173,7 +171,7 @@ export async function loadPaperView(id: string) {
         type: i.question.type,
         text: i.question.text,
         marks,
-        subpartsCount: multiUnitMatch ? units : undefined,
+        subpartsCount,
       };
     }),
   );

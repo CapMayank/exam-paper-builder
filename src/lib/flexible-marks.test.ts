@@ -78,3 +78,19 @@ describe("isFlexibleClass / withEffectiveAllowedTypes", () => {
     expect(withEffectiveAllowedTypes(sec, { className: "Class 10", subject: "English" }).flexible).toBe(false);
   });
 });
+
+import { sectionItemsFormula, spanningSectionTotals } from "./flexibleMarksPrint";
+
+describe("printed section formula with a spanning match", () => {
+  const sec = mcqSection(true);
+  const mcq = { type: "MCQ", text: "q", options: ["a", "b"] };
+  it("is the true count and marks, not 'count x marks each'", () => {
+    expect(spanningSectionTotals(sec, [match(4), mcq])).toEqual({ count: 2, marks: 5 });
+    expect(sectionItemsFormula(sec, [match(4), mcq], "5 questions × 1 mark = 5 marks")).toBe("2 Questions · 5 Marks");
+  });
+  it("leaves the usual formula when no match spans slots", () => {
+    expect(spanningSectionTotals(sec, [mcq, mcq])).toBeNull();
+    expect(sectionItemsFormula(sec, [mcq, mcq], "usual")).toBe("usual");
+    expect(sectionItemsFormula(mcqSection(false), [match(4), mcq], "usual")).toBe("usual");
+  });
+});
