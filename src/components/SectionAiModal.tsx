@@ -16,6 +16,7 @@ import {
 import { MathText } from "@/components/MathText";
 import { QuestionContent } from "@/components/QuestionContent";
 import { useToast } from "@/components/ui";
+import { difficultyLabel } from "@/lib/questionModal";
 import { answerStageSummary, runAnswerStages } from "@/lib/answerStage";
 import { api, retryTransient } from "@/lib/client";
 import {
@@ -619,7 +620,7 @@ export function SectionAiModal({
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-600">
-                          {q.difficulty}
+                          {difficultyLabel(q.difficulty)}
                         </span>
                         <span className="rounded bg-indigo-50 border border-indigo-200/60 px-2 py-0.5 font-bold text-indigo-700">
                           {isSubpartQuestionType(q.type || section.type) && q.subparts && q.subparts.length > 0

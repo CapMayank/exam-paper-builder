@@ -21,6 +21,8 @@ import { api, retryTransient } from "@/lib/client";
 import { MathText } from "./MathText";
 import { QuestionContent } from "./QuestionContent";
 import type { Book, Chapter } from "@/lib/types";
+import { difficultyLabel, skillLabel } from "@/lib/questionModal";
+import { SKILLS } from "@/lib/questionTagging";
 
 export interface GeneratedQuestionPayload {
   type: string;
@@ -79,7 +81,7 @@ export function AIQuestionGeneratorModal({
   const [type, setType] = useState<string>(defaultType || "SHORT");
   const [marks, setMarks] = useState<number>(defaultMarks || 3);
   const [difficulty, setDifficulty] = useState<"EASY" | "MEDIUM" | "HARD">("MEDIUM");
-  const [cognitiveLevel, setCognitiveLevel] = useState<string>("APPLYING");
+  const [cognitiveLevel, setCognitiveLevel] = useState<string>("UNDERSTANDING");
   const [language, setLanguage] = useState<PaperLanguage>(() => {
     const sub = (selectedBook?.subject || "").toLowerCase();
     const title = (selectedBook?.title || "").toLowerCase();
@@ -440,7 +442,6 @@ export function AIQuestionGeneratorModal({
                 <option value="MCQ">Multiple Choice (MCQ)</option>
                 <option value="SHORT">Short Answer</option>
                 <option value="LONG">Long Answer</option>
-                <option value="NUMERICAL">Numerical Problem</option>
               </select>
             </label>
           )}
@@ -470,25 +471,25 @@ export function AIQuestionGeneratorModal({
               value={difficulty}
               onChange={(e) => setDifficulty(e.target.value as "EASY" | "MEDIUM" | "HARD")}
             >
-              <option value="EASY">Easy (Direct recall / foundational)</option>
-              <option value="MEDIUM">Medium (Application & conceptual)</option>
-              <option value="HARD">Hard (Multi-step / HOTS)</option>
+              <option value="EASY">Easy</option>
+              <option value="MEDIUM">Average</option>
+              <option value="HARD">Difficult</option>
             </select>
           </label>
 
           {/* Cognitive Level */}
           <label className="block">
-            <span className="label">Bloom's Cognitive Level</span>
+            <span className="label">Skill</span>
             <select
               className="input text-xs"
               value={cognitiveLevel}
               onChange={(e) => setCognitiveLevel(e.target.value)}
             >
-              <option value="REMEMBERING">Remembering (Recall terms/facts)</option>
-              <option value="UNDERSTANDING">Understanding (Explain/summarize)</option>
-              <option value="APPLYING">Applying (Solve/calculate/predict)</option>
-              <option value="ANALYZING">Analyzing (Examine/differentiate)</option>
-              <option value="EVALUATING">Evaluating (Judge/justify)</option>
+              {SKILLS.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
+              ))}
             </select>
           </label>
 
@@ -537,11 +538,13 @@ export function AIQuestionGeneratorModal({
                   {activeQuestion.type} · {activeQuestion.marks} Mark{activeQuestion.marks > 1 ? "s" : ""}
                 </span>
                 <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
-                  {activeQuestion.difficulty}
+                  {difficultyLabel(activeQuestion.difficulty)}
                 </span>
-                <span className="rounded bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 border border-amber-200">
-                  {activeQuestion.cognitiveLevel}
-                </span>
+                {skillLabel(activeQuestion.cognitiveLevel) && (
+                  <span className="rounded bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 border border-amber-200">
+                    {skillLabel(activeQuestion.cognitiveLevel)}
+                  </span>
+                )}
               </div>
               <button
                 type="button"

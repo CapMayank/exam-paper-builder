@@ -29,6 +29,9 @@ import { ErrorBanner, Field, Modal, useConfirm, useToast } from "@/components/ui
 import type { BatchImportReport } from "@/lib/batchQuestionIo";
 import { parseBulkQuestions } from "@/lib/bulkImport";
 import { api } from "@/lib/client";
+import { aiDraftType } from "@/lib/aiDraftType";
+import { difficultyLabel } from "@/lib/questionModal";
+import { skillOf } from "@/lib/questionTagging";
 import { canModifyQuestion, hasAnyWriteScope, type Actor } from "@/lib/permissions";
 import { DIFFICULTIES, isKindergartenType, isMcqLikeType, QUESTION_TYPES, QUESTION_TYPE_LABEL, sortClassNames, type QuestionType } from "@/lib/constants";
 import { subpartsTotalMarks, type Book, type QuestionDto } from "@/lib/types";
@@ -105,6 +108,8 @@ export default function QuestionsPage() {
   const [subjectFilter, setSubjectFilter] = useState<string>("");
   const [filters, setFilters] = useState({ bookId: "", chapterId: "", type: "", difficulty: "", marks: "", q: "", freshness: "ALL" });
   const [editing, setEditing] = useState<QuestionDto | "new" | null>(null);
+  // marks of an AI-generated draft, so the form checks its parts against them; null for any other edit
+  const [draftMarks, setDraftMarks] = useState<number | null>(null);
   const [showAnswers, setShowAnswers] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -296,7 +301,7 @@ export default function QuestionsPage() {
         }
       );
       const verifiedCount = res.updatedCount ?? res.count ?? 0;
-      toast.success(`Updated difficulty to ${diff} for ${verifiedCount} question(s).`);
+      toast.success(`Updated difficulty to ${difficultyLabel(diff)} for ${verifiedCount} question(s).`);
       setSelectedIds(new Set());
       await load();
     } catch (e) {
@@ -558,7 +563,7 @@ export default function QuestionsPage() {
           <option value="">Any difficulty</option>
           {DIFFICULTIES.map((d) => (
             <option key={d} value={d}>
-              {d}
+              {difficultyLabel(d)}
             </option>
           ))}
         </select>
@@ -704,7 +709,7 @@ export default function QuestionsPage() {
                     {isKindergartenType(q.type) ? "🎨 " : ""}
                     {QUESTION_TYPE_LABEL[q.type as keyof typeof QUESTION_TYPE_LABEL]}
                   </span>
-                  <span className={`badge border font-semibold ${diffBadgeClass}`}>{q.difficulty}</span>
+                  <span className={`badge border font-semibold ${diffBadgeClass}`}>{difficultyLabel(q.difficulty)}</span>
                   {q.subparts && q.subparts.length > 0 ? (
                     <span
                       className="badge bg-indigo-50 text-indigo-700 font-semibold border border-indigo-200"
@@ -833,7 +838,7 @@ export default function QuestionsPage() {
                   onClick={() => handleBulkUpdateDifficulty(diff)}
                   className="btn btn-xs btn-outline text-slate-700 hover:text-indigo-700 hover:border-indigo-300"
                 >
-                  {diff}
+                  {difficultyLabel(diff)}
                 </button>
               ))}
             </div>
@@ -866,7 +871,10 @@ export default function QuestionsPage() {
               : "Edit Question"
           }
           subtitle="Write the question and its answer. Chapter, difficulty and skill fill in as you type."
-          onClose={() => setEditing(null)}
+          onClose={() => {
+            setEditing(null);
+            setDraftMarks(null);
+          }}
           wide
         >
           <QuestionForm
@@ -874,9 +882,14 @@ export default function QuestionsPage() {
             books={books}
             initial={editing === "new" ? undefined : editing}
             fixedBookId={editing === "new" ? (filters.bookId || undefined) : undefined}
-            onCancel={() => setEditing(null)}
+            targetMarks={draftMarks ?? undefined}
+            onCancel={() => {
+              setEditing(null);
+              setDraftMarks(null);
+            }}
             onSaved={() => {
               setEditing(null);
+              setDraftMarks(null);
               void load();
             }}
           />
@@ -1027,8 +1040,9 @@ export default function QuestionsPage() {
                 ? filters.chapterId
                 : targetBook?.chapters[0]?.id) ||
               "";
-            const mappedType = (q.type || "MCQ") as QuestionType;
+            const mappedType = aiDraftType(q.type, q.options);
 
+            setDraftMarks(q.marks > 0 ? q.marks : null);
             setEditing({
               id: "",
               bookId: targetBookId,
@@ -1039,6 +1053,7 @@ export default function QuestionsPage() {
               subparts: q.subparts || [],
               answer: q.answer || "",
               difficulty: q.difficulty,
+              cognitiveLevel: skillOf(q.cognitiveLevel),
               spaceMm: 0,
               showGrid: false,
               imagePath: null,
