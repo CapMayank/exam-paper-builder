@@ -106,8 +106,17 @@ export const POST = route(async (_req, params, user) => {
           pageBreakBefore: it.pageBreakBefore === true,
           instruction: typeof it.instruction === "string" ? it.instruction.slice(0, 300) : "",
           componentKey: typeof it.componentKey === "string" && componentKeys.has(it.componentKey) ? it.componentKey : "",
+          pairMarks: it.pairMarks === 0.5 ? 0.5 : null,
         },
       });
+    }
+
+    // the slot moves the snapshot was taken with; an older snapshot predates them, so it restores to the blueprint counts
+    await tx.paperSectionSlots.deleteMany({ where: { paperId: id } });
+    for (const m of Array.isArray(payload.slotMoves) ? payload.slotMoves : []) {
+      if (sectionIds.has(m.sectionId) && Number.isInteger(m.delta) && m.delta !== 0) {
+        await tx.paperSectionSlots.create({ data: { paperId: id, sectionId: m.sectionId, delta: m.delta } });
+      }
     }
 
     // 3. Restore paper settings if present

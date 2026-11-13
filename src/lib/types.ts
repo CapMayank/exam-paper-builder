@@ -128,6 +128,7 @@ export type PaperSnapshotItem = {
   position: number;
   questionId: string;
   orQuestionId?: string | null;
+  pairMarks?: number | null;
   question?: QuestionDto;
   orQuestion?: QuestionDto | null;
 };
@@ -153,6 +154,8 @@ export type PaperSnapshotPayload = {
   showCandidateDetails: boolean;
   showSignatures: boolean;
   items: PaperSnapshotItem[];
+  /** slots this paper moved between same-mark sections (flexible marks); absent in older snapshots */
+  slotMoves?: Array<{ sectionId: string; delta: number }>;
   timestamp: string;
 };
 

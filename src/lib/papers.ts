@@ -2,6 +2,7 @@ import "server-only";
 import { HttpError, type SessionUser } from "./api";
 import { resolvePaperExamType } from "./constants";
 import { toQuestionDto } from "./dto";
+import { applySlotDeltas } from "./sectionPools";
 import { diagnosePaperImplications, paperStatus, questionSlotMarks, slotPlacement, subpartsMarksProblem, toPlacedItems } from "./blueprint";
 import { isTypeAllowed, orTypeRefusal, withEffectiveAllowedTypes } from "./sectionTypes";
 import { componentImplications, parseComponents } from "./languageComponents";
@@ -124,6 +125,7 @@ const questionUsageInclude = {
 
 const paperInclude = {
   blueprint: { include: blueprintInclude },
+  slotMoves: true,
   items: {
     orderBy: { position: "asc" },
     include: {
@@ -141,7 +143,14 @@ export async function loadPaperView(id: string) {
   const { blueprint: stored, items, ...rest } = paper;
   // every check that reads the view (picker, add, edit, autofill, AI, mismatch flags) sees each section's effective
   // allowed types; the blueprint row itself is never changed
-  const blueprint = { ...stored, sections: stored.sections.map((s) => withEffectiveAllowedTypes(s, stored.book)) };
+  // slots this paper moved between same-mark sections (flexible marks): the section counts every consumer reads
+  const blueprint = {
+    ...stored,
+    sections: applySlotDeltas(
+      stored.sections.map((s) => withEffectiveAllowedTypes(s, stored.book)),
+      paper.slotMoves,
+    ),
+  };
   const placedItems = toPlacedItems(blueprint.sections, items);
   const progress = paperStatus(
     {
@@ -277,6 +286,7 @@ export function snapshotItems(items: PaperView["items"]) {
     pageBreakBefore: it.pageBreakBefore,
     componentKey: it.componentKey,
     instruction: it.instruction,
+    pairMarks: it.question.pairMarks ?? null,
   }));
 }
 
