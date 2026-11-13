@@ -108,6 +108,11 @@ export function RowMenu(props: {
               onClick={() => {
                 onSelect(item.key);
                 onOpenChange(false);
+                // give focus back to the trigger unless something else (a modal) took it
+                requestAnimationFrame(() => {
+                  const a = document.activeElement;
+                  if (!a || a === document.body) buttonRef.current?.focus();
+                });
               }}
             >
               {item.label}

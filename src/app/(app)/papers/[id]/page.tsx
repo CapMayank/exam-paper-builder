@@ -44,7 +44,7 @@ import { SubjectWorkspaceDrawer } from "@/components/subject-workspace/SubjectWo
 import { SectionAiModal } from "@/components/SectionAiModal";
 import { KeyDisputesBanner } from "@/components/KeyDisputesBanner";
 import { slotPlanSummary } from "@/lib/slotPlan";
-import { choicePolicyNote, orMenuItems, rowActions, rowMenuItems, sectionStatusLine, sectionWarning } from "@/lib/workbenchView";
+import { choicePolicyNote, orMenuItems, rowActions, rowMenuItems, sectionStatusLine, sectionWarning, showBankAutoFill } from "@/lib/workbenchView";
 import { RowMenu } from "@/components/RowMenu";
 import { answerStageSummary, runAnswerStages } from "@/lib/answerStage";
 import { PaperQuestionEditModal } from "@/components/PaperQuestionEditModal";
@@ -581,6 +581,25 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   );
   // A fresh or half-built paper only has unfilled slots: that is progress, not a blueprint change.
   const onlyProgressGaps = noticeItems.every((i) => i.code === "SECTION_UNDERFILLED");
+  // Bank Auto-Fill shows while the paper is incomplete, and on a full paper that has OR-question problems.
+  const bankAutoFillShown = showBankAutoFill({
+    canEdit: canEditPaper,
+    final,
+    complete: progress.complete,
+    noticeCodes: noticeItems.map((i) => i.code),
+  });
+  const bankAutoFillButton = (
+    <button
+      type="button"
+      className="btn btn-ghost border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs shadow-2xs font-semibold flex items-center gap-1.5"
+      disabled={autofilling}
+      onClick={handleAutofill}
+      title="Fill the remaining question slots and fix OR questions, from the question bank"
+    >
+      <RefreshCw size={13} className={autofilling ? "animate-spin" : ""} />
+      <span>{autofilling ? "Auto-filling…" : "Bank Auto-Fill"}</span>
+    </button>
+  );
   const coverage = coverageRows(paper);
   const resolvedExamType = resolvePaperExamType(paper);
   const pickerSection = blueprint.sections.find((s) => s.id === pickerSectionId) ?? null;
@@ -949,14 +968,17 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                 )
               ) : progress.complete ? (
                 canEditPaper ? (
-                  <button
-                    className="btn bg-emerald-600 hover:bg-emerald-700 text-white text-xs shadow-xs font-semibold flex items-center gap-1.5"
-                    onClick={() => setPreflightOpen(true)}
-                    title="Lock and finalize paper"
-                  >
-                    <Lock size={14} />
-                    <span>Finalise Paper</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {bankAutoFillShown && bankAutoFillButton}
+                    <button
+                      className="btn bg-emerald-600 hover:bg-emerald-700 text-white text-xs shadow-xs font-semibold flex items-center gap-1.5"
+                      onClick={() => setPreflightOpen(true)}
+                      title="Lock and finalize paper"
+                    >
+                      <Lock size={14} />
+                      <span>Finalise Paper</span>
+                    </button>
+                  </div>
                 ) : (
                   <span className="badge border border-slate-200 bg-slate-50 text-slate-600 font-medium text-xs py-1.5 px-2.5">
                     Draft (View Only)
@@ -974,16 +996,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                       <Sparkles size={14} />
                       <span>Generate with AI</span>
                     </button>
-                    <button
-                      type="button"
-                      className="btn btn-ghost border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs shadow-2xs font-semibold flex items-center gap-1.5"
-                      disabled={autofilling}
-                      onClick={handleAutofill}
-                      title="Automatically fill all remaining question slots from existing Question Bank"
-                    >
-                      <RefreshCw size={13} className={autofilling ? "animate-spin" : ""} />
-                      <span>{autofilling ? "Auto-filling…" : "Bank Auto-Fill"}</span>
-                    </button>
+                    {bankAutoFillButton}
                   </div>
                 ) : (
                   <span className="badge border border-slate-200 bg-slate-50 text-slate-600 font-medium text-xs py-1.5 px-2.5">
@@ -1603,13 +1616,9 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                     {noticeOpen ? <ChevronUp size={14} aria-hidden /> : <ChevronDown size={14} aria-hidden />}
                   </span>
                 </button>
-                {canEditPaper &&
-                  noticeItems.some(
-                    (i) =>
-                      i.code === "SECTION_UNDERFILLED" ||
-                      i.code === "MISSING_INTERNAL_CHOICE" ||
-                      i.code === "FORBIDDEN_INTERNAL_CHOICE",
-                  ) && <span className="text-xs text-amber-900">Use Bank Auto-Fill above to fix these.</span>}
+                {bankAutoFillShown && (
+                  <span className="text-xs text-amber-900">Use Bank Auto-Fill above to fix these.</span>
+                )}
               </div>
               {noticeOpen && (
               <div id="paper-notice-details" className="space-y-3.5">
@@ -1671,7 +1680,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                     </p>
                   </div>
                   <ol className="list-decimal space-y-1 pl-4 text-xs text-slate-700">
-                    <li>Fill the paper with Generate with AI or Bank Auto-Fill above, or add questions from a section.</li>
+                    <li>{canEditPaper ? "Fill the paper with Generate with AI or Bank Auto-Fill above, or add questions from a section." : "Add questions from a section."}</li>
                     <li>Open the Print Setup tab on the left to set the school header, exam date and instructions.</li>
                     <li>Use Export &amp; Print when the paper is ready.</li>
                   </ol>
@@ -1754,7 +1763,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                     >
                       <span
                         className={`font-semibold ${
-                          isOverfilled ? "text-red-700" : isSectionFull ? "text-emerald-700" : "text-amber-700"
+                          isOverfilled ? "text-red-700" : warningText || !isSectionFull ? "text-amber-700" : "text-emerald-700"
                         }`}
                       >
                         {statusText}
@@ -1890,7 +1899,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                               <div className="mb-2.5 flex flex-wrap gap-1.5">
                                 {isTypeMismatch && (
                                   <span className="badge !bg-red-100 !text-red-800 border border-red-200 text-[10px] font-bold">
-                                    ⚠ Type Mismatch: Expected {QUESTION_TYPE_LABEL[s.type as keyof typeof QUESTION_TYPE_LABEL] || s.type}, but question is {it.question.type}
+                                    ⚠ Type Mismatch: Expected {QUESTION_TYPE_LABEL[s.type as keyof typeof QUESTION_TYPE_LABEL] || s.type}, but question is {typeLabel(it.question.type)}
                                   </span>
                                 )}
                                 {isQuestionMarksMismatch && (
@@ -1945,7 +1954,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                 {it.orQuestion?.usages && it.orQuestion.usages.length > 0 && (
                                   <div className="border-t border-purple-100 pt-1.5 mt-1.5 space-y-1">
                                     <div className="text-[11px] font-semibold text-purple-700">
-                                      Alternate (OR) Question Usage:
+                                      OR question usage:
                                     </div>
                                     <QuestionFreshnessAlert usages={it.orQuestion.usages} currentPaper={paper} />
                                     <QuestionUsagePills usages={it.orQuestion.usages} currentPaperId={paper.id} currentPaper={paper} />
@@ -2024,7 +2033,10 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                           ariaLabel="OR question actions"
                                           items={orMenuItems(true)}
                                           open={openRowMenu?.itemId === it.id && openRowMenu.kind === "or"}
-                                          onOpenChange={(o) => setOpenRowMenu(o ? { itemId: it.id, kind: "or" } : null)}
+                                          onOpenChange={(o) => {
+                                            if (o) setQuickSwapItemId(null);
+                                            setOpenRowMenu(o ? { itemId: it.id, kind: "or" } : null);
+                                          }}
                                           buttonClassName="btn btn-sm border-purple-200 bg-white text-purple-700 hover:bg-purple-50 shadow-2xs font-medium"
                                           onSelect={(key) => {
                                             setOpenRowMenu(null);
@@ -2061,7 +2073,10 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                                           moving: movingItemId !== null,
                                         })}
                                         open={openRowMenu?.itemId === it.id && openRowMenu.kind === "more"}
-                                        onOpenChange={(o) => setOpenRowMenu(o ? { itemId: it.id, kind: "more" } : null)}
+                                        onOpenChange={(o) => {
+                                          if (o) setQuickSwapItemId(null);
+                                          setOpenRowMenu(o ? { itemId: it.id, kind: "more" } : null);
+                                        }}
                                         onSelect={(key) => {
                                           setOpenRowMenu(null);
                                           handleMoreSelect(key, it, s);

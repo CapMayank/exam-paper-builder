@@ -8,22 +8,26 @@ export function sectionStatusLine(a: {
   matchPairs?: number;
 }): string {
   const marks = `${String(a.placedMarks)}/${String(a.targetMarks)} marks`;
+  const plural = (n: number, word: string) => `${String(n)} ${word}${n === 1 ? "" : "s"}`;
   if (a.type === "MATCH_COLUMN" && a.itemCount === 1) {
-    return `1 question (${String(a.matchPairs ?? a.count)} pairs) · ${marks}`;
+    return `1 question (${plural(a.matchPairs ?? a.count, "pair")}) · ${marks}`;
   }
   if (a.type === "MATCH_COLUMN" && a.itemCount === 0) {
-    return `0/1 question (${String(a.count)} pairs) · ${marks}`;
+    return `0/1 question (${plural(a.count, "pair")}) · ${marks}`;
   }
   if (a.itemCount === 1 && a.filledUnits > 1) {
-    return `1 question (${String(a.filledUnits)} parts) · ${marks}`;
+    return `1 question (${plural(a.filledUnits, "part")}) · ${marks}`;
   }
-  return `${String(a.filledUnits)}/${String(a.count)} questions · ${marks}`;
+  return `${String(a.filledUnits)}/${String(a.count)} question${a.count === 1 ? "" : "s"} · ${marks}`;
 }
 
 /** The single warning for a section, or null. Overfill wins over a marks mismatch. */
 export function sectionWarning(a: { count: number; filledUnits: number; placedMarks: number; targetMarks: number }): string | null {
   if (a.filledUnits > a.count) {
     return `${String(a.filledUnits - a.count)} more than this section holds`;
+  }
+  if (a.placedMarks > a.targetMarks) {
+    return `Placed marks (${String(a.placedMarks)}) are more than the section total (${String(a.targetMarks)})`;
   }
   if (a.placedMarks !== a.targetMarks && a.filledUnits >= a.count) {
     return `Placed marks (${String(a.placedMarks)}) do not match the section total (${String(a.targetMarks)})`;
@@ -95,4 +99,12 @@ export function orMenuItems(hasOr: boolean): OrMenuItem[] {
     { key: "changeOr", label: "Change OR question" },
     { key: "removeOr", label: "Remove OR question" },
   ];
+}
+
+const OR_PROBLEM_CODES = ["MISSING_INTERNAL_CHOICE", "FORBIDDEN_INTERNAL_CHOICE"];
+
+/** Bank Auto-Fill in the header: while the paper is incomplete, or when OR-question problems need it on a full paper. */
+export function showBankAutoFill(a: { canEdit: boolean; final: boolean; complete: boolean; noticeCodes: string[] }): boolean {
+  if (!a.canEdit || a.final) return false;
+  return !a.complete || a.noticeCodes.some((c) => OR_PROBLEM_CODES.includes(c));
 }

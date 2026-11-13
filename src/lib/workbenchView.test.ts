@@ -6,6 +6,7 @@ import {
   rowActions,
   rowMenuItems,
   orMenuItems,
+  showBankAutoFill,
 } from "./workbenchView";
 
 describe("sectionStatusLine", () => {
@@ -26,7 +27,38 @@ describe("sectionStatusLine", () => {
   });
 });
 
+describe("sectionStatusLine plurals", () => {
+  it("says question for a one-slot section", () => {
+    expect(sectionStatusLine({ type: "SHORT", count: 1, filledUnits: 0, itemCount: 0, placedMarks: 0, targetMarks: 3 })).toBe("0/1 question · 0/3 marks");
+  });
+  it("says 1 pair for a one-pair match column", () => {
+    expect(sectionStatusLine({ type: "MATCH_COLUMN", count: 1, filledUnits: 0, itemCount: 0, placedMarks: 0, targetMarks: 1 })).toBe("0/1 question (1 pair) · 0/1 marks");
+    expect(sectionStatusLine({ type: "MATCH_COLUMN", count: 5, filledUnits: 5, itemCount: 1, placedMarks: 5, targetMarks: 5, matchPairs: 1 })).toBe("1 question (1 pair) · 5/5 marks");
+  });
+});
+
+describe("showBankAutoFill", () => {
+  const base = { canEdit: true, final: false, complete: false, noticeCodes: [] as string[] };
+  it("shows while the paper is incomplete", () => {
+    expect(showBankAutoFill(base)).toBe(true);
+  });
+  it("hides on a complete paper with no OR problems", () => {
+    expect(showBankAutoFill({ ...base, complete: true, noticeCodes: ["SECTION_UNDERFILLED"] })).toBe(false);
+  });
+  it("shows on a complete paper with an OR problem", () => {
+    expect(showBankAutoFill({ ...base, complete: true, noticeCodes: ["MISSING_INTERNAL_CHOICE"] })).toBe(true);
+    expect(showBankAutoFill({ ...base, complete: true, noticeCodes: ["FORBIDDEN_INTERNAL_CHOICE"] })).toBe(true);
+  });
+  it("hides for a view-only user or a final paper", () => {
+    expect(showBankAutoFill({ ...base, canEdit: false })).toBe(false);
+    expect(showBankAutoFill({ ...base, final: true, noticeCodes: ["MISSING_INTERNAL_CHOICE"] })).toBe(false);
+  });
+});
+
 describe("sectionWarning", () => {
+  it("warns when placed marks exceed the target before the section is full", () => {
+    expect(sectionWarning({ count: 4, filledUnits: 1, placedMarks: 20, targetMarks: 12 })).toBe("Placed marks (20) are more than the section total (12)");
+  });
   it("returns null when the section is not full and marks are still open", () => {
     expect(sectionWarning({ count: 4, filledUnits: 2, placedMarks: 6, targetMarks: 12 })).toBeNull();
   });
