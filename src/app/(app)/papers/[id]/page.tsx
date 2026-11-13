@@ -1998,7 +1998,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
 
                             {/* the slot's paper fields are edited in the Edit modal; the row only shows them when set */}
                             {(it.instruction ?? "").trim() !== "" && (
-                              <p className="mb-1.5 text-[11px] text-slate-600">
+                              <p className="mb-1.5 text-[11px] text-slate-600 [overflow-wrap:anywhere]">
                                 <span className="font-semibold">Instruction:</span> <span className="italic">&ldquo;{it.instruction!.trim()}&rdquo;</span>
                               </p>
                             )}

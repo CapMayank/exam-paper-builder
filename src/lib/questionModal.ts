@@ -124,3 +124,20 @@ export function paperFieldsPatch(
   if (componentKey !== (before.componentKey ?? "").trim()) patch.componentKey = componentKey;
   return Object.keys(patch).length > 0 ? patch : null;
 }
+
+/**
+ * Whether two save payloads say the same thing: object keys in any order, an undefined key the same as a missing
+ * one; arrays in order. Used to tell an untouched question from an edited one, so saving only a slot's paper fields
+ * never rewrites (or forks) the question.
+ */
+export function samePayload(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((v, i) => samePayload(v, b[i]));
+  }
+  if (a === null || b === null || typeof a !== "object" || typeof b !== "object") return false;
+  const ra = a as Record<string, unknown>;
+  const rb = b as Record<string, unknown>;
+  const keys = new Set([...Object.keys(ra), ...Object.keys(rb)]);
+  return [...keys].every((k) => samePayload(ra[k], rb[k]));
+}

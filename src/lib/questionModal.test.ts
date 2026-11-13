@@ -9,6 +9,7 @@ import {
   modalTitle,
   openingTab,
   paperFieldsPatch,
+  samePayload,
   showTypeChips,
   skillLabel,
 } from "./questionModal";
@@ -178,5 +179,36 @@ describe("paperFieldsPatch", () => {
 
   it("can clear a stored component", () => {
     expect(paperFieldsPatch({ componentKey: "read" }, { instruction: "", componentKey: "" })).toEqual({ componentKey: "" });
+  });
+});
+
+describe("samePayload", () => {
+  const base = { type: "SHORT", text: "Why?", options: [], subparts: [{ label: "(i)", marks: 1 }], imagePath: null };
+
+  it("is true for equal payloads whatever the key order", () => {
+    expect(samePayload(base, { imagePath: null, subparts: [{ marks: 1, label: "(i)" }], options: [], text: "Why?", type: "SHORT" })).toBe(true);
+  });
+
+  it("treats an undefined key like a missing one", () => {
+    expect(samePayload({ ...base, attemptCount: undefined }, base)).toBe(true);
+    expect(samePayload({ ...base, subparts: [{ label: "(i)", marks: 1, options: undefined }] }, base)).toBe(true);
+  });
+
+  it("is false when a value changes", () => {
+    expect(samePayload({ ...base, text: "Why not?" }, base)).toBe(false);
+    expect(samePayload({ ...base, subparts: [{ label: "(i)", marks: 2 }] }, base)).toBe(false);
+  });
+
+  it("does not treat null like missing, nor reordered arrays as equal", () => {
+    expect(samePayload({ ...base, attemptCount: null }, base)).toBe(false);
+    expect(samePayload({ options: ["a", "b"] }, { options: ["b", "a"] })).toBe(false);
+    expect(samePayload({ options: ["a"] }, { options: ["a", ""] })).toBe(false);
+  });
+
+  it("compares primitives and nested nulls", () => {
+    expect(samePayload(1, 1)).toBe(true);
+    expect(samePayload(null, null)).toBe(true);
+    expect(samePayload(null, {})).toBe(false);
+    expect(samePayload({ a: { b: null } }, { a: { b: null } })).toBe(true);
   });
 });

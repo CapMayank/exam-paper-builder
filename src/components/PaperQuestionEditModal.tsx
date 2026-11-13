@@ -6,7 +6,7 @@ import { Modal } from "@/components/ui";
 import { api } from "@/lib/client";
 import { OR_CHAPTER_GUIDELINE, OR_CHAPTER_REQUIRED, orChapterRequired } from "@/lib/internalChoiceRules";
 import { parseComponents } from "@/lib/languageComponents";
-import { chapterOptionIds, modalTitle, paperFieldsPatch } from "@/lib/questionModal";
+import { chapterOptionIds, modalTitle, paperFieldsPatch, samePayload } from "@/lib/questionModal";
 import type { Book, PaperData, PaperItem, Section } from "@/lib/types";
 
 type Target = "primary" | "or";
@@ -47,27 +47,33 @@ export function PaperQuestionEditModal({
   // the paper fields, held until the form is saved; cancel discards them
   const [instruction, setInstruction] = useState(item.instruction ?? "");
   const [componentKey, setComponentKey] = useState(item.componentKey ?? "");
+  const storedKey = item.componentKey ?? "";
   // what the server holds for them, moved on after each PATCH that lands, so a retry sends only what is left
   const storedFields = useRef({ instruction: item.instruction ?? "", componentKey: item.componentKey ?? "" });
   // the question last saved by PUT in this modal, so a retry after a failed PATCH does not save it again
-  const savedQuestion = useRef<{ target: Target; json: string } | null>(null);
+  const savedQuestion = useRef<{ target: Target; mode: string; payload: unknown } | null>(null);
   // targets already forked in this modal: a later save updates that paper-only copy instead of forking again
   const forked = useRef(new Set<Target>());
 
-  async function save(payload: unknown, mode: "UPDATE_MASTER" | "FORK_COPY") {
-    const json = JSON.stringify(payload);
-    if (savedQuestion.current?.target !== target || savedQuestion.current.json !== json) {
+  async function save(payload: unknown, mode: "UPDATE_MASTER" | "FORK_COPY", info?: { unchanged: boolean }) {
+    const last = savedQuestion.current;
+    const alreadySaved = !!last && last.target === target && last.mode === mode && samePayload(last.payload, payload);
+    // an untouched question is never sent: saving only the paper fields must not rewrite or fork it
+    if (!info?.unchanged && !alreadySaved) {
+      // After a fork in this modal the slot already points at that new copy, made for this paper only (by this
+      // user, in no other paper). Forking again would orphan it, so a later save updates that copy in place.
       const putMode = forked.current.has(target) ? "UPDATE_MASTER" : mode;
       const updated = await api<PaperData>(`/api/papers/${paper.id}/questions/${item.id}`, {
         method: "PUT",
         json: { mode: putMode, target, question: payload },
       });
       onPaper(updated);
-      savedQuestion.current = { target, json };
+      savedQuestion.current = { target, mode, payload };
       if (putMode === "FORK_COPY") forked.current.add(target);
     }
 
-    if (target === "primary" && canEdit) {
+    // the fields belong to the slot, so they are saved with either question (they are edited on the main tab)
+    if (canEdit) {
       const patch = paperFieldsPatch(storedFields.current, { instruction, componentKey });
       // the route takes one of these keys per request
       for (const [key, value] of Object.entries(patch ?? {})) {
@@ -100,6 +106,9 @@ export function PaperQuestionEditModal({
               onChange={(e) => setComponentKey(e.target.value)}
             >
               <option value="">Not assigned</option>
+              {storedKey && !components.some((c) => c.key === storedKey) && (
+                <option value={storedKey}>{storedKey} (not in blueprint)</option>
+              )}
               {components.map((c) => (
                 <option key={c.key} value={c.key}>
                   {c.title} ({c.marks})

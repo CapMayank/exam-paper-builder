@@ -61,7 +61,7 @@ import {
   suggestDifficulty,
   suggestSkill,
 } from "@/lib/questionTagging";
-import { chapterChoice, detailsSummary } from "@/lib/questionModal";
+import { chapterChoice, detailsSummary, samePayload } from "@/lib/questionModal";
 import { MathRichEditor, type MathRichEditorHandle } from "./MathRichEditor";
 import { MathToolbar } from "./MathToolbar";
 import { DiagramSearchModal } from "./DiagramSearchModal";
@@ -237,7 +237,8 @@ export function QuestionForm({
   preferredChapterId?: string;
   submitLabel?: string;
   showPaperEditModes?: boolean;
-  customSaveHandler?: (payload: unknown, mode: "UPDATE_MASTER" | "FORK_COPY") => Promise<void>;
+  /** `info.unchanged`: the question is exactly as the form opened it (an edit whose question was not touched). */
+  customSaveHandler?: (payload: unknown, mode: "UPDATE_MASTER" | "FORK_COPY", info?: { unchanged: boolean }) => Promise<void>;
   onSaved?: (q: QuestionDto) => void;
   onCancel: () => void;
 }) {
@@ -439,96 +440,108 @@ export function QuestionForm({
   const skillSuggested = autoTag && !touched.skill && hasText;
   const effSkill = skillSuggested ? suggestSkill(text, type) : skill;
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
+  /** The save body for the current state of the form. */
+  function buildPayload() {
+    const isMcq = isMcqLikeType(type);
+    const usesSubparts = isSubpartQuestionType(type) || (subparts && subparts.length > 0);
+    const serializedOptions = isKindergartenType(type)
+      ? [serializeKindergartenConfig(kdgConfig)]
+      : type === "MATCH_COLUMN"
+      ? matchPairs.map((p) => serializeMatchColumnPair(p.left, p.right))
+      : isMcq
+      ? options.map((o) => o.trim())
+      : [];
+    return {
+      bookId,
+      chapterId: effChapterId,
+      type,
+      text,
+      options: serializedOptions,
+      answer: isMcq ? (answer || "") : answer,
+      difficulty: effDifficulty,
+      cognitiveLevel: effSkill || null,
+      imagePath,
+      spaceMm,
+      showGrid: (type === "DRAW" || type === "MAP_WORK") && showGrid,
+      passageGroupId: passageGroupId.trim() || null,
+      subparts: usesSubparts
+        ? subparts.map((sp) => ({
+            ...sp,
+            marks: snapPartMarks(sp.marks) || 1,
+            label: sp.label.trim() || "(i)",
+            text: sp.text.trim(),
+            answer: sp.answer?.trim() || "",
+            options: Array.isArray(sp.options) ? sp.options.map((o) => o.trim()).filter(Boolean) : undefined,
+          }))
+        : [],
+      ...(usesSubparts && attemptCount ? { attemptCount } : {}),
+    };
+  }
+  // The question as the form opened it (no effect changes an edited question's state on mount), so a save can
+  // tell the caller the question itself is untouched.
+  const [openedPayload] = useState(buildPayload);
+
+  /** Why the question cannot be saved as it is, or null. */
+  function validationError(): string | null {
     const isMcq = isMcqLikeType(type);
     const usesSubparts = isSubpartQuestionType(type) || (subparts && subparts.length > 0);
 
     if (isMcq && !usesSubparts && options.some((o) => !o.trim())) {
-      return setError("Fill in every option, or remove the empty ones.");
+      return "Fill in every option, or remove the empty ones.";
     }
-    if (isMcq && !usesSubparts && options.length < MIN_OPTIONS) return setError(`Add at least ${MIN_OPTIONS} options.`);
+    if (isMcq && !usesSubparts && options.length < MIN_OPTIONS) return `Add at least ${MIN_OPTIONS} options.`;
 
     if (type === "MATCH_COLUMN") {
       if (matchPairs.length < MIN_OPTIONS) {
-        return setError(`Add at least ${MIN_OPTIONS} matching rows.`);
+        return `Add at least ${MIN_OPTIONS} matching rows.`;
       }
       if (matchPairs.some((p) => !p.left.trim() || !p.right.trim())) {
-        return setError("Fill in both Column A (स्तम्भ 'अ') and Column B (स्तम्भ 'ब') for every row.");
+        return "Fill in both Column A (स्तम्भ 'अ') and Column B (स्तम्भ 'ब') for every row.";
       }
     }
 
     if (usesSubparts) {
       if (subparts.some((sp) => sp.options && sp.options.length > 0 && sp.options.filter((o) => o.trim()).length < MIN_OPTIONS)) {
-        return setError(`A part with options needs at least ${MIN_OPTIONS} of them filled in. Fill them or remove that part's options.`);
+        return `A part with options needs at least ${MIN_OPTIONS} of them filled in. Fill them or remove that part's options.`;
       }
       if (subparts.length === 0) {
-        return setError("Please add at least one sub-question / subpart.");
+        return "Please add at least one sub-question / subpart.";
       }
       if (subparts.some((sp) => !sp.text.trim())) {
-        return setError("Fill in the prompt text for every subpart.");
+        return "Fill in the prompt text for every subpart.";
       }
       if (subparts.some((sp) => !sp.marks || sp.marks <= 0)) {
-        return setError("Give every part some marks (½ and ¼ marks are allowed).");
+        return "Give every part some marks (½ and ¼ marks are allowed).";
       }
       // checked first: unequal "any N" parts fail the marks total too, and this says why
       if (attemptCount && subparts.some((sp) => sp.marks !== subparts[0].marks)) {
-        return setError("When students answer any few of the parts, every part must carry the same marks.");
+        return "When students answer any few of the parts, every part must carry the same marks.";
       }
       const totalSubMarks = attemptedSubpartsMarks(subparts, attemptCount);
       if (targetMarks !== undefined && !validateSubPartsSum(subparts, targetMarks, attemptCount)) {
-        return setError(
-          attemptCount
-            ? `Any ${attemptCount} of these parts add up to ${formatMarksValue(totalSubMarks)} marks, but the question must be worth ${targetMarks}. Use "Split marks equally" or adjust the parts.`
-            : `The parts add up to ${formatMarksValue(totalSubMarks)} marks, but the question must be worth ${targetMarks}. Use "Split marks equally" or adjust the parts.`
-        );
+        return attemptCount
+          ? `Any ${attemptCount} of these parts add up to ${formatMarksValue(totalSubMarks)} marks, but the question must be worth ${targetMarks}. Use "Split marks equally" or adjust the parts.`
+          : `The parts add up to ${formatMarksValue(totalSubMarks)} marks, but the question must be worth ${targetMarks}. Use "Split marks equally" or adjust the parts.`;
       }
     }
 
-    if (!text.trim()) return setError("Enter the question text.");
-    const isKdg = isKindergartenType(type);
-    if (isKdg && !text.trim()) {
-      return setError("Please provide an activity instruction for the question.");
-    }
+    if (!text.trim()) return "Enter the question text.";
+    return null;
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    const payload = buildPayload();
+    const unchanged = !!initial && samePayload(payload, openedPayload);
+    // an untouched question is not rewritten by a custom handler, so a legacy flaw in it cannot block saving the rest
+    const problem = customSaveHandler && unchanged ? null : validationError();
+    if (problem) return setError(problem);
 
     setBusy(true);
     try {
-      const serializedOptions = isKdg
-        ? [serializeKindergartenConfig(kdgConfig)]
-        : type === "MATCH_COLUMN"
-        ? matchPairs.map((p) => serializeMatchColumnPair(p.left, p.right))
-        : isMcq
-        ? options.map((o) => o.trim())
-        : [];
-
-      const payload = {
-        bookId,
-        chapterId: effChapterId,
-        type,
-        text,
-        options: serializedOptions,
-        answer: isMcq ? (answer || "") : answer,
-        difficulty: effDifficulty,
-        cognitiveLevel: effSkill || null,
-        imagePath,
-        spaceMm,
-        showGrid: (type === "DRAW" || type === "MAP_WORK") && showGrid,
-        passageGroupId: passageGroupId.trim() || null,
-        subparts: usesSubparts
-          ? subparts.map((sp) => ({
-              ...sp,
-              marks: snapPartMarks(sp.marks) || 1,
-              label: sp.label.trim() || "(i)",
-              text: sp.text.trim(),
-              answer: sp.answer?.trim() || "",
-              options: Array.isArray(sp.options) ? sp.options.map((o) => o.trim()).filter(Boolean) : undefined,
-            }))
-          : [],
-        ...(usesSubparts && attemptCount ? { attemptCount } : {}),
-      };
       if (customSaveHandler) {
-        await customSaveHandler(payload, paperEditMode);
+        await customSaveHandler(payload, paperEditMode, { unchanged });
       } else {
         const isExisting = Boolean(initial && initial.id && initial.id.trim() !== "");
         const saved = isExisting
