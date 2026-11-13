@@ -1,6 +1,8 @@
 import { questionInstruction } from "./sectionTypes";
 import { loadPaperView } from "./papers";
 import { sectionItemsFormula, withPairMarksNote } from "./flexibleMarksPrint";
+import { applySlotDeltas } from "./sectionPools";
+import { withEffectiveAllowedTypes } from "./sectionTypes";
 import { isDraftPaper } from "./preflightChecks";
 import { questionSlotMarks } from "@/lib/blueprint";
 import { partsAttemptCount, resolveMarksStyle, showPartMarks } from "@/lib/marksDisplay";
@@ -297,6 +299,7 @@ export async function buildPaperDocx(
   const loaded = await prisma.paper.findUnique({
     where: { id: paperId },
     include: {
+      slotMoves: true,
       blueprint: {
         include: {
           book: true,
@@ -316,7 +319,14 @@ export async function buildPaperDocx(
 
   if (!loaded) throw new HttpError(404, "Paper not found");
   // exported as printed: rows of one form under one heading are one run (one sub-heading, one numbering)
-  const view = mergeSameFormRows(loaded.blueprint.sections, loaded.items);
+  // the same flexible-marks view as the builder and the printed sheet: slots this paper moved between sections, and
+  // each match question's pair value, so the exported marks are the marks the paper was built with
+  const flexSections = applySlotDeltas(
+    loaded.blueprint.sections.map((s) => withEffectiveAllowedTypes(s, loaded.blueprint.book)),
+    loaded.slotMoves,
+  );
+  const flexItems = loaded.items.map((i) => ({ ...i, question: { ...i.question, pairMarks: i.pairMarks } }));
+  const view = mergeSameFormRows(flexSections, flexItems);
   const paper = { ...loaded, blueprint: { ...loaded.blueprint, sections: view.sections }, items: view.items };
 
   const marksStyle = resolveMarksStyle(paper.marksStyle);

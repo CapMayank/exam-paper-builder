@@ -9,6 +9,7 @@ vi.mock("@/lib/session", () => ({
 
 import { POST as aiCommit } from "@/app/api/papers/[id]/ai-commit-section/route";
 import { POST as aiGenerate } from "@/app/api/papers/[id]/ai-generate-section/route";
+import { buildPaperDocx } from "./paperDocx";
 import { planPaperSlotAssignments } from "./paperAutogen";
 import { POST as duplicatePaper } from "@/app/api/papers/[id]/duplicate/route";
 import { PATCH as patchItem } from "@/app/api/papers/[id]/questions/[itemId]/route";
@@ -196,5 +197,29 @@ describe("flexible marks through the API", () => {
     });
     expect([400, 409, 422]).toContain(commit.status);
     expect(await prisma.paperQuestion.count({ where: { paperId: t.paperId } })).toBe(1);
+  });
+
+  it("the printed DOCX shows the true marks: half-mark match as 2 marks, a note, and a section total that adds up", async () => {
+    const t = await setup("Class 6");
+    const added = (await (await t.add(t.a, (await t.mk(4)).id)).json()) as View;
+    await t.patch(added.items[0].id, { pairMarks: 0.5 });
+    const ch = (await prisma.chapter.findFirst({ where: { bookId: { in: bookIds } }, orderBy: { id: "desc" } }))!;
+    for (let i = 0; i < 3; i++) {
+      const q = await prisma.question.create({
+        data: { bookId: ch.bookId, chapterId: ch.id, type: "MCQ", text: `Printed filler ${i}?`, optionsJson: JSON.stringify(["a", "b", "c", "d"]), answer: "a", createdById: userId },
+      });
+      expect((await t.add(t.a, q.id)).status).toBe(200);
+    }
+    const user = (await prisma.user.findUnique({ where: { id: userId } }))!;
+    for (const scheme of [false, true]) {
+      const result = await buildPaperDocx(t.paperId, scheme, user as never);
+      const { default: JSZip } = await import("jszip");
+      const xml = await (await JSZip.loadAsync(result.buffer)).file("word/document.xml")!.async("string");
+      const text = xml.replace(/<[^>]+>/g, "");
+      expect(text).toMatch(/\[2 Marks?\]/);
+      expect(text).toContain("½ mark for each pair");
+      expect(text).not.toMatch(/\[4 Marks?\]/);
+      expect(text).toMatch(/4 Questions? · 5 Marks?/i);
+    }
   });
 });
