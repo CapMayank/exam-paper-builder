@@ -9,7 +9,7 @@ import { QuestionView } from "@/components/QuestionView";
 import { ErrorBanner, Modal, Spinner } from "@/components/ui";
 import { slotPlacement, subpartsMarksProblem, toPlacedItems, whyCannotAdd, type BlueprintDef } from "@/lib/blueprint";
 import { allowedTypesFor, isTypeAllowed } from "@/lib/sectionTypes";
-import { composerChapterIds, SKILLS } from "@/lib/questionTagging";
+import { SKILLS } from "@/lib/questionTagging";
 import { aiQuestionPayload } from "@/lib/aiQuestionPayload";
 import { api, retryTransient } from "@/lib/client";
 import {
@@ -28,6 +28,7 @@ import { type Book, type PaperData, type QuestionDto, type Section, subpartsTota
 import { OR_CHAPTER_GUIDELINE, OR_CHAPTER_REQUIRED, orChapterRule, paperSectionChoiceRequirement } from "@/lib/internalChoiceRules";
 import {
   canPasteSeveral,
+  chapterOptionIds,
   difficultyLabel,
   skillLabel,
   modalTitle as buildModalTitle,
@@ -71,6 +72,8 @@ export function QuestionPicker({
   const [tab, setTab] = useState<SourceTab>(() => openingTab(mode));
   // Inside Write: several questions pasted at once instead of the one-question form.
   const [pasting, setPasting] = useState(false);
+  // once opened, the paste panel stays mounted (hidden) so going back to one question keeps the pasted text
+  const [pasteOpened, setPasteOpened] = useState(false);
   // An OR question's chapter: from class 9 it must be the main question's ("required"); below that it is advice.
   const orRule = isAlternate ? orChapterRule(paper.blueprint.book.className) : null;
   const mainChapterId = isAlternate && activeItem ? activeItem.question.chapterId : null;
@@ -182,7 +185,7 @@ export function QuestionPicker({
           } else if (!isTypeAllowed(section, q.type)) {
             why = `Must be a type this section accepts (${allowedTypes.join(", ")}).`;
           } else if (orChapterLocked && activeItem && q.chapterId !== activeItem.question.chapterId) {
-            why = `Must match primary question chapter (Ch ${activeItem.question.chapter?.number}).`;
+            why = `Must be from the same chapter as the main question (Ch ${activeItem.question.chapter?.number}).`;
           } else if (subpartsMarksProblem(section, q)) {
             why = `Its parts: ${subpartsMarksProblem(section, q)}`;
           }
@@ -463,6 +466,8 @@ export function QuestionPicker({
         : undefined,
     };
     setInitialForEdit(dummyDto);
+    // the Write form stays mounted across tabs, so it is remounted to load the draft
+    setFormKey((k) => k + 1);
     setPasting(false);
     setTab("write");
   }
@@ -491,6 +496,7 @@ export function QuestionPicker({
         <div className="flex gap-1.5 rounded-xl border border-slate-200 bg-slate-100/80 p-1 text-xs font-semibold">
           <button
             type="button"
+            aria-pressed={tab === "bank"}
             onClick={() => setTab("bank")}
             className={`flex-1 rounded-lg py-2 transition ${
               tab === "bank"
@@ -502,10 +508,8 @@ export function QuestionPicker({
           </button>
           <button
             type="button"
-            onClick={() => {
-              if (tab !== "write") setInitialForEdit(undefined);
-              setTab("write");
-            }}
+            aria-pressed={tab === "write"}
+            onClick={() => setTab("write")}
             className={`flex-1 rounded-lg py-2 transition ${
               tab === "write"
                 ? "bg-white text-indigo-700 shadow-xs"
@@ -516,6 +520,7 @@ export function QuestionPicker({
           </button>
           <button
             type="button"
+            aria-pressed={tab === "ai"}
             onClick={() => setTab("ai")}
             className={`flex-1 rounded-lg py-2 transition flex items-center justify-center gap-1.5 ${
               tab === "ai"
@@ -540,6 +545,13 @@ export function QuestionPicker({
                   // the Write form switches type itself and keeps the typed text, so it is not remounted
                   setPickType(t);
                   setAiGenerated(null);
+                  // bank selections were of the old type and are no longer listed
+                  setSelectedIds(new Set());
+                  // a type that cannot be pasted closes (and discards) the paste panel
+                  if (!canPasteSeveral({ mode, type: t, slotsLeft })) {
+                    setPasting(false);
+                    setPasteOpened(false);
+                  }
                 }}
                 className={`rounded-full border px-2.5 py-0.5 text-xs ${pickType === t ? "border-indigo-500 bg-indigo-50 font-semibold text-indigo-700" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"}`}
               >
@@ -549,7 +561,7 @@ export function QuestionPicker({
           </div>
         )}
 
-        {tab === "bank" ? (
+        {tab === "bank" && (
           <>
             <div className="grid gap-2.5 sm:grid-cols-3">
               <select
@@ -751,8 +763,11 @@ export function QuestionPicker({
               </button>
             </div>
           </>
-        ) : tab === "write" ? (
-          full ? (
+        )}
+
+        {/* Write stays mounted (hidden and inert) while another tab is open, so typed text and a retry-as-edit survive */}
+        <div hidden={tab !== "write"} inert={tab !== "write"}>
+          {full ? (
             <div className="space-y-3">
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-xs text-emerald-800">
                 This section is already full ({sectionStatus.filled} of {sectionStatus.needed} slots filled).
@@ -774,26 +789,35 @@ export function QuestionPicker({
               ) : (
                 pasteOffered && (
                   <div className="flex justify-end">
-                    <button type="button" className="btn btn-sm" onClick={() => setPasting(true)}>
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      onClick={() => {
+                        setPasting(true);
+                        setPasteOpened(true);
+                      }}
+                    >
                       Paste several
                     </button>
                   </div>
                 )
               )}
-              {showPaste && (
-                <PasteQuestionsPanel
-                  paper={paper}
-                  section={section}
-                  type={pickType}
-                  chapters={paper.blueprint.chapters.map((c) => c.chapter)}
-                  gaps={chapterGaps}
-                  slotsLeft={slotsLeft}
-                  onPaper={onPaper}
-                  onClose={onClose}
-                />
+              {pasteOpened && pasteOffered && (
+                <div hidden={!showPaste} inert={!showPaste}>
+                  <PasteQuestionsPanel
+                    paper={paper}
+                    section={section}
+                    type={pickType}
+                    chapters={paper.blueprint.chapters.map((c) => c.chapter)}
+                    gaps={chapterGaps}
+                    slotsLeft={slotsLeft}
+                    onPaper={onPaper}
+                    onClose={onClose}
+                  />
+                </div>
               )}
               {/* hidden, not unmounted, while pasting, so going back keeps what was typed */}
-              <div hidden={showPaste}>
+              <div hidden={showPaste} inert={showPaste}>
                 <QuestionForm
                   key={formKey}
                   books={books}
@@ -801,8 +825,10 @@ export function QuestionPicker({
                   fixedBookId={paper.blueprint.bookId}
                   typeFromParent={pickType}
                   targetMarks={section.marksEach}
-                  allowedChapterIds={composerChapterIds(
+                  allowedChapterIds={chapterOptionIds(
                     paper.blueprint.chapters.map((c) => c.chapterId),
+                    // guideline: the main question's chapter is offered even when the blueprint lacks it
+                    orRule === "guideline" ? mainChapterId : null,
                     orChapterLocked ? mainChapterId : null,
                   )}
                   preferredChapterId={orRule === "guideline" ? (mainChapterId ?? undefined) : undefined}
@@ -830,9 +856,10 @@ export function QuestionPicker({
                 />
               </div>
             </div>
-          )
-        ) : (
-          /* tab === "ai" */
+          )}
+        </div>
+
+        {tab === "ai" && (
           full ? (
             <div className="space-y-3">
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-xs text-emerald-800">
