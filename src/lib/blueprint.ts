@@ -286,8 +286,8 @@ export type PaperStatus = {
   complete: boolean;
 };
 
-function getItemUnits(item: PlacedItem, secCount: number): number {
-  if (item.subpartsCount && item.subpartsCount > 1 && secCount >= item.subpartsCount) {
+function getItemUnits(item: PlacedItem, secCount: number, spanning = false): number {
+  if (item.subpartsCount && item.subpartsCount > 1 && (spanning || secCount >= item.subpartsCount)) {
     return item.subpartsCount;
   }
   return 1;
@@ -352,7 +352,7 @@ export function paperStatus(bp: BlueprintDef, items: PlacedItem[]): PaperStatus 
   const sectionById = new Map(bp.sections.map((s) => [s.id, s]));
   const sections = bp.sections.map((s) => {
     const placed = items.filter((i) => i.sectionId === s.id);
-    const filledUnits = placed.reduce((sum, i) => sum + getItemUnits(i, s.count), 0);
+    const filledUnits = placed.reduce((sum, i) => sum + getItemUnits(i, s.count, spansSlots(s)), 0);
     return {
       id: s.id,
       needed: s.count,
@@ -412,7 +412,8 @@ export function whyCannotAdd(
   const sec = status.sections.find((s) => s.id === section.id)!;
   if (sec.filled >= sec.needed) return `${section.title} is already full (${sec.needed} questions).`;
   const isMultiUnitMatch = (section.type === "MATCH_COLUMN" && section.count > 1 && section.marksEach === 1) || spansSlots(section);
-  const candidateUnits = isMultiUnitMatch && candidate.subpartsCount && candidate.subpartsCount > 1 && section.count >= candidate.subpartsCount
+  // a spanning match counts all its slots even when they exceed the section, so it is refused instead of squeezed in
+  const candidateUnits = isMultiUnitMatch && candidate.subpartsCount && candidate.subpartsCount > 1 && (spansSlots(section) || section.count >= candidate.subpartsCount)
     ? candidate.subpartsCount
     : 1;
   if (sec.filled + candidateUnits > sec.needed) {
@@ -635,7 +636,8 @@ export function questionSlotMarks(
     }
     if (spans && pairs > 0) {
       const half = q.pairMarks === 0.5 && pairs % 2 === 0;
-      const units = Math.min(half ? pairs / 2 : pairs, secCount);
+      // no cap: a match with more marks than the section has slots must be refused, never quietly shortened
+      const units = half ? pairs / 2 : pairs;
       return { marks: units, units };
     }
     return { marks: secMarksEach, units: 1 };

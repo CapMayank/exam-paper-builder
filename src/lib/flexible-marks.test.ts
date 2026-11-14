@@ -36,8 +36,13 @@ describe("slotPlacement for a match in a flexible non-match section", () => {
   it("a match whose pairs cannot be read counts as one slot, never 0 or NaN", () => {
     expect(slotPlacement(mcqSection(true), { type: "MATCH_COLUMN", text: "x", options: [] })).toEqual({ marks: 1, subpartsCount: undefined });
   });
-  it("more pairs than the section has slots is capped at the section count", () => {
-    expect(slotPlacement(mcqSection(true), match(9))).toEqual({ marks: 5, subpartsCount: 5 });
+  it("more pairs than the section has slots is not hidden by a cap: it counts all pairs and is refused", () => {
+    expect(slotPlacement(mcqSection(true), match(9))).toEqual({ marks: 9, subpartsCount: 9 });
+    expect(whyCannotAdd(
+      { sections: [mcqSection(true)], chapters: [{ chapterId: "c1", marks: 5 }] } as unknown as BlueprintDef,
+      [],
+      { sectionId: "s1", chapterId: "c1", type: "MATCH_COLUMN", ...slotPlacement(mcqSection(true), match(9)) },
+    )).toMatch(/slots/);
   });
 });
 

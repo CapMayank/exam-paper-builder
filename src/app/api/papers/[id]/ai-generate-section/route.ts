@@ -72,9 +72,14 @@ export const POST = route(async (req, { id }, user) => {
     if (slots.length !== 1) {
       throw new HttpError(422, `${matchedSection.title}: a match question is generated as one combined question covering several slots.`);
     }
+    // at 1/2 mark per pair a free slot holds two pairs
+    const perSlot = (body as { pairMarks?: number }).pairMarks === 0.5 ? 2 : 1;
     if (pairs < 2) throw new HttpError(422, "A match question needs at least 2 pairs, so at least 2 free slots.");
-    if (pairs > free) {
-      throw new HttpError(422, `${matchedSection.title} has ${free} free slot${free === 1 ? "" : "s"}, but a match question with ${pairs} pairs needs ${pairs}.`);
+    if (pairs > free * perSlot) {
+      throw new HttpError(
+        422,
+        `${matchedSection.title} has ${free} free slot${free === 1 ? "" : "s"}, which holds ${free * perSlot} pairs at ${perSlot === 2 ? "1/2 mark" : "1 mark"} per pair, but this match question has ${pairs}.`,
+      );
     }
   }
   if (

@@ -249,6 +249,54 @@ describe("flexible marks through the API", () => {
     expect(text).not.toMatch(/\[\s*4 Marks?\s*\]/);
   });
 
+  describe("choosing the pair value when adding", () => {
+    it("a 6-pair match is refused at 1 mark per pair in 5 slots, and accepted at 1/2 as 3 marks", async () => {
+      const t = await setup("Class 6");
+      const m6 = await t.mk(6);
+      const refused = await t.add(t.a, m6.id);
+      expect(refused.status).toBe(409);
+      const res = await call(addItem, `/api/papers/${t.paperId}/questions`, "POST", { id: t.paperId }, { sectionId: t.a, questionId: m6.id, pairMarks: 0.5 });
+      const view = (await res.json()) as View;
+      expect(res.status).toBe(200);
+      expect(sec(view, t.a)).toMatchObject({ filled: 3, needed: 5 });
+      expect(view.progress.usedMarks).toBe(3);
+      expect(view.items[0].question.pairMarks).toBe(0.5);
+    });
+
+    it("bad values at add time are refused and nothing is saved", async () => {
+      const t = await setup("Class 6");
+      const odd = await t.mk(5);
+      const r1 = await call(addItem, `/api/papers/${t.paperId}/questions`, "POST", { id: t.paperId }, { sectionId: t.a, questionId: odd.id, pairMarks: 0.5 });
+      expect(r1.status).toBe(400);
+      const even = await t.mk(4);
+      const r2 = await call(addItem, `/api/papers/${t.paperId}/questions`, "POST", { id: t.paperId }, { sectionId: t.a, questionId: even.id, pairMarks: 0.3 });
+      expect(r2.status).toBe(400);
+      expect(await prisma.paperQuestion.count({ where: { paperId: t.paperId } })).toBe(0);
+    });
+
+    it("AI generate allows twice the pairs at 1/2 mark, and refuses more than the free slots hold", async () => {
+      const t = await setup("Class 6");
+      const gen = (marksEach: number, pairMarks?: number) =>
+        call(aiGenerate, `/api/papers/${t.paperId}/ai-generate-section`, "POST", { id: t.paperId }, {
+          sectionId: t.a, sectionTitle: "Section A", sectionType: "MATCH_COLUMN", marksEach, pairMarks,
+          slots: [{ slotIndex: 0, chapterId: "x", chapterNumber: 1, chapterTitle: "C", marks: marksEach }],
+        });
+      const tooMany = await gen(12, 0.5); // 5 slots hold 10 pairs at 1/2
+      expect(tooMany.status).toBe(422);
+      expect(((await tooMany.json()) as { error: string }).error).toMatch(/holds 10 pairs/);
+      const tooManyFull = await gen(6);
+      expect(tooManyFull.status).toBe(422);
+      expect(((await tooManyFull.json()) as { error: string }).error).toMatch(/holds 5 pairs/);
+    });
+
+    it("class 10 ignores nothing: a pair value is refused", async () => {
+      const t = await setup("Class 10");
+      const m4 = await t.mk(4);
+      const r = await call(addItem, `/api/papers/${t.paperId}/questions`, "POST", { id: t.paperId }, { sectionId: t.a, questionId: m4.id, pairMarks: 0.5 });
+      expect(r.status).toBe(400);
+    });
+  });
+
   describe("review fixes", () => {
     it("editing a match in a section that borrowed slots counts all its slots", async () => {
       const t = await setup("Class 6");

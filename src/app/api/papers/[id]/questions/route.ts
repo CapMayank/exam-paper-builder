@@ -1,8 +1,18 @@
 import { body, HttpError, route } from "@/lib/api";
-import { slotPlacement, subpartsMarksProblem, whyCannotAdd } from "@/lib/blueprint";
+import { pairMarksProblem, slotPlacement, spansSlots, subpartsMarksProblem, whyCannotAdd } from "@/lib/blueprint";
+import { parseMatchColumnPairs } from "@/lib/constants";
 import { assertCanModifyPaper, assertValidOrChoice, loadPaperView, toPlacedItems } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { addItemSchema } from "@/lib/schemas";
+
+function safeJsonArray(json: string | null | undefined): string[] {
+  try {
+    const v = JSON.parse(json || "[]");
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
 
 /** Add a question to a section. The blueprint rules are enforced here, not just in the UI. */
 export const POST = route(async (req, { id }, user) => {
@@ -25,6 +35,18 @@ export const POST = route(async (req, { id }, user) => {
   const marksProblem = subpartsMarksProblem(targetSection, question);
   if (marksProblem) throw new HttpError(400, `Question ${marksProblem}`);
 
+  // the pair value is chosen here, before the question counts against the section (class 8 and below)
+  let pairMarks: number | null = null;
+  if (input.pairMarks !== undefined && input.pairMarks !== 1) {
+    if (question.type !== "MATCH_COLUMN") throw new HttpError(400, "Marks per pair only applies to a match question.");
+    const pairs = parseMatchColumnPairs(safeJsonArray(question.optionsJson), question.text, question.explanation).length;
+    const problem = pairMarksProblem(targetSection, pairs, input.pairMarks);
+    if (problem) throw new HttpError(400, problem);
+    pairMarks = input.pairMarks;
+  } else if (input.pairMarks === 1 && question.type === "MATCH_COLUMN" && !spansSlots(targetSection) && targetSection.type !== "MATCH_COLUMN") {
+    pairMarks = null;
+  }
+
   const reason = whyCannotAdd(
     {
       sections: paper.blueprint.sections,
@@ -35,7 +57,7 @@ export const POST = route(async (req, { id }, user) => {
       sectionId: input.sectionId,
       chapterId: question.chapterId,
       type: question.type,
-      ...slotPlacement(targetSection, question),
+      ...slotPlacement(targetSection, { ...question, options: safeJsonArray(question.optionsJson), pairMarks } as never),
       passageGroupId: question.passageGroupId,
     },
   );
@@ -54,6 +76,7 @@ export const POST = route(async (req, { id }, user) => {
       questionId: question.id,
       orQuestionId: input.orQuestionId || null,
       position: (last?.position ?? -1) + 1,
+      pairMarks,
     },
   });
   await prisma.paper.update({ where: { id }, data: { updatedAt: new Date() } });

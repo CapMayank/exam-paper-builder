@@ -334,6 +334,8 @@ export const addItemSchema = z.object({
   sectionId: z.string().min(1),
   questionId: z.string().min(1),
   orQuestionId: z.string().nullable().optional(),
+  /** match question in a class 8 and below one-mark section: marks per pair, 1 or 0.5 */
+  pairMarks: z.number().optional(),
 });
 export const moveItemSchema = z.object({ direction: z.enum(["up", "down"]) });
 export const replaceItemSchema = z.object({

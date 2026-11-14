@@ -7,7 +7,7 @@ import { PasteQuestionsPanel } from "@/components/PasteQuestionsPanel";
 import { isExhaustedUsage, QuestionFreshnessAlert, QuestionUsagePills } from "@/components/QuestionUsageHistory";
 import { QuestionView } from "@/components/QuestionView";
 import { ErrorBanner, Modal, Spinner } from "@/components/ui";
-import { slotPlacement, spansSlots, subpartsMarksProblem, toPlacedItems, whyCannotAdd, type BlueprintDef } from "@/lib/blueprint";
+import { pairMarksProblem, slotPlacement, spansSlots, subpartsMarksProblem, toPlacedItems, whyCannotAdd, type BlueprintDef } from "@/lib/blueprint";
 import { allowedTypesFor, isTypeAllowed, typeLabels } from "@/lib/sectionTypes";
 import { SKILLS } from "@/lib/questionTagging";
 import { aiQuestionPayload } from "@/lib/aiQuestionPayload";
@@ -83,6 +83,8 @@ export function QuestionPicker({
   // memoized with the list it reads, so the React Compiler can keep this component's other memos
   const chips = useMemo(() => showTypeChips(allowedTypes, mode), [allowedTypes, mode]);
   const [pickType, setPickType] = useState<string>(section.type);
+  // flexible marks: marks per pair for a match question added to a one-mark section (chosen before it is placed)
+  const [pairMarksPick, setPairMarksPick] = useState<1 | 0.5>(1);
   const [bank, setBank] = useState<QuestionDto[]>([]);
   const [bankError, setBankError] = useState<string | null>(null);
   const [filters, setFilters] = useState({
@@ -133,7 +135,10 @@ export function QuestionPicker({
   const sectionStatus = paper.progress.sections.find((s) => s.id === section.id)!;
   // flexible marks: an AI match in another form's one-mark section covers the free slots, one pair per slot
   const spanningMatchPick = pickType === "MATCH_COLUMN" && section.type !== "MATCH_COLUMN" && spansSlots(section);
-  const marksToGenerate = spanningMatchPick ? Math.min(10, Math.max(2, sectionStatus.needed - sectionStatus.filled)) : targetSlotMarks;
+  // at 1/2 mark per pair the free slots hold twice as many pairs (an even number, so the marks stay whole)
+  const marksToGenerate = spanningMatchPick
+    ? Math.min(10, Math.max(2, (sectionStatus.needed - sectionStatus.filled) * (pairMarksPick === 0.5 ? 2 : 1)))
+    : targetSlotMarks;
 
   const full = !isReplacing && !isAlternate && sectionStatus.filled >= sectionStatus.needed;
 
@@ -199,13 +204,20 @@ export function QuestionPicker({
           } else {
             // the same two checks the server makes when the question is added
             const marksProblem = subpartsMarksProblem(section, q);
+            const pairValue = spanningMatchPick && q.type === "MATCH_COLUMN" ? pairMarksPick : undefined;
+            const pairProblem =
+              pairValue === 0.5
+                ? pairMarksProblem(section, parseMatchColumnPairs(q.options, q.text, (q as { explanation?: string }).explanation).length, 0.5)
+                : null;
             why = marksProblem
               ? `Its parts: ${marksProblem}`
+              : pairProblem
+              ? pairProblem
               : whyCannotAdd(def, placed, {
                   sectionId: section.id,
                   chapterId: q.chapterId,
                   type: q.type,
-                  ...slotPlacement(section, q),
+                  ...slotPlacement(section, pairValue ? { ...q, pairMarks: pairValue } : q),
                   passageGroupId: q.passageGroupId,
                 });
           }
@@ -223,7 +235,7 @@ export function QuestionPicker({
           Date.parse(b.q.createdAt ?? "") - Date.parse(a.q.createdAt ?? "") ||
           0,
       );
-  }, [chapterGaps, bank, placed, def, section.id, isAlternate, activeItem, paper.items, pickType, targetSlotMarks, isMultiUnitMatch, replacingItemId, orChapterLocked, mainChapterId]);
+  }, [chapterGaps, bank, placed, def, section.id, isAlternate, activeItem, paper.items, pickType, targetSlotMarks, isMultiUnitMatch, replacingItemId, orChapterLocked, mainChapterId, pairMarksPick, spanningMatchPick]);
 
   /** Resolves true when the question was placed; false when it was refused (the error is shown in the banner). */
   async function add(questionId: string, orQuestionId?: string | null): Promise<boolean> {
@@ -253,7 +265,12 @@ export function QuestionPicker({
       } else {
         const updated = await api<PaperData>(`/api/papers/${paper.id}/questions`, {
           method: "POST",
-          json: { sectionId: section.id, questionId, orQuestionId },
+          json: {
+            sectionId: section.id,
+            questionId,
+            orQuestionId,
+            ...(spanningMatchPick && pairMarksPick === 0.5 ? { pairMarks: 0.5 } : {}),
+          },
         });
         onPaper(updated);
         const s = updated.progress.sections.find((x) => x.id === section.id)!;
@@ -346,6 +363,7 @@ export function QuestionPicker({
               sectionType: pickType,
               sectionInstructions: section.instructions,
               marksEach: marksToGenerate,
+              ...(spanningMatchPick ? { pairMarks: pairMarksPick } : {}),
               language: aiLanguage,
               difficulty: aiDifficulty,
               teacherFocus: [
@@ -560,6 +578,24 @@ export function QuestionPicker({
                 {QUESTION_TYPE_LABEL[t as keyof typeof QUESTION_TYPE_LABEL] ?? t}
               </button>
             ))}
+          </div>
+        )}
+
+        {spanningMatchPick && !isAlternate && !isReplacing && (
+          <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600" role="group" aria-label="Marks per pair">
+            <span className="font-medium text-slate-500">Marks per pair:</span>
+            {([1, 0.5] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                aria-pressed={pairMarksPick === v}
+                onClick={() => setPairMarksPick(v)}
+                className={`rounded-full border px-2.5 py-0.5 ${pairMarksPick === v ? "border-indigo-500 bg-indigo-50 font-semibold text-indigo-700" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"}`}
+              >
+                {v === 1 ? "1 mark" : "1/2 mark"}
+              </button>
+            ))}
+            <span className="text-slate-500">A match takes one slot per mark (e.g. 6 pairs at 1/2 = 3 marks).</span>
           </div>
         )}
 
