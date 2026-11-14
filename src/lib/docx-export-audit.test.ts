@@ -439,9 +439,16 @@ In crystal field theory, the interaction between transition metal d-orbitals and
       });
       try {
         const text = await docText(made.paperId);
-        expect(text).toContain("Part alpha [2 Marks]");
-        expect(text).toContain("Part beta [3 Marks]");
+        // the student's paper shows only the question's total, so the marks beside questions add up to the paper's
+        expect(text).toContain("Part alpha");
+        expect(text).not.toContain("Part alpha [2 Marks]");
+        expect(text).not.toContain("Part beta [3 Marks]");
         expect(text).toContain("Answer every part below.  [5 Marks]");
+        // the marking scheme keeps the breakdown
+        const scheme = await (await import("./paperDocx")).buildPaperDocx(made.paperId, true, teacherUser as any);
+        const { default: JSZip } = await import("jszip");
+        const schemeText = (await (await JSZip.loadAsync(scheme.buffer)).file("word/document.xml")!.async("string")).replace(/<[^>]+>/g, "");
+        expect(schemeText).toContain("Part alpha [2 Marks]");
       } finally {
         await made.cleanup();
       }
@@ -475,8 +482,9 @@ In crystal field theory, the interaction between transition metal d-orbitals and
       });
       try {
         const text = await docText(made.paperId);
-        expect(text).toContain("Compulsory one [2 Marks]");
-        expect(text).toContain("Compulsory two [3 Marks]");
+        expect(text).toContain("Compulsory one");
+        expect(text).not.toContain("Compulsory one [2 Marks]");
+        expect(text).not.toContain("Compulsory two [3 Marks]");
         expect(text).toContain("Compulsory body stem.  [5 Marks]");
         expect(count(text, /\[5 Marks?\]/g)).toBe(1); // the question line only; the options and the alternative print none
         expect(text).not.toMatch(/essay topic\s*\[/);

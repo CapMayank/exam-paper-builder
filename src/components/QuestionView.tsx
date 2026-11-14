@@ -136,7 +136,8 @@ function SingleQuestionBody({
       : decomposed?.subparts ?? [];
     const sp = effectiveSubparts && subpartIndex !== undefined ? effectiveSubparts[subpartIndex] : null;
     if (!sp) return null;
-    const hideSubMarks = !showPartMarks(effectiveSubparts.length, partsAttemptCount(q, decomposed), marksStyle);
+    // the printed paper (dense, no answers) shows only each question's total, so the marks beside questions add up to the paper's
+  const hideSubMarks = !showPartMarks(effectiveSubparts.length, partsAttemptCount(q, decomposed), marksStyle) || Boolean(dense && !showAnswer);
     const contPrefix = effectiveLang === "sa" ? "प्रश्नः" : effectiveLang === "hi" ? "प्रश्न" : "Q.";
     const contLabel = displayLabel
       ? displayLabel.startsWith("Q.") || displayLabel.startsWith("प्रश्न")
@@ -254,7 +255,8 @@ function SingleQuestionBody({
   const shownStem = stemParts ? stemParts[stemPart ?? 0] ?? "" : stemText;
   const isFirstStemPart = !stemParts || stemPart === 0;
   const isLastStemPart = !stemParts || stemPart === stemParts.length - 1;
-  const hideSubMarks = !showPartMarks(effectiveSubparts.length, partsAttemptCount(q, decomposed), marksStyle);
+  // the printed paper (dense, no answers) shows only each question's total, so the marks beside questions add up to the paper's
+  const hideSubMarks = !showPartMarks(effectiveSubparts.length, partsAttemptCount(q, decomposed), marksStyle) || Boolean(dense && !showAnswer);
   const subGridCols = dense && !showAnswer && renderMode !== "STEM_ONLY" ? subpartGridColumns(effectiveSubparts, isA5) : 0;
 
   return (

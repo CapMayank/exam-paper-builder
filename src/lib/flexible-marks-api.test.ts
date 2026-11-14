@@ -226,6 +226,9 @@ describe("flexible marks through the API", () => {
       expect(text).toContain("½ mark for each pair");
     expect(text).not.toMatch(/\[\s*4 Marks?\s*\]/);
       expect(text).toMatch(/4 Questions? · 5 Marks?/i);
+      // the marks printed beside the questions add up to the paper's marks
+      const printed = [...text.matchAll(/\[(\d+) Marks?\]/g)].reduce((n, m) => n + Number(m[1]), 0);
+      expect(printed).toBe(5);
     }
   });
 

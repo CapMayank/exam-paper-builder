@@ -925,7 +925,8 @@ export async function buildPaperDocx(
           isMarkingScheme,
           paperLang,
           1,
-          showPartMarks(parsedSubparts.length, partsAttemptCount({ subparts: rawSubparts, attemptCount }, decomp), marksStyle),
+          // the student's paper shows only each question's total; the marking scheme keeps the part marks
+          isMarkingScheme && showPartMarks(parsedSubparts.length, partsAttemptCount({ subparts: rawSubparts, attemptCount }, decomp), marksStyle),
         );
       }
 
@@ -1152,11 +1153,12 @@ export async function buildPaperDocx(
             isMarkingScheme,
             paperLang,
             1,
-            showPartMarks(
-              parsedOrSubparts.length,
-              partsAttemptCount({ subparts: rawOrSubparts, attemptCount: orAttemptCount }, decompOr),
-              marksStyle,
-            ),
+            isMarkingScheme &&
+              showPartMarks(
+                parsedOrSubparts.length,
+                partsAttemptCount({ subparts: rawOrSubparts, attemptCount: orAttemptCount }, decompOr),
+                marksStyle,
+              ),
           );
         }
 
