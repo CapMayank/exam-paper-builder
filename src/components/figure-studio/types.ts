@@ -29,6 +29,7 @@ interface Base {
   id: string;
   style: Style;
   locked?: boolean;
+  groupId?: string;
 }
 
 /** Axis-aligned box in scene space, rotated about its centre by `rot` radians. */
@@ -214,6 +215,8 @@ export interface FractionObj extends Base, BoxFields {
   model: FractionModel;
   parts: number;
   shaded: number;
+  /** Optional explicit 0-based indices of shaded parts (defaults to sequential 0..shaded-1 when omitted). */
+  shadedCells?: number[];
   /** grid model: number of rows. */
   rows: number;
   /** Show the shaded/total fraction under the model. */

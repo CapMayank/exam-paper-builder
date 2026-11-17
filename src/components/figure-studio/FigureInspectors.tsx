@@ -13,7 +13,7 @@ import {
   Plus,
   X,
 } from "lucide-react";
-import { formatFraction, formatMixed, parseFraction, toFraction } from "./fractions";
+import { formatFraction, formatMixed, fractionTotalParts, getShadedCells, parseFraction, stepShadedCells, toFraction } from "./fractions";
 import { numberLineTicks } from "./render";
 import type { AxesObj, FractionObj, NumLineObj, Obj, TableObj } from "./types";
 import { CANVAS_PRESETS, MAX_CANVAS, MIN_CANVAS } from "./types";
@@ -1049,20 +1049,127 @@ const FRACTION_PRESETS: [number, number][] = [
 ];
 const SHADE_COLORS = ["#93c5fd", "#fca5a5", "#86efac", "#fde68a", "#c4b5fd", "#fdba74", "#cbd5e1", "#1e293b"];
 
+/** Interactive mini-SVG of the fraction model allowing teachers to toggle individual parts. */
+function FractionCellPicker({
+  obj,
+  total,
+  shadedSet,
+  shadeColor,
+  onToggle,
+}: {
+  obj: FractionObj;
+  total: number;
+  shadedSet: Set<number>;
+  shadeColor: string;
+  onToggle: (idx: number) => void;
+}) {
+  const stroke = obj.style.stroke || "#334155";
+  const handleKey = (e: React.KeyboardEvent, idx: number) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onToggle(idx);
+    }
+  };
+  const cellA11y = (i: number) => ({
+    role: "button" as const,
+    tabIndex: 0,
+    "aria-label": `Part ${i + 1} of ${total}`,
+    "aria-pressed": shadedSet.has(i),
+    onClick: () => onToggle(i),
+    onKeyDown: (e: React.KeyboardEvent) => handleKey(e, i),
+    className: "cursor-pointer transition-opacity hover:opacity-80 focus:outline-indigo-500",
+    fill: shadedSet.has(i) ? shadeColor : "#ffffff",
+    stroke,
+    strokeWidth: 1.5,
+  });
+
+  if (obj.model === "circle") {
+    const cx = 60;
+    const cy = 60;
+    const r = 52;
+    return (
+      <svg viewBox="0 0 120 120" className="mx-auto block h-28 w-28 select-none" aria-label="Fraction cell picker">
+        {total === 1 ? (
+          <circle cx={cx} cy={cy} r={r} {...cellA11y(0)} />
+        ) : (
+          Array.from({ length: total }, (_, i) => {
+            const a0 = -Math.PI / 2 + (i * 2 * Math.PI) / total;
+            const a1 = -Math.PI / 2 + ((i + 1) * 2 * Math.PI) / total;
+            const x0 = cx + r * Math.cos(a0);
+            const y0 = cy + r * Math.sin(a0);
+            const x1 = cx + r * Math.cos(a1);
+            const y1 = cy + r * Math.sin(a1);
+            const largeArc = a1 - a0 > Math.PI ? 1 : 0;
+            const d = `M ${cx} ${cy} L ${x0} ${y0} A ${r} ${r} 0 ${largeArc} 1 ${x1} ${y1} Z`;
+            return <path key={i} d={d} strokeLinejoin="round" {...cellA11y(i)} />;
+          })
+        )}
+      </svg>
+    );
+  }
+
+  const rows = obj.model === "bar" ? 1 : Math.max(1, Math.min(12, Math.round(obj.rows || 1)));
+  const cols = obj.model === "bar" ? total : Math.max(1, Math.round(total / rows));
+  const vbW = 220;
+  const vbH = obj.model === "bar" ? 44 : Math.round(Math.min(160, Math.max(56, vbW * Math.min(1.4, Math.max(0.45, rows / cols)))));
+  const pad = 2;
+  const cw = (vbW - pad * 2) / cols;
+  const ch = (vbH - pad * 2) / rows;
+
+  return (
+    <svg
+      viewBox={`0 0 ${vbW} ${vbH}`}
+      className="w-full select-none"
+      style={{ height: obj.model === "bar" ? 44 : Math.min(140, vbH * 0.85) }}
+      aria-label="Fraction cell picker"
+    >
+      {Array.from({ length: total }, (_, i) => {
+        const x = pad + (i % cols) * cw;
+        const y = pad + Math.floor(i / cols) * ch;
+        return <rect key={i} x={x} y={y} width={cw} height={ch} {...cellA11y(i)} />;
+      })}
+    </svg>
+  );
+}
+
 export function FractionInspector({ obj, update }: { obj: FractionObj; update: Update }) {
   const set = (patch: Partial<FractionObj>) => update((o) => ({ ...(o as FractionObj), ...patch }));
-  const total = obj.model === "grid" ? obj.rows * Math.max(1, Math.round(obj.parts / obj.rows)) : obj.parts;
+  const total = fractionTotalParts(obj);
+  const shadedCells = getShadedCells(obj);
+  const shadedSet = new Set(shadedCells);
+  const shadedCount = shadedCells.length;
   const shadeColor = obj.style.fill ?? "#93c5fd";
   const maxParts = obj.model === "grid" ? 48 : 24;
 
+  const withClampedCells = (patch: Partial<FractionObj>): Partial<FractionObj> => {
+    const next = { ...obj, ...patch };
+    const clamped = getShadedCells(next);
+    return obj.shadedCells === undefined
+      ? { ...patch, shaded: clamped.length }
+      : { ...patch, shadedCells: clamped, shaded: clamped.length };
+  };
+
   const setParts = (n: number) => {
     const parts = Math.max(1, Math.min(maxParts, Math.round(n)));
-    set({ parts, shaded: Math.min(obj.shaded, parts) });
+    set(withClampedCells({ parts }));
+  };
+
+  const setRows = (v: number) => {
+    if (v < 1 || v > 12) return;
+    set(withClampedCells({ rows: Math.round(v) }));
+  };
+
+  const toggleCell = (idx: number) => {
+    const next = new Set(shadedCells);
+    if (next.has(idx)) next.delete(idx);
+    else next.add(idx);
+    const sorted = Array.from(next).sort((a, b) => a - b);
+    set({ shadedCells: sorted, shaded: sorted.length });
   };
 
   return (
     <>
-      <Section title="Fraction" summary={`${Math.min(obj.shaded, total)}/${total}`}>
+      <Section title="Fraction" summary={`${shadedCount}/${total}`}>
         <Seg
           value={obj.model}
           options={[
@@ -1070,28 +1177,43 @@ export function FractionInspector({ obj, update }: { obj: FractionObj; update: U
             { id: "bar", label: "Bar" },
             { id: "grid", label: "Grid" },
           ]}
-          onChange={(model) => set({ model, parts: model === "grid" ? Math.max(obj.parts, 4) : obj.parts })}
+          onChange={(model) => set(withClampedCells({ model, parts: model === "grid" ? Math.max(obj.parts, 4) : obj.parts }))}
         />
         <div className="flex flex-wrap gap-1">
           {FRACTION_PRESETS.map(([n, d]) => (
             <button
               key={`${n}/${d}`}
               type="button"
-              aria-pressed={obj.shaded === n && obj.parts === d}
+              aria-pressed={shadedCount === n && obj.parts === d}
               className={`${CHIP} aria-pressed:border-indigo-600 aria-pressed:bg-indigo-600 aria-pressed:text-white`}
-              onClick={() => set({ parts: d, shaded: n })}
+              onClick={() => set({ parts: d, shaded: n, shadedCells: Array.from({ length: n }, (_, i) => i) })}
             >
               {n}/{d}
             </button>
           ))}
         </div>
         <div className="grid grid-cols-2 gap-2">
-          <Stepper label="Shaded parts" value={Math.min(obj.shaded, total)} min={0} max={total} onChange={(n) => set({ shaded: n })} />
+          <Stepper
+            label="Shaded parts"
+            value={shadedCount}
+            min={0}
+            max={total}
+            onChange={(n) => {
+              const next = stepShadedCells(obj, n);
+              set({ shadedCells: next, shaded: next.length });
+            }}
+          />
           <Stepper label="Equal parts" value={obj.parts} display={total} min={1} max={maxParts} onChange={setParts} />
         </div>
         {obj.model === "grid" && (
-          <NumInput label="Rows in the grid" value={obj.rows} onCommit={(v) => v >= 1 && v <= 12 && set({ rows: Math.round(v) })} />
+          <NumInput label="Rows in the grid" value={obj.rows} onCommit={setRows} />
         )}
+        <div>
+          <span className={LABEL}>Click parts to shade</span>
+          <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-2">
+            <FractionCellPicker obj={obj} total={total} shadedSet={shadedSet} shadeColor={shadeColor} onToggle={toggleCell} />
+          </div>
+        </div>
       </Section>
       <Section title="Look">
         <div>

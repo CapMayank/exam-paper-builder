@@ -11,6 +11,7 @@ import {
   rad,
 } from "./geometry";
 import { embedSceneInPng, extractSceneFromPng, isPng } from "./pngMeta";
+import { getShadedCells, stepShadedCells } from "./fractions";
 import type { AngleObj, Doc, SceneFile, ShapeObj } from "./types";
 
 describe("Figure Studio - Geometry & Angle Engine", () => {
@@ -221,5 +222,23 @@ describe("Figure Studio - PNG Metadata & Scene Roundtrip", () => {
     expect(parsedScene.doc.objects.length).toBe(1);
     expect(parsedScene.doc.objects[0].type).toBe("angle");
     expect((parsedScene.doc.objects[0] as AngleObj).label).toBe("θ");
+  });
+});
+
+describe("Figure Studio - Custom Fraction Shading", () => {
+  it("falls back to sequential indices when shadedCells is undefined", () => {
+    expect(getShadedCells({ model: "bar", parts: 5, rows: 1, shaded: 3 })).toEqual([0, 1, 2]);
+  });
+
+  it("filters, deduplicates, sorts, and clamps shadedCells to grid total", () => {
+    expect(
+      getShadedCells({ model: "grid", parts: 4, rows: 2, shaded: 3, shadedCells: [8, 2, 0, 2, -1] }),
+    ).toEqual([0, 2]);
+  });
+
+  it("preserves custom pattern when stepping shaded count up or down", () => {
+    const base = { model: "grid" as const, parts: 6, rows: 2, shaded: 2, shadedCells: [1, 4] };
+    expect(stepShadedCells(base, 3)).toEqual([0, 1, 4]);
+    expect(stepShadedCells(base, 1)).toEqual([1]);
   });
 });

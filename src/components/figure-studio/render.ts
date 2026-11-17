@@ -10,7 +10,7 @@ import {
   rotateAround,
   shapeContours,
 } from "./geometry";
-import { toFraction } from "./fractions";
+import { fractionTotalParts, getShadedCells, toFraction } from "./fractions";
 import { STAMP_REGISTRY } from "./stamps";
 import { layoutText, setMeasurer } from "./text";
 import type { AngleObj, AxesObj, BoxObj, Doc, FractionObj, GridSettings, TableObj, LineObj, NumLineObj, Obj, PathObj, PointObj, Pt, Rect, ShapeObj, Style } from "./types";
@@ -845,9 +845,9 @@ function renderFraction(ctx: CanvasRenderingContext2D, obj: FractionObj) {
   const hh = obj.h / 2;
   const shadeColor = obj.style.fill ?? "#93c5fd";
   const rows = Math.max(1, Math.min(12, Math.round(obj.rows || 1)));
-  let parts = Math.max(1, Math.min(48, Math.round(obj.parts)));
-  if (obj.model === "grid") parts = rows * Math.max(1, Math.round(parts / rows));
-  const shaded = Math.max(0, Math.min(parts, Math.round(obj.shaded)));
+  const parts = fractionTotalParts(obj);
+  const shadedSet = new Set(getShadedCells(obj));
+  const shaded = shadedSet.size;
 
   ctx.lineJoin = "round";
   if (obj.model === "circle") {
@@ -859,7 +859,7 @@ function renderFraction(ctx: CanvasRenderingContext2D, obj: FractionObj) {
       if (parts > 1) ctx.moveTo(0, 0);
       ctx.arc(0, 0, r, a0, a1);
       if (parts > 1) ctx.closePath();
-      if (i < shaded) {
+      if (shadedSet.has(i)) {
         ctx.fillStyle = shadeColor;
         ctx.fill();
       }
@@ -873,7 +873,7 @@ function renderFraction(ctx: CanvasRenderingContext2D, obj: FractionObj) {
     for (let i = 0; i < parts; i++) {
       const x = -hw + (i % cols) * cw;
       const y = -hh + Math.floor(i / cols) * ch;
-      if (i < shaded) {
+      if (shadedSet.has(i)) {
         ctx.fillStyle = shadeColor;
         ctx.fillRect(x, y, cw, ch);
       }
