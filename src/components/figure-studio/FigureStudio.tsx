@@ -1221,11 +1221,10 @@ export function FigureStudio({
         if (coordRef.current) coordRef.current.textContent = `x ${Math.round(sp.x)}  y ${Math.round(sp.y)}`;
         pointerPosRef.current = sp;
         const updated = dragHandle(target, activeHandleRef.current.id, sp, e.shiftKey);
-        setDoc((prev) => {
-          const next = { ...prev, objects: prev.objects.map((o) => (o.id === objId ? updated : o)) };
-          dragDocRef.current = next;
-          return next;
-        });
+        const baseDoc = dragDocRef.current ?? doc;
+        const next = { ...baseDoc, objects: baseDoc.objects.map((o) => (o.id === objId ? updated : o)) };
+        dragDocRef.current = next;
+        setDoc(next);
         return;
       }
 
@@ -1237,11 +1236,10 @@ export function FigureStudio({
           aspect: e.shiftKey,
           center: e.altKey,
         });
-        setDoc((prev) => {
-          const next = { ...prev, objects: prev.objects.map((o) => (o.id === objId ? { ...o, ...newRect } : o)) };
-          dragDocRef.current = next;
-          return next;
-        });
+        const baseDoc = dragDocRef.current ?? doc;
+        const next = { ...baseDoc, objects: baseDoc.objects.map((o) => (o.id === objId ? { ...o, ...newRect } : o)) };
+        dragDocRef.current = next;
+        setDoc(next);
         return;
       }
 
@@ -1254,11 +1252,10 @@ export function FigureStudio({
         const finalRot = e.shiftKey
           ? Math.round(ang / (Math.PI / 12)) * (Math.PI / 12)
           : ang;
-        setDoc((prev) => {
-          const next = { ...prev, objects: prev.objects.map((o) => (o.id === objId ? { ...o, rot: finalRot } : o)) };
-          dragDocRef.current = next;
-          return next;
-        });
+        const baseDoc = dragDocRef.current ?? doc;
+        const next = { ...baseDoc, objects: baseDoc.objects.map((o) => (o.id === objId ? { ...o, rot: finalRot } : o)) };
+        dragDocRef.current = next;
+        setDoc(next);
         return;
       }
     }
@@ -1286,11 +1283,10 @@ export function FigureStudio({
           scaledMap.set(item.id, scaleObj(item, sx, sy, origin));
         }
       }
-      setDoc((prev) => {
-        const next = { ...prev, objects: prev.objects.map((o) => (o.locked ? o : (scaledMap.get(o.id) ?? o))) };
-        dragDocRef.current = next;
-        return next;
-      });
+      const baseDoc = dragDocRef.current ?? doc;
+      const next = { ...baseDoc, objects: baseDoc.objects.map((o) => (o.locked ? o : (scaledMap.get(o.id) ?? o))) };
+      dragDocRef.current = next;
+      setDoc(next);
       return;
     }
 
@@ -1343,11 +1339,10 @@ export function FigureStudio({
           movedMap.set(item.id, translateObj(item, dx, dy));
         }
       }
-      setDoc((prev) => {
-        const next = { ...prev, objects: prev.objects.map((o) => (o.locked ? o : (movedMap.get(o.id) ?? o))) };
-        dragDocRef.current = next;
-        return next;
-      });
+      const baseDoc = dragDocRef.current ?? doc;
+      const next = { ...baseDoc, objects: baseDoc.objects.map((o) => (o.locked ? o : (movedMap.get(o.id) ?? o))) };
+      dragDocRef.current = next;
+      setDoc(next);
       return;
     }
 
@@ -1525,8 +1520,8 @@ export function FigureStudio({
       ) {
         throw new Error("Clipboard image copy is not supported in this browser.");
       }
-      const blob = await renderDocToBlob(doc, grid, 2, cropToFigure);
-      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      const item = new ClipboardItem({ "image/png": renderDocToBlob(doc, grid, 2, cropToFigure) });
+      await navigator.clipboard.write([item]);
       setCopyStatus("copied");
     } catch {
       setCopyStatus("error");
@@ -2030,7 +2025,7 @@ export function FigureStudio({
             }`}
             onClick={() => void copyFigurePng()}
             title={copyStatus === "error" ? "Clipboard write blocked or unsupported" : "Copy PNG to clipboard (Ctrl+Shift+C)"}
-            aria-label="Copy PNG"
+            aria-label={copyStatus === "copied" ? "Copied PNG" : copyStatus === "error" ? "Copy PNG failed" : "Copy PNG"}
           >
             {copyStatus === "copied" ? (
               <Check size={14} />
