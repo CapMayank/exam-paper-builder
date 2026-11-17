@@ -18,7 +18,7 @@ import {
 } from "./geometry";
 import { embedSceneInPng, extractSceneFromPng, isPng } from "./pngMeta";
 import { getShadedCells, stepShadedCells } from "./fractions";
-import type { AngleObj, Doc, LineObj, SceneFile, ShapeObj, TextObj } from "./types";
+import type { AngleObj, Doc, LineObj, PathObj, PointObj, SceneFile, ShapeObj, TextObj } from "./types";
 
 describe("Figure Studio - Geometry & Angle Engine", () => {
   it("computes angle geometry and degrees correctly", () => {
@@ -290,6 +290,16 @@ describe("Figure Studio - Grouping & Marquee Selection", () => {
     expect(marqueeSelectIds(objs, { x: 0, y: 0, w: 30, h: 30 }, ["c"], true)).toEqual(["c", "a", "b"]);
   });
 
+  it("skips locked objects inside the marquee rect", () => {
+    const objs = [
+      mkRect("a", 10, 10),
+      mkRect("locked_in", 15, 15, { locked: true }),
+      mkRect("grouped_unlocked", 200, 200, { groupId: "g1" }),
+      mkRect("grouped_locked", 12, 12, { groupId: "g1", locked: true }),
+    ];
+    expect(marqueeSelectIds(objs, { x: 0, y: 0, w: 60, h: 60 }, [], false)).toEqual(["a"]);
+  });
+
   it("clones mixed grouped and ungrouped objects with remapped groupIds", () => {
     const objs = [
       mkRect("a", 0, 0, { groupId: "g1" }),
@@ -382,5 +392,147 @@ describe("Figure Studio - Group Scaling & Object Snapping", () => {
     expect(pts).toContainEqual({ x: 0, y: 0 });
     expect(pts).toContainEqual({ x: 50, y: 0 });
     expect(pts).toContainEqual({ x: 100, y: 0 });
+  });
+
+  it("scales AngleObj (arcR, fontSize), PointObj (lx, ly, fontSize), and PathObj", () => {
+    const angle: AngleObj = {
+      id: "a1",
+      type: "angle",
+      v: { x: 10, y: 10 },
+      a: { x: 110, y: 10 },
+      b: { x: 10, y: 110 },
+      reflex: false,
+      arcR: 20,
+      arcs: 1,
+      rightMark: false,
+      labelMode: "auto",
+      label: "",
+      decimals: 0,
+      fontSize: 16,
+      fillSector: false,
+      armArrow: "none",
+      armTicks: 0,
+      style: { stroke: "#000", width: 2, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+    };
+    const scaledAngle = scaleObj(angle, 2, 2, { x: 10, y: 10 });
+    expect(scaledAngle.v).toEqual({ x: 10, y: 10 });
+    expect(scaledAngle.a).toEqual({ x: 210, y: 10 });
+    expect(scaledAngle.b).toEqual({ x: 10, y: 210 });
+    expect(scaledAngle.arcR).toBe(40);
+    expect(scaledAngle.fontSize).toBe(32);
+
+    const tinyAngle = scaleObj(angle, 0.1, 0.1, { x: 0, y: 0 });
+    expect(tinyAngle.arcR).toBe(4);
+    expect(tinyAngle.fontSize).toBe(8);
+
+    const point: PointObj = {
+      id: "pt1",
+      type: "point",
+      x: 50,
+      y: 30,
+      label: "A",
+      lx: 12,
+      ly: -10,
+      size: 3.5,
+      mode: "dot",
+      fontSize: 16,
+      style: { stroke: "#000", width: 2, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+    };
+    const scaledPoint = scaleObj(point, 2, 0.5, { x: 10, y: 10 });
+    expect(scaledPoint.x).toBe(90);
+    expect(scaledPoint.y).toBe(20);
+    expect(scaledPoint.lx).toBe(24);
+    expect(scaledPoint.ly).toBe(-5);
+    expect(scaledPoint.fontSize).toBe(20); // round(16 * ((2 + 0.5) / 2))
+
+    const path: PathObj = {
+      id: "p1",
+      type: "path",
+      pts: [10, 20, 30, 60],
+      style: { stroke: "#000", width: 3, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+    };
+    const scaledPath = scaleObj(path, 2, 0.5, { x: 10, y: 20 });
+    expect(scaledPath.pts).toEqual([10, 20, 50, 40]);
+    expect(scaledPath.style.width).toBe(3);
+  });
+
+  it("extracts snap points for AngleObj, PointObj, PathObj, and rotated BoxObj", () => {
+    const angle: AngleObj = {
+      id: "a1",
+      type: "angle",
+      v: { x: 0, y: 0 },
+      a: { x: 100, y: 0 },
+      b: { x: 0, y: 80 },
+      reflex: false,
+      arcR: 20,
+      arcs: 1,
+      rightMark: false,
+      labelMode: "auto",
+      label: "",
+      decimals: 0,
+      fontSize: 14,
+      fillSector: false,
+      armArrow: "none",
+      armTicks: 0,
+      style: { stroke: "#000", width: 2, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+    };
+    expect(objectSnapPoints(angle)).toEqual([
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 0, y: 80 },
+      { x: 50, y: 0 },
+      { x: 0, y: 40 },
+    ]);
+
+    const point: PointObj = {
+      id: "pt1",
+      type: "point",
+      x: 42,
+      y: 84,
+      label: "P",
+      lx: 10,
+      ly: -10,
+      size: 3,
+      mode: "dot",
+      fontSize: 14,
+      style: { stroke: "#000", width: 2, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+    };
+    expect(objectSnapPoints(point)).toEqual([{ x: 42, y: 84 }]);
+
+    const path: PathObj = {
+      id: "p1",
+      type: "path",
+      pts: [0, 0, 10, 10, 20, 0],
+      style: { stroke: "#000", width: 2, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+    };
+    expect(objectSnapPoints(path)).toEqual([]);
+
+    // 40x20 box centered at (100, 100), rotated 90 degrees -> half-extents become (10, 20)
+    const rotatedBox: ShapeObj = {
+      id: "b1",
+      type: "shape",
+      kind: "rect",
+      x: 80,
+      y: 90,
+      w: 40,
+      h: 20,
+      rot: Math.PI / 2,
+      sides: 4,
+      a0: 0,
+      a1: 90,
+      radius: 0,
+      inner: 0.5,
+      style: { stroke: "#000", width: 2, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+    };
+    const boxPts = objectSnapPoints(rotatedBox).map((q) => ({
+      x: Math.round(q.x),
+      y: Math.round(q.y),
+    }));
+    expect(boxPts).toHaveLength(9);
+    expect(boxPts).toContainEqual({ x: 100, y: 100 }); // center
+    expect(boxPts).toContainEqual({ x: 110, y: 80 }); // rotated corners
+    expect(boxPts).toContainEqual({ x: 90, y: 120 });
+    expect(boxPts).toContainEqual({ x: 110, y: 100 }); // rotated edge midpoints
+    expect(boxPts).toContainEqual({ x: 100, y: 80 });
   });
 });

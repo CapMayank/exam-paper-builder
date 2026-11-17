@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AlertCircle,
   Check,
   ChevronDown,
   ClipboardCopy,
@@ -830,7 +831,7 @@ export function FigureStudio({
   const handlePointerDown = (e: React.PointerEvent) => {
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     const rawP = screenToScene(e.clientX, e.clientY);
-    const p = activeTool === "select" ? rawP : snapScenePt(rawP, e.altKey);
+    const p = snapScenePt(rawP, e.altKey);
     isDragging.current = true;
     dragDocRef.current = null;
     dragStart.current = p;
@@ -1421,7 +1422,8 @@ export function FigureStudio({
       const { start, current, additive } = marqueeRef.current;
       marqueeRef.current = null;
       const rect = normRect(start, current);
-      if (rect.w > 2 || rect.h > 2) {
+      const minMarquee = 2 / zoom;
+      if (rect.w > minMarquee || rect.h > minMarquee) {
         setSelectedIds((prev) => marqueeSelectIds(doc.objects, rect, prev, additive));
       }
       return;
@@ -1482,17 +1484,25 @@ export function FigureStudio({
     setSelectedIds(clones.map((c) => c.id));
   }, [doc, selectedIds, pushHistory]);
 
+  const selectedObjs = doc.objects.filter((o) => selectedIds.includes(o.id));
+  const unlockedSelectedObjs = selectedObjs.filter((o) => !o.locked);
+  const canGroup =
+    unlockedSelectedObjs.length >= 2 &&
+    (unlockedSelectedObjs.some((o) => !o.groupId) ||
+      new Set(unlockedSelectedObjs.map((o) => o.groupId)).size > 1);
+  const canUngroup = unlockedSelectedObjs.some((o) => Boolean(o.groupId));
+
   const groupSelected = useCallback(() => {
+    if (!canGroup) return;
     const unlockedIds = new Set(
       doc.objects.filter((o) => selectedIds.includes(o.id) && !o.locked).map((o) => o.id),
     );
-    if (unlockedIds.size < 2) return;
     const gid = uid();
     pushHistory({
       ...doc,
       objects: doc.objects.map((o) => (unlockedIds.has(o.id) ? { ...o, groupId: gid } : o)),
     });
-  }, [doc, selectedIds, pushHistory]);
+  }, [canGroup, doc, selectedIds, pushHistory]);
 
   const ungroupSelected = useCallback(() => {
     const hasGroup = doc.objects.some((o) => selectedIds.includes(o.id) && !o.locked && o.groupId);
@@ -1889,13 +1899,6 @@ export function FigureStudio({
 
   const selectedCount = selectedIds.length;
   const single = selectedCount === 1 ? selectedObj : undefined;
-  const selectedObjs = doc.objects.filter((o) => selectedIds.includes(o.id));
-  const unlockedSelectedObjs = selectedObjs.filter((o) => !o.locked);
-  const canGroup =
-    unlockedSelectedObjs.length >= 2 &&
-    (unlockedSelectedObjs.some((o) => !o.groupId) ||
-      new Set(unlockedSelectedObjs.map((o) => o.groupId)).size > 1);
-  const canUngroup = unlockedSelectedObjs.some((o) => Boolean(o.groupId));
   const toolLabel = TOOL_LABELS[activeTool] ?? activeTool;
   const canvasHint =
     activeTool === "angle"
@@ -2029,7 +2032,13 @@ export function FigureStudio({
             title={copyStatus === "error" ? "Clipboard write blocked or unsupported" : "Copy PNG to clipboard (Ctrl+Shift+C)"}
             aria-label="Copy PNG"
           >
-            {copyStatus === "copied" ? <Check size={14} /> : <ClipboardCopy size={14} />}
+            {copyStatus === "copied" ? (
+              <Check size={14} />
+            ) : copyStatus === "error" ? (
+              <AlertCircle size={14} />
+            ) : (
+              <ClipboardCopy size={14} />
+            )}
             <span className="hidden sm:inline">
               {copyStatus === "copied" ? "Copied!" : copyStatus === "error" ? "Copy failed" : "Copy PNG"}
             </span>
