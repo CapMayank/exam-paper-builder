@@ -13,10 +13,12 @@ import {
   expandGroupSelection,
   marqueeSelectIds,
   rectsIntersect,
+  objectSnapPoints,
+  scaleObj,
 } from "./geometry";
 import { embedSceneInPng, extractSceneFromPng, isPng } from "./pngMeta";
 import { getShadedCells, stepShadedCells } from "./fractions";
-import type { AngleObj, Doc, SceneFile, ShapeObj } from "./types";
+import type { AngleObj, Doc, LineObj, SceneFile, ShapeObj, TextObj } from "./types";
 
 describe("Figure Studio - Geometry & Angle Engine", () => {
   it("computes angle geometry and degrees correctly", () => {
@@ -303,5 +305,82 @@ describe("Figure Studio - Grouping & Marquee Selection", () => {
     expect(clones[2].groupId).toBe("id_5");
     expect(clones[2].groupId).not.toBe("g2");
     expect(clones[3].groupId).toBeUndefined();
+  });
+});
+
+describe("Figure Studio - Group Scaling & Object Snapping", () => {
+  it("scales BoxObj, TextObj font size, and keeps stroke width fixed", () => {
+    const txt: TextObj = {
+      id: "t1",
+      type: "text",
+      x: 100,
+      y: 100,
+      w: 80,
+      h: 30,
+      rot: 0,
+      text: "ABC",
+      font: "sans",
+      size: 16,
+      bold: false,
+      italic: false,
+      underline: false,
+      align: "center",
+      bg: "none",
+      border: false,
+      style: { stroke: "#000", width: 2, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+    };
+    const scaled = scaleObj(txt, 0.5, 0.5, { x: 0, y: 0 });
+    expect(scaled.x).toBe(50);
+    expect(scaled.y).toBe(50);
+    expect(scaled.w).toBe(40);
+    expect(scaled.h).toBe(15);
+    expect(scaled.size).toBe(8);
+    expect(scaled.style.width).toBe(2);
+  });
+
+  it("clamps minimum box size and falls back to uniform scale on rotated BoxObj", () => {
+    const box: ShapeObj = {
+      id: "s1",
+      type: "shape",
+      kind: "rect",
+      x: 10,
+      y: 10,
+      w: 20,
+      h: 20,
+      rot: Math.PI / 4,
+      sides: 4,
+      a0: 0,
+      a1: 90,
+      radius: 0,
+      inner: 0.5,
+      style: { stroke: "#000", width: 2, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+    };
+    const tiny = scaleObj(box, 0.01, 0.01, { x: 0, y: 0 });
+    expect(tiny.w).toBeGreaterThanOrEqual(4);
+    expect(tiny.h).toBeGreaterThanOrEqual(4);
+
+    const nonUniformRot = scaleObj(box, 2, 4, { x: 0, y: 0 });
+    expect(nonUniformRot.w).toBe(nonUniformRot.h);
+  });
+
+  it("extracts vertices, midpoints, and centers in objectSnapPoints", () => {
+    const line: LineObj = {
+      id: "l1",
+      type: "line",
+      kind: "line",
+      pts: [{ x: 0, y: 0 }, { x: 100, y: 0 }],
+      start: "none",
+      end: "none",
+      ticks: 0,
+      parallels: 0,
+      label: "",
+      labelSize: 14,
+      labelOffset: 10,
+      style: { stroke: "#000", width: 2, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+    };
+    const pts = objectSnapPoints(line);
+    expect(pts).toContainEqual({ x: 0, y: 0 });
+    expect(pts).toContainEqual({ x: 50, y: 0 });
+    expect(pts).toContainEqual({ x: 100, y: 0 });
   });
 });

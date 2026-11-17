@@ -588,6 +588,68 @@ export function translateObj<T extends Obj>(o: T, dx: number, dy: number): T {
   }
 }
 
+/** Scale an object around `origin` while keeping stroke widths fixed and clamping font sizes >= 8px. */
+export function scaleObj<T extends Obj>(o: T, sx: number, sy: number, origin: Pt): T {
+  const fx = Number.isFinite(sx) ? Math.max(1e-4, sx) : 1;
+  const fy = Number.isFinite(sy) ? Math.max(1e-4, sy) : 1;
+  const sAvg = (fx + fy) / 2;
+  const scalePt = (p: Pt): Pt => ({
+    x: origin.x + (p.x - origin.x) * fx,
+    y: origin.y + (p.y - origin.y) * fy,
+  });
+
+  switch (o.type) {
+    case "path": {
+      const pts = o.pts.slice();
+      for (let i = 0; i < pts.length; i += 2) {
+        pts[i] = origin.x + (o.pts[i] - origin.x) * fx;
+        pts[i + 1] = origin.y + (o.pts[i + 1] - origin.y) * fy;
+      }
+      return { ...o, pts };
+    }
+    case "line":
+      return {
+        ...o,
+        pts: o.pts.map(scalePt),
+        labelSize: Math.max(8, Math.round(o.labelSize * sAvg)),
+      };
+    case "angle":
+      return {
+        ...o,
+        v: scalePt(o.v),
+        a: scalePt(o.a),
+        b: scalePt(o.b),
+        arcR: Math.max(4, o.arcR * sAvg),
+        fontSize: Math.max(8, Math.round(o.fontSize * sAvg)),
+      };
+    case "point":
+      return {
+        ...o,
+        x: origin.x + (o.x - origin.x) * fx,
+        y: origin.y + (o.y - origin.y) * fy,
+        lx: o.lx * fx,
+        ly: o.ly * fy,
+        fontSize: Math.max(8, Math.round(o.fontSize * sAvg)),
+      };
+    default: {
+      const bo = o as BoxObj;
+      const ux = bo.rot !== 0 && fx !== fy ? sAvg : fx;
+      const uy = bo.rot !== 0 && fx !== fy ? sAvg : fy;
+      const scaledBox: BoxObj = {
+        ...bo,
+        x: origin.x + (bo.x - origin.x) * ux,
+        y: origin.y + (bo.y - origin.y) * uy,
+        w: Math.max(4, bo.w * ux),
+        h: Math.max(4, bo.h * uy),
+      };
+      if (scaledBox.type === "text" || scaledBox.type === "table") {
+        return { ...scaledBox, size: Math.max(8, Math.round(scaledBox.size * sAvg)) } as T;
+      }
+      return scaledBox as T;
+    }
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Bounds                                                              */
 /* ------------------------------------------------------------------ */
@@ -853,6 +915,28 @@ export function keyPoints(o: Obj): Pt[] {
       const bo = o as BoxObj;
       const cs = boxCorners(bo);
       return [boxCenter(bo), ...cs, mid(cs[0], cs[1]), mid(cs[1], cs[2]), mid(cs[2], cs[3]), mid(cs[3], cs[0])];
+    }
+  }
+}
+
+/** Extract object key points (endpoints, vertices, edge midpoints, centers) for snapping. */
+export function objectSnapPoints(o: Obj): Pt[] {
+  switch (o.type) {
+    case "path":
+      return [];
+    case "line": {
+      const out = o.pts.slice();
+      for (let i = 0; i < o.pts.length - 1; i++) out.push(mid(o.pts[i], o.pts[i + 1]));
+      return out;
+    }
+    case "angle":
+      return [o.v, o.a, o.b, mid(o.v, o.a), mid(o.v, o.b)];
+    case "point":
+      return [{ x: o.x, y: o.y }];
+    default: {
+      const bo = o as BoxObj;
+      const cs = boxCorners(bo);
+      return [...cs, mid(cs[0], cs[1]), mid(cs[1], cs[2]), mid(cs[2], cs[3]), mid(cs[3], cs[0]), boxCenter(bo)];
     }
   }
 }
