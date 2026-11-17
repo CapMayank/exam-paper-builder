@@ -108,7 +108,7 @@ export function unionRect(a: Rect | null, b: Rect): Rect {
   return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
 }
 export const inflate = (r: Rect, d: number): Rect => ({ x: r.x - d, y: r.y - d, w: r.w + 2 * d, h: r.h + 2 * d });
-export const rectsIntersect = (a: Rect, b: Rect) =>
+export const rectsIntersect = (a: Rect, b: Rect): boolean =>
   a.x <= b.x + b.w && b.x <= a.x + a.w && a.y <= b.y + b.h && b.y <= a.y + a.h;
 export const rectContainsPt = (r: Rect, p: Pt) => p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
 export const rectCenter = (r: Rect): Pt => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
@@ -659,6 +659,54 @@ export function selectionBounds(objs: Obj[]): Rect | null {
 /** Tight crop of the drawing for "fit canvas to drawing". */
 export function contentBounds(objs: Obj[]): Rect | null {
   return selectionBounds(objs);
+}
+
+/* ------------------------------------------------------------------ */
+/* Grouping & Marquee Selection                                        */
+/* ------------------------------------------------------------------ */
+
+/** Expand `seedIds` to include all unlocked members sharing any seed's `groupId` (preserving `objects` order). */
+export function expandGroupSelection(objects: Obj[], seedIds: string[]): string[] {
+  if (seedIds.length === 0) return [];
+  const seedSet = new Set(seedIds);
+  const groupIds = new Set<string>();
+  for (const o of objects) {
+    if (seedSet.has(o.id) && o.groupId) groupIds.add(o.groupId);
+  }
+  return objects
+    .filter((o) => !o.locked && (seedSet.has(o.id) || Boolean(o.groupId && groupIds.has(o.groupId))))
+    .map((o) => o.id);
+}
+
+/** Return unlocked object IDs intersecting `marquee` (with group expansion), optionally unioned with `existingIds`. */
+export function marqueeSelectIds(
+  objects: Obj[],
+  marquee: Rect,
+  existingIds: string[],
+  additive: boolean,
+): string[] {
+  const hitIds = objects
+    .filter((o) => !o.locked && rectsIntersect(objectBounds(o), marquee))
+    .map((o) => o.id);
+  const expanded = expandGroupSelection(objects, hitIds);
+  if (!additive) return expanded;
+  return Array.from(new Set([...existingIds, ...expanded]));
+}
+
+/** Translate `objs` by `(dx, dy)`, assigning fresh IDs and remapping each unique non-empty `groupId`. */
+export function cloneWithRemappedGroups(objs: Obj[], dx: number, dy: number, makeId: () => string): Obj[] {
+  const groupMap = new Map<string, string>();
+  return objs.map((o) => {
+    const id = makeId();
+    const moved = translateObj(o, dx, dy);
+    if (!o.groupId) return { ...moved, id };
+    let mappedGroup = groupMap.get(o.groupId);
+    if (!mappedGroup) {
+      mappedGroup = makeId();
+      groupMap.set(o.groupId, mappedGroup);
+    }
+    return { ...moved, id, groupId: mappedGroup };
+  });
 }
 
 /* ------------------------------------------------------------------ */

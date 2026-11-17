@@ -9,6 +9,10 @@ import {
   hatchGeometry,
   rotateAround,
   rad,
+  cloneWithRemappedGroups,
+  expandGroupSelection,
+  marqueeSelectIds,
+  rectsIntersect,
 } from "./geometry";
 import { embedSceneInPng, extractSceneFromPng, isPng } from "./pngMeta";
 import { getShadedCells, stepShadedCells } from "./fractions";
@@ -240,5 +244,64 @@ describe("Figure Studio - Custom Fraction Shading", () => {
     const base = { model: "grid" as const, parts: 6, rows: 2, shaded: 2, shadedCells: [1, 4] };
     expect(stepShadedCells(base, 3)).toEqual([0, 1, 4]);
     expect(stepShadedCells(base, 1)).toEqual([1]);
+  });
+});
+
+describe("Figure Studio - Grouping & Marquee Selection", () => {
+  const mkRect = (id: string, x: number, y: number, extra: Partial<ShapeObj> = {}): ShapeObj => ({
+    id,
+    type: "shape",
+    kind: "rect",
+    x,
+    y,
+    w: 40,
+    h: 40,
+    rot: 0,
+    sides: 4,
+    a0: 0,
+    a1: 90,
+    radius: 0,
+    inner: 0.5,
+    style: { stroke: "#000", width: 2, dash: "solid", fill: null, hatch: "none", opacity: 1 },
+    ...extra,
+  });
+
+  it("expands selection to all unlocked members of a group", () => {
+    const objs = [
+      mkRect("a", 0, 0, { groupId: "g1" }),
+      mkRect("b", 100, 0, { groupId: "g1" }),
+      mkRect("c", 200, 0, { groupId: "g1", locked: true }),
+      mkRect("d", 300, 0),
+    ];
+    expect(expandGroupSelection(objs, ["a"])).toEqual(["a", "b"]);
+  });
+
+  it("marquee selects intersecting unlocked objects, expands groups, and unions when additive", () => {
+    const objs = [
+      mkRect("a", 10, 10, { groupId: "g1" }),
+      mkRect("b", 200, 200, { groupId: "g1" }),
+      mkRect("c", 300, 300),
+    ];
+    expect(rectsIntersect({ x: 0, y: 0, w: 30, h: 30 }, { x: 10, y: 10, w: 40, h: 40 })).toBe(true);
+    expect(rectsIntersect({ x: 0, y: 0, w: 30, h: 30 }, { x: 200, y: 200, w: 40, h: 40 })).toBe(false);
+    expect(marqueeSelectIds(objs, { x: 0, y: 0, w: 30, h: 30 }, ["c"], false)).toEqual(["a", "b"]);
+    expect(marqueeSelectIds(objs, { x: 0, y: 0, w: 30, h: 30 }, ["c"], true)).toEqual(["c", "a", "b"]);
+  });
+
+  it("clones mixed grouped and ungrouped objects with remapped groupIds", () => {
+    const objs = [
+      mkRect("a", 0, 0, { groupId: "g1" }),
+      mkRect("b", 50, 0, { groupId: "g1" }),
+      mkRect("c", 100, 0, { groupId: "g2" }),
+      mkRect("d", 150, 0),
+    ];
+    let n = 0;
+    const clones = cloneWithRemappedGroups(objs, 20, 20, () => `id_${++n}`);
+    expect(clones.map((c) => c.id)).toEqual(["id_1", "id_3", "id_4", "id_6"]);
+    expect(clones[0].groupId).toBe("id_2");
+    expect(clones[1].groupId).toBe("id_2");
+    expect(clones[2].groupId).toBe("id_5");
+    expect(clones[2].groupId).not.toBe("g2");
+    expect(clones[3].groupId).toBeUndefined();
   });
 });
