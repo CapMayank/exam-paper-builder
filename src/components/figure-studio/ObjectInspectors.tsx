@@ -12,8 +12,10 @@ import {
   Copy,
   FlipHorizontal,
   FlipVertical,
+  Group,
   Tag,
   Trash2,
+  Ungroup,
 } from "lucide-react";
 import { angleGeom, uid, withAngleDegrees } from "./geometry";
 import { LABEL, CHIP, Section, Seg, Slider, Toggle, type Update } from "./FigureInspectors";
@@ -129,6 +131,10 @@ export function SelectionHeader({
   onFlipV,
   onDuplicate,
   onDelete,
+  onGroup,
+  onUngroup,
+  canGroup = false,
+  canUngroup = false,
 }: {
   title: string;
   detail?: string;
@@ -140,6 +146,10 @@ export function SelectionHeader({
   onFlipV: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
+  onGroup?: () => void;
+  onUngroup?: () => void;
+  canGroup?: boolean;
+  canUngroup?: boolean;
 }) {
   return (
     <div className="border-b border-slate-200 px-4 pb-2 pt-3">
@@ -175,6 +185,28 @@ export function SelectionHeader({
           <Trash2 size={15} />
         </IconAction>
       </div>
+      {(canGroup || canUngroup) && (
+        <div className="mt-2 flex items-center gap-1.5">
+          <button
+            type="button"
+            disabled={!canGroup || !onGroup}
+            onClick={onGroup}
+            title="Group selected objects (Ctrl+G)"
+            className="btn btn-sm flex-1 justify-center gap-1.5 text-xs disabled:opacity-40"
+          >
+            <Group size={14} /> Group
+          </button>
+          <button
+            type="button"
+            disabled={!canUngroup || !onUngroup}
+            onClick={onUngroup}
+            title="Ungroup (Ctrl+Shift+G)"
+            className="btn btn-sm flex-1 justify-center gap-1.5 text-xs disabled:opacity-40"
+          >
+            <Ungroup size={14} /> Ungroup
+          </button>
+        </div>
+      )}
     </div>
   );
 }

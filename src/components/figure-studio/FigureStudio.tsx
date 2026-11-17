@@ -3,6 +3,8 @@
 import {
   Check,
   ChevronDown,
+  ClipboardCopy,
+  Crosshair,
   Eraser,
   Grid,
   Hand,
@@ -31,19 +33,28 @@ import {
   BOX_HANDLES,
   BoxHandle,
   clamp,
+  cloneWithRemappedGroups,
   deg,
   dist,
   dragHandle,
+  expandGroupSelection,
   flipObjects,
+  marqueeSelectIds,
   normAngle,
+  normRect,
   objectBounds,
   objectHandles,
+  objectSnapPoints,
   pt,
   rad,
   rectCenter,
   resizeBox,
   rotateAround,
+  scaleObj,
   selectionBounds,
+  snapDelta,
+  snapPoint as snapGeoPoint,
+  type SnapResult,
   translateObj,
   uid,
   withAngleDegrees,
@@ -239,6 +250,8 @@ export function FigureStudio({
   // Viewport pan/zoom
   const [zoom, setZoom] = useState(1);
   const [snap, setSnap] = useState(true);
+  const [snapToObjects, setSnapToObjects] = useState(true);
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [cropToFigure, setCropToFigure] = useState(true);
   const [pan, setPan] = useState<Pt>({ x: 0, y: 0 });
 
@@ -279,7 +292,29 @@ export function FigureStudio({
   const pointerPosRef = useRef<Pt>({ x: 0, y: 0 });
   const activeHandleRef = useRef<ActiveHandle | null>(null);
   const liveObj = useRef<Obj | null>(null);
+  const marqueeRef = useRef<{ start: Pt; current: Pt; additive: boolean } | null>(null);
+  const groupScaleRef = useRef<{
+    corner: "nw" | "ne" | "sw" | "se";
+    origin: Pt;
+    startBounds: Rect;
+    snapshot: Obj[];
+  } | null>(null);
+  const moveDragRef = useRef<{
+    startRaw: Pt;
+    snapshot: Obj[];
+    didMove: boolean;
+    pendingNarrow?: string[];
+  } | null>(null);
+  const activeSnapRef = useRef<SnapResult | null>(null);
+  const dragDocRef = useRef<Doc | null>(null);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const coordRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
   const clipboardRef = useRef<Obj[]>([]);
   const pasteCount = useRef(0);
   const zoomRef = useRef(1);
@@ -680,7 +715,7 @@ export function FigureStudio({
         ctx.restore();
       }
     } else if (selectedIds.length > 1) {
-      // Multi-selection bounding box
+      // Multi-selection bounding box & corner scale handles
       const selectedObjs = doc.objects.filter((o) => selectedIds.includes(o.id));
       const sb = selectionBounds(selectedObjs);
       if (sb) {
@@ -689,8 +724,62 @@ export function FigureStudio({
         ctx.lineWidth = 1.2;
         ctx.setLineDash([4, 3]);
         ctx.strokeRect(sb.x - 4, sb.y - 4, sb.w + 8, sb.h + 8);
+        ctx.setLineDash([]);
+
+        const hSize = 8 / zoom;
+        const corners: Pt[] = [
+          { x: sb.x, y: sb.y },
+          { x: sb.x + sb.w, y: sb.y },
+          { x: sb.x, y: sb.y + sb.h },
+          { x: sb.x + sb.w, y: sb.y + sb.h },
+        ];
+        for (const cp of corners) {
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(cp.x - hSize / 2, cp.y - hSize / 2, hSize, hSize);
+          ctx.strokeStyle = "#1e6075";
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(cp.x - hSize / 2, cp.y - hSize / 2, hSize, hSize);
+        }
         ctx.restore();
       }
+    }
+
+    // Marquee selection rectangle
+    if (marqueeRef.current) {
+      const mr = normRect(marqueeRef.current.start, marqueeRef.current.current);
+      ctx.save();
+      ctx.fillStyle = "rgba(79, 70, 229, 0.1)";
+      ctx.fillRect(mr.x, mr.y, mr.w, mr.h);
+      ctx.strokeStyle = "#4f46e5";
+      ctx.lineWidth = 1.2 / zoom;
+      ctx.setLineDash([4 / zoom, 3 / zoom]);
+      ctx.strokeRect(mr.x, mr.y, mr.w, mr.h);
+      ctx.restore();
+    }
+
+    // Object key-point snap indicator
+    if (activeSnapRef.current?.kind === "point" && activeSnapRef.current.target) {
+      const sp = activeSnapRef.current.target;
+      const r = 6 / zoom;
+      const arm = 10 / zoom;
+      ctx.save();
+      ctx.strokeStyle = "#4f46e5";
+      ctx.lineWidth = 1.8 / zoom;
+      ctx.beginPath();
+      ctx.arc(sp.x, sp.y, r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(sp.x - arm, sp.y);
+      ctx.lineTo(sp.x + arm, sp.y);
+      ctx.moveTo(sp.x, sp.y - arm);
+      ctx.lineTo(sp.x, sp.y + arm);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(sp.x, sp.y, 2.2 / zoom, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
     }
 
     ctx.restore();
@@ -707,17 +796,43 @@ export function FigureStudio({
   }, [render]);
 
   // Pointer Event Handlers
-  /** Snap drawing clicks to the grid (hold Alt to place freely). Editing and freehand tools are never snapped. */
-  const snapPoint = (pt: Pt, bypass: boolean): Pt => {
-    if (!snap || bypass || grid.style === "none" || grid.size <= 0) return pt;
-    if (["select", "hand", "pen", "highlighter", "eraser", "text"].includes(activeTool)) return pt;
-    return { x: Math.round(pt.x / grid.size) * grid.size, y: Math.round(pt.y / grid.size) * grid.size };
+  /** Snap drawing/handle points to object key points or grid (hold Alt to place freely). Freehand pen/highlighter are never snapped. */
+  const snapScenePt = (
+    rawPt: Pt,
+    bypass: boolean,
+    excludeIds: string[] = [],
+    forceAllow = false,
+  ): Pt => {
+    if (
+      bypass ||
+      activeTool === "pen" ||
+      activeTool === "highlighter" ||
+      (!forceAllow && ["select", "hand", "eraser", "text"].includes(activeTool))
+    ) {
+      activeSnapRef.current = null;
+      return rawPt;
+    }
+    const gridSize = snap && grid.style !== "none" && grid.size > 0 ? grid.size : null;
+    const points = snapToObjects
+      ? doc.objects
+          .filter((o) => !excludeIds.includes(o.id))
+          .flatMap((o) => objectSnapPoints(o))
+      : undefined;
+    const res = snapGeoPoint(rawPt, {
+      points,
+      grid: gridSize,
+      tol: 8 / zoom,
+    });
+    activeSnapRef.current = res.kind === "point" ? res : null;
+    return res.p;
   };
 
   const handlePointerDown = (e: React.PointerEvent) => {
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    const p = snapPoint(screenToScene(e.clientX, e.clientY), e.altKey);
+    const rawP = screenToScene(e.clientX, e.clientY);
+    const p = activeTool === "select" ? rawP : snapScenePt(rawP, e.altKey);
     isDragging.current = true;
+    dragDocRef.current = null;
     dragStart.current = p;
     pointerPosRef.current = p;
 
@@ -726,11 +841,11 @@ export function FigureStudio({
     // 1. Direct Handle Hit-Testing on Selected Object
     if (selectedIds.length === 1) {
       const target = doc.objects.find((o) => o.id === selectedIds[0]);
-      if (target) {
+      if (target && !target.locked) {
         // Hit-test object specific handles (v, a, b, r, endpoints, etc.)
         const handles = objectHandles(target);
         for (const h of handles) {
-          if (dist(p, h.p) <= 12 / zoom) {
+          if (dist(rawP, h.p) <= 12 / zoom) {
             activeHandleRef.current = { kind: "obj", id: h.id, objId: target.id };
             return;
           }
@@ -746,14 +861,14 @@ export function FigureStudio({
             y: nPos.y + Math.sin(dir) * rotOffset,
           };
 
-          if (dist(p, rotHandlePt) <= 12 / zoom) {
+          if (dist(rawP, rotHandlePt) <= 12 / zoom) {
             activeHandleRef.current = { kind: "rot", objId: target.id };
             return;
           }
 
           for (const bh of BOX_HANDLES) {
             const bhp = boxHandlePos(target, bh);
-            if (dist(p, bhp) <= 10 / zoom) {
+            if (dist(rawP, bhp) <= 10 / zoom) {
               activeHandleRef.current = { kind: "box", handle: bh, objId: target.id };
               return;
             }
@@ -762,18 +877,64 @@ export function FigureStudio({
       }
     }
 
-    // 2. Select tool click hit-testing
+    // 1b. Multi-Selection Corner Resize Handles (before object hit-testing)
+    if (activeTool === "select" && selectedIds.length > 1) {
+      const selectedObjs = doc.objects.filter((o) => selectedIds.includes(o.id) && !o.locked);
+      const sb = selectionBounds(selectedObjs);
+      if (sb) {
+        const corners: { id: "nw" | "ne" | "sw" | "se"; p: Pt; origin: Pt }[] = [
+          { id: "nw", p: { x: sb.x, y: sb.y }, origin: { x: sb.x + sb.w, y: sb.y + sb.h } },
+          { id: "ne", p: { x: sb.x + sb.w, y: sb.y }, origin: { x: sb.x, y: sb.y + sb.h } },
+          { id: "sw", p: { x: sb.x, y: sb.y + sb.h }, origin: { x: sb.x + sb.w, y: sb.y } },
+          { id: "se", p: { x: sb.x + sb.w, y: sb.y + sb.h }, origin: { x: sb.x, y: sb.y } },
+        ];
+        const hitCorner = corners.find((c) => dist(rawP, c.p) <= 10 / zoom);
+        if (hitCorner) {
+          groupScaleRef.current = {
+            corner: hitCorner.id,
+            origin: hitCorner.origin,
+            startBounds: sb,
+            snapshot: selectedObjs,
+          };
+          return;
+        }
+      }
+    }
+
+    // 2. Select tool click hit-testing & marquee
     if (activeTool === "select") {
       const hit = [...doc.objects].reverse().find((o) => {
+        if (o.locked) return false;
         const b = objectBounds(o);
-        return p.x >= b.x - 6 && p.x <= b.x + b.w + 6 && p.y >= b.y - 6 && p.y <= b.y + b.h + 6;
+        return rawP.x >= b.x - 6 / zoom && rawP.x <= b.x + b.w + 6 / zoom && rawP.y >= b.y - 6 / zoom && rawP.y <= b.y + b.h + 6 / zoom;
       });
 
       if (hit) {
-        setSelectedIds([hit.id]);
-        setStyle(hit.style);
+        const groupIds = expandGroupSelection(doc.objects, [hit.id]);
+        if (e.shiftKey) {
+          const allSelected = groupIds.every((id) => selectedIds.includes(id));
+          const nextIds = allSelected
+            ? selectedIds.filter((id) => !groupIds.includes(id))
+            : Array.from(new Set([...selectedIds, ...groupIds]));
+          setSelectedIds(nextIds);
+          if (nextIds.includes(hit.id)) {
+            setStyle(hit.style);
+            const snapshot = doc.objects.filter((o) => nextIds.includes(o.id) && !o.locked);
+            moveDragRef.current = { startRaw: rawP, snapshot, didMove: false };
+          }
+        } else if (selectedIds.includes(hit.id) && selectedIds.length > groupIds.length) {
+          setStyle(hit.style);
+          const snapshot = doc.objects.filter((o) => selectedIds.includes(o.id) && !o.locked);
+          moveDragRef.current = { startRaw: rawP, snapshot, didMove: false, pendingNarrow: groupIds };
+        } else {
+          setSelectedIds(groupIds);
+          setStyle(hit.style);
+          const snapshot = doc.objects.filter((o) => groupIds.includes(o.id) && !o.locked);
+          moveDragRef.current = { startRaw: rawP, snapshot, didMove: false };
+        }
       } else {
-        setSelectedIds([]);
+        marqueeRef.current = { start: rawP, current: rawP, additive: e.shiftKey };
+        if (!e.shiftKey) setSelectedIds([]);
       }
       return;
     }
@@ -1046,9 +1207,7 @@ export function FigureStudio({
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    const p = snapPoint(screenToScene(e.clientX, e.clientY), e.altKey);
-    if (coordRef.current) coordRef.current.textContent = `x ${Math.round(p.x)}  y ${Math.round(p.y)}`;
-    pointerPosRef.current = p;
+    const rawP = screenToScene(e.clientX, e.clientY);
 
     // 1. Direct Handle Dragging (Smooth 60fps)
     if (activeHandleRef.current && isDragging.current) {
@@ -1057,39 +1216,144 @@ export function FigureStudio({
       if (!target) return;
 
       if (activeHandleRef.current.kind === "obj") {
-        const updated = dragHandle(target, activeHandleRef.current.id, p, e.shiftKey);
-        setDoc((prev) => ({
-          ...prev,
-          objects: prev.objects.map((o) => (o.id === objId ? updated : o)),
-        }));
+        const sp = snapScenePt(rawP, e.altKey, [objId], true);
+        if (coordRef.current) coordRef.current.textContent = `x ${Math.round(sp.x)}  y ${Math.round(sp.y)}`;
+        pointerPosRef.current = sp;
+        const updated = dragHandle(target, activeHandleRef.current.id, sp, e.shiftKey);
+        setDoc((prev) => {
+          const next = { ...prev, objects: prev.objects.map((o) => (o.id === objId ? updated : o)) };
+          dragDocRef.current = next;
+          return next;
+        });
         return;
       }
 
       if (activeHandleRef.current.kind === "box" && hasBoxFields(target)) {
-        const newRect = resizeBox(target, activeHandleRef.current.handle, p, {
+        const sp = snapScenePt(rawP, e.altKey, [objId], true);
+        if (coordRef.current) coordRef.current.textContent = `x ${Math.round(sp.x)}  y ${Math.round(sp.y)}`;
+        pointerPosRef.current = sp;
+        const newRect = resizeBox(target, activeHandleRef.current.handle, sp, {
           aspect: e.shiftKey,
           center: e.altKey,
         });
-        setDoc((prev) => ({
-          ...prev,
-          objects: prev.objects.map((o) => (o.id === objId ? { ...o, ...newRect } : o)),
-        }));
+        setDoc((prev) => {
+          const next = { ...prev, objects: prev.objects.map((o) => (o.id === objId ? { ...o, ...newRect } : o)) };
+          dragDocRef.current = next;
+          return next;
+        });
         return;
       }
 
       if (activeHandleRef.current.kind === "rot" && hasBoxFields(target)) {
+        activeSnapRef.current = null;
+        if (coordRef.current) coordRef.current.textContent = `x ${Math.round(rawP.x)}  y ${Math.round(rawP.y)}`;
+        pointerPosRef.current = rawP;
         const c = boxCenter(target);
-        const ang = Math.atan2(p.y - c.y, p.x - c.x) + Math.PI / 2;
+        const ang = Math.atan2(rawP.y - c.y, rawP.x - c.x) + Math.PI / 2;
         const finalRot = e.shiftKey
           ? Math.round(ang / (Math.PI / 12)) * (Math.PI / 12)
           : ang;
-        setDoc((prev) => ({
-          ...prev,
-          objects: prev.objects.map((o) => (o.id === objId ? { ...o, rot: finalRot } : o)),
-        }));
+        setDoc((prev) => {
+          const next = { ...prev, objects: prev.objects.map((o) => (o.id === objId ? { ...o, rot: finalRot } : o)) };
+          dragDocRef.current = next;
+          return next;
+        });
         return;
       }
     }
+
+    // 1b. Multi-Selection Group Scale Drag
+    if (groupScaleRef.current && isDragging.current) {
+      const sp = snapScenePt(rawP, e.altKey, selectedIds, true);
+      if (coordRef.current) coordRef.current.textContent = `x ${Math.round(sp.x)}  y ${Math.round(sp.y)}`;
+      pointerPosRef.current = sp;
+      const { corner, origin, startBounds, snapshot } = groupScaleRef.current;
+      const dirX = corner === "ne" || corner === "se" ? 1 : -1;
+      const dirY = corner === "sw" || corner === "se" ? 1 : -1;
+      const dx = (sp.x - origin.x) * dirX;
+      const dy = (sp.y - origin.y) * dirY;
+      const minScale = 0.05;
+      const rawSx = Math.max(minScale, dx / Math.max(1, startBounds.w));
+      const rawSy = Math.max(minScale, dy / Math.max(1, startBounds.h));
+      const s = Math.max(rawSx, rawSy);
+      const sx = e.shiftKey ? rawSx : s;
+      const sy = e.shiftKey ? rawSy : s;
+
+      const scaledMap = new Map<string, Obj>();
+      for (const item of snapshot) {
+        if (!item.locked) {
+          scaledMap.set(item.id, scaleObj(item, sx, sy, origin));
+        }
+      }
+      setDoc((prev) => {
+        const next = { ...prev, objects: prev.objects.map((o) => (o.locked ? o : (scaledMap.get(o.id) ?? o))) };
+        dragDocRef.current = next;
+        return next;
+      });
+      return;
+    }
+
+    // 1c. Marquee Selection Drag
+    if (marqueeRef.current && isDragging.current) {
+      activeSnapRef.current = null;
+      marqueeRef.current.current = rawP;
+      if (coordRef.current) coordRef.current.textContent = `x ${Math.round(rawP.x)}  y ${Math.round(rawP.y)}`;
+      pointerPosRef.current = rawP;
+      return;
+    }
+
+    // 1d. Whole Selection Translation Drag
+    if (activeTool === "select" && moveDragRef.current && isDragging.current) {
+      const { startRaw, snapshot, didMove } = moveDragRef.current;
+      const rawDx = rawP.x - startRaw.x;
+      const rawDy = rawP.y - startRaw.y;
+      if (coordRef.current) coordRef.current.textContent = `x ${Math.round(rawP.x)}  y ${Math.round(rawP.y)}`;
+      pointerPosRef.current = rawP;
+
+      if (!didMove && Math.hypot(rawDx, rawDy) < 2 / zoom) return;
+      moveDragRef.current.didMove = true;
+
+      let dx = rawDx;
+      let dy = rawDy;
+      const movingIds = new Set(snapshot.map((o) => o.id));
+      if (!e.altKey && (snapToObjects || (snap && grid.style !== "none" && grid.size > 0))) {
+        const movingPts = snapshot.flatMap((o) =>
+          objectSnapPoints(o).map((q) => ({ x: q.x + rawDx, y: q.y + rawDy })),
+        );
+        if (movingPts.length > 0) {
+          const staticPts = snapToObjects
+            ? doc.objects.filter((o) => !movingIds.has(o.id)).flatMap((o) => objectSnapPoints(o))
+            : [];
+          const gridSize = snap && grid.style !== "none" && grid.size > 0 ? grid.size : null;
+          const sd = snapDelta(movingPts, staticPts, { grid: gridSize, tol: 8 / zoom });
+          dx += sd.dx;
+          dy += sd.dy;
+          activeSnapRef.current = sd.target ? { p: sd.target, kind: "point", target: sd.target } : null;
+        } else {
+          activeSnapRef.current = null;
+        }
+      } else {
+        activeSnapRef.current = null;
+      }
+
+      const movedMap = new Map<string, Obj>();
+      for (const item of snapshot) {
+        if (!item.locked) {
+          movedMap.set(item.id, translateObj(item, dx, dy));
+        }
+      }
+      setDoc((prev) => {
+        const next = { ...prev, objects: prev.objects.map((o) => (o.locked ? o : (movedMap.get(o.id) ?? o))) };
+        dragDocRef.current = next;
+        return next;
+      });
+      return;
+    }
+
+    const excludeIds = liveObj.current ? [liveObj.current.id] : [];
+    const p = snapScenePt(rawP, e.altKey, excludeIds);
+    if (coordRef.current) coordRef.current.textContent = `x ${Math.round(p.x)}  y ${Math.round(p.y)}`;
+    pointerPosRef.current = p;
 
     if (!isDragging.current && activeTool !== "angle") return;
 
@@ -1097,21 +1361,6 @@ export function FigureStudio({
       setPan((prev) => ({
         x: prev.x + e.movementX,
         y: prev.y + e.movementY,
-      }));
-      return;
-    }
-
-    // Whole object translation
-    if (activeTool === "select" && isDragging.current && selectedIds.length > 0) {
-      const dx = p.x - dragStart.current.x;
-      const dy = p.y - dragStart.current.y;
-      dragStart.current = p;
-
-      setDoc((prev) => ({
-        ...prev,
-        objects: prev.objects.map((o) =>
-          selectedIds.includes(o.id) ? translateObj(o, dx, dy) : o,
-        ),
       }));
       return;
     }
@@ -1149,11 +1398,44 @@ export function FigureStudio({
 
   const handlePointerUp = () => {
     isDragging.current = false;
+    activeSnapRef.current = null;
+    const latestDoc = dragDocRef.current ?? doc;
+    dragDocRef.current = null;
 
     // Commit handle dragging into history
     if (activeHandleRef.current) {
       activeHandleRef.current = null;
-      pushHistory(doc);
+      pushHistory(latestDoc);
+      return;
+    }
+
+    // Commit multi-selection group scale into history
+    if (groupScaleRef.current) {
+      groupScaleRef.current = null;
+      pushHistory(latestDoc);
+      return;
+    }
+
+    // Commit marquee selection
+    if (marqueeRef.current) {
+      const { start, current, additive } = marqueeRef.current;
+      marqueeRef.current = null;
+      const rect = normRect(start, current);
+      if (rect.w > 2 || rect.h > 2) {
+        setSelectedIds((prev) => marqueeSelectIds(doc.objects, rect, prev, additive));
+      }
+      return;
+    }
+
+    // Commit selection move or narrow multi-selection on click
+    if (moveDragRef.current) {
+      const { didMove, pendingNarrow } = moveDragRef.current;
+      moveDragRef.current = null;
+      if (didMove) {
+        pushHistory(latestDoc);
+      } else if (pendingNarrow) {
+        setSelectedIds(pendingNarrow);
+      }
       return;
     }
 
@@ -1192,6 +1474,57 @@ export function FigureStudio({
     }
   };
 
+  const duplicateSelected = useCallback(() => {
+    const picked = doc.objects.filter((o) => selectedIds.includes(o.id) && !o.locked);
+    if (picked.length === 0) return;
+    const clones = cloneWithRemappedGroups(picked, 20, 20, uid);
+    pushHistory({ ...doc, objects: [...doc.objects, ...clones] });
+    setSelectedIds(clones.map((c) => c.id));
+  }, [doc, selectedIds, pushHistory]);
+
+  const groupSelected = useCallback(() => {
+    const unlockedIds = new Set(
+      doc.objects.filter((o) => selectedIds.includes(o.id) && !o.locked).map((o) => o.id),
+    );
+    if (unlockedIds.size < 2) return;
+    const gid = uid();
+    pushHistory({
+      ...doc,
+      objects: doc.objects.map((o) => (unlockedIds.has(o.id) ? { ...o, groupId: gid } : o)),
+    });
+  }, [doc, selectedIds, pushHistory]);
+
+  const ungroupSelected = useCallback(() => {
+    const hasGroup = doc.objects.some((o) => selectedIds.includes(o.id) && !o.locked && o.groupId);
+    if (!hasGroup) return;
+    pushHistory({
+      ...doc,
+      objects: doc.objects.map((o) =>
+        selectedIds.includes(o.id) && !o.locked && o.groupId ? { ...o, groupId: undefined } : o,
+      ),
+    });
+  }, [doc, selectedIds, pushHistory]);
+
+  const copyFigurePng = useCallback(async () => {
+    try {
+      if (
+        typeof navigator === "undefined" ||
+        !navigator.clipboard ||
+        typeof navigator.clipboard.write !== "function" ||
+        typeof ClipboardItem === "undefined"
+      ) {
+        throw new Error("Clipboard image copy is not supported in this browser.");
+      }
+      const blob = await renderDocToBlob(doc, grid, 2, cropToFigure);
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      setCopyStatus("copied");
+    } catch {
+      setCopyStatus("error");
+    }
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(() => setCopyStatus("idle"), 2000);
+  }, [doc, grid, cropToFigure]);
+
   // Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1199,33 +1532,42 @@ export function FigureStudio({
         return;
       }
 
-      if ((e.ctrlKey || e.metaKey) && e.key === "z") {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
         e.preventDefault();
         if (e.shiftKey) redo();
         else undo();
-      } else if ((e.ctrlKey || e.metaKey) && e.key === "y") {
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
         e.preventDefault();
         redo();
-      } else if ((e.ctrlKey || e.metaKey) && e.key === "d") {
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d") {
         // Duplicate
         e.preventDefault();
         duplicateSelected();
-      } else if ((e.ctrlKey || e.metaKey) && e.key === "c") {
-        const picked = doc.objects.filter((o) => selectedIds.includes(o.id) && !o.locked);
-        if (picked.length > 0) {
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "g") {
+        e.preventDefault();
+        if (e.shiftKey) ungroupSelected();
+        else groupSelected();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
+        if (e.shiftKey) {
           e.preventDefault();
-          clipboardRef.current = picked;
-          pasteCount.current = 0;
+          void copyFigurePng();
+        } else {
+          const picked = doc.objects.filter((o) => selectedIds.includes(o.id) && !o.locked);
+          if (picked.length > 0) {
+            e.preventDefault();
+            clipboardRef.current = picked;
+            pasteCount.current = 0;
+          }
         }
-      } else if ((e.ctrlKey || e.metaKey) && e.key === "v" && clipboardRef.current.length > 0) {
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v" && clipboardRef.current.length > 0) {
         e.preventDefault();
         pasteCount.current += 1;
         const shift = 20 * pasteCount.current;
-        const clones = clipboardRef.current.map((o) => ({ ...translateObj(o, shift, shift), id: uid() }));
+        const clones = cloneWithRemappedGroups(clipboardRef.current, shift, shift, uid);
         pushHistory({ ...doc, objects: [...doc.objects, ...clones] });
         setSelectedIds(clones.map((c) => c.id));
         setActiveTool("select");
-      } else if ((e.ctrlKey || e.metaKey) && e.key === "a") {
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a") {
         e.preventDefault();
         setSelectedIds(doc.objects.filter((o) => !o.locked).map((o) => o.id));
         setActiveTool("select");
@@ -1270,7 +1612,18 @@ export function FigureStudio({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [doc, selectedIds, undo, redo, fitView]);
+  }, [
+    doc,
+    selectedIds,
+    undo,
+    redo,
+    fitView,
+    pushHistory,
+    duplicateSelected,
+    groupSelected,
+    ungroupSelected,
+    copyFigurePng,
+  ]);
 
   // Selected Object Inspector helpers
   const selectedObj = doc.objects.find((o) => selectedIds.includes(o.id));
@@ -1381,18 +1734,6 @@ export function FigureStudio({
         return m && (m.dx || m.dy) ? translateObj(o, m.dx, m.dy) : o;
       }),
     });
-  };
-
-  const duplicateSelected = () => {
-    if (selectedIds.length === 0) return;
-    const clones = doc.objects
-      .filter((o) => selectedIds.includes(o.id))
-      .map((o) => {
-        const shifted = translateObj(o, 20, 20);
-        return { ...shifted, id: uid() };
-      });
-    pushHistory({ ...doc, objects: [...doc.objects, ...clones] });
-    setSelectedIds(clones.map((c) => c.id));
   };
 
   const handleExport = async () => {
@@ -1541,12 +1882,20 @@ export function FigureStudio({
     setAnglePending(null);
     setActiveFlyout(null);
     setInsertTab(null);
+    activeSnapRef.current = null;
   };
 
   if (!mounted) return null;
 
   const selectedCount = selectedIds.length;
   const single = selectedCount === 1 ? selectedObj : undefined;
+  const selectedObjs = doc.objects.filter((o) => selectedIds.includes(o.id));
+  const unlockedSelectedObjs = selectedObjs.filter((o) => !o.locked);
+  const canGroup =
+    unlockedSelectedObjs.length >= 2 &&
+    (unlockedSelectedObjs.some((o) => !o.groupId) ||
+      new Set(unlockedSelectedObjs.map((o) => o.groupId)).size > 1);
+  const canUngroup = unlockedSelectedObjs.some((o) => Boolean(o.groupId));
   const toolLabel = TOOL_LABELS[activeTool] ?? activeTool;
   const canvasHint =
     activeTool === "angle"
@@ -1666,6 +2015,25 @@ export function FigureStudio({
             <X size={15} className="sm:hidden" />
             <span className="hidden sm:inline">Cancel</span>
           </button>
+          <button
+            type="button"
+            aria-live="polite"
+            className={`btn btn-sm !px-2.5 sm:!px-3 ${
+              copyStatus === "copied"
+                ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                : copyStatus === "error"
+                  ? "border-red-300 bg-red-50 text-red-700"
+                  : ""
+            }`}
+            onClick={() => void copyFigurePng()}
+            title={copyStatus === "error" ? "Clipboard write blocked or unsupported" : "Copy PNG to clipboard (Ctrl+Shift+C)"}
+            aria-label="Copy PNG"
+          >
+            {copyStatus === "copied" ? <Check size={14} /> : <ClipboardCopy size={14} />}
+            <span className="hidden sm:inline">
+              {copyStatus === "copied" ? "Copied!" : copyStatus === "error" ? "Copy failed" : "Copy PNG"}
+            </span>
+          </button>
           <button type="button" className="btn btn-sm btn-primary !px-2.5 sm:!px-3" onClick={handleExport}>
             <Check size={14} /> Use<span className="hidden sm:inline"> figure</span>
           </button>
@@ -1756,6 +2124,7 @@ export function FigureStudio({
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
             onDoubleClick={handleDoubleClick}
           />
 
@@ -1850,6 +2219,10 @@ export function FigureStudio({
                 onFlipV={flipV}
                 onDuplicate={duplicateSelected}
                 onDelete={deleteSelected}
+                onGroup={groupSelected}
+                onUngroup={ungroupSelected}
+                canGroup={canGroup}
+                canUngroup={canUngroup}
               />
               {single?.type === "angle" && (
                 <AngleInspector
@@ -1883,10 +2256,14 @@ export function FigureStudio({
                 <p className="mt-0.5 text-xs text-slate-500">Click something on the page to edit it.</p>
               </div>
               <StyleSection title="Style for new drawings" value={style} onChange={updateSelectedStyle} />
-              <Section title="Grid" summary={grid.style === "none" ? "off" : `${grid.size}px${snap ? ", snapping" : ""}`}>
+              <Section
+                title="Grid & Snapping"
+                summary={grid.style === "none" ? (snapToObjects ? "obj snap" : "off") : `${grid.size}px${snap || snapToObjects ? ", snapping" : ""}`}
+              >
                 <div className="grid grid-cols-2">
                   <Toggle label="Show grid" checked={grid.style !== "none"} onChange={(v) => setGrid((g) => ({ ...g, style: v ? "squares" : "none" }))} />
                   <Toggle label="Snap to grid" checked={snap} onChange={setSnap} />
+                  <Toggle label="Snap to objects" checked={snapToObjects} onChange={setSnapToObjects} />
                   <Toggle label="Print the grid" checked={grid.include} onChange={(v) => setGrid((g) => ({ ...g, include: v }))} />
                 </div>
                 <Seg
@@ -1927,6 +2304,15 @@ export function FigureStudio({
             title="Snap to grid (hold Alt to bypass)"
           >
             <Magnet size={13} /> Snap
+          </button>
+          <button
+            type="button"
+            aria-pressed={snapToObjects}
+            className={`flex items-center gap-1 rounded-md px-2 py-0.5 ${snapToObjects ? "text-indigo-700" : "text-slate-500"} hover:bg-slate-100`}
+            onClick={() => setSnapToObjects((s) => !s)}
+            title="Snap to object key points (hold Alt to bypass)"
+          >
+            <Crosshair size={13} /> Obj Snap
           </button>
           <span className="mx-1 hidden h-4 w-px bg-slate-200 sm:block" />
           <span className="hidden tabular-nums sm:inline">
@@ -1970,6 +2356,9 @@ export function FigureStudio({
               <div><kbd className="kbd">Ctrl+Z</kbd> Undo</div>
               <div><kbd className="kbd">Ctrl+Y</kbd> Redo</div>
               <div><kbd className="kbd">Ctrl+C / V</kbd> Copy / paste</div>
+              <div><kbd className="kbd">Ctrl+Shift+C</kbd> Copy PNG</div>
+              <div><kbd className="kbd">Ctrl+G</kbd> Group</div>
+              <div><kbd className="kbd">Ctrl+Shift+G</kbd> Ungroup</div>
               <div><kbd className="kbd">Ctrl+A</kbd> Select all</div>
               <div><kbd className="kbd">Arrows</kbd> Nudge (Shift = 10px)</div>
               <div><kbd className="kbd">Alt</kbd> Draw without snapping</div>
