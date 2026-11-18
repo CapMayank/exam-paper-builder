@@ -353,9 +353,9 @@ export function extractTableFromText(text: string): ExtractedTableResult {
       .map((r) => r.replace(/\\hline/g, "").trim())
       .filter((r) => r.length > 0);
 
-    const parsedRows = rawRows.map((r) =>
-      r.split("&").map((cell) => cleanLatexToUnicode(cell.trim())),
-    );
+    const parsedRows = rawRows
+      .map((r) => r.split("&").map((cell) => cleanLatexToUnicode(cell.trim())))
+      .filter((cells) => cells.some((c) => c.trim().length > 0));
 
     if (parsedRows.length > 0) {
       const headers = hasHline ? parsedRows[0] : [];
@@ -453,7 +453,9 @@ export function extractTableFromText(text: string): ExtractedTableResult {
         rowLine = rowLine.slice(0, pipeIdx + 1).trim();
       }
       const cells = splitTableRowCells(rowLine);
-      rows.push(cells);
+      if (cells.some((c) => c.trim().length > 0)) {
+        rows.push(cells);
+      }
     }
 
     return {

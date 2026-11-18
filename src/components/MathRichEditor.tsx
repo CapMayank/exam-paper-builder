@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MathfieldElement } from "mathlive";
-import { findMathRanges } from "@/lib/math";
+import { extractTableFromText, findMathRanges, type ParsedTableData } from "@/lib/math";
+import { buildTableLatex } from "@/lib/tableUtils";
 
 /**
  * Handle the parent form uses to push toolbar content into whichever editor is focused.
@@ -51,6 +52,20 @@ function serialize(root: HTMLElement, multiline: boolean): string {
           const field = n.querySelector("math-field") as MathfieldElement | null;
           const tex = field?.getValue("latex").replace(/\\placeholder(\[[^\]]*\])?\{[^}]*\}/g, "").trim();
           if (tex) out += n.dataset.display ? `$$${tex}$$` : `$${tex}$`;
+        } else if (n.dataset.table) {
+          if (n.dataset.dirty === "1") {
+            const hasHeader = n.dataset.hasHeader === "1";
+            const headers = Array.from(n.querySelectorAll("thead th")).map((th) =>
+              (th.textContent ?? "").trim(),
+            );
+            const rows = Array.from(n.querySelectorAll("tbody tr")).map((tr) =>
+              Array.from(tr.querySelectorAll("td")).map((td) => (td.textContent ?? "").trim()),
+            );
+            const built = buildTableLatex(headers, rows, hasHeader);
+            if (built) out += built;
+          } else if (n.dataset.latex) {
+            out += n.dataset.latex;
+          }
         } else if (n.tagName === "BR") {
           if (!n.dataset.phantom) out += "\n";
         } else {
@@ -141,7 +156,72 @@ export function MathRichEditor({
     return wrap;
   }
 
-  /** Builds DOM nodes for a string: text, line breaks and rendered formula boxes. */
+  function createTable(rawLatex: string, parsed: ParsedTableData): HTMLElement {
+    const wrap = document.createElement("div");
+    wrap.contentEditable = "false";
+    wrap.dataset.table = "1";
+    wrap.dataset.latex = rawLatex;
+    if (parsed.headers.length > 0) wrap.dataset.hasHeader = "1";
+    wrap.className = "mre-table";
+
+    const bar = document.createElement("div");
+    bar.className = "mre-table-bar";
+    const label = document.createElement("span");
+    const totalRows = parsed.rows.length + (parsed.headers.length > 0 ? 1 : 0);
+    const totalCols = Math.max(parsed.headers.length, ...parsed.rows.map((r) => r.length), 1);
+    label.textContent = `Table (${totalRows} × ${totalCols})`;
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "mre-table-remove";
+    removeBtn.title = "Remove table";
+    removeBtn.setAttribute("aria-label", "Remove table");
+    removeBtn.textContent = "×";
+    removeBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      wrap.remove();
+      emit();
+    });
+    bar.append(label, removeBtn);
+    wrap.appendChild(bar);
+
+    const scroll = document.createElement("div");
+    scroll.className = "mre-table-scroll";
+    const table = document.createElement("table");
+
+    const makeCell = (tag: "th" | "td", text: string) => {
+      const cell = document.createElement(tag);
+      cell.contentEditable = "true";
+      cell.textContent = text;
+      cell.addEventListener("input", () => {
+        wrap.dataset.dirty = "1";
+      });
+      return cell;
+    };
+
+    if (parsed.headers.length > 0) {
+      const thead = document.createElement("thead");
+      const tr = document.createElement("tr");
+      parsed.headers.forEach((h) => tr.appendChild(makeCell("th", h)));
+      thead.appendChild(tr);
+      table.appendChild(thead);
+    }
+
+    const tbody = document.createElement("tbody");
+    parsed.rows.forEach((row) => {
+      const tr = document.createElement("tr");
+      for (let c = 0; c < totalCols; c++) {
+        tr.appendChild(makeCell("td", row[c] ?? ""));
+      }
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    scroll.appendChild(table);
+    wrap.appendChild(scroll);
+    return wrap;
+  }
+
+  /** Builds DOM nodes for a string: text, line breaks, rendered tables, and formula boxes. */
   function buildNodes(text: string): Node[] {
     const nodes: Node[] = [];
     const pushText = (t: string) => {
@@ -153,6 +233,15 @@ export function MathRichEditor({
     let cursor = 0;
     for (const r of findMathRanges(text)) {
       pushText(text.slice(cursor, r.start));
+      if (/\\begin\{(?:array|tabular)\}\s*\{[^}]*\}/.test(r.tex)) {
+        const rawSnippet = text.slice(r.start, r.end);
+        const extracted = extractTableFromText(rawSnippet);
+        if (extracted.table && (extracted.table.headers.length > 0 || extracted.table.rows.length > 0)) {
+          nodes.push(createTable(rawSnippet, extracted.table));
+          cursor = r.end;
+          continue;
+        }
+      }
       nodes.push(createMath(r.tex, r.display));
       cursor = r.end;
     }
@@ -163,9 +252,11 @@ export function MathRichEditor({
   function rebuild(root: HTMLElement, text: string) {
     root.replaceChildren();
     const nodes = buildNodes(text);
-    if (nodes[0] instanceof HTMLElement && nodes[0].dataset.math) nodes.unshift(document.createTextNode(ZWSP));
+    const isWidget = (n: Node | undefined): n is HTMLElement =>
+      n instanceof HTMLElement && Boolean(n.dataset.math || n.dataset.table);
+    if (isWidget(nodes[0])) nodes.unshift(document.createTextNode(ZWSP));
     const last = nodes[nodes.length - 1];
-    if (last instanceof HTMLElement && last.dataset.math) nodes.push(document.createTextNode(ZWSP));
+    if (isWidget(last)) nodes.push(document.createTextNode(ZWSP));
     if (last instanceof HTMLElement && last.tagName === "BR") {
       const phantom = document.createElement("br");
       phantom.dataset.phantom = "1";
@@ -277,7 +368,12 @@ export function MathRichEditor({
   }, []);
 
   function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
-    if ((e.target as HTMLElement).closest("math-field")) return;
+    const target = e.target as HTMLElement;
+    if (target.closest("math-field")) return;
+    if (target.closest("[data-table]")) {
+      if (e.key === "Enter") e.preventDefault();
+      return;
+    }
     if (e.key !== "Enter") return;
     e.preventDefault();
     if (!multiline) return;
@@ -302,9 +398,28 @@ export function MathRichEditor({
   }
 
   function onPaste(e: React.ClipboardEvent<HTMLDivElement>) {
-    if ((e.target as HTMLElement).closest("math-field")) return;
+    const target = e.target as HTMLElement;
+    if (target.closest("math-field")) return;
     e.preventDefault();
     const text = e.clipboardData.getData("text/plain");
+    if (target.closest("[data-table]")) {
+      const clean = text.replace(/\s+/g, " ");
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0) {
+        const range = sel.getRangeAt(0);
+        range.deleteContents();
+        const node = document.createTextNode(clean);
+        range.insertNode(node);
+        range.setStartAfter(node);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        const tableWrap = target.closest("[data-table]") as HTMLElement | null;
+        if (tableWrap) tableWrap.dataset.dirty = "1";
+        emit();
+      }
+      return;
+    }
     api.insert(multiline ? text : text.replace(/\n+/g, " "));
   }
 
@@ -313,7 +428,7 @@ export function MathRichEditor({
     const root = rootRef.current;
     if (!root) return;
     const text = serialize(root, multiline);
-    const boxes = root.querySelectorAll("[data-math]").length;
+    const boxes = root.querySelectorAll("[data-math], [data-table]").length;
     if (findMathRanges(text).length !== boxes) {
       rebuild(root, text);
       lastEmitted.current = text;

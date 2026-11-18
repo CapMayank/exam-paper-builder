@@ -127,4 +127,36 @@ describe("tableUtils & Table Serialization Suite", () => {
       }
     });
   });
+
+  describe("Empty trailing row filtering", () => {
+    it("drops trailing empty rows in LaTeX arrays (e.g. MathLive trailing '&' rows)", () => {
+      const latex = `$$\\begin{array}{|c|c|}
+\\hline
+\\text{Shopkeeper} & \\text{number of kites sold} \\\\
+\\hline
+\\text{Chaman} & 250 \\\\
+\\hline
+\\text{Poonam Ben} & 700 \\\\
+\\hline
+ &  \\\\
+\\hline
+\\end{array}$$`;
+
+      const extracted = extractTableFromText(latex);
+      expect(extracted.table).not.toBeNull();
+      expect(extracted.table!.headers).toEqual(["Shopkeeper", "number of kites sold"]);
+      expect(extracted.table!.rows).toEqual([
+        ["Chaman", "250"],
+        ["Poonam Ben", "700"],
+      ]);
+    });
+
+    it("drops trailing empty rows in Markdown tables", () => {
+      const md = `| Shopkeeper | Kites |\n| --- | --- |\n| Chaman | 250 |\n| | |`;
+      const extracted = extractTableFromText(md);
+      expect(extracted.table).not.toBeNull();
+      expect(extracted.table!.headers).toEqual(["Shopkeeper", "Kites"]);
+      expect(extracted.table!.rows).toEqual([["Chaman", "250"]]);
+    });
+  });
 });
