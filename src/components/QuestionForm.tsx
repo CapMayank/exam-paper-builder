@@ -6,11 +6,13 @@ import {
   ArrowUp,
   ChevronDown,
   Copy,
+  Crop,
   ImagePlus,
   Library,
   PencilRuler,
   Plus,
   RefreshCw,
+  ScanLine,
   Shuffle,
   Sigma,
   Sparkles,
@@ -75,6 +77,7 @@ import { DiagramSearchModal } from "./DiagramSearchModal";
 import { FigureStudio } from "./figure-studio";
 import { AIQuestionImproverModal } from "./AIQuestionImproverModal";
 import { TableModal } from "./TableModal";
+import { BookFigureModal } from "./BookFigureModal";
 import { ErrorBanner, Field } from "./ui";
 
 /** Pre-primary worksheets are written on: they keep blank answer space under each question. */
@@ -297,6 +300,9 @@ export function QuestionForm({
   const [diagramSearchOpen, setDiagramSearchOpen] = useState(false);
   const [aiImproverOpen, setAiImproverOpen] = useState(false);
   const [tableModalOpen, setTableModalOpen] = useState(false);
+  const [bookModalOpen, setBookModalOpen] = useState(false);
+  const [bookModalFile, setBookModalFile] = useState<File | null>(null);
+  const [bookModalUrl, setBookModalUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const activeEditorRef = useRef<MathRichEditorHandle | null>(null);
@@ -661,7 +667,21 @@ export function QuestionForm({
   const rowColumns = (bookLocked ? 1 : 2) + (typeField ? 1 : 0);
 
   return (
-    <form onSubmit={submit} className="space-y-4">
+    <form
+      onSubmit={submit}
+      onPasteCapture={(e) => {
+        if (isKindergartenType(type)) return;
+        const imgFile = Array.from(e.clipboardData?.files ?? []).find((f) => f.type.startsWith("image/"));
+        if (imgFile) {
+          e.preventDefault();
+          e.stopPropagation();
+          setBookModalUrl(null);
+          setBookModalFile(imgFile);
+          setBookModalOpen(true);
+        }
+      }}
+      className="space-y-4"
+    >
       <ErrorBanner message={error} />
 
       {/* 1. Where the question goes */}
@@ -1383,6 +1403,17 @@ export function QuestionForm({
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={imageUrl(imagePath)} alt="Figure" className="max-h-36 max-w-xs rounded-lg border border-slate-200 bg-white object-contain shadow-2xs" />
                   <div className="flex flex-col gap-2">
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      onClick={() => {
+                        setBookModalFile(null);
+                        setBookModalUrl(imageUrl(imagePath));
+                        setBookModalOpen(true);
+                      }}
+                    >
+                      <Crop size={14} aria-hidden /> Crop / Clean
+                    </button>
                     <button type="button" className="btn btn-sm" onClick={() => setSketching(true)}>
                       <PencilRuler size={14} aria-hidden /> Edit
                     </button>
@@ -1396,6 +1427,17 @@ export function QuestionForm({
                 </div>
               ) : (
                 <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    onClick={() => {
+                      setBookModalFile(null);
+                      setBookModalUrl(null);
+                      setBookModalOpen(true);
+                    }}
+                  >
+                    <ScanLine size={14} aria-hidden /> Scan from book
+                  </button>
                   <button type="button" className="btn btn-sm" onClick={() => setDiagramSearchOpen(true)}>
                     <Library size={14} aria-hidden /> From library
                   </button>
@@ -1601,6 +1643,20 @@ export function QuestionForm({
         onClose={() => setTableModalOpen(false)}
         onInsert={handleInsertSnippet}
         initialMode="grid"
+      />
+
+      <BookFigureModal
+        isOpen={bookModalOpen}
+        onClose={() => {
+          setBookModalOpen(false);
+          setBookModalFile(null);
+          setBookModalUrl(null);
+        }}
+        initialFile={bookModalFile}
+        initialImageUrl={bookModalUrl}
+        onComplete={async (blob) => {
+          await attach(blob);
+        }}
       />
     </form>
   );
