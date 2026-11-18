@@ -28,6 +28,21 @@ describe("bookScanFilter", () => {
     expect(out[center]).toBeLessThanOrEqual(40);
   });
 
+  it("keeps large solid dark regions dark instead of hollowing them out", () => {
+    const w = 40;
+    const h = 40;
+    const pixels = new Uint8ClampedArray(w * h * 4);
+    for (let i = 0; i < w * h; i++) {
+      pixels[i * 4] = 25;
+      pixels[i * 4 + 1] = 25;
+      pixels[i * 4 + 2] = 25;
+      pixels[i * 4 + 3] = 255;
+    }
+    const out = applyBookScanFilter(pixels, w, h, "bw", 0.5);
+    const center = (20 * w + 20) * 4;
+    expect(out[center]).toBeLessThanOrEqual(40);
+  });
+
   it("leaves pixels untouched in original mode and scales dimensions proportionally", () => {
     const src = new Uint8ClampedArray([100, 120, 140, 255]);
     expect(applyBookScanFilter(src, 1, 1, "original")).toEqual(src);

@@ -9,6 +9,7 @@ import {
   Crop,
   Eraser,
   Loader2,
+  RefreshCw,
   RotateCcw,
   RotateCw,
   Smartphone,
@@ -35,8 +36,8 @@ interface CropRect {
 }
 
 interface WhiteoutStroke {
-  points: Array<{ x: number; y: number }>; // normalized 0..1 in current rotated image
-  radius: number; // normalized to image width
+  points: Array<{ x: number; y: number }>;
+  radius: number;
 }
 
 type DragMode =
@@ -44,9 +45,57 @@ type DragMode =
   | { kind: "handle"; handle: "nw" | "ne" | "sw" | "se"; startX: number; startY: number; orig: CropRect };
 
 const DEFAULT_CROP: CropRect = { x: 0.04, y: 0.04, w: 0.92, h: 0.92 };
+const MAX_UPLOAD_BYTES = 2_900_000; // stay safely under /api/uploads 3 MB limit
 
-export function BookFigureModal({
-  isOpen,
+async function decodeBlobToBitmap(blob: Blob): Promise<ImageBitmap> {
+  if (blob.type !== "image/svg+xml") {
+    try {
+      return await createImageBitmap(blob);
+    } catch {
+      // fall through to <img> fallback
+    }
+  }
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error("Image decode failed"));
+      el.src = url;
+    });
+    const w = Math.max(1, img.naturalWidth || 800);
+    const h = Math.max(1, img.naturalHeight || 600);
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas unavailable");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(img, 0, 0, w, h);
+    return await createImageBitmap(canvas);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+async function encodeCanvasUnderLimit(canvas: HTMLCanvasElement): Promise<Blob | null> {
+  const png = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/png"));
+  if (png && png.size <= MAX_UPLOAD_BYTES) return png;
+
+  for (const quality of [0.9, 0.78, 0.65]) {
+    const jpg = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", quality));
+    if (jpg && jpg.size <= MAX_UPLOAD_BYTES) return jpg;
+  }
+  return png;
+}
+
+export function BookFigureModal(props: BookFigureModalProps) {
+  if (!props.isOpen) return null;
+  return <BookFigureModalInner {...props} />;
+}
+
+function BookFigureModalInner({
   onClose,
   onComplete,
   initialFile,
@@ -55,6 +104,7 @@ export function BookFigureModal({
 }: BookFigureModalProps) {
   const [tab, setTab] = useState<"qr" | "paste" | "webcam">(initialTab);
   const [sourceBitmap, setSourceBitmap] = useState<ImageBitmap | null>(null);
+  const bitmapRef = useRef<ImageBitmap | null>(null);
   const [rotation, setRotation] = useState<0 | 90 | 180 | 270>(0);
   const [filterMode, setFilterMode] = useState<ScanFilterMode>("bw");
   const [clarity, setClarity] = useState<number>(0.5);
@@ -65,10 +115,15 @@ export function BookFigureModal({
   const [loadError, setLoadError] = useState("");
 
   // QR session state
-  const [qrSvg, setQrSvg] = useState("");
+  const [qrNonce, setQrNonce] = useState(0);
+  const [qrDataUrl, setQrDataUrl] = useState("");
   const [qrUrl, setQrUrl] = useState("");
-  const [qrStatus, setQrStatus] = useState<"loading" | "waiting" | "error">("loading");
-  const [isLocalhost, setIsLocalhost] = useState(false);
+  const [qrStatus, setQrStatus] = useState<"loading" | "waiting" | "expired" | "error">("loading");
+  const [isLocalhost] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"),
+  );
 
   // Webcam state
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -80,33 +135,51 @@ export function BookFigureModal({
   const baseCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const dragRef = useRef<DragMode | null>(null);
   const drawingRef = useRef<WhiteoutStroke | null>(null);
-  const [imgDims, setImgDims] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
 
-  const loadBlob = useCallback(async (blob: Blob) => {
-    setLoadError("");
-    try {
-      const bmp = await createImageBitmap(blob);
-      setSourceBitmap((prev) => {
-        prev?.close();
-        return bmp;
-      });
-      setRotation(0);
-      setCrop(DEFAULT_CROP);
-      setStrokes([]);
-      setTool("crop");
-      setFilterMode("bw");
-    } catch {
-      setLoadError("Could not read that image. Try PNG, JPEG, or WebP.");
-    }
+  const setBitmap = useCallback((bmp: ImageBitmap | null) => {
+    bitmapRef.current?.close();
+    bitmapRef.current = bmp;
+    setSourceBitmap(bmp);
   }, []);
+
+  const loadBlob = useCallback(
+    async (blob: Blob) => {
+      setLoadError("");
+      try {
+        const bmp = await decodeBlobToBitmap(blob);
+        setBitmap(bmp);
+        setRotation(0);
+        setCrop(DEFAULT_CROP);
+        setStrokes([]);
+        setTool("crop");
+        setFilterMode("bw");
+      } catch {
+        setLoadError("Could not read that image. Try PNG, JPEG, or WebP.");
+      }
+    },
+    [setBitmap],
+  );
 
   // Load initialFile or initialImageUrl if provided
   useEffect(() => {
-    if (!isOpen) return;
     let cancelled = false;
-    setTab(initialTab);
     if (initialFile) {
-      void loadBlob(initialFile);
+      decodeBlobToBitmap(initialFile)
+        .then((bmp) => {
+          if (cancelled) {
+            bmp.close();
+            return;
+          }
+          setBitmap(bmp);
+          setRotation(0);
+          setCrop(DEFAULT_CROP);
+          setStrokes([]);
+          setTool("crop");
+          setFilterMode("bw");
+        })
+        .catch(() => {
+          if (!cancelled) setLoadError("Could not read that image. Try PNG, JPEG, or WebP.");
+        });
     } else if (initialImageUrl) {
       fetch(initialImageUrl)
         .then((r) => {
@@ -119,38 +192,26 @@ export function BookFigureModal({
         .catch(() => {
           if (!cancelled) setLoadError("Could not load existing figure.");
         });
-    } else {
-      setSourceBitmap((prev) => {
-        prev?.close();
-        return null;
-      });
     }
     return () => {
       cancelled = true;
     };
-  }, [isOpen, initialFile, initialImageUrl, initialTab, loadBlob]);
+  }, [initialFile, initialImageUrl, loadBlob, setBitmap]);
 
   // Cleanup bitmap on unmount
   useEffect(() => {
     return () => {
-      setSourceBitmap((prev) => {
-        prev?.close();
-        return null;
-      });
+      bitmapRef.current?.close();
+      bitmapRef.current = null;
     };
   }, []);
 
   // QR session creation & polling when on QR tab in Stage 1
   useEffect(() => {
-    if (!isOpen || sourceBitmap || tab !== "qr") return;
+    if (sourceBitmap || tab !== "qr") return;
     let cancelled = false;
     let timer: ReturnType<typeof setInterval> | null = null;
-    setQrStatus("loading");
-    setQrSvg("");
-    setIsLocalhost(
-      typeof window !== "undefined" &&
-        (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"),
-    );
+    let inFlight = false;
 
     async function start() {
       try {
@@ -160,26 +221,35 @@ export function BookFigureModal({
         if (cancelled) return;
         const url = `${window.location.origin}/capture/${token}`;
         setQrUrl(url);
-        const svg = await QRCode.toString(url, { type: "svg", margin: 1, width: 196 });
+        const dataUrl = await QRCode.toDataURL(url, { margin: 1, width: 196 });
         if (cancelled) return;
-        setQrSvg(svg);
+        setQrDataUrl(dataUrl);
         setQrStatus("waiting");
 
         timer = setInterval(async () => {
+          if (inFlight || cancelled) return;
+          inFlight = true;
           try {
             const poll = await fetch(`/api/capture-session/${encodeURIComponent(token)}`);
+            if (poll.status === 404 || poll.status === 410) {
+              if (timer) clearInterval(timer);
+              if (!cancelled) setQrStatus("expired");
+              return;
+            }
             if (!poll.ok) return;
             const data = (await poll.json()) as { status?: string };
             if (data.status === "ready" && !cancelled) {
-              if (timer) clearInterval(timer);
               const imgRes = await fetch(`/api/capture-session/${encodeURIComponent(token)}?image=1`);
               if (imgRes.ok) {
+                if (timer) clearInterval(timer);
                 const blob = await imgRes.blob();
                 if (!cancelled) await loadBlob(blob);
               }
             }
           } catch {
             // ignore transient poll error
+          } finally {
+            inFlight = false;
           }
         }, 1500);
       } catch {
@@ -192,17 +262,16 @@ export function BookFigureModal({
       cancelled = true;
       if (timer) clearInterval(timer);
     };
-  }, [isOpen, sourceBitmap, tab, loadBlob]);
+  }, [sourceBitmap, tab, qrNonce, loadBlob]);
 
   // Webcam stream lifecycle
   useEffect(() => {
-    if (!isOpen || sourceBitmap || tab !== "webcam") {
+    if (sourceBitmap || tab !== "webcam") {
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
       return;
     }
     let cancelled = false;
-    setCamError("");
     navigator.mediaDevices
       ?.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1600 } } })
       .then((stream) => {
@@ -224,11 +293,11 @@ export function BookFigureModal({
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     };
-  }, [isOpen, sourceBitmap, tab]);
+  }, [sourceBitmap, tab]);
 
-  // Global paste listener inside modal Stage 1
+  // Paste listener inside modal Stage 1
   useEffect(() => {
-    if (!isOpen || sourceBitmap) return;
+    if (sourceBitmap) return;
     const onPaste = (e: ClipboardEvent) => {
       const file = Array.from(e.clipboardData?.files ?? []).find((f) => f.type.startsWith("image/"));
       if (file) {
@@ -238,42 +307,9 @@ export function BookFigureModal({
     };
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
-  }, [isOpen, sourceBitmap, loadBlob]);
+  }, [sourceBitmap, loadBlob]);
 
-  // Build filtered base canvas whenever bitmap, rotation, filterMode, or clarity changes
-  useEffect(() => {
-    if (!sourceBitmap) return;
-    const swapped = rotation === 90 || rotation === 270;
-    const rawW = swapped ? sourceBitmap.height : sourceBitmap.width;
-    const rawH = swapped ? sourceBitmap.width : sourceBitmap.height;
-    const { width, height } = computeFitDimensions(rawW, rawH, 1400);
-
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    ctx.save();
-    ctx.translate(width / 2, height / 2);
-    ctx.rotate((rotation * Math.PI) / 180);
-    const drawW = swapped ? height : width;
-    const drawH = swapped ? width : height;
-    ctx.drawImage(sourceBitmap, -drawW / 2, -drawH / 2, drawW, drawH);
-    ctx.restore();
-
-    if (filterMode !== "original") {
-      const imgData = ctx.getImageData(0, 0, width, height);
-      const filtered = applyBookScanFilter(imgData.data, width, height, filterMode, clarity);
-      imgData.data.set(filtered);
-      ctx.putImageData(imgData, 0, 0);
-    }
-
-    baseCanvasRef.current = canvas;
-    setImgDims({ w: width, h: height });
-  }, [sourceBitmap, rotation, filterMode, clarity]);
-
-  // Render preview canvas with whiteout strokes + crop overlay
+  // Render preview canvas with whiteout strokes
   const drawPreview = useCallback(() => {
     const base = baseCanvasRef.current;
     const canvas = previewCanvasRef.current;
@@ -288,7 +324,6 @@ export function BookFigureModal({
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(base, 0, 0);
 
-    // Draw whiteout strokes
     ctx.save();
     ctx.strokeStyle = "#ffffff";
     ctx.fillStyle = "#ffffff";
@@ -316,9 +351,42 @@ export function BookFigureModal({
     ctx.restore();
   }, [strokes]);
 
+  // Build filtered base canvas whenever bitmap, rotation, filterMode, or clarity changes
   useEffect(() => {
+    if (!sourceBitmap) return;
+    const swapped = rotation === 90 || rotation === 270;
+    const rawW = swapped ? sourceBitmap.height : sourceBitmap.width;
+    const rawH = swapped ? sourceBitmap.width : sourceBitmap.height;
+    const { width, height } = computeFitDimensions(rawW, rawH, 1400);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    // Fill white first so transparent PNGs/SVGs don't turn transparent regions black in lum calculations
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.save();
+    ctx.translate(width / 2, height / 2);
+    ctx.rotate((rotation * Math.PI) / 180);
+    const drawW = swapped ? height : width;
+    const drawH = swapped ? width : height;
+    ctx.drawImage(sourceBitmap, -drawW / 2, -drawH / 2, drawW, drawH);
+    ctx.restore();
+
+    if (filterMode !== "original") {
+      const imgData = ctx.getImageData(0, 0, width, height);
+      const filtered = applyBookScanFilter(imgData.data, width, height, filterMode, clarity);
+      imgData.data.set(filtered);
+      ctx.putImageData(imgData, 0, 0);
+    }
+
+    baseCanvasRef.current = canvas;
     drawPreview();
-  }, [drawPreview, imgDims]);
+  }, [sourceBitmap, rotation, filterMode, clarity, drawPreview]);
 
   function getNormPoint(e: React.PointerEvent<HTMLDivElement>): { x: number; y: number } {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -419,6 +487,7 @@ export function BookFigureModal({
     const preview = previewCanvasRef.current;
     if (!preview) return;
     setSaving(true);
+    setLoadError("");
     try {
       const sx = Math.round(crop.x * preview.width);
       const sy = Math.round(crop.y * preview.height);
@@ -435,17 +504,16 @@ export function BookFigureModal({
       ctx.fillRect(0, 0, width, height);
       ctx.drawImage(preview, sx, sy, sw, sh, 0, 0, width, height);
 
-      const blob = await new Promise<Blob | null>((res) => out.toBlob(res, "image/png"));
-      if (blob) {
-        await onComplete(blob);
-        onClose();
-      }
+      const blob = await encodeCanvasUnderLimit(out);
+      if (!blob) throw new Error("Failed to encode cropped figure.");
+      await onComplete(blob);
+      onClose();
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Could not attach figure. Please try again.");
     } finally {
       setSaving(false);
     }
   }
-
-  if (!isOpen) return null;
 
   return (
     <Modal
@@ -462,7 +530,11 @@ export function BookFigureModal({
           <div className="flex gap-1 border-b border-slate-200">
             <button
               type="button"
-              onClick={() => setTab("qr")}
+              onClick={() => {
+                setLoadError("");
+                setQrStatus("loading");
+                setTab("qr");
+              }}
               className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-semibold transition ${
                 tab === "qr" ? "border-indigo-600 text-indigo-700" : "border-transparent text-slate-600 hover:text-slate-900"
               }`}
@@ -471,7 +543,10 @@ export function BookFigureModal({
             </button>
             <button
               type="button"
-              onClick={() => setTab("paste")}
+              onClick={() => {
+                setLoadError("");
+                setTab("paste");
+              }}
               className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-semibold transition ${
                 tab === "paste" ? "border-indigo-600 text-indigo-700" : "border-transparent text-slate-600 hover:text-slate-900"
               }`}
@@ -480,7 +555,11 @@ export function BookFigureModal({
             </button>
             <button
               type="button"
-              onClick={() => setTab("webcam")}
+              onClick={() => {
+                setLoadError("");
+                setCamError("");
+                setTab("webcam");
+              }}
               className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-semibold transition ${
                 tab === "webcam" ? "border-indigo-600 text-indigo-700" : "border-transparent text-slate-600 hover:text-slate-900"
               }`}
@@ -502,12 +581,27 @@ export function BookFigureModal({
               {qrStatus === "error" && (
                 <p className="text-xs text-rose-600">Could not start phone capture session. Try Paste / Upload instead.</p>
               )}
-              {qrStatus === "waiting" && qrSvg && (
+              {qrStatus === "expired" && (
+                <div className="space-y-2 py-4">
+                  <p className="text-xs font-medium text-amber-800">This QR code expired.</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQrStatus("loading");
+                      setQrNonce((n) => n + 1);
+                    }}
+                    className="btn btn-sm"
+                  >
+                    <RefreshCw size={13} /> Generate New QR
+                  </button>
+                </div>
+              )}
+              {qrStatus === "waiting" && qrDataUrl && (
                 <>
-                  <div
-                    className="rounded-xl border border-slate-200 bg-white p-3 shadow-xs"
-                    dangerouslySetInnerHTML={{ __html: qrSvg }}
-                  />
+                  <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={qrDataUrl} alt="Phone capture QR code" className="size-48" />
+                  </div>
                   <div className="space-y-1">
                     <p className="text-sm font-semibold text-slate-800">Scan with your phone camera</p>
                     <p className="text-xs text-slate-500">
@@ -572,6 +666,8 @@ export function BookFigureModal({
         </div>
       ) : (
         <div className="space-y-3">
+          {loadError && <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">{loadError}</p>}
+
           {/* Toolbar */}
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
             <div className="flex flex-wrap items-center gap-1.5">
@@ -665,20 +761,14 @@ export function BookFigureModal({
           {/* Canvas + Interactive Crop Overlay */}
           <div className="flex justify-center rounded-xl border border-slate-200 bg-slate-100 p-2">
             <div
-              className={`relative inline-block select-none touch-none ${tool === "whiteout" ? "cursor-crosshair" : "cursor-default"}`}
+              className={`relative inline-block overflow-hidden select-none touch-none ${tool === "whiteout" ? "cursor-crosshair" : "cursor-default"}`}
               onPointerDown={onOverlayPointerDown}
               onPointerMove={onOverlayPointerMove}
               onPointerUp={onOverlayPointerUp}
+              onPointerCancel={onOverlayPointerUp}
             >
               <canvas ref={previewCanvasRef} className="block max-h-[52vh] max-w-full rounded bg-white shadow-xs" />
 
-              {/* Dimmed outside-crop mask + crop box */}
-              <div
-                className="pointer-events-none absolute inset-0"
-                style={{
-                  background: `linear-gradient(to right, rgba(15,23,42,0.45) ${crop.x * 100}%, transparent ${crop.x * 100}% ${(crop.x + crop.w) * 100}%, rgba(15,23,42,0.45) ${(crop.x + crop.w) * 100}%)`,
-                }}
-              />
               <div
                 className={`absolute border-2 ${tool === "crop" ? "border-indigo-500 cursor-move" : "pointer-events-none border-indigo-400/70"}`}
                 style={{
@@ -686,6 +776,7 @@ export function BookFigureModal({
                   top: `${crop.y * 100}%`,
                   width: `${crop.w * 100}%`,
                   height: `${crop.h * 100}%`,
+                  boxShadow: "0 0 0 9999px rgba(15, 23, 42, 0.45)",
                 }}
               >
                 {tool === "crop" &&
@@ -712,10 +803,9 @@ export function BookFigureModal({
             <button
               type="button"
               onClick={() => {
-                setSourceBitmap((prev) => {
-                  prev?.close();
-                  return null;
-                });
+                setLoadError("");
+                setQrStatus("loading");
+                setBitmap(null);
               }}
               className="btn btn-sm"
             >

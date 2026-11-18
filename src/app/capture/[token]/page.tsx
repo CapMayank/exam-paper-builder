@@ -9,21 +9,26 @@ type Stage = "checking" | "ready" | "uploading" | "sent" | "expired" | "error";
 
 async function downscaleToJpeg(file: File): Promise<Blob> {
   const bitmap = await createImageBitmap(file);
-  const { width, height } = computeFitDimensions(bitmap.width, bitmap.height, 1800);
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Canvas unavailable");
-  ctx.drawImage(bitmap, 0, 0, width, height);
-  bitmap.close();
-  return await new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob(
-      (b) => (b ? resolve(b) : reject(new Error("Failed to encode image"))),
-      "image/jpeg",
-      0.88,
-    );
-  });
+  try {
+    const { width, height } = computeFitDimensions(bitmap.width, bitmap.height, 1800);
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas unavailable");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, width, height);
+    ctx.drawImage(bitmap, 0, 0, width, height);
+    return await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (b) => (b ? resolve(b) : reject(new Error("Failed to encode image"))),
+        "image/jpeg",
+        0.88,
+      );
+    });
+  } finally {
+    bitmap.close();
+  }
 }
 
 export default function MobileCapturePage() {

@@ -70,9 +70,9 @@ export function applyBookScanFilter(
   }
 
   const radius = Math.max(6, Math.min(48, Math.round(Math.min(width, height) * 0.06)));
-  // clarity in [0..1] controls how aggressively near-paper greys snap to white (higher = darker/more ink kept)
+  // Higher clarity keeps more faint ink (raises whiteRatio so only pixels close to paper brightness snap to white)
   const clampedClarity = Math.max(0, Math.min(1, clarity));
-  const whiteRatio = 0.88 - clampedClarity * 0.14; // 0.88 (light) .. 0.74 (keeps fainter ink)
+  const whiteRatio = 0.8 + clampedClarity * 0.14; // 0.80 .. 0.94
   const blackRatio = 0.42 + clampedClarity * 0.14; // 0.42 .. 0.56
 
   for (let y = 0; y < height; y++) {
@@ -92,7 +92,10 @@ export function applyBookScanFilter(
       const ratio = localMean > 1 ? lum[idx] / localMean : 1;
 
       let v: number;
-      if (ratio >= whiteRatio) {
+      if (lum[idx] < 50) {
+        // Absolute dark-ink floor prevents large solid dark shapes from hollowing out
+        v = 15;
+      } else if (ratio >= whiteRatio) {
         v = 255;
       } else if (ratio <= blackRatio) {
         v = 15;

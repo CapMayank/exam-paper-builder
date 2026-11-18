@@ -670,7 +670,10 @@ export function QuestionForm({
     <form
       onSubmit={submit}
       onPasteCapture={(e) => {
-        if (isKindergartenType(type)) return;
+        if (isKindergartenType(type) || bookModalOpen || sketching) return;
+        const target = e.target as HTMLElement | null;
+        const hasPlainText = Boolean(e.clipboardData?.getData("text/plain"));
+        if (hasPlainText && target?.closest("[contenteditable], input, textarea, math-field")) return;
         const imgFile = Array.from(e.clipboardData?.files ?? []).find((f) => f.type.startsWith("image/"));
         if (imgFile) {
           e.preventDefault();
@@ -1655,7 +1658,8 @@ export function QuestionForm({
         initialFile={bookModalFile}
         initialImageUrl={bookModalUrl}
         onComplete={async (blob) => {
-          await attach(blob);
+          setError(null);
+          setImagePath(await uploadImage(blob));
         }}
       />
     </form>

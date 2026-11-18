@@ -25,6 +25,9 @@ describe("captureSessions", () => {
     expect(saved).toBe(true);
     expect((await getCaptureSessionStatus(token))?.status).toBe("ready");
 
+    // Second upload to an already-ready session must be rejected
+    expect(await saveCaptureSessionImage(token, sample, "image/png")).toBe(false);
+
     const consumed = await consumeCaptureSessionImage(token);
     expect(consumed?.mimeType).toBe("image/png");
     expect(consumed?.buffer.equals(sample)).toBe(true);

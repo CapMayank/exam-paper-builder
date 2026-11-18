@@ -99,7 +99,7 @@ export async function saveCaptureSessionImage(
   mimeType: string,
 ): Promise<boolean> {
   const meta = await readMeta(token);
-  if (!meta) return false;
+  if (!meta || meta.status !== "pending") return false;
   await writeFile(binPath(token), buffer);
   const next: SessionMeta = { ...meta, status: "ready", mimeType };
   await writeFile(metaPath(token), JSON.stringify(next), "utf8");
@@ -111,9 +111,11 @@ export async function consumeCaptureSessionImage(
 ): Promise<{ buffer: Buffer; mimeType: string } | null> {
   const meta = await readMeta(token);
   if (!meta || meta.status !== "ready" || !meta.mimeType) return null;
+  // Claim atomically by removing metadata first so concurrent pollers cannot double-consume
   try {
+    await rm(metaPath(token));
     const buffer = await readFile(binPath(token));
-    await deleteSessionFiles(token);
+    await rm(binPath(token), { force: true });
     return { buffer, mimeType: meta.mimeType };
   } catch {
     await deleteSessionFiles(token);
