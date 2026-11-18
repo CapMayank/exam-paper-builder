@@ -539,7 +539,7 @@ function QuestionSolutionItem({
         <img
           src={imageUrl(q.imagePath)}
           alt="Diagram"
-          className="my-1 max-h-36 rounded border border-slate-200 object-contain"
+          className="my-1 max-h-28 rounded border border-slate-200 object-contain"
         />
       )}
 

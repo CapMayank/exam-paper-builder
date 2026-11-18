@@ -782,7 +782,7 @@ export async function buildPaperDocx(
                 children: [
                   new ImageRun({
                     data: imgBuf,
-                    transformation: { width: 340, height: 210 },
+                    transformation: { width: 250, height: 155 },
                     type: ext === "jpg" ? "jpeg" : (ext as any),
                   }),
                 ],
@@ -1010,7 +1010,7 @@ export async function buildPaperDocx(
                   children: [
                     new ImageRun({
                       data: imgBuf,
-                      transformation: { width: 340, height: 210 },
+                      transformation: { width: 250, height: 155 },
                       type: ext === "jpg" ? "jpeg" : (ext as any),
                     }),
                   ],

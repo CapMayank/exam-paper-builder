@@ -282,7 +282,7 @@ function SingleQuestionBody({
             <img
               src={imageUrl(q.imagePath)}
               alt=""
-              style={{ display: "block", marginTop: "2mm", maxWidth: "100%", maxHeight: isA5 ? "50mm" : "70mm", objectFit: "contain" }}
+              style={{ display: "block", marginTop: "2mm", maxWidth: isA5 ? "65%" : "60%", maxHeight: isA5 ? "34mm" : "45mm", objectFit: "contain" }}
             />
           )}
           {isLastStemPart && isMcq && q.options.length > 0 && (

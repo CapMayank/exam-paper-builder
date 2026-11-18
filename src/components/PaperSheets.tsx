@@ -91,8 +91,8 @@ function GroupedItemBody({ q, sectionType, isA5 }: { q: QuestionDto; sectionType
           style={{
             display: "block",
             marginTop: "2mm",
-            maxWidth: "100%",
-            maxHeight: isA5 ? "50mm" : "70mm",
+            maxWidth: isA5 ? "65%" : "60%",
+            maxHeight: isA5 ? "34mm" : "45mm",
             objectFit: "contain",
           }}
         />
