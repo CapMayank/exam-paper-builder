@@ -208,3 +208,19 @@ describe("pasting several questions into a section", () => {
     ]);
   });
 });
+
+describe("half-mark blueprint support", () => {
+  it("blueprintSchema accepts 0.5 marksEach and fractional chapter marks", async () => {
+    const { blueprintSchema } = await import("./schemas");
+    const parsed = blueprintSchema.parse({
+      name: "Class 1 Test",
+      bookId: "book-1",
+      examType: "ANNUAL",
+      durationMin: 150,
+      chapters: [{ chapterId: "c1", marks: 2.5 }],
+      sections: [{ title: "True/False", type: "TRUE_FALSE", count: 4, marksEach: 0.5 }],
+    });
+    expect(parsed.sections[0].marksEach).toBe(0.5);
+    expect(parsed.chapters[0].marks).toBe(2.5);
+  });
+});

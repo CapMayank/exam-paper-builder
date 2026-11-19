@@ -221,7 +221,7 @@ export const blueprintSchema = z.object({
   textbookVariant: z.string().trim().max(200).optional(),
   blueprintVersion: z.string().trim().max(50).optional(),
   componentsJson: z.string().max(20000).optional(),
-  chapters: z.array(z.object({ chapterId: z.string().min(1), marks: z.number().int().min(0).max(1000), unitKey: z.string().trim().max(60).optional().default(""), unitTitle: z.string().trim().max(200).optional().default("") })),
+  chapters: z.array(z.object({ chapterId: z.string().min(1), marks: z.number().min(0).max(1000), unitKey: z.string().trim().max(60).optional().default(""), unitTitle: z.string().trim().max(200).optional().default("") })),
   sections: z
     .array(
       z.object({
@@ -230,7 +230,7 @@ export const blueprintSchema = z.object({
         instructions: z.string().trim().max(500).default(""),
         type: z.enum(QUESTION_TYPES),
         count: z.number().int().min(1).max(100),
-        marksEach: z.number().int().min(1).max(100),
+        marksEach: z.number().positive().max(100),
         orChoiceMode: z.enum(["BOARD_DEFAULT", "REQUIRED", "NOT_REQUIRED"]).default("BOARD_DEFAULT"),
         orAlternativeCount: z.number().int().min(0).max(5).default(1),
         orSlotsJson: z.string().default("[]"),

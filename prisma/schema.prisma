@@ -123,7 +123,7 @@ model BlueprintChapter {
   id          String    @id @default(cuid())
   blueprintId String
   chapterId   String
-  marks       Int
+  marks       Float
   unitKey     String    @default("") // chapters sharing a unitKey share one quota (the scheme allocates by unit)
   unitTitle   String    @default("")
   blueprint   Blueprint @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
@@ -141,7 +141,7 @@ model BlueprintSection {
   instructions  String          @default("")
   type               String // question type, see constants.ts
   count              Int
-  marksEach          Int
+  marksEach          Float
   orChoiceMode       String          @default("BOARD_DEFAULT") // BOARD_DEFAULT | REQUIRED | NOT_REQUIRED
   orAlternativeCount Int             @default(1)
   orSlotsJson        String          @default("[]") // JSON array of booleans per slot e.g. [true, false]
