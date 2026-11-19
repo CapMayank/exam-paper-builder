@@ -104,8 +104,7 @@ fi
 
 echo "🗄️ Generating Prisma client and syncing database schema..."
 npx prisma generate
-# --accept-data-loss needed for lossless Int -> Float cast on BlueprintChapter.marks & BlueprintSection.marksEach (backup taken above)
-npx prisma db push --skip-generate --accept-data-loss
+npx prisma db push --skip-generate
 
 # 7. Next.js Production Bundle (Unpack pre-built bundle from CI, or build locally)
 BUILD_ARCHIVE=""
