@@ -1,7 +1,7 @@
 /**
  * The school's own question-paper patterns for Classes 1–8 (MPBSE publishes none for these classes).
  *
- *   Classes 1–4, 50 marks: MCQ 5×1, Fill in the blanks 5×1, VSA 6×2, SA 6×3, LA 2×5  (24 questions)
+ *   Classes 1–4, 50 marks: MCQ 3×1, Fill in the blanks 3×1, True/False 4×0.5, Match 4×0.5, VSA 6×2, SA 6×3, LA 2×5 (28 slots)
  *   Classes 5–8, 60 marks: MCQ 5×1, Fill in the blanks 5×1, VSA 6×2, SA 6×3, LA 4×5  (26 questions)
  *
  * Section titles name the marks, not the form: each slot also accepts other forms at the same marks (grammar or a
@@ -11,6 +11,29 @@
  * Difficult) and skill (Knowledge / Understanding / Applying / HOTS); those are carried by the questions.
  */
 import type { BlueprintTemplate } from "./curriculumTemplates";
+
+function primarySchoolPattern(): BlueprintTemplate {
+  return {
+    id: "school-1-4-50m",
+    templateCode: "school-1-4-50m",
+    title: "School pattern, 50 marks",
+    description: "Classes 1–4: MCQ, fill in the blanks, true/false, match the columns, very short, short and long answers.",
+    examType: "ANNUAL",
+    durationMin: 150,
+    totalMarks: 50,
+    targetClasses: "Class 1–4",
+    archetype: "SCHOOL",
+    sections: [
+      { title: "Section A – Multiple Choice Questions", instructions: "Choose the correct option.", questionTypes: [{ type: "MCQ", count: 3, marksEach: 1, orChoiceMode: "NOT_REQUIRED" }] },
+      { title: "Section B – Fill in the Blanks", instructions: "Fill in the blanks.", questionTypes: [{ type: "FILL_BLANK", count: 3, marksEach: 1, orChoiceMode: "NOT_REQUIRED" }] },
+      { title: "Section C – True / False", instructions: "Write True or False.", questionTypes: [{ type: "TRUE_FALSE", count: 4, marksEach: 0.5, orChoiceMode: "NOT_REQUIRED" }] },
+      { title: "Section D – Match the Columns", instructions: "Match the columns.", questionTypes: [{ type: "MATCH_COLUMN", count: 4, marksEach: 0.5, orChoiceMode: "NOT_REQUIRED" }] },
+      { title: "Section E – Very Short Answer Questions", instructions: "Answer in one or two sentences.", questionTypes: [{ type: "VERY_SHORT", count: 6, marksEach: 2, orChoiceMode: "NOT_REQUIRED" }] },
+      { title: "Section F – Short Answer Questions", instructions: "Answer in 30–40 words.", questionTypes: [{ type: "SHORT", count: 6, marksEach: 3, orChoiceMode: "NOT_REQUIRED" }] },
+      { title: "Section G – Long Answer Questions", instructions: "Answer in detail.", questionTypes: [{ type: "LONG", count: 2, marksEach: 5, orChoiceMode: "NOT_REQUIRED" }] },
+    ],
+  };
+}
 
 function schoolPattern(range: [number, number], totalMarks: number, longCount: number, durationMin: number): BlueprintTemplate {
   const [from, to] = range;
@@ -153,7 +176,7 @@ function sanskritPattern(): BlueprintTemplate {
 }
 
 export const SCHOOL_PATTERNS: Array<{ levels: [number, number]; template: BlueprintTemplate }> = [
-  { levels: [1, 4], template: schoolPattern([1, 4], 50, 2, 150) },
+  { levels: [1, 4], template: primarySchoolPattern() },
   { levels: [5, 8], template: languagePattern("English") },
   { levels: [5, 8], template: languagePattern("Hindi") },
   { levels: [6, 8], template: sanskritPattern() },

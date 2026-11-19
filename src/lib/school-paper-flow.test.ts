@@ -12,19 +12,24 @@ const flat = (level: number) => {
 };
 
 describe("school blueprint patterns", () => {
-  it("Classes 1–4: 24 questions, 50 marks", () => {
+  it("Classes 1–4: 28 slots, 50 marks", () => {
     for (const level of [1, 2, 3, 4]) {
       const { t, sections } = flat(level);
       expect(t.totalMarks).toBe(50);
       expect(blueprintTotalMarks(sections)).toBe(50);
-      expect(sections.reduce((n, s) => n + s.count, 0)).toBe(24);
+      expect(sections.reduce((n, s) => n + s.count, 0)).toBe(28);
       expect(sections.map((s) => [s.type, s.count, s.marksEach])).toEqual([
-        ["MCQ", 5, 1],
-        ["FILL_BLANK", 5, 1],
+        ["MCQ", 3, 1],
+        ["FILL_BLANK", 3, 1],
+        ["TRUE_FALSE", 4, 0.5],
+        ["MATCH_COLUMN", 4, 0.5],
         ["VERY_SHORT", 6, 2],
         ["SHORT", 6, 3],
         ["LONG", 2, 5],
       ]);
+      const ids = ["c1", "c2", "c3", "c4"];
+      const distributed = distributeSlotMarks(slotMarksOf(sections), ids);
+      expect(Object.values(distributed).reduce((a, b) => a + b, 0)).toBe(50);
     }
   });
 
@@ -252,6 +257,6 @@ describe("half-mark blueprint support", () => {
     ]);
 
     expect(whyCannotAdd(bp, [], { sectionId: "mc", chapterId: "c1", type: "MATCH_COLUMN", subpartsCount: 4 })).toBeNull();
-    expect(whyCannotAdd(bp, [{ sectionId: "mc", chapterId: "c1", type: "MATCH_COLUMN", subpartsCount: 2 }], { sectionId: "mc", chapterId: "c1", type: "MATCH_COLUMN", subpartsCount: 3 })).not.toBeNull();
+    expect(whyCannotAdd(bp, [{ sectionId: "mc", chapterId: "c1", subpartsCount: 2 }], { sectionId: "mc", chapterId: "c1", type: "MATCH_COLUMN", subpartsCount: 3 })).not.toBeNull();
   });
 });
