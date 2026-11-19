@@ -158,11 +158,12 @@ export function autoFillPaper(
     const multiMatch =
       sec.type === "MATCH_COLUMN" &&
       sec.count > 1 &&
-      sec.marksEach === 1 &&
+      sec.marksEach > 0 &&
+      sec.marksEach <= 1 &&
       candidatePool.some((c) => c.type === "MATCH_COLUMN" && c.matchPairs !== undefined);
     if (multiMatch && needed > 0) {
       const pool = candidatePool.filter((c) => c.type === "MATCH_COLUMN" && !usedQuestionIds.has(c.id) && (c.matchPairs ?? 0) > 0);
-      const hasSingle = pool.some((c) => (c.matchPairs ?? 0) >= needed && ((chapterRemaining.get(rep(c.chapterId)) ?? 0)) >= needed);
+      const hasSingle = pool.some((c) => (c.matchPairs ?? 0) >= needed && ((chapterRemaining.get(rep(c.chapterId)) ?? 0)) >= needed * sec.marksEach);
       if (!hasSingle) {
         // No single question has enough pairs: combine up to three whose pair counts add up EXACTLY to the
         // section (a question always counts all of its pairs, so overshooting would overfill the section).
@@ -174,11 +175,12 @@ export function autoFillPaper(
           for (let i = start; i < sorted.length; i++) {
             const c = sorted[i];
             const n = c.matchPairs ?? 0;
-            if (n > left || (budget.get(rep(c.chapterId)) ?? 0) < n) continue;
-            budget.set(rep(c.chapterId), (budget.get(rep(c.chapterId)) ?? 0) - n);
+            const cost = n * sec.marksEach;
+            if (n > left || (budget.get(rep(c.chapterId)) ?? 0) < cost) continue;
+            budget.set(rep(c.chapterId), (budget.get(rep(c.chapterId)) ?? 0) - cost);
             const found = search(i + 1, left - n, [...picked, c]);
             if (found) return found;
-            budget.set(rep(c.chapterId), (budget.get(rep(c.chapterId)) ?? 0) + n);
+            budget.set(rep(c.chapterId), (budget.get(rep(c.chapterId)) ?? 0) + cost);
           }
           return null;
         };
@@ -187,7 +189,7 @@ export function autoFillPaper(
           for (const c of picked) {
             usedQuestionIds.add(c.id);
             preAdded.push({ sectionId: sec.id, questionId: c.id, orQuestionId: null, requiresInternalChoice: false, chapterId: c.chapterId });
-            preCharges.push({ chapterId: c.chapterId, marks: c.matchPairs ?? 0 });
+            preCharges.push({ chapterId: c.chapterId, marks: (c.matchPairs ?? 0) * sec.marksEach });
           }
           for (const [k, v] of budget) chapterRemaining.set(rep(k), v);
           continue;

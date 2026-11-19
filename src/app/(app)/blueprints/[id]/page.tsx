@@ -60,6 +60,7 @@ const newSectionGroup = (over: Partial<SectionGroup> = {}, defaultIndex = 0): Se
 });
 
 const num = (v: string) => Math.max(0, Math.floor(Number(v) || 0));
+const marksNum = (v: string) => Math.max(0, Math.round((Number(v) || 0) * 100) / 100);
 
 /**
  * The app keeps pages alive between visits (Cache Components preserve state with <Activity>), so without a key
@@ -1434,11 +1435,12 @@ function BlueprintEditor({ params, searchParams }: PageProps<"/blueprints/[id]">
                                   <span className="text-[11px] text-slate-500 font-medium">Marks:</span>
                                   <input
                                     type="number"
-                                    min={1}
+                                    min={0.5}
+                                    step={0.5}
                                     style={{ width: "3.75rem" }}
                                     className="input text-xs py-1 px-2 text-center font-medium"
                                     value={qt.marksEach}
-                                    onChange={(e) => patchQuestionType(grp.key, qt.key, { marksEach: num(e.target.value) })}
+                                    onChange={(e) => patchQuestionType(grp.key, qt.key, { marksEach: marksNum(e.target.value) })}
                                     aria-label="Marks each"
                                   />
                                 </div>

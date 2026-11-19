@@ -270,8 +270,8 @@ export function validateBlueprint(bp: {
   const errors: string[] = [];
   if (bp.sections.length === 0) errors.push("Add at least one section.");
   if (bp.chapters.filter((c) => c.marks > 0).length === 0) errors.push("Give at least one chapter some marks.");
-  const total = blueprintTotalMarks(bp.sections);
-  const chapterTotal = bp.chapters.reduce((s, c) => s + c.marks, 0);
+  const total = Math.round(blueprintTotalMarks(bp.sections) * 100) / 100;
+  const chapterTotal = Math.round(bp.chapters.reduce((s, c) => s + c.marks, 0) * 100) / 100;
   if (total !== chapterTotal) {
     errors.push(`Sections total ${total} marks but chapter weightage totals ${chapterTotal}. They must match.`);
   }
@@ -297,7 +297,7 @@ function getItemMarks(item: PlacedItem, secMarksEach: number): number {
   if (item.marks && item.marks > 0) {
     return item.marks;
   }
-  if (item.subpartsCount && item.subpartsCount > 1 && secMarksEach === 1) {
+  if (item.subpartsCount && item.subpartsCount > 1 && secMarksEach > 0 && secMarksEach <= 1) {
     return item.subpartsCount * secMarksEach;
   }
   return secMarksEach;
@@ -411,7 +411,7 @@ export function whyCannotAdd(
   const status = paperStatus(bp, items);
   const sec = status.sections.find((s) => s.id === section.id)!;
   if (sec.filled >= sec.needed) return `${section.title} is already full (${sec.needed} questions).`;
-  const isMultiUnitMatch = (section.type === "MATCH_COLUMN" && section.count > 1 && section.marksEach === 1) || spansSlots(section);
+  const isMultiUnitMatch = (section.type === "MATCH_COLUMN" && section.count > 1 && section.marksEach > 0 && section.marksEach <= 1) || spansSlots(section);
   // a spanning match counts all its slots even when they exceed the section, so it is refused instead of squeezed in
   const candidateUnits = isMultiUnitMatch && candidate.subpartsCount && candidate.subpartsCount > 1 && (spansSlots(section) || section.count >= candidate.subpartsCount)
     ? candidate.subpartsCount

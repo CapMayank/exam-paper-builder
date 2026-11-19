@@ -223,4 +223,35 @@ describe("half-mark blueprint support", () => {
     expect(parsed.sections[0].marksEach).toBe(0.5);
     expect(parsed.chapters[0].marks).toBe(2.5);
   });
+
+  it("paperStatus and whyCannotAdd handle 0.5-mark TRUE_FALSE and 4-pair MATCH_COLUMN", async () => {
+    const { whyCannotAdd, paperStatus, validateBlueprint } = await import("./blueprint");
+    const bp = {
+      sections: [
+        { id: "tf", title: "True/False", type: "TRUE_FALSE", count: 4, marksEach: 0.5 },
+        { id: "mc", title: "Match", type: "MATCH_COLUMN", count: 4, marksEach: 0.5 },
+      ],
+      chapters: [{ chapterId: "c1", marks: 4 }],
+    };
+    expect(validateBlueprint(bp)).toEqual([]);
+
+    const items = [
+      { sectionId: "tf", chapterId: "c1", type: "TRUE_FALSE" },
+      { sectionId: "tf", chapterId: "c1", type: "TRUE_FALSE" },
+      { sectionId: "tf", chapterId: "c1", type: "TRUE_FALSE" },
+      { sectionId: "tf", chapterId: "c1", type: "TRUE_FALSE" },
+      { sectionId: "mc", chapterId: "c1", type: "MATCH_COLUMN", subpartsCount: 4 },
+    ];
+    const status = paperStatus(bp, items);
+    expect(status.totalMarks).toBe(4);
+    expect(status.usedMarks).toBe(4);
+    expect(status.complete).toBe(true);
+    expect(status.sections).toEqual([
+      { id: "tf", needed: 4, filled: 4 },
+      { id: "mc", needed: 4, filled: 4 },
+    ]);
+
+    expect(whyCannotAdd(bp, [], { sectionId: "mc", chapterId: "c1", type: "MATCH_COLUMN", subpartsCount: 4 })).toBeNull();
+    expect(whyCannotAdd(bp, [{ sectionId: "mc", chapterId: "c1", type: "MATCH_COLUMN", subpartsCount: 2 }], { sectionId: "mc", chapterId: "c1", type: "MATCH_COLUMN", subpartsCount: 3 })).not.toBeNull();
+  });
 });

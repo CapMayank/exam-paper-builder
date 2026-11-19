@@ -99,7 +99,7 @@ export function SectionAiModal({
   const [step, setStep] = useState<"config" | "preview">("config");
 
   const isMatchSection = section?.type === "MATCH_COLUMN";
-  const isMultiUnitMatch = isMatchSection && (section?.count ?? 1) > 1 && section?.marksEach === 1;
+  const isMultiUnitMatch = isMatchSection && (section?.count ?? 1) > 1 && (section?.marksEach ?? 1) > 0 && (section?.marksEach ?? 1) <= 1;
 
   // Calculate existing question units in section
   const sectionItems = section
