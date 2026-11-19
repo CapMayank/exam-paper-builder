@@ -363,7 +363,11 @@ export function QuestionPicker({
               sectionType: pickType,
               sectionInstructions: section.instructions,
               marksEach: marksToGenerate,
-              ...(spanningMatchPick ? { pairMarks: pairMarksPick } : {}),
+              ...(spanningMatchPick
+                ? { pairMarks: pairMarksPick }
+                : isMultiUnitMatch && section.marksEach < 1
+                ? { pairMarks: section.marksEach }
+                : {}),
               language: aiLanguage,
               difficulty: aiDifficulty,
               teacherFocus: [

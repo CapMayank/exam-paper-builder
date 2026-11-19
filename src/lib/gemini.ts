@@ -1100,6 +1100,7 @@ export interface GeneratePaperSectionInput {
   sectionType: string;
   sectionInstructions?: string | null;
   marksEach: number;
+  pairMarks?: number;
   language: PaperLanguage;
   /** A difficulty profile id (FOUNDATION | BOARD | SCHOOL | CHALLENGE) or a legacy value (BALANCED | EASY | MEDIUM | HARD). */
   difficulty: DifficultyInput;
@@ -1200,6 +1201,7 @@ export async function generatePaperSectionWithGemini(
     sectionType,
     sectionInstructions,
     marksEach,
+    pairMarks,
     language,
     difficulty,
     model,
@@ -1395,7 +1397,11 @@ ${UNIVERSAL_QUALITY_RULES.filter((r) => !answersLater || !/^Model answers/.test(
   // How many pairs the match question has, the same rule the validator applies: one pair per slot when the
   // section is one combined set, else one per mark (at least 4) for a single match question in one slot.
   // Asking for "all 1 matching pairs" for a single slot got one pair back, which the validator always rejected.
-  const matchPairCount = slots.length > 1 ? slots.length : marksEach > 1 ? Math.min(marksEach, 10) : 4;
+  const rawPairs =
+    pairMarks && pairMarks > 0 && pairMarks < 1
+      ? Math.round(marksEach / pairMarks)
+      : marksEach;
+  const matchPairCount = slots.length > 1 ? slots.length : rawPairs > 1 ? Math.min(rawPairs, 10) : 4;
   const testedTerms = extractTestedTerms(existingQuestionTexts ?? []);
   // what the schema shows in "answer": in two-stage mode only an objective key, never a model answer
   const objectiveSection = isMcqLikeType(normalizedType) || ["TRUE_FALSE", "FILL_BLANK", "MATCH_COLUMN"].includes(normalizedType);

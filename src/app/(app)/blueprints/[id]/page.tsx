@@ -236,7 +236,7 @@ function BlueprintEditor({ params, searchParams }: PageProps<"/blueprints/[id]">
   }));
   const sections = flattenSectionGroups(sectionGroups);
   const total = blueprintTotalMarks(sections);
-  const chapterTotal = chapterQuotas.reduce((s, c) => s + c.marks, 0);
+  const chapterTotal = Math.round(chapterQuotas.reduce((s, c) => s + c.marks, 0) * 100) / 100;
   const problems = validateBlueprint({ sections, chapters: chapterQuotas });
 
   const { totalLogicalQuestions, totalAlternativeQuestions } = useMemo(() => {
@@ -1770,10 +1770,11 @@ function BlueprintEditor({ params, searchParams }: PageProps<"/blueprints/[id]">
                           <input
                             type="number"
                             min={0}
+                            step={0.5}
                             className="input"
                             aria-label={`Marks for chapter ${c.number}`}
                             value={marks[c.id] ?? 0}
-                            onChange={(e) => setMarks({ ...marks, [c.id]: num(e.target.value) })}
+                            onChange={(e) => setMarks({ ...marks, [c.id]: marksNum(e.target.value) })}
                           />
                         </td>
                       </tr>

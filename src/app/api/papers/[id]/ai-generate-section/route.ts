@@ -180,6 +180,7 @@ export const POST = route(async (req, { id }, user) => {
     sectionType: effectiveType,
     sectionInstructions: effectiveInstructions,
     marksEach: Number(marksEach) || matchedSection?.marksEach || 1,
+    pairMarks: (body as { pairMarks?: number }).pairMarks,
     language: resolvedLanguage,
     difficulty,
     model,

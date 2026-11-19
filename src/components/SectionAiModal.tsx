@@ -254,6 +254,7 @@ export function SectionAiModal({
           sectionType: aiType || section.type,
           sectionInstructions: section.instructions,
           marksEach: slotMarks,
+          ...(isMultiUnitMatch && section.marksEach < 1 ? { pairMarks: section.marksEach } : {}),
           language,
           difficulty,
           teacherFocus,

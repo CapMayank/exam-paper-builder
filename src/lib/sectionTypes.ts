@@ -55,7 +55,7 @@ export function toleratesType(section: TypedSection, type: string | null | undef
   if (isTypeAllowed(section, type)) return true;
   const t = type as string;
   if (SUBJECTIVE_TYPES.includes(t) && SUBJECTIVE_TYPES.includes(section.type) && section.marksEach >= 3) return true;
-  if (OBJECTIVE_TYPES.includes(t) && OBJECTIVE_TYPES.includes(section.type) && section.marksEach === 1) return true;
+  if (OBJECTIVE_TYPES.includes(t) && OBJECTIVE_TYPES.includes(section.type) && section.marksEach > 0 && section.marksEach <= 1) return true;
   return false;
 }
 
@@ -101,7 +101,7 @@ export function subjectFamily(subject: string | null | undefined): SubjectFamily
 export function defaultAllowedTypes(type: string, marksEach: number, subject: string | null | undefined): string[] {
   const fam = subjectFamily(subject);
   const list: string[] = [];
-  if (marksEach === 1) {
+  if (marksEach > 0 && marksEach <= 1) {
     // "One word" is the VERY_SHORT form: a one-mark slot takes it beside the objective forms
     list.push("MCQ", "FILL_BLANK", "TRUE_FALSE", "MATCH_COLUMN", "VERY_SHORT");
     if (fam === "LANGUAGE") list.push("GRAMMAR");

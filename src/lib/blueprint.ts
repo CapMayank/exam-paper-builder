@@ -259,7 +259,7 @@ export function sectionMarks(s: Pick<SectionDef, "count" | "marksEach">) {
 }
 
 export function blueprintTotalMarks(sections: Pick<SectionDef, "count" | "marksEach">[]) {
-  return sections.reduce((sum, s) => sum + sectionMarks(s), 0);
+  return Math.round(sections.reduce((sum, s) => sum + sectionMarks(s), 0) * 100) / 100;
 }
 
 /** Errors that make a blueprint unusable. Empty array = valid. */

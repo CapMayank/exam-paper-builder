@@ -455,7 +455,7 @@ export function verifyQuestionAcademicQuality(
   // -------------------------------------------------------------
   if (isSubpartQuestionType(qType) && question.subparts && question.subparts.length > 0) {
     const subSum = subpartsTotalMarks(question.subparts);
-    if (subSum !== marks) {
+    if (Math.round(subSum * 100) !== Math.round(marks * 100)) {
       addIssue(dimensions, "marksSuitability", {
         code: "SUBPARTS_MARKS_SUM_MISMATCH",
         severity: "ERROR",
@@ -635,16 +635,24 @@ export async function repairOrRegenerateQuestion(
     if (currentQuestion.subparts && currentQuestion.subparts.length > 0) {
       const targetMarks = Number(currentQuestion.marks) || contract.marksEach || 1;
       const count = currentQuestion.subparts.length;
-      const baseMark = Math.floor(targetMarks / count) || 1;
-      let rem = targetMarks - baseMark * count;
-      currentQuestion.subparts = currentQuestion.subparts.map((sp, idx) => {
-        const extra = rem > 0 ? 1 : 0;
-        if (rem > 0) rem--;
-        return {
+      if (targetMarks < count) {
+        const eachMark = Math.round((targetMarks / count) * 100) / 100;
+        currentQuestion.subparts = currentQuestion.subparts.map((sp) => ({
           ...sp,
-          marks: baseMark + extra,
-        };
-      });
+          marks: eachMark,
+        }));
+      } else {
+        const baseMark = Math.floor(targetMarks / count) || 1;
+        let rem = Math.round(targetMarks - baseMark * count);
+        currentQuestion.subparts = currentQuestion.subparts.map((sp) => {
+          const extra = rem > 0 ? 1 : 0;
+          if (rem > 0) rem--;
+          return {
+            ...sp,
+            marks: baseMark + extra,
+          };
+        });
+      }
     }
 
     attempts++;

@@ -259,4 +259,67 @@ describe("half-mark blueprint support", () => {
     expect(whyCannotAdd(bp, [], { sectionId: "mc", chapterId: "c1", type: "MATCH_COLUMN", subpartsCount: 4 })).toBeNull();
     expect(whyCannotAdd(bp, [{ sectionId: "mc", chapterId: "c1", subpartsCount: 2 }], { sectionId: "mc", chapterId: "c1", type: "MATCH_COLUMN", subpartsCount: 3 })).not.toBeNull();
   });
+
+  it("defaultAllowedTypes and toleratesType treat 0.5-mark sections as objective", async () => {
+    const { defaultAllowedTypes, toleratesType } = await import("./sectionTypes");
+    const allowedTf = defaultAllowedTypes("TRUE_FALSE", 0.5, "Science");
+    expect(allowedTf).toContain("MCQ");
+    expect(allowedTf).toContain("FILL_BLANK");
+    expect(allowedTf).not.toContain("SHORT");
+    expect(allowedTf).not.toContain("LONG");
+    expect(toleratesType({ type: "TRUE_FALSE", marksEach: 0.5 }, "MCQ")).toBe(true);
+    expect(toleratesType({ type: "TRUE_FALSE", marksEach: 0.5 }, "SHORT")).toBe(false);
+  });
+
+  it("grounded MATCH_COLUMN generation with marksEach=2 and pairMarks=0.5 produces 4 pairs", async () => {
+    const { buildAndValidateGenerationContract, generateCurriculumGroundedSectionQuestions } = await import("./curriculumContract");
+    const contractRes = buildAndValidateGenerationContract({
+      schoolName: "Test School",
+      blueprintName: "Class 1–4",
+      className: "Class 3",
+      academicSession: "2026-27",
+      examType: "ANNUAL",
+      bookId: "b1",
+      subject: "Science",
+      sectionTitle: "Match the Columns",
+      questionType: "MATCH_COLUMN",
+      marksEach: 2,
+      pairMarks: 0.5,
+      slots: [{ slotIndex: 0, chapterId: "c1", chapterNumber: 1, chapterTitle: "Plants", marks: 2 }],
+    });
+    expect(contractRes.valid).toBe(true);
+    const qs = generateCurriculumGroundedSectionQuestions(contractRes.contract!, { generateDiagrams: false });
+    expect(qs[0].options?.length).toBe(4);
+  });
+
+  it("parseBlueprintImport preserves 0.5 marksEach and fractional chapter marks", async () => {
+    const { parseBlueprintImport } = await import("./blueprintImport");
+    const json = JSON.stringify({
+      name: "Class 2 Science",
+      sections: [
+        { title: "True/False", type: "TRUE_FALSE", count: 4, marksEach: 0.5 },
+        { title: "Match", type: "MATCH_COLUMN", count: 4, marksEach: 0.5 },
+      ],
+      chapters: [{ number: 1, marks: 4 }],
+    });
+    const parsed = parseBlueprintImport(json, "json");
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.blueprint.sections[0].marksEach).toBe(0.5);
+    expect(parsed.blueprint.sections[1].marksEach).toBe(0.5);
+    expect(parsed.blueprint.chapters[0].marks).toBe(4);
+  });
+
+  it("componentSuggestion collapses 4x0.5 MATCH_COLUMN into one 2-mark unit", async () => {
+    const { suggestSlotComponents } = await import("./componentSuggestion");
+    const componentsJson = JSON.stringify([
+      { key: "c1", title: "Part A", marks: 2 },
+      { key: "c2", title: "Part B", marks: 10 },
+    ]);
+    const out = suggestSlotComponents(
+      [{ id: "s1", type: "MATCH_COLUMN", count: 4, marksEach: 0.5 }],
+      componentsJson,
+    );
+    expect(Object.keys(out)).toEqual(["s1:0"]);
+    expect(out["s1:1"]).toBeUndefined();
+  });
 });

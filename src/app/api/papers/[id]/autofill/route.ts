@@ -288,8 +288,9 @@ export const POST = route(async (req, { id }, user) => {
 
       // A passage cannot be faked from a template, and a multi-pair match section is one question.
       if (["UNSEEN_PASSAGE", "REFERENCE_CONTEXT"].includes(sec.type)) continue;
-      const collapsedMatch = sec.type === "MATCH_COLUMN" && sec.count > 1 && sec.marksEach === 1;
+      const collapsedMatch = sec.type === "MATCH_COLUMN" && sec.count > 1 && sec.marksEach > 0 && sec.marksEach <= 1;
       const synthSlots = collapsedMatch ? 1 : u.count;
+      const synthTargetMarks = collapsedMatch ? u.count * sec.marksEach : sec.marksEach;
       for (let slotI = 0; slotI < synthSlots; slotI++) {
         // Find best chapter with quota deficit (preferring exact quota matches)
         // Syllabus-component entries ("Section A: Reading") are not topics; a template question
@@ -301,13 +302,13 @@ export const POST = route(async (req, { id }, user) => {
           const remB = (chapterRemainingMarks.get(rep(b.chapterId)) ?? 0);
 
           // 1. Exact match first (remaining quota exactly equals slot marks)
-          const exactA = remA === sec.marksEach ? 1 : 0;
-          const exactB = remB === sec.marksEach ? 1 : 0;
+          const exactA = remA === synthTargetMarks ? 1 : 0;
+          const exactB = remB === synthTargetMarks ? 1 : 0;
           if (exactA !== exactB) return exactB - exactA;
 
-          // 2. Chapters that have enough quota (rem >= marksEach) prioritized
-          const enoughA = remA >= sec.marksEach ? 1 : 0;
-          const enoughB = remB >= sec.marksEach ? 1 : 0;
+          // 2. Chapters that have enough quota (rem >= synthTargetMarks) prioritized
+          const enoughA = remA >= synthTargetMarks ? 1 : 0;
+          const enoughB = remB >= synthTargetMarks ? 1 : 0;
           if (enoughA !== enoughB) return enoughB - enoughA;
 
           // 3. Largest remaining quota
@@ -339,14 +340,15 @@ export const POST = route(async (req, { id }, user) => {
           orChoiceMode: sec.orChoiceMode,
           orSlotsJson: sec.orSlotsJson,
           questionType: sec.type,
-          marksEach: sec.marksEach,
+          marksEach: synthTargetMarks,
+          ...(collapsedMatch && sec.marksEach < 1 ? { pairMarks: sec.marksEach } : {}),
           slots: [
             {
               slotIndex: currentPlacedInSection,
               chapterId: chosenBpChapter.chapterId,
               chapterNumber: chosenBpChapter.chapter.number,
               chapterTitle: chosenBpChapter.chapter.title,
-              marks: sec.marksEach,
+              marks: synthTargetMarks,
               requiresInternalChoice: slotReq.required,
             },
           ],
@@ -655,7 +657,7 @@ export const POST = route(async (req, { id }, user) => {
   const finalUnfilled = result.unfilled
     .map((u) => {
       const sec = sectionMap.get(u.sectionId);
-      const collapsed = Boolean(sec && sec.type === "MATCH_COLUMN" && sec.count > 1 && sec.marksEach === 1);
+      const collapsed = Boolean(sec && sec.type === "MATCH_COLUMN" && sec.count > 1 && sec.marksEach > 0 && sec.marksEach <= 1);
       const filled = synthesizedBySection.get(u.sectionId) ?? 0;
       return { ...u, count: collapsed ? (filled >= 1 ? 0 : u.count) : Math.max(0, u.count - filled) };
     })

@@ -220,7 +220,7 @@ export function distributeSlotMarks(slotMarks: number[], chapterIds: string[]): 
   for (const m of slots) {
     let best = chapterIds[0];
     for (const id of chapterIds) if (out[id] < out[best]) best = id;
-    out[best] += m;
+    out[best] = Math.round((out[best] + m) * 100) / 100;
   }
   return out;
 }

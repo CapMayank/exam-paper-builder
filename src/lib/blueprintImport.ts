@@ -578,7 +578,7 @@ function parseJsonBlueprint(parsed: any): BlueprintImportResult {
         rawTypes.forEach((qt: any) => {
           const type = normalizeQuestionType(qt.type || qt.questionType || "MCQ");
           const count = Math.max(1, Math.floor(Number(qt.count || qt.questions || qt.totalQuestions || 1)));
-          const marksEach = Math.max(1, Math.floor(Number(qt.marksEach || qt.marks || qt.markEach || 1)));
+          const marksEach = Math.max(0.5, Math.round((Number(qt.marksEach ?? qt.marks ?? qt.markEach ?? 1) || 1) * 100) / 100);
           warnIfAdjusted(warnings, title, "count", qt.count ?? qt.questions ?? qt.totalQuestions, count);
           warnIfAdjusted(warnings, title, "marks per question", qt.marksEach ?? qt.marks ?? qt.markEach, marksEach);
           const itemInstructions = (qt.instructions || qt.instruction || instructions).toString().trim();
@@ -608,7 +608,7 @@ function parseJsonBlueprint(parsed: any): BlueprintImportResult {
       } else {
         const type = normalizeQuestionType(s.type || s.questionType || "MCQ");
         const count = Math.max(1, Math.floor(Number(s.count || s.questions || s.totalQuestions || 1)));
-        const marksEach = Math.max(1, Math.floor(Number(s.marksEach || s.marks || s.markEach || 1)));
+        const marksEach = Math.max(0.5, Math.round((Number(s.marksEach ?? s.marks ?? s.markEach ?? 1) || 1) * 100) / 100);
         warnIfAdjusted(warnings, title, "count", s.count ?? s.questions ?? s.totalQuestions, count);
         warnIfAdjusted(warnings, title, "marks per question", s.marksEach ?? s.marks ?? s.markEach, marksEach);
 
@@ -640,7 +640,7 @@ function parseJsonBlueprint(parsed: any): BlueprintImportResult {
   rawChapters.forEach((c: any) => {
     const chapterNumber = c.chapterNumber != null ? Number(c.chapterNumber) : c.number != null ? Number(c.number) : undefined;
     const chapterTitle = c.chapterTitle || c.title || c.name || undefined;
-    const marks = Math.max(0, Math.floor(Number(c.marks || c.weightage || 0)));
+    const marks = Math.max(0, Math.round((Number(c.marks ?? c.weightage ?? 0) || 0) * 100) / 100);
 
     if (chapterNumber != null || chapterTitle) {
       chapters.push({
@@ -766,7 +766,7 @@ function parseCsvBlueprint(csvText: string): BlueprintImportResult {
         let title = (parts[0] || "").trim();
         const rawType = parts[1] || "";
         const count = Math.max(1, Math.floor(Number(parts[2]) || 1));
-        const marksEach = Math.max(1, Math.floor(Number(parts[3]) || 1));
+        const marksEach = Math.max(0.5, Math.round((Number(parts[3]) || 1) * 100) / 100);
         warnIfAdjusted(warnings, title, "count", parts[2], count);
         warnIfAdjusted(warnings, title, "marks per question", parts[3], marksEach);
         const instructions = (parts[4] || "").trim();
@@ -803,7 +803,7 @@ function parseCsvBlueprint(csvText: string): BlueprintImportResult {
       if (parts.length >= 2) {
         const first = parts[0];
         const numVal = Number(first);
-        const marks = Math.max(0, Math.floor(Number(parts[1]) || 0));
+        const marks = Math.max(0, Math.round((Number(parts[1]) || 0) * 100) / 100);
 
         if (!isNaN(numVal)) {
           chapters.push({ chapterNumber: numVal, marks });
@@ -829,7 +829,7 @@ function parseCsvBlueprint(csvText: string): BlueprintImportResult {
         const title = parts[0] || `Section ${String.fromCharCode(65 + sections.length)}`;
         const type = normalizeQuestionType(parts[1] || "MCQ");
         const count = Math.max(1, Math.floor(Number(parts[2]) || 1));
-        const marksEach = Math.max(1, Math.floor(Number(parts[3]) || 1));
+        const marksEach = Math.max(0.5, Math.round((Number(parts[3]) || 1) * 100) / 100);
         warnIfAdjusted(warnings, title, "count", parts[2], count);
         warnIfAdjusted(warnings, title, "marks per question", parts[3], marksEach);
         const instructions = parts[4] || "";

@@ -135,6 +135,7 @@ export interface GenerationContract {
   subjectVariant?: SubjectVariantCode;
   questionType: QuestionType;
   marksEach: number;
+  pairMarks?: number;
   difficulty: "EASY" | "MEDIUM" | "HARD" | "BALANCED";
   language: "en" | "hi" | "sa" | "bilingual";
   requiredCount: number;
@@ -3541,6 +3542,7 @@ export function buildAndValidateGenerationContract(params: {
   questionType?: string | null;
   sectionType?: string | null;
   marksEach?: number | null;
+  pairMarks?: number | null;
   difficulty?: string | null;
   language?: string | null;
   requiredCount?: number | null;
@@ -3787,6 +3789,7 @@ export function buildAndValidateGenerationContract(params: {
     subjectVariant,
     questionType: qTypeRaw,
     marksEach,
+    ...(params.pairMarks && params.pairMarks > 0 && params.pairMarks < 1 ? { pairMarks: params.pairMarks } : {}),
     difficulty,
     language,
     requiredCount,
@@ -4017,12 +4020,16 @@ export function generateCurriculumGroundedSectionQuestions(
   // Special handling for MATCH_COLUMN: 1 combined question covering all slots
   if (qType === "MATCH_COLUMN") {
     const firstSlot = contract.slots[0];
+    const rawPairs =
+      contract.pairMarks && contract.pairMarks > 0 && contract.pairMarks < 1
+        ? Math.round(contract.marksEach / contract.pairMarks)
+        : contract.marksEach;
     const targetPairCount = Math.max(
       2,
       contract.slots.length > 1
         ? contract.slots.length
-        : contract.marksEach > 1
-        ? Math.min(contract.marksEach, 10)
+        : rawPairs > 1
+        ? Math.min(rawPairs, 10)
         : 4,
     );
 
