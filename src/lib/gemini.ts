@@ -14,6 +14,7 @@ import {
   QUESTION_TYPES,
 } from "./constants";
 import { decomposeStemSubparts } from "./subpartExtractor";
+import { layoutGraph, type GraphSpec } from "./figureGraph";
 import { layoutMatchColumn } from "./matchColumnKey";
 import {
   findEligibleDiagrams,
@@ -2573,8 +2574,12 @@ export function normalizeFigureObjects(
   const cx = canvasWidth / 2;
   const cy = canvasHeight / 2;
 
+  // a plotted graph is laid out in code (figureGraph.ts) so its numbers, titles and labels never overlap
+  const graphs = rawObjects.filter((o: any) => o && typeof o === "object" && o.type === "graph") as GraphSpec[];
+
   // 1. Pass: Flatten structures & normalize types
   const normalized = rawObjects
+    .filter((o: any) => !(o && typeof o === "object" && o.type === "graph"))
     .map((item: any, idx: number) => {
       if (!item || typeof item !== "object") return null;
 
@@ -2770,6 +2775,9 @@ export function normalizeFigureObjects(
     });
   }
 
+  // graph objects go in after the pass above, which would otherwise re-point their labels
+  graphs.forEach((g, i) => normalized.push(...layoutGraph(g, canvasWidth, canvasHeight, `graph${i}`)));
+
   return normalized;
 }
 
@@ -2803,6 +2811,11 @@ CRITICAL OBJECT SCHEMA RULES:
 
 5. Text (Labels, headings, value annotations):
    { "type": "text", "text": "Label", "x": x, "y": y, "w": 90, "h": 22, "rot": 0, "size": 12, "bold": false, "align": "center", "bg": "white", "style": { "stroke": "#0f172a", "width": 2 } }
+
+6. Graph (ANY plotted graph: velocity-time, distance-time, V-I, y = f(x), bar-free line/scatter plots):
+   { "type": "graph", "xLabel": "Time (s)", "yLabel": "Velocity (m/s)", "xMin": 0, "xMax": 6, "xStep": 1, "yMin": 0, "yMax": 40, "yStep": 10, "series": [ { "kind": "line"|"dots", "points": [ {"x": 0, "y": 36, "label": "(0, 36)"}, {"x": 5, "y": 0, "label": "(5, 0)"} ] } ] }
+   * Give DATA values only (not pixels). Axes, ticks, numbers, titles and label positions are laid out automatically.
+   * NEVER draw a graph's axes, ticks, numbers or axis titles yourself with line/text objects. One "graph" object per graph.
 
 CRITICAL ANTI-OVERLAP & DISCIPLINE RULES:
 - FOR BIOLOGY: NEVER output circuit components ("resistor", "battery", "ammeter", "voltmeter"). Use biology stamps ("plant_cell", "animal_cell", "neuron"), Punnett square grids (rects with gametes and genotypes), or trophic pyramids. Leader lines pointing to parts ((A), (B), (C), (D)) must have callout text placed outside the boundary with zero overlap!
