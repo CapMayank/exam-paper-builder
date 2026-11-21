@@ -150,15 +150,17 @@ export function PaperPreflightModal({
                 {report.warnings.map((warn, idx) => (
                   <div key={idx} className="flex items-start justify-between gap-3 rounded-lg border border-amber-100 bg-amber-50/40 p-3 text-xs text-amber-900">
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-0.5">
+                      <div className="flex items-start gap-2 mb-0.5">
                         {warn.questionNumber && (
-                          <span className="px-1.5 py-0.5 rounded bg-amber-200/60 text-amber-900 font-bold text-[10px]">
+                          <span className="shrink-0 px-1.5 py-0.5 rounded bg-amber-200/60 text-amber-900 font-bold text-[10px]">
                             Q{warn.questionNumber}
                           </span>
                         )}
-                        {warn.title && <span className="font-bold text-amber-950">{warn.title}:</span>}
-                        {warn.title && <span className="font-bold text-amber-950">{warn.title}:</span>}
-                        <span className="font-medium text-amber-950">{warn.message}</span>
+                        {/* one text block, so the title and message wrap together instead of splitting into columns */}
+                        <p className="min-w-0 font-medium text-amber-950">
+                          {warn.title && <span className="font-bold">{warn.title}: </span>}
+                          {warn.message}
+                        </p>
                       </div>
                     </div>
                     {warn.code === "DATE_UNSET" && onGoToTab ? (

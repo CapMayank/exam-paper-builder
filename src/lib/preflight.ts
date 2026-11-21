@@ -1,10 +1,17 @@
 import { questionContentKey } from "./orIdentity";
+import { questionAnswerStatus } from "./answerKeyStatus";
 import { cleanOptionText, isMcqLikeType } from "./constants";
 import { evaluatePaperInternalChoiceCompliance, orChapterRequired } from "./internalChoiceRules";
 import { computeDisplayedPaperNumbering } from "./layout";
 import { isTemplateFiller } from "./templateFiller";
 import { findPlaceholder, marksMismatchMessage, plainText } from "./preflightChecks";
 import { attemptedSubpartsMarks, unequalAnyKOfN, unequalAnyKOfNMessage, validateSubPartsSum, type PaperData } from "./types";
+
+function missingAnswerText(st: { status: string; missingParts: string[] }): string {
+  return st.status === "partial" && st.missingParts.length > 0
+    ? `has no model answer for part ${st.missingParts.join(", ")}`
+    : "has no model answer recorded";
+}
 
 export type PreflightIssue = {
   code: string;
@@ -143,12 +150,14 @@ export function validatePaperPreflight(paper: PaperData): PreflightReport {
       });
     }
 
-    if (item.orQuestion && (!item.orQuestion.answer || item.orQuestion.answer.trim() === "")) {
+    // answered the way the answer-key panel counts it: a question with parts is answered part by part
+    const orStatus = item.orQuestion ? questionAnswerStatus(item.orQuestion) : null;
+    if (item.orQuestion && orStatus && (orStatus.status === "missing" || orStatus.status === "partial")) {
       issues.push({
         code: "MISSING_OR_ANSWER",
         title: "OR question has no answer",
         severity: "warning",
-        message: `Question ${qNum} (OR) has no model answer recorded.`,
+        message: `Question ${qNum} (OR) ${missingAnswerText(orStatus)}.`,
         questionNumber: qNum,
         questionId: item.orQuestion.id,
       });
@@ -201,11 +210,12 @@ export function validatePaperPreflight(paper: PaperData): PreflightReport {
 
     // 5. Answer Key Validation for Objective Questions
     if (isMcqLikeType(q.type) || q.type === "TRUE_FALSE" || q.type === "VERY_SHORT") {
-      if (!q.answer || q.answer.trim() === "") {
+      const st = questionAnswerStatus(q);
+      if (st.status === "missing" || st.status === "partial") {
         issues.push({
           code: "MISSING_ANSWER_KEY",
           severity: "warning",
-          message: `Question ${qNum} (${q.type}) has no model answer recorded. Answer keys and marking schemes will show a blank answer.`,
+          message: `Question ${qNum} (${q.type}) ${missingAnswerText(st)}. Answer keys and marking schemes will show a blank answer.`,
           questionNumber: qNum,
           questionId: q.id,
         });

@@ -323,6 +323,61 @@ describe("Teacher Audit Implementation & Regressions Test Suite", () => {
       expect(report.warnings.some((w) => w.code === "MISSING_ANSWER_KEY")).toBe(true);
     });
 
+    it("does not flag a question answered part by part, or an answered OR", () => {
+      const q0 = basePaper.items[0].question;
+      const paper = {
+        ...basePaper,
+        items: [
+          {
+            ...basePaper.items[0],
+            question: {
+              ...q0,
+              type: "VERY_SHORT",
+              answer: "",
+              subparts: [
+                { label: "(a)", text: "Part a", marks: 1, answer: "Answer a" },
+                { label: "(b)", text: "Part b", marks: 1, answer: "Answer b" },
+              ],
+            },
+            orQuestion: {
+              ...q0,
+              id: "or_1",
+              text: "Alternative question",
+              answer: "",
+              subparts: [{ label: "(a)", text: "Alt part", marks: 1, answer: "Alt answer" }],
+            },
+          },
+          basePaper.items[1],
+        ],
+      } as never;
+      const report = validatePaperPreflight(paper);
+      expect(report.warnings.filter((w) => /ANSWER/.test(w.code))).toEqual([]);
+    });
+
+    it("still flags a part left without an answer", () => {
+      const q0 = basePaper.items[0].question;
+      const paper = {
+        ...basePaper,
+        items: [
+          {
+            ...basePaper.items[0],
+            question: {
+              ...q0,
+              type: "VERY_SHORT",
+              answer: "",
+              subparts: [
+                { label: "(a)", text: "Part a", marks: 1, answer: "Answer a" },
+                { label: "(b)", text: "Part b", marks: 1, answer: "" },
+              ],
+            },
+          },
+          basePaper.items[1],
+        ],
+      } as never;
+      const report = validatePaperPreflight(paper);
+      expect(report.warnings.find((w) => w.code === "MISSING_ANSWER_KEY")?.message).toMatch(/\(b\)/);
+    });
+
     it("flags subpart marks mismatch with section quota", () => {
       const paperWithMismatch = {
         ...basePaper,
