@@ -6,7 +6,7 @@ import { groupedItemInstruction, questionInstruction } from "@/lib/sectionTypes"
 import { BOOKLET_MAX_PAGES, chooseFitLevel, describeFit, FIT_LEVELS, fitMm, getFit, MIN_QUESTION_GAP_MM, nextFitLevel, sheetCost, WORKSHEET_FIT_LEVELS, WORKSHEET_MAX_PAGES, type FitStatus, type PrintFit } from "@/lib/printFit";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { OptionFlow, QuestionView, questionStemText } from "@/components/QuestionView";
+import { AnswerSpace, ContinuationBanner, OptionFlow, QuestionView, questionStemText } from "@/components/QuestionView";
 import { groupedItemPrintsOptions, isShortStemPart, splitStemParagraphs, subpartGridColumns } from "@/lib/compactLayout";
 import { getInternalChoiceSeparatorLabel } from "@/lib/internalChoiceRules";
 import { resolveMarksStyle } from "@/lib/marksDisplay";
@@ -23,6 +23,8 @@ import {
   getPaperLocale,
   getQuestionTypeLabel,
   isBookletLayout,
+  isKindergartenType,
+  isMcqLikeType,
   isPrePrimaryClass,
   WORKSHEET_MODE,
   canHaveSubparts,
@@ -419,12 +421,16 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
       const groupMarks = allInGroup.reduce((sum, x) => sum + x.count * x.marksEach, 0);
       const groupCount = allInGroup.reduce((sum, x) => sum + x.count, 0);
       const secRange = numbering.sectionRanges[s.id];
+      const groupMatch = paper.items.find(
+        (x) => x.question.type === "MATCH_COLUMN" && allInGroup.some((sec) => sec.id === x.sectionId)
+      );
       const reconciledMainInstruction = sectionHeadingInstruction(
         s.instructions,
         s.type,
         secRange?.groupStartQ ?? 0,
         secRange?.groupEndQ ?? 0,
-        paperLang
+        paperLang,
+        groupMatch?.question.text
       );
 
       const groupRightLabel = locale.section.formatGroupSummary(groupCount, groupMarks, {
@@ -602,11 +608,13 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
         n += 1;
         sectionRelativeCounter += 1;
 
-        const subparts = it.question.subparts && it.question.subparts.length > 0
-          ? it.question.subparts
-          : canHaveSubparts(it.question.type)
-          ? decomposeForSlot(it.question.text, s.marksEach)?.subparts ?? []
-          : [];
+        const partsOf = (q: QuestionDto) =>
+          q.subparts && q.subparts.length > 0
+            ? q.subparts
+            : canHaveSubparts(q.type)
+            ? decomposeForSlot(q.text, s.marksEach)?.subparts ?? []
+            : [];
+        const subparts = partsOf(it.question);
         // Short sub-items ("(i) Write (ii) Clean …") share lines inside one block instead of taking a block each.
         const subGridCols = isPrePrimary || it.orQuestion ? 0 : subpartGridColumns(subparts, isA5);
         const canDecompose = !isPrePrimary && !it.orQuestion && subparts && subparts.length > 1 && subGridCols === 0;
@@ -629,68 +637,162 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
         }
         const breakBeforeQuestion = Boolean(it.pageBreakBefore) && !instructionLine;
 
-        if (canDecompose) {
-          // The stem prints one paragraph per block, so a long passage starts on the current page and carries on
-          // overleaf. Its last paragraph stays with the first subpart, and a short lead-in line stays with the
-          // paragraph after it, so neither is left alone at the foot of a page.
-          const stemParts = splitStemParagraphs(questionStemText(it.question, totalQuestionMarks));
-          stemParts.forEach((part, partIdx) => {
-            const isLastPart = partIdx === stemParts.length - 1;
-            blocks.push({
-              key: partIdx === 0 ? `${it.id}-stem` : `${it.id}-stem-${partIdx}`,
-              keepWithNext: isLastPart || isShortStemPart(part),
-              forceBreakBefore: partIdx === 0 && breakBeforeQuestion,
-              groupId: it.id,
-              render: () => (
-                <div style={{ paddingBottom: g(isA5 ? 1.5 : 2.5) }}>
-                  <QuestionView
-                    q={it.question}
-                    number={currentN}
-                    numberLabel={numberLabel}
-                    marks={totalQuestionMarks}
-                    marksStyle={resolveMarksStyle(paper.marksStyle)}
-                    compact={isEffectiveCompact}
-                    fit={fit}
-                    renderMode="STEM_ONLY"
-                    stemPart={stemParts.length > 1 ? partIdx : undefined}
-                    isA5={isA5}
-                    lang={paperLang}
-                    dense
-                  />
-                </div>
-              ),
-            });
-          });
+        const marksStyle = resolveMarksStyle(paper.marksStyle);
+        const partGap = g(isA5 ? 1.5 : 2.5);
+        const altIndent = isA5 ? "7.5mm" : "9.5mm";
+        // An OR alternative opens with the "OR" line; one that starts a new page also says whose alternative it is.
+        const altHead = (isContinuation: boolean) => (
+          <>
+            {isContinuation && <ContinuationBanner label={numberLabel} lang={paperLang} isA5={isA5} />}
+            <div style={{ textAlign: "center", margin: "0 0 2mm", fontWeight: 700, fontSize: isA5 ? "8.5pt" : "9.5pt", letterSpacing: "0.04em", color: "#1e293b" }}>
+              {getInternalChoiceSeparatorLabel(paperLang)}
+            </div>
+          </>
+        );
 
-          // 2. Individual subparts: can cleanly break across page boundaries
-          subparts.forEach((_, spIdx) => {
-            const isLastSubpart = spIdx === subparts.length - 1;
-            blocks.push({
-              key: `${it.id}-sp-${spIdx}`,
+        /**
+         * One question (or its OR alternative, `alt`) as page-breakable blocks, so a question starts on the current
+         * page and carries on overleaf instead of leaving the foot of the page empty. In order: each paragraph of the
+         * text, the figure, each row of a match table, each sub-part. A short lead-in paragraph stays with the one
+         * after it, and the text stays with the first table row or sub-part, so neither is left alone at the foot of a
+         * page. An MCQ's figure stays inside its text, above the options. The alternative prints indented under "OR",
+         * without its own number or marks. `last` marks the final body of the question (it takes the question gap).
+         */
+        const pushBody = (q: QuestionDto, alt: boolean, forceBreak: boolean, last: boolean) => {
+          const parts = partsOf(q);
+          const gridCols = subpartGridColumns(parts, isA5);
+          const shown = alt
+            ? { number: undefined, numberLabel: undefined, marks: undefined }
+            : { number: currentN, numberLabel, marks: totalQuestionMarks };
+          const prefix = alt ? `${it.id}-or` : it.id;
+          const textIndent = alt ? { marginLeft: altIndent } : undefined;
+          const common = { slotMarks: totalQuestionMarks, marksStyle, compact: true, fit, isA5, lang: paperLang, dense: true } as const;
+
+          type Piece = { key: string; keepWithNext: boolean; tight?: boolean; render: (isContinuation: boolean) => ReactNode };
+          const pieces: Piece[] = [];
+
+          if (gridCols > 0) {
+            // short sub-items laid out in a grid print with their question, as one block
+            pieces.push({
+              key: prefix,
               keepWithNext: false,
-              groupId: it.id,
-              render: ({ isContinuation }) => (
-                <div style={{ paddingBottom: isLastSubpart ? questionBottomPadding : g(isA5 ? 1.5 : 2.5) }}>
-                  <QuestionView
-                    q={it.question}
-                    number={currentN}
-                    numberLabel={numberLabel}
-                    marks={totalQuestionMarks}
-                    marksStyle={resolveMarksStyle(paper.marksStyle)}
-                    compact={isEffectiveCompact}
-                  fit={fit}
-                    renderMode="SUBPART_ONLY"
-                    subpartIndex={spIdx}
-                    isContinuation={isContinuation}
-                    isA5={isA5}
-                    lang={paperLang}
-                    dense
-                  />
-                </div>
+              render: (isContinuation) => (
+                <>
+                  {alt && altHead(isContinuation)}
+                  <div style={textIndent}>
+                    <QuestionView q={q} {...shown} {...common} />
+                  </div>
+                </>
               ),
             });
+          } else {
+            const ownFigure = Boolean(q.imagePath) && !(isMcqLikeType(q.type) && q.options.length > 0);
+            const matchCount =
+              q.type === "MATCH_COLUMN" ? parseMatchColumnPairs(q.options, q.text, (q as { explanation?: string }).explanation).length : 0;
+            const after: "figure" | "rows" | "parts" | null = ownFigure ? "figure" : matchCount > 0 ? "rows" : parts.length > 0 ? "parts" : null;
+
+            const stemParts = splitStemParagraphs(questionStemText(q, totalQuestionMarks));
+            stemParts.forEach((part, partIdx) => {
+              const isLastPart = partIdx === stemParts.length - 1;
+              pieces.push({
+                key: partIdx === 0 ? `${prefix}-stem` : `${prefix}-stem-${partIdx}`,
+                keepWithNext: isLastPart ? after === "rows" || after === "parts" : isShortStemPart(part),
+                render: (isContinuation) => (
+                  <>
+                    {alt && partIdx === 0 && altHead(isContinuation)}
+                    <div style={textIndent}>
+                      <QuestionView
+                        q={q}
+                        {...shown}
+                        {...common}
+                        renderMode="STEM_ONLY"
+                        stemPart={stemParts.length > 1 ? partIdx : undefined}
+                        splitAttachments={ownFigure || matchCount > 0}
+                      />
+                    </div>
+                  </>
+                ),
+              });
+            });
+
+            // figures and table rows carry the number (unprinted) so they line up with the text and can say
+            // "Q. 7 (Continued)" when they open a page
+            if (ownFigure) {
+              pieces.push({
+                key: `${prefix}-fig`,
+                keepWithNext: false,
+                render: (isContinuation) => (
+                  <QuestionView q={q} number={currentN} numberLabel={numberLabel} {...common} piece={{ kind: "figure" }} isContinuation={isContinuation} />
+                ),
+              });
+            }
+            for (let row = 0; row < matchCount; row++) {
+              pieces.push({
+                key: `${prefix}-row-${row}`,
+                keepWithNext: false,
+                tight: row < matchCount - 1,
+                render: (isContinuation) => (
+                  <QuestionView
+                    q={q}
+                    number={currentN}
+                    numberLabel={numberLabel}
+                    {...common}
+                    piece={{ kind: "matchRows", from: row, to: row + 1, header: row === 0, last: row === matchCount - 1 }}
+                    isContinuation={isContinuation}
+                  />
+                ),
+              });
+            }
+            parts.forEach((_, spIdx) => {
+              pieces.push({
+                key: `${prefix}-sp-${spIdx}`,
+                keepWithNext: false,
+                render: (isContinuation) => (
+                  // sub-parts of the alternative line up with its indented text
+                  <div style={alt ? { marginLeft: isA5 ? "1.5mm" : "2.5mm" } : undefined}>
+                    <QuestionView
+                      q={q}
+                      number={currentN}
+                      numberLabel={numberLabel}
+                      marks={totalQuestionMarks}
+                      marksStyle={marksStyle}
+                      compact
+                      fit={fit}
+                      renderMode="SUBPART_ONLY"
+                      subpartIndex={spIdx}
+                      isContinuation={isContinuation}
+                      isA5={isA5}
+                      lang={paperLang}
+                      dense
+                    />
+                  </div>
+                ),
+              });
+            });
+          }
+
+          pieces.forEach((pc, idx) => {
+            const isLastPiece = idx === pieces.length - 1;
+            const pad = isLastPiece ? (last ? questionBottomPadding : partGap) : pc.tight ? 0 : partGap;
+            blocks.push({
+              key: pc.key,
+              keepWithNext: pc.keepWithNext,
+              forceBreakBefore: idx === 0 && forceBreak,
+              groupId: it.id,
+              render: ({ isContinuation }) => <div style={{ paddingBottom: pad }}>{pc.render(isContinuation)}</div>,
+            });
           });
-        } else {
+        };
+
+        // Answer space the teacher set prints under the question (under both questions of an OR pair).
+        const spaceMm =
+          isEffectiveCompact || subGridCols > 0
+            ? 0
+            : Math.round(Math.max(it.question.spaceMm ?? 0, it.orQuestion?.spaceMm ?? 0) * (fit.space ?? 1));
+        const isDrawSpace = [it.question.type, it.orQuestion?.type].some((t) => t === "DRAW" || t === "MAP_WORK");
+
+        if (isPrePrimary || isKindergartenType(it.question.type)) {
+          // nursery–KG activities print whole, as designed
           blocks.push({
             key: it.id,
             keepWithNext: false,
@@ -704,7 +806,7 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
                   number={currentN}
                   numberLabel={numberLabel}
                   marks={totalQuestionMarks}
-                  marksStyle={resolveMarksStyle(paper.marksStyle)}
+                  marksStyle={marksStyle}
                   compact={isEffectiveCompact || subGridCols > 0}
                   fit={fit}
                   isA5={isA5}
@@ -714,6 +816,23 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
               </div>
             ),
           });
+        } else if (canDecompose) {
+          pushBody(it.question, false, breakBeforeQuestion, true);
+        } else {
+          pushBody(it.question, false, breakBeforeQuestion, !it.orQuestion && spaceMm === 0);
+          if (it.orQuestion) pushBody(it.orQuestion, true, false, spaceMm === 0);
+          if (spaceMm > 0) {
+            blocks.push({
+              key: `${it.id}-space`,
+              keepWithNext: false,
+              groupId: it.id,
+              render: () => (
+                <div style={{ paddingBottom: questionBottomPadding }}>
+                  <AnswerSpace mm={spaceMm} isDraw={isDrawSpace} indent="9.5mm" lang={paperLang} />
+                </div>
+              ),
+            });
+          }
         }
       }
     }

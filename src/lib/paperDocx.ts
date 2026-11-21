@@ -40,7 +40,7 @@ import {
   formatExerciseFormula,
   formatMarksLabel,
   formatQuestionNumber,
-  getColumnLabels,
+  matchColumnLabels,
   getMatchColumnInstruction,
   getQuestionTypeLabel,
   isMcqLikeType,
@@ -335,7 +335,6 @@ export async function buildPaperDocx(
   const isHindi = paperLang === "hi";
   const isSanskrit = paperLang === "sa";
   const docFont = isSanskrit || isHindi ? "Mangal" : "Times New Roman";
-  const colLabels = getColumnLabels(paperLang);
 
   const totalMarks = paper.blueprint.sections.reduce((sum, s) => sum + s.count * s.marksEach, 0);
   const examType = resolvePaperExamType(paper);
@@ -603,7 +602,8 @@ export async function buildPaperDocx(
         section.type,
         secRange?.groupStartQ ?? 0,
         secRange?.groupEndQ ?? 0,
-        paperLang
+        paperLang,
+        items.find((it) => it.question.type === "MATCH_COLUMN")?.question.text
       );
       if (reconciledInstruction) {
         paragraphs.push(
@@ -865,7 +865,7 @@ export async function buildPaperDocx(
                         width: { size: 50, type: WidthType.PERCENTAGE },
                         children: [
                           new Paragraph({
-                            children: [new TextRun({ text: colLabels.colA, bold: true, font: docFont })],
+                            children: [new TextRun({ text: matchColumnLabels(q.text, paperLang).colA, bold: true, font: docFont })],
                           }),
                         ],
                       }),
@@ -873,7 +873,7 @@ export async function buildPaperDocx(
                         width: { size: 50, type: WidthType.PERCENTAGE },
                         children: [
                           new Paragraph({
-                            children: [new TextRun({ text: colLabels.colB, bold: true, font: docFont })],
+                            children: [new TextRun({ text: matchColumnLabels(q.text, paperLang).colB, bold: true, font: docFont })],
                           }),
                         ],
                       }),
@@ -1093,7 +1093,7 @@ export async function buildPaperDocx(
                           width: { size: 50, type: WidthType.PERCENTAGE },
                           children: [
                             new Paragraph({
-                              children: [new TextRun({ text: colLabels.colA, bold: true, font: docFont })],
+                              children: [new TextRun({ text: matchColumnLabels(orQ.text, paperLang).colA, bold: true, font: docFont })],
                             }),
                           ],
                         }),
@@ -1101,7 +1101,7 @@ export async function buildPaperDocx(
                           width: { size: 50, type: WidthType.PERCENTAGE },
                           children: [
                             new Paragraph({
-                              children: [new TextRun({ text: colLabels.colB, bold: true, font: docFont })],
+                              children: [new TextRun({ text: matchColumnLabels(orQ.text, paperLang).colB, bold: true, font: docFont })],
                             }),
                           ],
                         }),

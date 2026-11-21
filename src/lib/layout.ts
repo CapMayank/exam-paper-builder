@@ -126,7 +126,7 @@ export function imposeBooklet(realPages: number): Sheet[] {
   return sheets;
 }
 
-import { getSharedInstruction, type NumberingStyle, type PaperLanguage, localizeSectionTitle } from "./constants";
+import { alignColumnNames, getSharedInstruction, matchColumnScheme, type NumberingStyle, type PaperLanguage, localizeSectionTitle } from "./constants";
 import { localizeSectionInstruction } from "./localization";
 import { sectionLetter } from "./sectionLetter";
 
@@ -526,14 +526,16 @@ export function sectionHeadingInstruction(
   sectionType: string,
   startQ: number,
   endQ: number,
-  paperLang: PaperLanguage
+  paperLang: PaperLanguage,
+  /** The section's match question: its column names ("Column I / II") replace the instruction's ("Column A / B"). */
+  matchQuestionText?: string | null
 ): string {
   const reconciled = reconcileSectionGroupInstruction(instruction, startQ, endQ, paperLang);
   if (!reconciled) return "";
   if ((paperLang === "hi" || paperLang === "sa") && !/[ऀ-ॿ]/.test(reconciled)) {
     return getSharedInstruction(sectionType, paperLang);
   }
-  return reconciled;
+  return alignColumnNames(reconciled, matchColumnScheme(matchQuestionText));
 }
 
 /**

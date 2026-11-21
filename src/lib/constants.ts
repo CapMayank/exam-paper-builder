@@ -237,6 +237,47 @@ export function getColumnLabels(lang: PaperLanguage = "en"): { colA: string; col
   return locale.columnLabels;
 }
 
+/** How a match question names its two columns: "Column I / II", "Column A / B" or "List I / II". */
+export type MatchColumnScheme = "roman" | "letter" | "list";
+
+/** The column names a match question's instruction uses, or null when it names none ("Match the following:"). */
+export function matchColumnScheme(text?: string | null): MatchColumnScheme | null {
+  const instruction = getMatchColumnInstruction(text);
+  if (/\blist[\s-]*(?:i{1,2}|[12])\b/i.test(instruction)) return "list";
+  if (/\bcolumn[\s-]*(?:i{1,2}|[12])\b/i.test(instruction)) return "roman";
+  if (/\bcolumn[\s-]*[ab]\b/i.test(instruction)) return "letter";
+  return null;
+}
+
+const SCHEME_NAMES: Record<MatchColumnScheme, [string, string]> = {
+  roman: ["Column I", "Column II"],
+  letter: ["Column A", "Column B"],
+  list: ["List I", "List II"],
+};
+
+/**
+ * Headings for a match table, in the words the question uses: "Match Column I with Column II" gets a table headed
+ * Column I / Column II, not Column A / Column B. A question naming no columns keeps the language's own headings;
+ * Hindi and Sanskrit papers always keep theirs.
+ */
+export function matchColumnLabels(text: string | null | undefined, lang: PaperLanguage = "en"): { colA: string; colB: string } {
+  const base = getColumnLabels(lang);
+  const scheme = matchColumnScheme(text);
+  if (!scheme || lang === "hi" || lang === "sa") return base;
+  const [a, b] = SCHEME_NAMES[scheme];
+  if (lang === "bilingual") return { colA: `स्तम्भ 'अ' (${a})`, colB: `स्तम्भ 'ब' (${b})` };
+  return { colA: a, colB: b };
+}
+
+/** Rewrites the column names in a line ("Match the items in Column A with Column B") to the given scheme. */
+export function alignColumnNames(text: string, scheme: MatchColumnScheme | null): string {
+  if (!scheme) return text;
+  const [first, second] = SCHEME_NAMES[scheme];
+  return text.replace(/\b(column|list)([\s-]*)(ii|i|a|b|1|2)\b/gi, (_m, _word, _sep, token: string) =>
+    /^(ii|b|2)$/i.test(token) ? second : first,
+  );
+}
+
 export function isKindergartenType(type?: string | null): boolean {
   if (!type) return false;
   return (

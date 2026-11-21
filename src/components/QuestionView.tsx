@@ -5,7 +5,7 @@ import {
   cleanMatchItem,
   cleanOptionText,
   formatMarksLabel,
-  getColumnLabels,
+  matchColumnLabels,
   getMatchColumnInstruction,
   isKindergartenType,
   isMcqLikeType,
@@ -78,6 +78,45 @@ function isPassageType(type: string): boolean {
 
 export type QuestionRenderMode = "FULL" | "STEM_ONLY" | "SUBPART_ONLY";
 
+/**
+ * A question printed in pieces so it can cross a page: its figure on its own, or rows [from, to) of its match
+ * table. `header` prints the column headings (the first rows, or rows that open a new page); `last` closes the table.
+ */
+export type QuestionPiece = { kind: "figure" } | { kind: "matchRows"; from: number; to: number; header: boolean; last: boolean };
+
+/** "Q. 22 (Continued)": heads the part of a question that carries on at the top of a new page. */
+export function ContinuationBanner({ label, lang, isA5 }: { label?: string; lang: PaperLanguage; isA5?: boolean }) {
+  const prefix = lang === "sa" ? "प्रश्नः" : lang === "hi" ? "प्रश्न" : "Q.";
+  const text = label
+    ? label.startsWith("Q.") || label.startsWith("प्रश्न")
+      ? label
+      : `${prefix} ${label}`
+    : lang === "sa" ? "प्रश्नः" : lang === "hi" ? "प्रश्न" : "Question";
+  const suffix =
+    lang === "sa" || lang === "hi"
+      ? " (क्रमशः...)"
+      : lang === "bilingual"
+      ? " (Continued / क्रमशः...)"
+      : " (Continued)";
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "2mm",
+        fontSize: isA5 ? "8pt" : "8.5pt",
+        fontWeight: 700,
+        color: "#475569",
+        padding: "0.5mm 0 1.5mm 0",
+        borderBottom: "1px dashed #cbd5e1",
+        marginBottom: "1.5mm",
+      }}
+    >
+      <span>{text}{suffix}</span>
+    </div>
+  );
+}
+
 function SingleQuestionBody({
   q,
   number,
@@ -94,11 +133,17 @@ function SingleQuestionBody({
   fit,
   dense,
   stemPart,
+  piece,
+  splitAttachments,
 }: {
   q: QuestionDto;
   number?: number;
   numberLabel?: string;
   marks?: number;
+  /** Print only this piece of the question (see QuestionPiece). */
+  piece?: QuestionPiece;
+  /** STEM_ONLY: leave the figure and the match table out; they print as pieces of their own. */
+  splitAttachments?: boolean;
   /** Printed paper: short sub-items share a line and marks tags that repeat the question's total are dropped. */
   dense?: boolean;
   /** STEM_ONLY: print only this paragraph of the stem (see splitStemParagraphs), so a passage can cross a page. */
@@ -125,7 +170,8 @@ function SingleQuestionBody({
   const hasSanskrit = isTextPredominantlySanskrit(q.text) || q.options.some((o) => isTextPredominantlySanskrit(o));
   const hasHindi = /[\u0900-\u097F]/.test(q.text) || q.options.some((o) => /[\u0900-\u097F]/.test(o));
   const effectiveLang: PaperLanguage = lang ?? (hasSanskrit ? "sa" : hasHindi ? "hi" : "en");
-  const colLabels = getColumnLabels(effectiveLang);
+  // headed in the question's own words: "Match Column I with Column II" → Column I / Column II
+  const colLabels = matchColumnLabels(q.text, effectiveLang);
 
   if (renderMode === "SUBPART_ONLY") {
     const decomposed = (!q.subparts || q.subparts.length === 0) && canHaveSubparts(q.type)
@@ -138,39 +184,9 @@ function SingleQuestionBody({
     if (!sp) return null;
     // the printed paper (dense, no answers) shows only each question's total, so the marks beside questions add up to the paper's
   const hideSubMarks = !showPartMarks(effectiveSubparts.length, partsAttemptCount(q, decomposed), marksStyle) || Boolean(dense && !showAnswer);
-    const contPrefix = effectiveLang === "sa" ? "प्रश्नः" : effectiveLang === "hi" ? "प्रश्न" : "Q.";
-    const contLabel = displayLabel
-      ? displayLabel.startsWith("Q.") || displayLabel.startsWith("प्रश्न")
-        ? displayLabel
-        : `${contPrefix} ${displayLabel}`
-      : effectiveLang === "sa" ? "प्रश्नः" : effectiveLang === "hi" ? "प्रश्न" : "Question";
-    const contSuffix =
-      effectiveLang === "sa"
-        ? " (क्रमशः...)"
-        : effectiveLang === "hi"
-        ? " (क्रमशः...)"
-        : effectiveLang === "bilingual"
-        ? " (Continued / क्रमशः...)"
-        : " (Continued)";
     return (
       <div style={{ marginLeft: subpartMarginLeft }}>
-        {isContinuation && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "2mm",
-              fontSize: isA5 ? "8pt" : "8.5pt",
-              fontWeight: 700,
-              color: "#475569",
-              padding: "0.5mm 0 1.5mm 0",
-              borderBottom: "1px dashed #cbd5e1",
-              marginBottom: "1.5mm",
-            }}
-          >
-            <span>{contLabel}{contSuffix}</span>
-          </div>
-        )}
+        {isContinuation && <ContinuationBanner label={displayLabel} lang={effectiveLang} isA5={isA5} />}
         <div
           style={{
             display: "flex",
@@ -240,6 +256,79 @@ function SingleQuestionBody({
   const matchPairs = q.type === "MATCH_COLUMN" ? parseMatchColumnPairs(q.options, q.text, (q as any).explanation) : [];
   const baseStemText = q.type === "MATCH_COLUMN" && matchPairs.length > 0 ? withPairMarksNote(getMatchColumnInstruction(q.text), (q as { pairMarks?: number | null }).pairMarks) : q.text;
 
+  const tableBorder = "1px solid #cbd5e1";
+  const cellPad = isA5 ? "0.8mm 2mm" : "1.2mm 2.5mm";
+  const figure = (marginTop: string) =>
+    q.imagePath ? (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={imageUrl(q.imagePath)}
+        alt=""
+        style={{ display: "block", marginTop, maxWidth: isA5 ? "65%" : "60%", maxHeight: isA5 ? "34mm" : "45mm", objectFit: "contain" }}
+      />
+    ) : null;
+  /** The match table, or rows [from, to) of it; pieces stack into one table (no doubled borders between them). */
+  const matchTable = (from: number, to: number, header: boolean, closes: boolean, marginTop: string) => (
+    <table
+      style={{
+        width: "100%",
+        tableLayout: "fixed",
+        borderCollapse: "collapse",
+        marginTop,
+        fontSize: tableFontSize,
+        borderLeft: tableBorder,
+        borderRight: tableBorder,
+        borderTop: header || from === 0 ? tableBorder : "none",
+        borderBottom: closes ? tableBorder : "none",
+      }}
+    >
+      {header && (
+        <thead>
+          <tr style={{ backgroundColor: "#f8fafc", borderBottom: tableBorder }}>
+            <th style={{ textAlign: "left", padding: cellPad, borderRight: tableBorder, width: "50%", fontWeight: 700 }}>{colLabels.colA}</th>
+            <th style={{ textAlign: "left", padding: cellPad, width: "50%", fontWeight: 700 }}>{colLabels.colB}</th>
+          </tr>
+        </thead>
+      )}
+      <tbody>
+        {matchPairs.slice(from, to).map((pair, k) => {
+          const idx = from + k;
+          return (
+            <tr key={idx} style={{ borderBottom: idx < matchPairs.length - 1 ? "1px solid #e2e8f0" : "none" }}>
+              <td style={{ padding: cellPad, borderRight: tableBorder, verticalAlign: "top", width: "50%" }}>
+                <span style={{ fontWeight: 600, marginRight: "1.5mm" }}>
+                  {LETTERS_LIST[idx] ?? `(${String.fromCharCode(65 + idx)})`}
+                </span>
+                <MathText text={cleanMatchItem(pair.left)} />
+              </td>
+              <td style={{ padding: cellPad, verticalAlign: "top", width: "50%" }}>
+                <span style={{ fontWeight: 600, marginRight: "1.5mm" }}>
+                  {ROMAN_LOWER[idx] ?? `(${idx + 1})`}
+                </span>
+                <MathText text={cleanMatchItem(pair.right)} />
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+  // pieces line up with the question's text column (to the right of its number)
+  const pieceIndent = displayLabel !== undefined ? (isA5 ? "7.5mm" : "9.5mm") : 0;
+  if (piece?.kind === "figure") {
+    return (
+      <div>
+        {isContinuation && <ContinuationBanner label={displayLabel} lang={effectiveLang} isA5={isA5} />}
+        <div style={{ marginLeft: pieceIndent }}>{figure("0")}</div>
+      </div>
+    );
+  }
+  if (piece?.kind === "matchRows") {
+    // rows that open a new page repeat the column headings
+    const header = piece.header || Boolean(isContinuation);
+    return <div style={{ marginLeft: pieceIndent }}>{matchTable(piece.from, piece.to, header, piece.last, piece.from === 0 ? "2mm" : "0")}</div>;
+  }
+
   const decomposed = (!q.subparts || q.subparts.length === 0) && canHaveSubparts(q.type)
     ? decomposeForSlot(baseStemText, slotMarks)
     : null;
@@ -269,7 +358,7 @@ function SingleQuestionBody({
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
           {/* flow-root keeps the right-floated marks tag inside this box when it drops to a line of its own */}
-          <div style={{ display: "flow-root", whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight, ...(isA5 && fit && fit.passageScale !== 1 && (renderMode === "STEM_ONLY" || isPassageType(q.type)) ? { fontSize: `${fit.passageScale}em` } : null) }}>
+          <div style={{ display: "flow-root", whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight, ...(isA5 && fit && fit.passageScale !== 1 && ((renderMode === "STEM_ONLY" && stemPart !== undefined) || isPassageType(q.type)) ? { fontSize: `${fit.passageScale}em` } : null) }}>
             <QuestionContent text={shownStem} isA5={isA5} />
             {marks !== undefined && marksStyle === "INLINE" && isLastStemPart && (
               <span style={{ float: "right", fontWeight: 700, fontSize: marksFontSize, marginLeft: "2mm", whiteSpace: "nowrap", color: "#334155" }}>
@@ -277,65 +366,11 @@ function SingleQuestionBody({
               </span>
             )}
           </div>
-          {isLastStemPart && q.imagePath && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={imageUrl(q.imagePath)}
-              alt=""
-              style={{ display: "block", marginTop: "2mm", maxWidth: isA5 ? "65%" : "60%", maxHeight: isA5 ? "34mm" : "45mm", objectFit: "contain" }}
-            />
-          )}
+          {isLastStemPart && !splitAttachments && figure("2mm")}
           {isLastStemPart && isMcq && q.options.length > 0 && (
             <OptionFlow options={q.options} forceSingle={singleColumnOptions} isA5={isA5} fontSize={optFontSize} marginTop={dense ? "1mm" : "2mm"} />
           )}
-          {isLastStemPart && q.type === "MATCH_COLUMN" && matchPairs.length > 0 && (
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                marginTop: "2mm",
-                fontSize: tableFontSize,
-                border: "1px solid #cbd5e1",
-              }}
-            >
-              <thead>
-                <tr style={{ backgroundColor: "#f8fafc", borderBottom: "1px solid #cbd5e1" }}>
-                  <th
-                    style={{
-                      textAlign: "left",
-                      padding: isA5 ? "0.8mm 2mm" : "1.2mm 2.5mm",
-                      borderRight: "1px solid #cbd5e1",
-                      width: "50%",
-                      fontWeight: 700,
-                    }}
-                  >
-                    {colLabels.colA}
-                  </th>
-                  <th style={{ textAlign: "left", padding: isA5 ? "0.8mm 2mm" : "1.2mm 2.5mm", width: "50%", fontWeight: 700 }}>
-                    {colLabels.colB}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {matchPairs.map((pair, idx) => (
-                  <tr key={idx} style={{ borderBottom: idx < matchPairs.length - 1 ? "1px solid #e2e8f0" : "none" }}>
-                    <td style={{ padding: isA5 ? "0.8mm 2mm" : "1.2mm 2.5mm", borderRight: "1px solid #cbd5e1", verticalAlign: "top" }}>
-                      <span style={{ fontWeight: 600, marginRight: "1.5mm" }}>
-                        {LETTERS_LIST[idx] ?? `(${String.fromCharCode(65 + idx)})`}
-                      </span>
-                      <MathText text={cleanMatchItem(pair.left)} />
-                    </td>
-                    <td style={{ padding: isA5 ? "0.8mm 2mm" : "1.2mm 2.5mm", verticalAlign: "top" }}>
-                      <span style={{ fontWeight: 600, marginRight: "1.5mm" }}>
-                        {ROMAN_LOWER[idx] ?? `(${idx + 1})`}
-                      </span>
-                      <MathText text={cleanMatchItem(pair.right)} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+          {isLastStemPart && !splitAttachments && q.type === "MATCH_COLUMN" && matchPairs.length > 0 && matchTable(0, matchPairs.length, true, true, "2mm")}
           {isLastStemPart && q.type === "TRUE_FALSE" && (
             <div style={{ marginTop: "1.5mm", fontStyle: "italic", fontSize: metaFontSize }}>
               {effectiveLang === "sa"
@@ -481,8 +516,17 @@ export function QuestionView({
   fit,
   dense,
   stemPart,
+  slotMarks = marks,
+  piece,
+  splitAttachments,
 }: {
   q: QuestionDto;
+  /** Print only this piece of the question (see QuestionPiece): no OR alternative, no answer space. */
+  piece?: QuestionPiece;
+  /** STEM_ONLY: the figure and match table print as pieces of their own. */
+  splitAttachments?: boolean;
+  /** What the whole question is worth when `marks` is not printed (an OR alternative printed on its own). */
+  slotMarks?: number;
   /** Printed paper: use the space-saving arrangement (see SingleQuestionBody). */
   dense?: boolean;
   /** STEM_ONLY: print only this paragraph of the stem. */
@@ -505,6 +549,25 @@ export function QuestionView({
   const hasHindi = /[\u0900-\u097F]/.test(q.text) || (orQuestion && /[\u0900-\u097F]/.test(orQuestion.text));
   const effectiveLang: PaperLanguage = lang ?? (hasSanskrit ? "sa" : hasHindi ? "hi" : "en");
 
+  if (piece) {
+    return (
+      <SingleQuestionBody
+        q={q}
+        number={number}
+        numberLabel={numberLabel}
+        marks={marks}
+        slotMarks={slotMarks}
+        marksStyle={marksStyle}
+        piece={piece}
+        isContinuation={isContinuation}
+        isA5={isA5}
+        lang={effectiveLang}
+        fit={fit}
+        dense={dense}
+      />
+    );
+  }
+
   if (renderMode === "SUBPART_ONLY") {
     return (
       <div style={{ breakInside: "avoid", pageBreakInside: "avoid" }}>
@@ -513,6 +576,7 @@ export function QuestionView({
           number={number}
           numberLabel={numberLabel}
           marks={marks}
+          slotMarks={slotMarks}
           marksStyle={marksStyle}
           showAnswer={showAnswer}
           renderMode="SUBPART_ONLY"
@@ -529,7 +593,6 @@ export function QuestionView({
 
   const isKdg = isKindergartenType(q.type);
   const maxSpaceMm = compact || isKdg ? 0 : Math.round(Math.max(q.spaceMm, orQuestion?.spaceMm ?? 0) * (fit?.space ?? 1));
-  const showGrid = q.showGrid || !!orQuestion?.showGrid;
   const isDraw =
     q.type === "DRAW" ||
     q.type === "MAP_WORK" ||
@@ -539,22 +602,6 @@ export function QuestionView({
 
   const orSeparator = getInternalChoiceSeparatorLabel(effectiveLang);
 
-  const spaceLabel = isDraw
-    ? effectiveLang === "sa"
-      ? "[चित्राङ्कनार्थं स्थानम्]"
-      : effectiveLang === "hi"
-      ? "[चित्र हेतु स्थान]"
-      : effectiveLang === "bilingual"
-      ? "[Space for Diagram / चित्र हेतु स्थान]"
-      : "[Space for Diagram]"
-    : effectiveLang === "sa"
-    ? "[उत्तरलेखनार्थं स्थानम्]"
-    : effectiveLang === "hi"
-    ? "[उत्तर हेतु स्थान]"
-    : effectiveLang === "bilingual"
-    ? "[Space for Answer / उत्तर हेतु स्थान]"
-    : "[Space for Answer]";
-
   return (
     <div style={{ breakInside: "avoid", pageBreakInside: "avoid" }}>
       {/* An OR pair prints its marks once, on the first question's line, in every marks style. */}
@@ -563,7 +610,7 @@ export function QuestionView({
         number={number}
         numberLabel={numberLabel}
         marks={marks}
-        slotMarks={marks}
+        slotMarks={slotMarks}
         marksStyle={marksStyle}
         showAnswer={showAnswer}
         renderMode={renderMode}
@@ -572,6 +619,7 @@ export function QuestionView({
         fit={fit}
         dense={dense}
         stemPart={stemPart}
+        splitAttachments={splitAttachments}
       />
 
       {orQuestion && (
@@ -597,7 +645,7 @@ export function QuestionView({
           </div>
           <SingleQuestionBody
             q={orQuestion}
-            slotMarks={marks}
+            slotMarks={slotMarks}
             showAnswer={showAnswer}
             marksStyle={marksStyle}
             isA5={isA5}
@@ -608,30 +656,47 @@ export function QuestionView({
       )}
 
       {renderMode !== "STEM_ONLY" && maxSpaceMm > 0 && (
-        <div
-          className={isDraw && showGrid ? "paper-grid" : isDraw ? "paper-grid" : "paper-ruled"}
-          style={{
-            height: `${maxSpaceMm}mm`,
-            marginTop: "2mm",
-            marginLeft: hasLabel ? "9.5mm" : 0,
-            position: "relative",
-          }}
-        >
-          <span
-            style={{
-              position: "absolute",
-              bottom: "1mm",
-              right: "2mm",
-              fontSize: "7pt",
-              color: "#94a3b8",
-              fontStyle: "italic",
-              userSelect: "none",
-            }}
-          >
-            {spaceLabel}
-          </span>
-        </div>
+        <AnswerSpace mm={maxSpaceMm} isDraw={isDraw} indent={hasLabel ? "9.5mm" : 0} lang={effectiveLang} />
       )}
+    </div>
+  );
+}
+
+/** The blank (ruled, or a grid for a drawing) space printed under a question for its answer. */
+export function AnswerSpace({ mm, isDraw, indent, lang }: { mm: number; isDraw: boolean; indent: string | 0; lang: PaperLanguage }) {
+  const label = isDraw
+    ? lang === "sa"
+      ? "[चित्राङ्कनार्थं स्थानम्]"
+      : lang === "hi"
+      ? "[चित्र हेतु स्थान]"
+      : lang === "bilingual"
+      ? "[Space for Diagram / चित्र हेतु स्थान]"
+      : "[Space for Diagram]"
+    : lang === "sa"
+    ? "[उत्तरलेखनार्थं स्थानम्]"
+    : lang === "hi"
+    ? "[उत्तर हेतु स्थान]"
+    : lang === "bilingual"
+    ? "[Space for Answer / उत्तर हेतु स्थान]"
+    : "[Space for Answer]";
+  return (
+    <div
+      className={isDraw ? "paper-grid" : "paper-ruled"}
+      style={{ height: `${mm}mm`, marginTop: "2mm", marginLeft: indent, position: "relative" }}
+    >
+      <span
+        style={{
+          position: "absolute",
+          bottom: "1mm",
+          right: "2mm",
+          fontSize: "7pt",
+          color: "#94a3b8",
+          fontStyle: "italic",
+          userSelect: "none",
+        }}
+      >
+        {label}
+      </span>
     </div>
   );
 }
