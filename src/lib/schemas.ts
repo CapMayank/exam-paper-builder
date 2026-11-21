@@ -203,6 +203,8 @@ export const questionPatchSchema = z.object({
   passageGroupId: z.string().trim().min(1).max(64).nullable().optional(),
   /** The question's figure: an uploaded file name, or null to remove it. */
   imagePath: imageFileName.nullable().optional(),
+  /** The figure was drawn by AI and still needs the teacher's check (false = "Looks right"). */
+  figureAutoDrawn: z.boolean().optional(),
 });
 
 export const blueprintSchema = z.object({

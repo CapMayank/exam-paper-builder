@@ -1,3 +1,4 @@
+import { figureBriefScene } from "@/lib/figureBrief";
 import { suggestChapter } from "@/lib/questionTagging";
 import { HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
@@ -57,6 +58,7 @@ export const POST = route(async (req, { id }, user) => {
 
   // All or nothing: a failure part-way must not leave the paper emptied or half-imported.
   let importedCount = 0;
+  const figuresNeeded: { questionId: string; description: string }[] = [];
   await prisma.$transaction(
     async (tx) => {
     // If mode === "replace", remove existing placed questions
@@ -139,10 +141,12 @@ export const POST = route(async (req, { id }, user) => {
               subpartsJson: subpartsColumn(q.orQuestion.subparts, q.orQuestion.attemptCount),
               answer: q.orQuestion.answer?.trim() || "",
               difficulty: q.orQuestion.difficulty || "MEDIUM",
+            figureScene: q.orQuestion.figure ? figureBriefScene(q.orQuestion.figure) : null,
               createdById: user.id,
             },
           });
           orQuestionId = createdOr.id;
+        if (q.orQuestion.figure) figuresNeeded.push({ questionId: createdOr.id, description: q.orQuestion.figure });
         }
 
         let finalType = normalizeQuestionType(q.type || bpSec.type);
@@ -162,10 +166,12 @@ export const POST = route(async (req, { id }, user) => {
             subpartsJson: subpartsColumn(q.subparts, q.attemptCount),
             answer: q.answer?.trim() || "",
             difficulty: q.difficulty || "MEDIUM",
+            figureScene: q.figure ? figureBriefScene(q.figure) : null,
             createdById: user.id,
           },
         });
 
+        if (q.figure) figuresNeeded.push({ questionId: createdQ.id, description: q.figure });
         await tx.paperQuestion.create({
           data: {
             paperId: id,
@@ -201,6 +207,7 @@ export const POST = route(async (req, { id }, user) => {
   return {
     success: true,
     importedCount,
+    figuresNeeded,
     paper: await loadPaperView(id),
   };
 });

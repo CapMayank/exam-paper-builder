@@ -1,3 +1,4 @@
+import { sceneAfterImageChange } from "@/lib/figureBrief";
 import { isTypeAllowed, withEffectiveAllowedTypes } from "@/lib/sectionTypes";
 import { body, HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
@@ -51,6 +52,10 @@ export const PATCH = route(async (req, { id }, user) => {
   if (input.showGrid !== undefined) data.showGrid = input.showGrid;
   if (input.passageGroupId !== undefined) data.passageGroupId = input.passageGroupId;
   if (input.imagePath !== undefined) data.imagePath = input.imagePath;
+  if (input.imagePath !== undefined || input.figureAutoDrawn !== undefined) {
+    const imagePath = input.imagePath !== undefined ? input.imagePath : existing.imagePath;
+    data.figureScene = sceneAfterImageChange(existing.figureScene, imagePath, input.figureAutoDrawn);
+  }
 
   const updated = await prisma.question.update({
     where: { id },
@@ -106,9 +111,13 @@ export const PUT = route(async (req, { id }, user) => {
   if (totalPaperUses > 0 && (input.chapterId !== existing.chapterId || input.bookId !== existing.bookId)) {
     throw new HttpError(409, "This question is used in a paper, so its chapter can't change.");
   }
+  const imageChanged = (input.imagePath ?? null) !== (existing.imagePath ?? null);
   const updated = await prisma.question.update({
     where: { id },
-    data: questionColumns(input),
+    data: {
+      ...questionColumns(input),
+      ...(imageChanged ? { figureScene: sceneAfterImageChange(existing.figureScene, input.imagePath ?? null, undefined) } : {}),
+    },
     include: { chapter: true, _count: { select: { paperQuestions: true, orPaperQuestions: true } } },
   });
 

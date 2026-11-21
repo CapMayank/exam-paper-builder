@@ -1,3 +1,4 @@
+import { figureBriefScene } from "@/lib/figureBrief";
 import { suggestChapter } from "@/lib/questionTagging";
 import { HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
@@ -86,6 +87,7 @@ export const POST = route(async (req, _params, user) => {
 
   // 2. Map and ingest questions section by section with smart type & marks routing
   let totalImportedQuestions = 0;
+  const figuresNeeded: { questionId: string; description: string }[] = [];
   const bpSections = [...blueprint.sections].sort((a, b) => a.position - b.position);
   const allocatedCounts = new Map<string, number>();
   const sectionPositions = new Map<string, number>();
@@ -145,10 +147,12 @@ export const POST = route(async (req, _params, user) => {
             subpartsJson: subpartsColumn(q.orQuestion.subparts, q.orQuestion.attemptCount),
             answer: q.orQuestion.answer?.trim() || "",
             difficulty: q.orQuestion.difficulty || "MEDIUM",
+            figureScene: q.orQuestion.figure ? figureBriefScene(q.orQuestion.figure) : null,
             createdById: user.id,
           },
         });
         orQuestionId = createdOr.id;
+        if (q.orQuestion.figure) figuresNeeded.push({ questionId: createdOr.id, description: q.orQuestion.figure });
       }
 
       // Create primary question
@@ -170,11 +174,13 @@ export const POST = route(async (req, _params, user) => {
           subpartsJson: subpartsColumn(q.subparts, q.attemptCount),
           answer: q.answer?.trim() || "",
           difficulty: q.difficulty || "MEDIUM",
+          figureScene: q.figure ? figureBriefScene(q.figure) : null,
           createdById: user.id,
         },
       });
 
       // Link to paper
+      if (q.figure) figuresNeeded.push({ questionId: createdQ.id, description: q.figure });
       await prisma.paperQuestion.create({
         data: {
           paperId: paper.id,
@@ -199,6 +205,7 @@ export const POST = route(async (req, _params, user) => {
   return {
     success: true,
     paperId: paper.id,
+    figuresNeeded,
     paper: await loadPaperView(paper.id),
   };
 });

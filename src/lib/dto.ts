@@ -1,3 +1,4 @@
+import { parseFigureBrief, type FigureBrief } from "./figureBrief";
 import type { Chapter, Question } from "@prisma/client";
 import {
   canHaveSubparts,
@@ -25,6 +26,8 @@ export type QuestionDto = {
   cognitiveLevel?: string | null;
   marks?: number;
   imagePath: string | null;
+  /** A figure the question still needs (or one AI drew), from an imported description; absent when none. */
+  figureBrief?: FigureBrief;
   spaceMm: number;
   showGrid: boolean;
   createdAt: string;
@@ -238,6 +241,10 @@ export function toQuestionDto(
     usages,
     attemptCount,
     ...(q.passageGroupId ? { passageGroupId: q.passageGroupId } : {}),
+    ...(() => {
+      const brief = parseFigureBrief(q.figureScene);
+      return brief ? { figureBrief: brief } : {};
+    })(),
     ...(q.sourceProvenance ? { sourceProvenance: q.sourceProvenance } : {}),
   };
 }
