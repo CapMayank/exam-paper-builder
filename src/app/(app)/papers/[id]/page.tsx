@@ -53,6 +53,8 @@ import { QuestionPicker } from "@/components/QuestionPicker";
 import { toleratesType, typeLabel } from "@/lib/sectionTypes";
 import { isExhaustedUsage, QuestionFreshnessAlert, QuestionUsagePills } from "@/components/QuestionUsageHistory";
 import { QuestionView } from "@/components/QuestionView";
+import { FigureBriefBar } from "@/components/FigureBriefBar";
+import { autoDrawFigures, createDefaultAutoDrawDeps } from "@/lib/autoDrawFigures";
 import { ErrorBanner, Field, Modal, Spinner, useConfirm, useToast } from "@/components/ui";
 import { canModifyPaper, type Actor } from "@/lib/permissions";
 import { api, imageUrl } from "@/lib/client";
@@ -131,7 +133,8 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   const [editingItem, setEditingItem] = useState<{ item: PaperItem; section: Section; target: "primary" | "or" } | null>(null);
   const [replacingItem, setReplacingItem] = useState<{ item: PaperItem; section: Section } | null>(null);
   const [alternateItem, setAlternateItem] = useState<{ item: PaperItem; section: Section } | null>(null);
-  const [diagramModalItem, setDiagramModalItem] = useState<{ item: PaperItem; section: Section } | null>(null);
+  const [diagramModalItem, setDiagramModalItem] = useState<{ item: PaperItem; section: Section; query?: string } | null>(null);
+  const [drawingFigureId, setDrawingFigureId] = useState<string | null>(null);
   const [studioItem, setStudioItem] = useState<{ item: PaperItem; section: Section; initialUrl: string | null } | null>(null);
   const [bwPreviewIds, setBwPreviewIds] = useState<Record<string, boolean>>({});
   const [details, setDetails] = useState({
@@ -489,6 +492,30 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
       showError((e as Error).message);
     }
   }, [id, adopt, showError]);
+
+  /** Draws one question's figure from its imported description. */
+  const autoDrawOne = async (questionId: string, description: string) => {
+    setDrawingFigureId(questionId);
+    try {
+      const { drawn } = await autoDrawFigures([{ questionId, description }], createDefaultAutoDrawDeps());
+      if (drawn) toast.success("Figure drawn. Check it before printing.");
+      else toast.info("Could not auto-draw: set an AI key, or add the figure yourself.");
+      await reloadPaper();
+    } finally {
+      setDrawingFigureId(null);
+    }
+  };
+
+  /** "Looks right": the auto-drawn figure has been checked. */
+  const acceptAutoDrawn = async (questionId: string) => {
+    try {
+      await api(`/api/questions/${questionId}`, { method: "PATCH", json: { figureAutoDrawn: false } });
+      await reloadPaper();
+    } catch (e) {
+      showError((e as Error).message);
+    }
+  };
+
 
   useEffect(() => {
     Promise.all([api<PaperData>(`/api/papers/${id}`), api<Book[]>("/api/books")]).then(
@@ -1990,6 +2017,25 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                               </p>
                             )}
 
+                            <FigureBriefBar
+                              question={it.question}
+                              busy={drawingFigureId === it.question.id}
+                              onAutoDraw={() => it.question.figureBrief && autoDrawOne(it.question.id, it.question.figureBrief.description)}
+                              onSearch={() => setDiagramModalItem({ item: it, section: s, query: it.question.figureBrief?.description })}
+                              onEdit={() => setEditingItem({ item: it, section: s, target: "primary" })}
+                              onLooksRight={() => acceptAutoDrawn(it.question.id)}
+                            />
+                            {it.orQuestion && (
+                              <FigureBriefBar
+                                question={it.orQuestion}
+                                label="OR question"
+                                busy={drawingFigureId === it.orQuestion.id}
+                                onAutoDraw={() => it.orQuestion?.figureBrief && autoDrawOne(it.orQuestion.id, it.orQuestion.figureBrief.description)}
+                                onEdit={() => setEditingItem({ item: it, section: s, target: "or" })}
+                                onLooksRight={() => it.orQuestion && acceptAutoDrawn(it.orQuestion.id)}
+                              />
+                            )}
+
                             {/* Question Content View */}
                             <div className={`paper-font text-sm leading-relaxed transition ${bwPreviewIds[it.question.id] ? "grayscale contrast-150" : ""}`}>
                               <QuestionView
@@ -2494,6 +2540,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
           subject={paper.blueprint?.book?.subject || paper.blueprint?.name || ""}
           chapterTitle={diagramModalItem.item.question.chapter?.title || ""}
           questionText={diagramModalItem.item.question.text}
+          initialQuery={diagramModalItem.query}
           onClose={() => setDiagramModalItem(null)}
           onSelectDiagram={async ({ imagePath }) => {
             const currentItem = diagramModalItem;
