@@ -45,8 +45,9 @@ import {
   groupedSubLabelsIndic,
   imposeBooklet,
   imposeTwoUpCut,
-  paginate,
+  paginateSlices,
   sectionHeadingInstruction,
+  type PageSlice,
   resolveGroupedExerciseInstruction,
 } from "@/lib/layout";
 import { resolveBoardAndSubjectCode } from "@/lib/curriculumContract";
@@ -60,7 +61,73 @@ type Block = {
   groupId?: string;
   node?: ReactNode;
   render?: (ctx: { isContinuation: boolean }) => ReactNode;
+  /** May be cut across a page: between lines of its passage, or between rows of its options (see blockCuts). */
+  cuttable?: boolean;
+  /** Question label for the "Q. N (Continued)" banner over the part of a cut block that opens a page. */
+  continuationLabel?: string;
 };
+
+type LineBox = { top: number; bottom: number; n: number };
+
+/** Groups boxes that share a line (they overlap vertically), top to bottom, counting the boxes on each. */
+function clusterLines(rects: DOMRect[]): LineBox[] {
+  const lines: LineBox[] = [];
+  for (const r of [...rects].filter((r) => r.height > 0 && r.width > 0).sort((a, b) => a.top - b.top)) {
+    const last = lines[lines.length - 1];
+    if (last && r.top < last.bottom - 1) {
+      last.bottom = Math.max(last.bottom, r.bottom);
+      last.n += 1;
+    } else lines.push({ top: r.top, bottom: r.bottom, n: 1 });
+  }
+  return lines;
+}
+
+/**
+ * Where a block may be cut, in px from its top: between two lines of a passage (at least two lines stay on each
+ * side, so no line is left alone), and between two rows of options once the question and two options are above.
+ */
+function blockCuts(el: HTMLElement): number[] {
+  const top = el.getBoundingClientRect().top;
+  const cuts: number[] = [];
+  el.querySelectorAll<HTMLElement>("[data-split-lines]").forEach((box) => {
+    const range = document.createRange();
+    range.selectNodeContents(box);
+    const lines = clusterLines(Array.from(range.getClientRects()));
+    for (let k = 2; k <= lines.length - 2; k++) cuts.push((lines[k - 1].bottom + lines[k].top) / 2 - top);
+  });
+  el.querySelectorAll<HTMLElement>("[data-option-rows]").forEach((flow) => {
+    const rows = clusterLines(Array.from(flow.children).map((c) => c.getBoundingClientRect()));
+    let above = 0;
+    for (let k = 1; k < rows.length; k++) {
+      above += rows[k - 1].n;
+      if (above >= 2) cuts.push((rows[k - 1].bottom + rows[k].top) / 2 - top);
+    }
+  });
+  return cuts.filter((c) => c > 0).sort((a, b) => a - b);
+}
+
+/**
+ * The block as placed on a page: whole, or the part of it a page holds (`from`-`to`, measured px). A part is the
+ * whole block drawn in a window, so its lines wrap exactly as measured; the part that opens a page is headed
+ * "Q. N (Continued)".
+ */
+function sliceBlock(b: Block | undefined, sl: PageSlice, zoom: number, lang: PaperLanguage, isA5?: boolean): Block | null {
+  if (!b) return null;
+  if (sl.from === 0 && sl.to === undefined) return b;
+  return {
+    key: `${b.key}~${Math.round(sl.from)}`,
+    keepWithNext: false,
+    groupId: b.groupId,
+    render: ({ isContinuation }) => (
+      <>
+        {isContinuation && <ContinuationBanner label={b.continuationLabel} lang={lang} isA5={isA5} />}
+        <div style={{ overflow: "hidden", ...(sl.to !== undefined ? { height: `${(sl.to - sl.from) / zoom}px` } : null) }}>
+          <div style={{ marginTop: `${-sl.from / zoom}px` }}>{renderBlock(b, false)}</div>
+        </div>
+      </>
+    ),
+  };
+}
 
 function renderBlock(b: Block, isContinuation: boolean): ReactNode {
   if (b.render) return b.render({ isContinuation });
@@ -668,7 +735,7 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
           const textIndent = alt ? { marginLeft: altIndent } : undefined;
           const common = { slotMarks: totalQuestionMarks, marksStyle, compact: true, fit, isA5, lang: paperLang, dense: true } as const;
 
-          type Piece = { key: string; keepWithNext: boolean; tight?: boolean; render: (isContinuation: boolean) => ReactNode };
+          type Piece = { key: string; keepWithNext: boolean; tight?: boolean; cuttable?: boolean; render: (isContinuation: boolean) => ReactNode };
           const pieces: Piece[] = [];
 
           if (gridCols > 0) {
@@ -697,6 +764,7 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
               pieces.push({
                 key: partIdx === 0 ? `${prefix}-stem` : `${prefix}-stem-${partIdx}`,
                 keepWithNext: isLastPart ? after === "rows" || after === "parts" : isShortStemPart(part),
+                cuttable: true,
                 render: (isContinuation) => (
                   <>
                     {alt && partIdx === 0 && altHead(isContinuation)}
@@ -747,6 +815,7 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
               pieces.push({
                 key: `${prefix}-sp-${spIdx}`,
                 keepWithNext: false,
+                cuttable: true,
                 render: (isContinuation) => (
                   // sub-parts of the alternative line up with its indented text
                   <div style={alt ? { marginLeft: isA5 ? "1.5mm" : "2.5mm" } : undefined}>
@@ -779,6 +848,8 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
               keepWithNext: pc.keepWithNext,
               forceBreakBefore: idx === 0 && forceBreak,
               groupId: it.id,
+              cuttable: pc.cuttable,
+              continuationLabel: numberLabel,
               render: ({ isContinuation }) => <div style={{ paddingBottom: pad }}>{pc.render(isContinuation)}</div>,
             });
           });
@@ -1106,7 +1177,7 @@ export function PaperSheets({
   );
   const measureRef = useRef<HTMLDivElement>(null);
   const probeRef = useRef<HTMLDivElement>(null);
-  const [pages, setPages] = useState<number[][] | null>(null);
+  const [pages, setPages] = useState<PageSlice[][] | null>(null);
   const [fitStatus, setFitStatus] = useState<FitStatus | undefined>(undefined);
 
   const contentW = isA5 ? 148.5 - 2 * fit.padX : CONTENT_W_MM;
@@ -1126,14 +1197,16 @@ export function PaperSheets({
         ),
       );
       if (cancelled) return;
-      const heights = Array.from(root.children).map((c) => (c as HTMLElement).getBoundingClientRect().height);
+      const els = Array.from(root.children) as HTMLElement[];
+      const heights = els.map((c) => c.getBoundingClientRect().height);
       const pageH = probe.getBoundingClientRect().height;
-      const paged = paginate(
+      const paged = paginateSlices(
         heights,
         blocks.map((b) => b.keepWithNext),
         pageH - 6, // 6px safety buffer above bottom margin to prevent footer collision
         blocks.map((b) => b.groupId),
-        blocks.map((b) => Boolean(b.forceBreakBefore))
+        blocks.map((b) => Boolean(b.forceBreakBefore)),
+        blocks.map((b, i) => (b.cuttable && els[i] ? blockCuts(els[i]) : null))
       );
       if (fitActive && isWorksheet) {
         const next = nextFitLevel(fitLevel, paged.length, fitMaxPages, fitLevels.length - 1);
@@ -1195,14 +1268,19 @@ export function PaperSheets({
     }
   }, [pageCount, sheets.length, isBookletPrint, includeRoughWork, isEffectiveTwoUp, fitStatus, onInfo]);
 
+  // `pages` can be one render behind `blocks` (it is re-measured in an effect)
+  const pageBlocks = useMemo(
+    () => pages?.map((pg) => pg.map((sl) => sliceBlock(blocks[sl.i], sl, fit.zoom, paperLang, isA5)).filter((b): b is Block => b !== null)) ?? null,
+    [pages, blocks, fit.zoom, paperLang, isA5]
+  );
+
   const continuationKeys = useMemo(() => {
-    if (!pages) return new Set<string>();
+    if (!pageBlocks) return new Set<string>();
     const seenGroups = new Set<string>();
     const contKeys = new Set<string>();
-    for (const pageBlockIndices of pages) {
+    for (const pg of pageBlocks) {
       const groupsOnThisPage = new Set<string>();
-      for (const idx of pageBlockIndices) {
-        const b = blocks[idx];
+      for (const b of pg) {
         // `pages` can be one render behind `blocks` (it is re-measured in an effect)
         if (b?.groupId) {
           if (seenGroups.has(b.groupId) && !groupsOnThisPage.has(b.groupId)) {
@@ -1216,17 +1294,17 @@ export function PaperSheets({
       }
     }
     return contKeys;
-  }, [pages, blocks]);
+  }, [pageBlocks]);
 
   const pageEl = (i: number | null, key: string) =>
-    i === null || !pages ? (
+    i === null || !pageBlocks ? (
       <BlankPage key={key} showTemplate={includeRoughWork} isA5={isA5} />
     ) : (
       <Page
         key={key}
         n={i + 1}
         total={pageCount}
-        blocks={pages[i].map((b) => blocks[b]).filter(Boolean)}
+        blocks={pageBlocks[i] ?? []}
         isA5={isA5}
         continuationKeys={continuationKeys}
         watermark={effectiveWatermark}

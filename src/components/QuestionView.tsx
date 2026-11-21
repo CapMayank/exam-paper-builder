@@ -43,7 +43,7 @@ export function OptionFlow({ options, forceSingle, isA5, fontSize, marginTop }: 
   const minWidth = optionMinWidth(cleaned, forceSingle);
   const gapMm = isA5 ? 3 : 4;
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: `${isA5 ? 1 : 1.5}mm ${gapMm}mm`, marginTop }}>
+    <div data-option-rows style={{ display: "flex", flexWrap: "wrap", gap: `${isA5 ? 1 : 1.5}mm ${gapMm}mm`, marginTop }}>
       {cleaned.map((o, i) => (
         <div
           key={i}
@@ -76,6 +76,7 @@ function FigureOptionGrid({ options, isA5, fontSize, marginTop }: { options: str
   return (
     <div
       className="opt-figure-grid"
+      data-option-rows
       style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: `${isA5 ? 1.5 : 2}mm ${isA5 ? 3 : 4}mm`, marginTop, breakInside: "avoid" }}
     >
       {options.map((o, i) => {
@@ -411,7 +412,7 @@ function SingleQuestionBody({
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
           {/* flow-root keeps the right-floated marks tag inside this box when it drops to a line of its own */}
-          <div style={{ display: "flow-root", whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight, ...(isA5 && fit && fit.passageScale !== 1 && ((renderMode === "STEM_ONLY" && stemPart !== undefined) || isPassageType(q.type)) ? { fontSize: `${fit.passageScale}em` } : null) }}>
+          <div data-split-lines style={{ display: "flow-root", whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight, ...(isA5 && fit && fit.passageScale !== 1 && ((renderMode === "STEM_ONLY" && stemPart !== undefined) || isPassageType(q.type)) ? { fontSize: `${fit.passageScale}em` } : null) }}>
             <QuestionContent text={shownStem} isA5={isA5} />
             {marks !== undefined && marksStyle === "INLINE" && isLastStemPart && (
               <span style={{ float: "right", fontWeight: 700, fontSize: marksFontSize, marginLeft: "2mm", whiteSpace: "nowrap", color: "#334155" }}>

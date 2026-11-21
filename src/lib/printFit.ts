@@ -7,8 +7,11 @@
 
 export const BOOKLET_MAX_PAGES = 8;
 
-/** Smallest text scale ever applied (9.5pt A5 body text -> 8.55pt). */
-export const MIN_FONT_ZOOM = 0.9;
+/**
+ * Smallest text scale ever applied (9.5pt A5 body text -> 9pt). Below this a passage is hard to read, so a paper
+ * that still runs long takes another page instead; pages are filled by cutting passages and options across them.
+ */
+export const MIN_FONT_ZOOM = 0.95;
 /** Smallest line-height multiplier for body text. */
 export const MIN_LINE_HEIGHT = 1.2;
 /** Smallest gap, in mm, kept between consecutive questions so they stay visually separate. */
@@ -31,8 +34,8 @@ export type PrintFit = {
    */
   layoutZoom?: number;
   /**
-   * Extra text scale for reading passages and their stems at the tighter levels (long passages are what
-   * push a booklet over its page limit). Combined with `zoom` it never drops below ~0.8 of normal size.
+   * Extra text scale for reading passages and their stems. Kept at 1: passages are what students read most,
+   * so they are never printed smaller than the rest of the paper.
    */
   passageScale: number;
   /** A5 page padding in mm: left/right, top, bottom. */
@@ -45,9 +48,9 @@ export const FIT_LEVELS: readonly PrintFit[] = [
   { level: 0, gap: 1, lineHeight: 1.35, space: 1, zoom: 1, passageScale: 1, padX: 9, padTop: 8, padBottom: 14 },
   { level: 1, gap: 0.8, lineHeight: 1.3, space: 0.75, zoom: 1, passageScale: 1, padX: 8.5, padTop: 7.5, padBottom: 13.5 },
   { level: 2, gap: 0.65, lineHeight: 1.28, space: 0.55, zoom: 0.97, passageScale: 1, padX: 8, padTop: 7, padBottom: 13 },
-  { level: 3, gap: 0.5, lineHeight: 1.25, space: 0.4, zoom: 0.95, passageScale: 0.96, padX: 7.5, padTop: 6.5, padBottom: 12.5 },
-  { level: 4, gap: 0.4, lineHeight: 1.22, space: 0.3, zoom: 0.92, passageScale: 0.93, padX: 7, padTop: 6, padBottom: 12 },
-  { level: 5, gap: 0.3, lineHeight: MIN_LINE_HEIGHT, space: 0.2, zoom: MIN_FONT_ZOOM, passageScale: 0.9, padX: 6.5, padTop: 6, padBottom: 12 },
+  { level: 3, gap: 0.5, lineHeight: 1.25, space: 0.4, zoom: MIN_FONT_ZOOM, passageScale: 1, padX: 7.5, padTop: 6.5, padBottom: 12.5 },
+  { level: 4, gap: 0.4, lineHeight: 1.22, space: 0.3, zoom: MIN_FONT_ZOOM, passageScale: 1, padX: 7, padTop: 6, padBottom: 12 },
+  { level: 5, gap: 0.3, lineHeight: MIN_LINE_HEIGHT, space: 0.2, zoom: MIN_FONT_ZOOM, passageScale: 1, padX: 6.5, padTop: 6, padBottom: 12 },
 ];
 
 export const LAST_FIT_LEVEL = FIT_LEVELS.length - 1;

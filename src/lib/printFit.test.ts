@@ -115,12 +115,11 @@ describe("describeFit", () => {
 });
 
 describe("passage text scale", () => {
-  it("only shrinks passages at the tighter levels and never below a readable size", () => {
-    expect(FIT_LEVELS[0].passageScale).toBe(1);
-    for (let i = 1; i < FIT_LEVELS.length; i++) {
-      expect(FIT_LEVELS[i].passageScale).toBeLessThanOrEqual(FIT_LEVELS[i - 1].passageScale);
+  it("never prints passages smaller than the rest of the paper, nor text below 9pt on A5", () => {
+    for (const f of FIT_LEVELS) {
+      expect(f.passageScale).toBe(1);
+      expect(9.5 * f.zoom).toBeGreaterThanOrEqual(9);
     }
-    for (const f of FIT_LEVELS) expect(f.passageScale * f.zoom).toBeGreaterThanOrEqual(0.8);
   });
 });
 

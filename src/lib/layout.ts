@@ -1,13 +1,103 @@
 // Pure print-layout helpers: page packing and booklet imposition.
 
+/** A block, or the part of it between `from` and `to` (px from its top; `to` omitted = to its end), placed on a page. */
+export type PageSlice = { i: number; from: number; to?: number };
+
+/** Height of the "Q. N (Continued)" banner reserved when a question carries on at the top of a page. */
+const CONTINUATION_EXTRA_PX = 24;
+
 /**
  * Greedy-pack blocks into pages. Blocks flagged keepWithNext are glued to the block after them
  * (so a section heading or reading passage stem never sits alone at the bottom of a page).
- * A unit taller than a page gets a page to itself rather than looping forever.
- * When blockGroupIds is provided, splitting a question across a page break correctly reserves
- * height for the continuation header on the continuation page so no content is clipped.
- * Returns, per page, the indices of the blocks placed on it.
+ * When blockGroupIds is provided, a question that carries on onto a new page reserves height
+ * for its continuation banner there, so no content is clipped.
+ *
+ * `cutsAt[i]` lists the heights (px from the block's top, ascending) at which block i may be cut, between two
+ * lines of a passage or two rows of options. A block that does not fit the rest of the page is cut at the
+ * lowest point that still fits, and the remainder carries on overleaf, so the foot of the page is not left
+ * empty. A unit taller than a page is cut the same way, or gets a page to itself when it cannot be cut.
  */
+export function paginateSlices(
+  heights: number[],
+  keepWithNext: boolean[],
+  pageHeight: number,
+  blockGroupIds?: (string | null | undefined)[],
+  forceBreakBefore?: boolean[],
+  cutsAt?: (readonly number[] | null | undefined)[]
+): PageSlice[][] {
+  type Unit = { idx: number[]; groupId?: string | null; forceBreak?: boolean };
+  const units: Unit[] = [];
+  let cur: Unit | null = null;
+  heights.forEach((_, i) => {
+    if (!cur) cur = { idx: [], groupId: blockGroupIds ? blockGroupIds[i] : null, forceBreak: false };
+    cur.idx.push(i);
+    if (forceBreakBefore && forceBreakBefore[i]) cur.forceBreak = true;
+    if (!keepWithNext[i] || i === heights.length - 1) {
+      units.push(cur);
+      cur = null;
+    }
+  });
+
+  const pages: PageSlice[][] = [];
+  let page: PageSlice[] = [];
+  let used = 0;
+  const seenGroupsOnEarlierPages = new Set<string>();
+  const currentGroupsOnPage = new Set<string>();
+  const newPage = () => {
+    pages.push(page);
+    page = [];
+    used = 0;
+    currentGroupsOnPage.forEach((g) => seenGroupsOnEarlierPages.add(g));
+    currentGroupsOnPage.clear();
+  };
+
+  for (const u of units) {
+    if (u.forceBreak && page.length > 0) newPage();
+    let rest: PageSlice[] = u.idx.map((i) => ({ i, from: 0 }));
+    while (rest.length > 0) {
+      const extraH = u.groupId && seenGroupsOnEarlierPages.has(u.groupId) && !currentGroupsOnPage.has(u.groupId) ? CONTINUATION_EXTRA_PX : 0;
+      const place = (slices: PageSlice[], h: number) => {
+        page.push(...slices);
+        used += h + extraH;
+        if (u.groupId) currentGroupsOnPage.add(u.groupId);
+      };
+      const total = rest.reduce((sum, p) => sum + heights[p.i] - p.from, 0);
+      if (used + total + extraH <= pageHeight) {
+        place(rest, total);
+        break;
+      }
+      // Cut at the lowest point that still fits: inside the last block that reaches the foot of the page.
+      let acc = used + extraH;
+      let split: { k: number; cut: number; h: number } | null = null;
+      for (let k = 0; k < rest.length; k++) {
+        const p = rest[k];
+        for (const c of cutsAt?.[p.i] ?? []) {
+          if (c > p.from && acc + (c - p.from) <= pageHeight) split = { k, cut: c, h: acc - used - extraH + (c - p.from) };
+        }
+        const rem = heights[p.i] - p.from;
+        if (acc + rem > pageHeight) break;
+        acc += rem;
+      }
+      if (split) {
+        const { k, cut, h } = split;
+        place([...rest.slice(0, k), { i: rest[k].i, from: rest[k].from, to: cut }], h);
+        rest = [{ i: rest[k].i, from: cut }, ...rest.slice(k + 1)];
+        newPage();
+        continue;
+      }
+      if (page.length > 0) {
+        newPage();
+        continue;
+      }
+      place(rest, total); // taller than a page and cannot be cut: a page of its own
+      break;
+    }
+  }
+  if (page.length > 0) pages.push(page);
+  return pages;
+}
+
+/** paginateSlices without cuts: per page, the indices of the blocks placed on it. */
 export function paginate(
   heights: number[],
   keepWithNext: boolean[],
@@ -15,60 +105,7 @@ export function paginate(
   blockGroupIds?: (string | null | undefined)[],
   forceBreakBefore?: boolean[]
 ): number[][] {
-  const units: { idx: number[]; h: number; groupId?: string | null; forceBreak?: boolean }[] = [];
-  let cur: { idx: number[]; h: number; groupId?: string | null; forceBreak?: boolean } | null = null;
-  heights.forEach((h, i) => {
-    if (!cur) cur = { idx: [], h: 0, groupId: blockGroupIds ? blockGroupIds[i] : null, forceBreak: forceBreakBefore ? forceBreakBefore[i] : false };
-    cur.idx.push(i);
-    cur.h += h;
-    if (forceBreakBefore && forceBreakBefore[i]) {
-      cur.forceBreak = true;
-    }
-    if (!keepWithNext[i] || i === heights.length - 1) {
-      units.push(cur);
-      cur = null;
-    }
-  });
-
-  const pages: number[][] = [];
-  let page: number[] = [];
-  let used = 0;
-  const CONTINUATION_EXTRA_PX = 24; // Height of continuation banner
-  const seenGroupsOnEarlierPages = new Set<string>();
-  const currentGroupsOnPage = new Set<string>();
-
-  for (const u of units) {
-    const isContinuation = Boolean(
-      u.groupId &&
-      seenGroupsOnEarlierPages.has(u.groupId) &&
-      !currentGroupsOnPage.has(u.groupId)
-    );
-    const extraH = isContinuation ? CONTINUATION_EXTRA_PX : 0;
-
-    const shouldBreakForForced = u.forceBreak && page.length > 0;
-    const shouldBreakForHeight = page.length > 0 && used + u.h + extraH > pageHeight;
-
-    if (shouldBreakForForced || shouldBreakForHeight) {
-      pages.push(page);
-      page = [];
-      used = 0;
-      currentGroupsOnPage.forEach((g) => seenGroupsOnEarlierPages.add(g));
-      currentGroupsOnPage.clear();
-    }
-
-    const isContOnFreshPage = Boolean(
-      u.groupId &&
-      seenGroupsOnEarlierPages.has(u.groupId) &&
-      !currentGroupsOnPage.has(u.groupId)
-    );
-    const appliedExtraH = isContOnFreshPage ? CONTINUATION_EXTRA_PX : 0;
-
-    page.push(...u.idx);
-    used += u.h + appliedExtraH;
-    if (u.groupId) currentGroupsOnPage.add(u.groupId);
-  }
-  if (page.length > 0) pages.push(page);
-  return pages;
+  return paginateSlices(heights, keepWithNext, pageHeight, blockGroupIds, forceBreakBefore).map((pg) => pg.map((s) => s.i));
 }
 
 export type Sheet = {
