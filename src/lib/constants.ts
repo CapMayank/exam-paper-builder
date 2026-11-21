@@ -336,6 +336,23 @@ export function splitOutsideMath(str: string, delimiters: string[]): [string, st
   return null;
 }
 
+const COLUMN_I_HEADER = /\bcolumn\s*(?:i\b|a\b|1\b)|स्तम्भ\s*['"]?(?:अ|1)['"]?|खण्ड\s*['"]?(?:क|1)['"]?/i;
+const COLUMN_II_HEADER = /\bcolumn\s*(?:ii\b|b\b|2\b)|स्तम्भ\s*['"]?(?:ब|2)['"]?|खण्ड\s*['"]?(?:ख|2)['"]?/i;
+
+/**
+ * Which column a header line opens: "II", "I", or null when the line is not a header. A line naming both columns
+ * ("Match the items in Column A with ... Column B:") is the instruction, not a header.
+ */
+export function isColumnHeaderLine(line: string): "I" | "II" | null {
+  const ii = COLUMN_II_HEADER.test(line);
+  // strip Column II mentions before testing Column I, so "Column II" is never read as "Column I"
+  const i = COLUMN_I_HEADER.test(line.replace(new RegExp(COLUMN_II_HEADER.source, "gi"), " "));
+  if (ii && i) return null;
+  if (ii) return "II";
+  if (i) return "I";
+  return null;
+}
+
 export function extractColumnIItems(text?: string | null): string[] {
   if (!text) return [];
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
@@ -343,19 +360,17 @@ export function extractColumnIItems(text?: string | null): string[] {
   let inColumnI = false;
   let hasExplicitColumnI = false;
 
-  const col1Regex = /\bcolumn\s*(?:i\b|a\b|1\b)|स्तम्भ\s*['"]?(?:अ|1)['"]?|खण्ड\s*['"]?(?:क|1)['"]?/i;
-  const col2Regex = /\bcolumn\s*(?:ii\b|b\b|2\b)|स्तम्भ\s*['"]?(?:ब|2)['"]?|खण्ड\s*['"]?(?:ख|2)['"]?/i;
 
   for (const line of lines) {
     // Check col2 first so 'Column II' is never matched as 'Column I'
-    if (col2Regex.test(line)) {
+    if (isColumnHeaderLine(line) === "II") {
       inColumnI = false;
       if (hasExplicitColumnI) {
         break; // Stop collecting Column I items once Column II is reached
       }
       continue;
     }
-    if (col1Regex.test(line)) {
+    if (isColumnHeaderLine(line) === "I") {
       inColumnI = true;
       hasExplicitColumnI = true;
       continue;
@@ -379,16 +394,14 @@ export function extractColumnIIItems(text?: string | null): string[] {
   const items: string[] = [];
   let inColumnII = false;
 
-  const col2Regex = /\bcolumn\s*(?:ii\b|b\b|2\b)|स्तम्भ\s*['"]?(?:ब|2)['"]?|खण्ड\s*['"]?(?:ख|2)['"]?/i;
-  const col1Regex = /\bcolumn\s*(?:i\b|a\b|1\b)|स्तम्भ\s*['"]?(?:अ|1)['"]?|खण्ड\s*['"]?(?:क|1)['"]?/i;
 
   for (const line of lines) {
-    if (col2Regex.test(line)) {
+    if (isColumnHeaderLine(line) === "II") {
       inColumnII = true;
       continue;
     }
     // If another column header or new section appears, stop
-    if (inColumnII && col1Regex.test(line)) {
+    if (inColumnII && isColumnHeaderLine(line) === "I") {
       break;
     }
 
@@ -409,11 +422,10 @@ export function getMatchColumnInstruction(text?: string | null): string {
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   if (lines.length === 0) return "Match the items in Column I with Column II:";
 
-  const colHeaderRegex = /\bcolumn\s*(?:i\b|a\b|1\b)|स्तम्भ\s*['"]?(?:अ|1)['"]?|खण्ड\s*['"]?(?:क|1)['"]?/i;
   const instructionLines: string[] = [];
   for (const line of lines) {
     if (
-      colHeaderRegex.test(line) ||
+      isColumnHeaderLine(line) !== null ||
       /^(\([A-Za-z0-9ivxIVX\u0900-\u097F]+\)|[A-Za-z0-9ivxIVX\u0900-\u097F]+[.)\]:-])\s+/.test(line)
     ) {
       break;
