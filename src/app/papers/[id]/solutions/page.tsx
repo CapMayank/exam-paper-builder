@@ -398,7 +398,7 @@ export default function SolutionsPage({ params }: PageProps<"/papers/[id]/soluti
                     : `Q${item.label}`;
                   return (
                     <div
-                      key={item.number}
+                      key={item.itemId}
                       className="rounded border border-indigo-100 bg-white p-1.5 shadow-xs flex items-center justify-between"
                     >
                       <span className="font-bold text-slate-800 shrink-0">{cleanLabel}:</span>
