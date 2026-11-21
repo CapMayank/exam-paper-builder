@@ -44,6 +44,11 @@ export interface ImportedPaperQuestion {
 
 export { subpartsColumn } from "./questionWrite";
 
+/** A kindergarten activity's settings sent as an "activity" object: stored as the one options entry the printer reads. */
+function importedActivityOptions(raw: unknown): string[] | undefined {
+  return raw && typeof raw === "object" && !Array.isArray(raw) ? [JSON.stringify(raw)] : undefined;
+}
+
 function importedAttemptCount(raw: unknown): number | undefined {
   const n = Number(raw);
   return Number.isInteger(n) && n > 0 ? n : undefined;
@@ -487,7 +492,8 @@ export function parsePaperJson(jsonStr: string): PaperImportResult {
           : undefined;
       const chapterTitle = typeof q.chapterTitle === "string" ? q.chapterTitle.trim() : undefined;
       const difficulty = importedDifficulty(q.difficulty);
-      const options = Array.isArray(q.options) ? q.options.map((opt) => String(opt).trim()) : undefined;
+      const options =
+        importedActivityOptions(q.activity) ?? (Array.isArray(q.options) ? q.options.map((opt) => String(opt).trim()) : undefined);
       const answer = typeof q.answer === "string" ? q.answer.trim() : undefined;
 
       // OR question
@@ -505,7 +511,9 @@ export function parsePaperJson(jsonStr: string): PaperImportResult {
                 : chapterNumber,
             chapterTitle: typeof orObj.chapterTitle === "string" ? orObj.chapterTitle.trim() : chapterTitle,
             difficulty: orObj.difficulty === undefined ? difficulty : importedDifficulty(orObj.difficulty),
-            options: Array.isArray(orObj.options) ? orObj.options.map((opt) => String(opt).trim()) : undefined,
+            options:
+              importedActivityOptions(orObj.activity) ??
+              (Array.isArray(orObj.options) ? orObj.options.map((opt) => String(opt).trim()) : undefined),
             answer: typeof orObj.answer === "string" ? orObj.answer.trim() : undefined,
             attemptCount: importedAttemptCount(orObj.attemptCount),
             subparts: Array.isArray(orObj.subparts)
