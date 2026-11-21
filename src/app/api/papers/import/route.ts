@@ -9,6 +9,7 @@ import {
 } from "@/lib/constants";
 import { assertCanManageScope, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
+import { scrambleImportedPaper } from "@/lib/importScramble";
 import {
   importedQuestionUnits,
   matchQuestionToBlueprintSection,
@@ -20,10 +21,12 @@ import {
 
 export const POST = route(async (req, _params, user) => {
   const json = await req.json();
-  const { blueprintId, paperData } = json as {
+  const { blueprintId, paperData: rawPaperData } = json as {
     blueprintId: string;
     paperData: PaperImportData;
   };
+  // shuffle MCQ options and scramble match columns, so an answer's printed position follows no pattern
+  const paperData = rawPaperData && Array.isArray(rawPaperData.sections) ? scrambleImportedPaper(rawPaperData) : rawPaperData;
 
   if (!blueprintId) {
     throw new HttpError(400, "Please select a target blueprint.");

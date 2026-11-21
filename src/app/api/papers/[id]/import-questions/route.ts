@@ -4,6 +4,7 @@ import { HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
+import { scrambleImportedPaper } from "@/lib/importScramble";
 import {
   importedQuestionUnits,
   matchQuestionToBlueprintSection,
@@ -15,10 +16,12 @@ import {
 
 export const POST = route(async (req, { id }, user) => {
   const json = await req.json();
-  const { paperData, mode = "replace" } = json as {
+  const { paperData: rawPaperData, mode = "replace" } = json as {
     paperData: PaperImportData;
     mode?: "replace" | "append";
   };
+  // shuffle MCQ options and scramble match columns, so an answer's printed position follows no pattern
+  const paperData = rawPaperData && Array.isArray(rawPaperData.sections) ? scrambleImportedPaper(rawPaperData) : rawPaperData;
 
   const paper = await prisma.paper.findUnique({
     where: { id },
