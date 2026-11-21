@@ -73,6 +73,8 @@ export type Blueprint = {
   chapters: { chapterId: string; marks: number; unitKey?: string; unitTitle?: string; chapter: { id: string; number: number; title: string } }[];
   sections: Section[];
   _count: { papers: number };
+  /** Papers built from this blueprint, newest first (only on the blueprint list endpoint). */
+  papers?: { id: string; title: string; status: string; updatedAt: string }[];
 };
 
 export type BlueprintData = Blueprint;

@@ -9,6 +9,12 @@ import { ensureCurriculumSeeded } from "@/lib/curriculumInit";
 
 import { keepActive, scopeFromRequest } from "@/lib/viewScope";
 
+// the list also names the papers built from each blueprint, so the directory can flag blueprints in use
+const blueprintListInclude = {
+  ...blueprintInclude,
+  papers: { select: { id: true, title: true, status: true, updatedAt: true }, orderBy: { updatedAt: "desc" as const } },
+};
+
 export const GET = route(async (req) => {
   await ensureCurriculumSeeded().catch((err) => {
     console.error("❌ Failed to ensure curriculum is seeded:", err);
@@ -20,7 +26,7 @@ export const GET = route(async (req) => {
     session && session !== "ALL"
       ? { ...notWorksheet, academicSession: { in: [session.replace(/[–—]/g, "-"), session.replace(/-/g, "–")] } }
       : notWorksheet;
-  const list = await prisma.blueprint.findMany({ where, orderBy: { createdAt: "desc" }, include: blueprintInclude });
+  const list = await prisma.blueprint.findMany({ where, orderBy: { createdAt: "desc" }, include: blueprintListInclude });
   return keepActive(list, (b) => b.book, scopeFromRequest(req));
 });
 

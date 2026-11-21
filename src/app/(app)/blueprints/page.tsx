@@ -792,13 +792,18 @@ export default function BlueprintsPage() {
 
                   const manageable = canManageBlueprint(bp);
                   const isChecked = checked.has(bp.id);
+                  const paperCount = bp._count?.papers ?? 0;
+                  const finalCount = bp.papers?.filter((p) => p.status === "FINAL").length ?? 0;
                   return (
                     <li key={bp.id}>
                       <div
                         className={`group relative rounded-xl border p-3 transition ${manageable ? "pl-10" : ""} ${
-                          active ? "border-indigo-500/80 ring-1 ring-indigo-500/20 bg-indigo-50/90 text-indigo-950 shadow-2xs" : isChecked ? "border-indigo-300 bg-indigo-50/40" : "border-slate-200 hover:border-slate-300 bg-white"
+                          active ? "border-indigo-500/80 ring-1 ring-indigo-500/20 bg-indigo-50/90 text-indigo-950 shadow-2xs" : isChecked ? "border-indigo-300 bg-indigo-50/40" : paperCount > 0 ? "border-emerald-200 bg-emerald-50/50 hover:border-emerald-300" : "border-slate-200 hover:border-slate-300 bg-white"
                         }`}
                       >
+                        {paperCount > 0 && (
+                          <span aria-hidden className="absolute left-0 top-2.5 bottom-2.5 w-1 rounded-r-full bg-emerald-500" />
+                        )}
                         {manageable && (
                           <input
                             type="checkbox"
@@ -844,8 +849,18 @@ export default function BlueprintsPage() {
                         <span className="mt-0.5 block text-xs text-slate-600 truncate">
                           {bp.book.className} · {bp.book.subject}
                         </span>
-                        <span className="mt-1.5 block text-[11px] text-slate-500">
-                          {totalMarks} marks · {bp.durationMin} mins · {plural(bp.sections.length, "section")}
+                        <span className="mt-1.5 flex items-center justify-between gap-2 text-[11px] text-slate-500">
+                          <span className="truncate">
+                            {totalMarks} marks · {bp.durationMin} mins · {plural(bp.sections.length, "section")}
+                          </span>
+                          {paperCount > 0 && (
+                            <span
+                              className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800 ring-1 ring-inset ring-emerald-600/20"
+                              title={`${plural(paperCount, "paper")} built from this blueprint${finalCount ? ` (${finalCount} final)` : ""}`}
+                            >
+                              <FileText size={10} /> {plural(paperCount, "paper")}
+                            </span>
+                          )}
                         </span>
                       </button>
                       <div className="absolute right-2 top-2 z-10 flex gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity bg-white/95 rounded-lg p-0.5 shadow-2xs border border-slate-200/60">
@@ -994,6 +1009,78 @@ export default function BlueprintsPage() {
                     )}
                   </div>
                 </div>
+
+                {/* Papers built from this blueprint */}
+                {(() => {
+                  const papers = selected.papers ?? [];
+                  const count = selected._count?.papers ?? papers.length;
+                  if (count === 0) {
+                    return (
+                      <div className="flex items-center gap-2 rounded-xl border border-dashed border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-500">
+                        <FileText size={14} className="text-slate-400" />
+                        No papers have been built from this blueprint yet.
+                      </div>
+                    );
+                  }
+                  const finals = papers.filter((p) => p.status === "FINAL").length;
+                  const drafts = papers.length - finals;
+                  const shown = papers.slice(0, 5);
+                  return (
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
+                            <FileText size={14} />
+                          </span>
+                          <div>
+                            <p className="text-sm font-semibold text-emerald-950">
+                              {plural(count, "paper")} built from this blueprint
+                            </p>
+                            {papers.length > 0 && (
+                              <p className="text-[11px] text-emerald-800/80">
+                                {finals} final · {drafts} draft
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <Link href="/papers" className="inline-flex items-center gap-0.5 text-xs font-semibold text-emerald-800 hover:underline">
+                          All papers <ChevronRight size={13} />
+                        </Link>
+                      </div>
+                      {shown.length > 0 && (
+                        <ul className="mt-2.5 divide-y divide-emerald-100 overflow-hidden rounded-lg border border-emerald-100 bg-white">
+                          {shown.map((p) => (
+                            <li key={p.id}>
+                              <Link
+                                href={`/papers/${p.id}`}
+                                className="flex items-center justify-between gap-3 px-3 py-2 text-xs hover:bg-emerald-50/60"
+                              >
+                                <span className="truncate font-medium text-slate-800">{p.title}</span>
+                                <span className="flex shrink-0 items-center gap-2">
+                                  <span className="text-[10px] text-slate-500">
+                                    {new Date(p.updatedAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
+                                  </span>
+                                  <span
+                                    className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ring-1 ring-inset ${
+                                      p.status === "FINAL"
+                                        ? "bg-emerald-50 text-emerald-800 ring-emerald-600/20"
+                                        : "bg-amber-50 text-amber-800 ring-amber-600/20"
+                                    }`}
+                                  >
+                                    {p.status === "FINAL" ? "Final" : "Draft"}
+                                  </span>
+                                </span>
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {papers.length > shown.length && (
+                        <p className="mt-1.5 text-[11px] text-emerald-800/80">+{papers.length - shown.length} more</p>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* Summary Metrics */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
