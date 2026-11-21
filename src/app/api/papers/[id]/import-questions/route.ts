@@ -4,7 +4,7 @@ import { HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { assertCanModifyPaper, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
-import { scrambleImportedPaper } from "@/lib/importScramble";
+import { balancePaperAnswerPositions } from "@/lib/answerPositionsDb";
 import {
   importedQuestionUnits,
   matchQuestionToBlueprintSection,
@@ -16,12 +16,10 @@ import {
 
 export const POST = route(async (req, { id }, user) => {
   const json = await req.json();
-  const { paperData: rawPaperData, mode = "replace" } = json as {
+  const { paperData, mode = "replace" } = json as {
     paperData: PaperImportData;
     mode?: "replace" | "append";
   };
-  // shuffle MCQ options and scramble match columns, so an answer's printed position follows no pattern
-  const paperData = rawPaperData && Array.isArray(rawPaperData.sections) ? scrambleImportedPaper(rawPaperData) : rawPaperData;
 
   const paper = await prisma.paper.findUnique({
     where: { id },
@@ -62,6 +60,7 @@ export const POST = route(async (req, { id }, user) => {
   // All or nothing: a failure part-way must not leave the paper emptied or half-imported.
   let importedCount = 0;
   const figuresNeeded: { questionId: string; description: string }[] = [];
+  const createdIds: string[] = [];
   await prisma.$transaction(
     async (tx) => {
     // If mode === "replace", remove existing placed questions
@@ -149,6 +148,7 @@ export const POST = route(async (req, { id }, user) => {
             },
           });
           orQuestionId = createdOr.id;
+          createdIds.push(createdOr.id);
         if (q.orQuestion.figure) figuresNeeded.push({ questionId: createdOr.id, description: q.orQuestion.figure });
         }
 
@@ -174,6 +174,7 @@ export const POST = route(async (req, { id }, user) => {
           },
         });
 
+        createdIds.push(createdQ.id);
         if (q.figure) figuresNeeded.push({ questionId: createdQ.id, description: q.figure });
         await tx.paperQuestion.create({
           data: {
@@ -200,6 +201,10 @@ export const POST = route(async (req, { id }, user) => {
     },
     { timeout: 60000 },
   );
+
+  // spread the answers: MCQ options and match columns rearranged (keys moved with them), so a pattern in
+  // the pasted reply does not reach the printed paper
+  await balancePaperAnswerPositions(id, { shuffleUnanswered: true, freshIds: createdIds });
 
   await recordAudit(user, "PAPER_UPDATE", "PAPER", id, {
     action: "PAPER_QUESTIONS_IMPORT",

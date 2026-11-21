@@ -9,7 +9,7 @@ import {
 } from "@/lib/constants";
 import { assertCanManageScope, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
-import { scrambleImportedPaper } from "@/lib/importScramble";
+import { balancePaperAnswerPositions } from "@/lib/answerPositionsDb";
 import {
   importedQuestionUnits,
   matchQuestionToBlueprintSection,
@@ -21,12 +21,10 @@ import {
 
 export const POST = route(async (req, _params, user) => {
   const json = await req.json();
-  const { blueprintId, paperData: rawPaperData } = json as {
+  const { blueprintId, paperData } = json as {
     blueprintId: string;
     paperData: PaperImportData;
   };
-  // shuffle MCQ options and scramble match columns, so an answer's printed position follows no pattern
-  const paperData = rawPaperData && Array.isArray(rawPaperData.sections) ? scrambleImportedPaper(rawPaperData) : rawPaperData;
 
   if (!blueprintId) {
     throw new HttpError(400, "Please select a target blueprint.");
@@ -197,6 +195,10 @@ export const POST = route(async (req, _params, user) => {
       totalImportedQuestions++;
     }
   }
+
+  // spread the answers: MCQ options and match columns rearranged (keys moved with them), so a pattern in
+  // the pasted reply does not reach the printed paper
+  await balancePaperAnswerPositions(paper.id, { shuffleUnanswered: true });
 
   await recordAudit(user, "PAPER_CREATE", "PAPER", paper.id, {
     action: "PAPER_IMPORT",

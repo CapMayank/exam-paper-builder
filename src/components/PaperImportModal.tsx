@@ -260,12 +260,12 @@ export function PaperImportModal({
       if (!res.ok) throw new Error(data.error || "Answer key generation failed");
       const failed = Array.isArray(data.failed) ? data.failed.length : 0;
       if (failed > 0) {
-        toast.info(`Answer key: ${data.saved?.length ?? 0} written, ${failed} still missing. Open Solutions to retry them.`);
+        toast.info(`Answer key: ${data.saved?.length ?? 0} written, ${failed} still missing. Open Tools → Answer Key in the workbench to retry them.`);
       } else if ((data.saved?.length ?? 0) > 0) {
         toast.success(`Answer key written for ${data.saved.length} question(s).`);
       }
     } catch (err) {
-      toast.info(`Questions are imported, but the answer key was not written: ${(err as Error).message} Open Solutions to retry.`);
+      toast.info(`Questions are imported, but the answer key was not written: ${(err as Error).message} Open Tools → Answer Key in the workbench to retry.`);
     }
   }
 

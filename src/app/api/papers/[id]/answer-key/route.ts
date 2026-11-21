@@ -4,6 +4,7 @@ import { recordAudit } from "@/lib/audit";
 import { generateAnswerKeyWithGemini } from "@/lib/gemini";
 import { canModifyPaper, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
+import { balancePaperAnswerPositions } from "@/lib/answerPositionsDb";
 
 const answerFields = { id: true, type: true, text: true, optionsJson: true, subpartsJson: true, answer: true } as const;
 
@@ -37,12 +38,19 @@ export const POST = route(async (req, { id }, user) => {
     throw new HttpError(403, "Only the paper's creator, a teacher assigned to this class and subject, or an Administrator can generate missing answers.");
   }
 
+  // { questionIds } limits the run to those questions, so the workbench can write the key in small steps and
+  // show progress; without it every question still missing an answer is done
+  const body = (await req.json().catch(() => null)) as { questionIds?: unknown } | null;
+  const only = Array.isArray(body?.questionIds) ? new Set(body.questionIds.filter((x): x is string => typeof x === "string")) : null;
+
   const marksById = new Map<string, number>();
-  const questions = paper.items.flatMap((it) => {
-    const list = it.orQuestion ? [it.question, it.orQuestion] : [it.question];
-    for (const q of list) marksById.set(q.id, it.section.marksEach);
-    return list;
-  });
+  const questions = paper.items
+    .flatMap((it) => {
+      const list = it.orQuestion ? [it.question, it.orQuestion] : [it.question];
+      for (const q of list) marksById.set(q.id, it.section.marksEach);
+      return list;
+    })
+    .filter((q) => !only || only.has(q.id));
 
   const customKey = req.headers.get("x-gemini-api-key");
   const result = await fillMissingAnswers({
@@ -104,5 +112,8 @@ export const POST = route(async (req, { id }, user) => {
     });
   }
 
-  return { ...result, paper: await loadPaperView(id) };
+  // with the keys known, spread the correct answers (moves only this paper's own questions, keys moved with them)
+  const balanced = result.saved.length > 0 ? await balancePaperAnswerPositions(id) : { changedQuestions: [] };
+
+  return { ...result, rebalanced: balanced.changedQuestions.length, paper: await loadPaperView(id) };
 });

@@ -37,6 +37,8 @@ import { DiagramSearchModal } from "@/components/DiagramSearchModal";
 import { FigureStudio } from "@/components/figure-studio";
 import { PaperImportModal } from "@/components/PaperImportModal";
 import { PaperPreflightModal } from "@/components/PaperPreflightModal";
+import { AnswerKeyPanel } from "@/components/AnswerKeyPanel";
+import { answerKeyRows } from "@/lib/answerKeyStatus";
 import { AICoverageModal } from "@/components/AICoverageModal";
 import { PaperSheets } from "@/components/PaperSheets";
 import { PaperSnapshotDrawer } from "@/components/PaperSnapshotDrawer";
@@ -162,6 +164,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   const [sectionAutofilling, setSectionAutofilling] = useState<string | null>(null);
   const [sectionAiModalSection, setSectionAiModalSection] = useState<Section | null>(null);
   const [preflightOpen, setPreflightOpen] = useState(false);
+  const [answerKeyOpen, setAnswerKeyOpen] = useState(false);
   const [coverageOpen, setCoverageOpen] = useState(false);
   const [autosaveStatus, setAutosaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -859,6 +862,22 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                       <div className="text-[11px] text-slate-500">Bloom&apos;s cognitive &amp; rigor check</div>
                     </div>
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setToolsMenuOpen(false);
+                      setAnswerKeyOpen(true);
+                    }}
+                    className="w-full flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition"
+                  >
+                    <div className="rounded-md bg-emerald-50 p-1.5 text-emerald-700">
+                      <KeyRound size={14} />
+                    </div>
+                    <div>
+                      <div className="font-semibold text-slate-900">Answer Key</div>
+                      <div className="text-[11px] text-slate-500">See what is missing, write it with AI, spread answers</div>
+                    </div>
+                  </button>
                 </div>
               )}
             </div>
@@ -1253,6 +1272,30 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                 </button>
               )}
             </section>
+
+            {paper.items.length > 0 &&
+              (() => {
+                const keyRows = answerKeyRows(paper).filter((r) => r.status !== "not-needed");
+                const done = keyRows.filter((r) => r.status === "answered").length;
+                return (
+                  <section className="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="flex items-center gap-1.5 font-semibold text-slate-800">
+                        <KeyRound size={13} className="text-emerald-700" /> Answer key
+                      </span>
+                      <span className={done === keyRows.length ? "font-medium text-emerald-700" : "font-medium text-slate-600"}>
+                        {done} / {keyRows.length}
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                      <div className="h-full bg-emerald-500" style={{ width: `${keyRows.length ? (done / keyRows.length) * 100 : 100}%` }} />
+                    </div>
+                    <button type="button" onClick={() => setAnswerKeyOpen(true)} className="btn btn-sm w-full justify-center text-xs">
+                      {done === keyRows.length ? "Review answer key" : `${keyRows.length - done} without an answer · Open`}
+                    </button>
+                  </section>
+                );
+              })()}
           </div>
 
           {/* TAB 2: Paper Header & Print Settings */}
@@ -2602,6 +2645,9 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
           onClose={() => setCoverageOpen(false)}
           onApplied={(p) => adopt(p)}
         />
+      )}
+      {answerKeyOpen && paper && (
+        <AnswerKeyPanel paper={paper} canEdit={canEditPaper} onPaper={(p) => adopt(p)} onClose={() => setAnswerKeyOpen(false)} />
       )}
       {preflightOpen && paper && (
         <PaperPreflightModal
