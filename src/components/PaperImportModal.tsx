@@ -30,6 +30,7 @@ import {
   type PaperVerificationReport,
 } from "@/lib/paperImport";
 import type { Blueprint, Chapter, PaperData } from "@/lib/types";
+import { autoDrawFigures, createDefaultAutoDrawDeps, type AutoDrawItem } from "@/lib/autoDrawFigures";
 
 interface PaperImportModalProps {
   isOpen: boolean;
@@ -50,6 +51,17 @@ export function PaperImportModal({
   onPaperUpdated,
 }: PaperImportModalProps) {
   const toast = useToast();
+
+  /** Draws imported figure descriptions in the background; the import itself is already saved. */
+  function startAutoDraw(figures: AutoDrawItem[] | undefined, onDone?: () => void, doneNote = "") {
+    if (!figures?.length) return;
+    toast.info(`Drawing ${figures.length} figure(s) from their descriptions…`);
+    void autoDrawFigures(figures, createDefaultAutoDrawDeps()).then(({ drawn, skipped }) => {
+      if (drawn > 0) toast.success(`Drew ${drawn} figure(s)${skipped ? `; ${skipped} still need one` : ""}. Check them before printing.${doneNote}`);
+      else toast.info(`${skipped} question(s) need a figure: set an AI key to auto-draw, or add them from the question.`);
+      onDone?.();
+    });
+  }
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [activeTab, setActiveTab] = useState<"import" | "examples">("import");
@@ -286,6 +298,7 @@ export function PaperImportModal({
         toast.success(`Imported ${data.importedCount} question(s) into ${currentPaper.title}`);
         if (writeAnswers) await writeAnswerKey(currentPaper.id);
         onPaperUpdated?.();
+        startAutoDraw(data.figuresNeeded, onPaperUpdated);
         onClose();
       } else {
         // Create New Paper from Import
@@ -302,6 +315,7 @@ export function PaperImportModal({
         toast.success(`Created "${data.paper?.title || "Exam Paper"}" matching blueprint!`);
         if (writeAnswers && data.paperId) await writeAnswerKey(data.paperId);
         onSuccess?.(data.paperId);
+        startAutoDraw(data.figuresNeeded, undefined, " Refresh the paper to see them.");
         onClose();
       }
     } catch (err) {

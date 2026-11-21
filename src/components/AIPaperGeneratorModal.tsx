@@ -26,11 +26,9 @@ import {
 import { MathText } from "@/components/MathText";
 import { QuestionContent } from "@/components/QuestionContent";
 import { ErrorBanner, Modal, Spinner, useToast } from "@/components/ui";
-import { renderDocToBlob } from "@/components/figure-studio/render";
-import { embedSceneInPng } from "@/components/figure-studio/pngMeta";
-import type { Doc, GridSettings, SceneFile } from "@/components/figure-studio/types";
 import { answerStageSummary, runAnswerStages, type AnswerStageResult } from "@/lib/answerStage";
-import { api, imageUrl, retryTransient, uploadImage } from "@/lib/client";
+import { api, imageUrl, retryTransient } from "@/lib/client";
+import { renderFigureAndUpload } from "@/lib/autoDrawFigures";
 import {
   cleanMatchItem,
   cleanOptionText,
@@ -350,17 +348,11 @@ export function AIPaperGeneratorModal({
             if (!q.imagePath && q.figureDoc && Array.isArray(q.figureDoc.objects) && q.figureDoc.objects.length > 0) {
               setCurrentActivity("Rendering vector diagrams in Figure Studio...");
               try {
-                const doc: Doc = {
-                  w: q.figureDoc.canvasWidth || 640,
-                  h: q.figureDoc.canvasHeight || 360,
-                  bg: "white",
-                  objects: q.figureDoc.objects as any,
-                };
-                const grid: GridSettings = { style: "dots", size: 20, include: false };
-                const rawPng = await renderDocToBlob(doc, grid, 2);
-                const sceneData: SceneFile = { v: 1, doc, grid };
-                const finalBlob = await embedSceneInPng(rawPng, JSON.stringify(sceneData));
-                const imagePath = await uploadImage(finalBlob);
+                const imagePath = await renderFigureAndUpload(
+                  q.figureDoc.objects,
+                  q.figureDoc.canvasWidth || 640,
+                  q.figureDoc.canvasHeight || 360,
+                );
                 (q as any).imagePath = imagePath;
               } catch (renderErr) {
                 console.warn("Failed to render vector diagram to PNG:", renderErr);

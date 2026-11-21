@@ -1,5 +1,5 @@
 import { body, route } from "@/lib/api";
-import { promptToFigureSceneWithGemini } from "@/lib/gemini";
+import { normalizeFigureObjects, promptToFigureSceneWithGemini } from "@/lib/gemini";
 import { z } from "zod";
 
 const figureSchema = z.object({
@@ -20,7 +20,7 @@ export const POST = route(async (req) => {
   return {
     success: result.success,
     isMock: result.isMock,
-    objects: result.data?.objects || [],
+    objects: normalizeFigureObjects(result.data?.objects || [], data.canvasWidth, data.canvasHeight),
     summary: result.data?.summary || "",
   };
 });
