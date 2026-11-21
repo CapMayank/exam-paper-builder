@@ -71,6 +71,7 @@ export const QUESTION_TYPE_LABEL: Record<QuestionType, string> = {
   KDG_PREWRITING: "Pre-Writing Strokes (lines, curves, zig-zag)",
 };
 
+import { optionTextOnly, splitOptionFigure } from "./optionFigure";
 import {
   detectPaperLanguage as detectPaperLangModule,
   getPaperLocale,
@@ -730,10 +731,19 @@ export function resolvePaperExamType(paper: {
 
 const MCQ_LETTERS = "ABCDEF";
 
+/** An option's text (no figure marker) and figure, for an answer that points at it. */
+function optionAt(options: string[], idx: number): { optionText?: string; optionFigure?: string } {
+  const raw = options[idx];
+  if (!raw) return { optionText: undefined };
+  const { figure, text } = splitOptionFigure(raw);
+  const t = cleanOptionText(text);
+  return { optionText: t || undefined, ...(figure ? { optionFigure: figure } : {}) };
+}
+
 export function normalizeMcqAnswer(
   rawAnswer: string | null | undefined,
   options: string[] = [],
-): { letter: string; optionText?: string; display: string } {
+): { letter: string; optionText?: string; optionFigure?: string; display: string } {
   const trimmed = (rawAnswer ?? "").trim();
   if (!trimmed) return { letter: "", optionText: undefined, display: "—" };
 
@@ -750,7 +760,7 @@ export function normalizeMcqAnswer(
     if (idx >= 0) {
       return {
         letter: upper,
-        optionText: options[idx] ? cleanOptionText(options[idx]) : undefined,
+        ...optionAt(options, idx),
         display: `(${upper})`,
       };
     }
@@ -759,7 +769,7 @@ export function normalizeMcqAnswer(
       const letter = MCQ_LETTERS[num - 1];
       return {
         letter,
-        optionText: options[num - 1] ? cleanOptionText(options[num - 1]) : undefined,
+        ...optionAt(options, num - 1),
         display: `(${letter})`,
       };
     }
@@ -775,7 +785,7 @@ export function normalizeMcqAnswer(
     if (idx >= 0) {
       return {
         letter: candidateLetter,
-        optionText: options[idx] ? cleanOptionText(options[idx]) : cleanOptionText(prefixMatch[2]),
+        ...(options[idx] ? optionAt(options, idx) : { optionText: cleanOptionText(prefixMatch[2]) }),
         display: `(${candidateLetter})`,
       };
     }
@@ -783,12 +793,14 @@ export function normalizeMcqAnswer(
 
   // Match against option text
   const cleanTrimmed = cleanOptionText(trimmed).toLowerCase();
-  const matchIdx = options.findIndex((o) => cleanOptionText(o).trim().toLowerCase() === cleanTrimmed);
+  const matchIdx = cleanTrimmed
+    ? options.findIndex((o) => cleanOptionText(optionTextOnly(o)).trim().toLowerCase() === cleanTrimmed)
+    : -1;
   if (matchIdx >= 0 && matchIdx < MCQ_LETTERS.length) {
     const letter = MCQ_LETTERS[matchIdx];
     return {
       letter,
-      optionText: cleanOptionText(options[matchIdx]),
+      ...optionAt(options, matchIdx),
       display: `(${letter})`,
     };
   }
@@ -809,7 +821,7 @@ export function canonicalMcqAnswer(answer: string | null | undefined, options: s
   const raw = (answer ?? "").trim();
   if (!raw || options.length === 0) return answer ?? "";
   const target = cleanOptionText(raw).trim().toLowerCase();
-  const byText = options.findIndex((o) => cleanOptionText(o).trim().toLowerCase() === target);
+  const byText = target ? options.findIndex((o) => cleanOptionText(optionTextOnly(o)).trim().toLowerCase() === target) : -1;
   if (byText >= 0 && byText < MCQ_LETTERS.length) return MCQ_LETTERS[byText];
   const idx = MCQ_LETTERS.indexOf(normalizeMcqAnswer(raw, options).letter);
   return idx >= 0 && idx < options.length ? MCQ_LETTERS[idx] : answer ?? "";

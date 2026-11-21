@@ -78,6 +78,8 @@ import { FigureStudio } from "./figure-studio";
 import { AIQuestionImproverModal } from "./AIQuestionImproverModal";
 import { TableModal } from "./TableModal";
 import { BookFigureModal } from "./BookFigureModal";
+import { OptionFigureButton } from "./OptionFigureButton";
+import { joinOptionFigure, splitOptionFigure } from "@/lib/optionFigure";
 import { ErrorBanner, Field } from "./ui";
 
 /** Pre-primary worksheets are written on: they keep blank answer space under each question. */
@@ -1260,15 +1262,31 @@ export function QuestionForm({
                       {sp.options.map((opt, optIdx) => (
                         <div key={optIdx} className="flex items-center gap-1.5">
                           <span className="text-xs font-bold text-slate-500 w-5">({String.fromCharCode(97 + optIdx)})</span>
+                          <OptionFigureButton
+                            figure={splitOptionFigure(opt).figure}
+                            label={`(${String.fromCharCode(97 + optIdx)})`}
+                            onError={setError}
+                            onChange={(fig) =>
+                              setSubparts((subs) =>
+                                subs.map((s, j) =>
+                                  j === i
+                                    ? { ...s, options: (s.options || []).map((o2, k) => (k === optIdx ? joinOptionFigure(fig, splitOptionFigure(o2).text) : o2)) }
+                                    : s
+                                )
+                              )
+                            }
+                          />
                           <MathRichEditor
                             className="flex-1 text-xs"
-                            value={opt}
-                            placeholder={`Option (${String.fromCharCode(97 + optIdx)})`}
+                            value={splitOptionFigure(opt).text}
+                            placeholder={splitOptionFigure(opt).figure ? "Caption (optional)" : `Option (${String.fromCharCode(97 + optIdx)})`}
                             onActivate={activate({ type: "text" })}
                             onChange={(v) =>
                               setSubparts((subs) =>
                                 subs.map((s, j) =>
-                                  j === i ? { ...s, options: (s.options || []).map((o2, k) => (k === optIdx ? v : o2)) } : s
+                                  j === i
+                                    ? { ...s, options: (s.options || []).map((o2, k) => (k === optIdx ? joinOptionFigure(splitOptionFigure(o2).figure, v) : o2)) }
+                                    : s
                                 )
                               )
                             }
@@ -1306,12 +1324,18 @@ export function QuestionForm({
                   onChange={() => setAnswer(LETTERS[i])}
                 />
                 <span className="w-5 text-sm font-medium">{LETTERS[i]}</span>
+                <OptionFigureButton
+                  figure={splitOptionFigure(o).figure}
+                  label={LETTERS[i]}
+                  onError={setError}
+                  onChange={(fig) => setOptions((opts) => opts.map((x, j) => (j === i ? joinOptionFigure(fig, splitOptionFigure(x).text) : x)))}
+                />
                 <MathRichEditor
                   className="flex-1"
-                  value={o}
-                  placeholder={`Option ${LETTERS[i]}`}
+                  value={splitOptionFigure(o).text}
+                  placeholder={splitOptionFigure(o).figure ? `Caption under the picture (optional)` : `Option ${LETTERS[i]}`}
                   onActivate={activate({ type: "option", index: i })}
-                  onChange={(v) => setOptions((opts) => opts.map((x, j) => (j === i ? v : x)))}
+                  onChange={(v) => setOptions((opts) => opts.map((x, j) => (j === i ? joinOptionFigure(splitOptionFigure(x).figure, v) : x)))}
                 />
                 <button
                   type="button"

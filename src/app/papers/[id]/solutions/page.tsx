@@ -5,6 +5,7 @@ import Link from "next/link";
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import { MathText } from "@/components/MathText";
 import { QuestionContent } from "@/components/QuestionContent";
+import { ResolvedOptionText } from "@/components/QuestionView";
 import { api, imageUrl } from "@/lib/client";
 import {
   cleanOptionText,
@@ -575,7 +576,7 @@ function QuestionSolutionItem({
                       return (
                         <span>
                           {resolved.letter && <b>({resolved.letter.toLowerCase()})</b>}{" "}
-                          <MathText text={cleanOptionText(resolved.optionText || sp.answer)} />
+                          <ResolvedOptionText figure={resolved.optionFigure} text={resolved.optionText} fallback={sp.answer} />
                         </span>
                       );
                     })()
@@ -621,7 +622,7 @@ function QuestionSolutionItem({
                   return (
                     <span>
                       {resolved.letter && <b>({resolved.letter.toLowerCase()})</b>}{" "}
-                      <MathText text={cleanOptionText(resolved.optionText || q.answer)} />
+                      <ResolvedOptionText figure={resolved.optionFigure} text={resolved.optionText} fallback={q.answer} />
                     </span>
                   );
                 })()

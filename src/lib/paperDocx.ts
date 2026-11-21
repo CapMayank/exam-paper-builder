@@ -53,6 +53,7 @@ import { decomposeForSlot } from "@/lib/subpartExtractor";
 import { prisma } from "@/lib/prisma";
 import { parseSubparts, parseSubpartsPayload, type SubPart } from "@/lib/types";
 import { UPLOAD_DIR } from "@/lib/uploads";
+import { figureOptionColumns, fitInBox, hasFigureOptions, imageDimensions, splitOptionFigure } from "@/lib/optionFigure";
 import {
   computeDisplayedPaperNumbering,
   mergeSameFormRows,
@@ -61,6 +62,62 @@ import {
 } from "@/lib/layout";
 import { resolveBoardAndSubjectCode } from "@/lib/curriculumContract";
 import { sectionLetter as titleSectionLetter } from "@/lib/sectionLetter";
+
+/**
+ * Picture options as a borderless grid: label, then the picture fitted into the same box for every option, then any
+ * caption. Four across for up to four short options, otherwise two across (same rule as the printed paper).
+ */
+function renderFigureOptionGrid(
+  opts: string[],
+  labels: string[],
+  paragraphs: (Paragraph | Table)[],
+  indent: number,
+  font: string,
+) {
+  const cols = figureOptionColumns(opts);
+  const box = cols === 4 ? { w: 100, h: 85 } : { w: 170, h: 125 };
+  const none = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
+  const cell = (raw: string | undefined, idx: number) => {
+    if (raw === undefined) return new TableCell({ width: { size: 100 / cols, type: WidthType.PERCENTAGE }, children: [new Paragraph({})] });
+    const { figure, text } = splitOptionFigure(cleanOptionText(raw));
+    const caption = cleanOptionText(text);
+    const children: Paragraph[] = [];
+    let picture: ImageRun | TextRun | null = null;
+    if (figure) {
+      const ext = path.extname(figure).toLowerCase().replace(".", "");
+      try {
+        if (["png", "jpg", "jpeg", "gif"].includes(ext)) {
+          const buf = fs.readFileSync(path.join(UPLOAD_DIR, figure));
+          const size = fitInBox(imageDimensions(buf), box.w, box.h);
+          picture = new ImageRun({ data: buf, transformation: size, type: ext === "jpeg" ? "jpg" : (ext as "png" | "jpg" | "gif") });
+        }
+      } catch {
+        // missing file: fall through to the placeholder
+      }
+      picture ??= new TextRun({ text: `[Picture: ${figure}]`, italics: true, size: 16, color: "64748B", font });
+    }
+    children.push(
+      new Paragraph({
+        spacing: { after: 20 },
+        children: [new TextRun({ text: `${labels[idx] ?? `(${idx + 1})`} `, bold: true, font }), ...(picture ? [picture] : [])],
+      }),
+    );
+    if (caption) children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 40 }, children: formatMathTextRuns(caption, { font }) }));
+    return new TableCell({ width: { size: 100 / cols, type: WidthType.PERCENTAGE }, children });
+  };
+  const rows: TableRow[] = [];
+  for (let i = 0; i < opts.length; i += cols) {
+    rows.push(new TableRow({ cantSplit: true, children: Array.from({ length: cols }, (_, k) => cell(opts[i + k], i + k)) }));
+  }
+  paragraphs.push(
+    new Table({
+      width: { size: 92, type: WidthType.PERCENTAGE },
+      indent: { size: indent, type: WidthType.DXA },
+      borders: { top: none, bottom: none, left: none, right: none, insideHorizontal: none, insideVertical: none },
+      rows,
+    }),
+  );
+}
 
 function renderQuestionOptions(
   opts: string[],
@@ -73,6 +130,10 @@ function renderQuestionOptions(
   const letters = lang === "sa" || lang === "hi"
     ? ["अ", "ब", "स", "द", "य", "र"]
     : ["A", "B", "C", "D", "E", "F"];
+  if (hasFigureOptions(opts)) {
+    renderFigureOptionGrid(opts, letters.map((l) => `(${l})`), paragraphs, indent, font);
+    return;
+  }
   const maxOptionLen = Math.max(...opts.map((o) => String(o).length));
   const isMathComplex = opts.some(
     (o) => String(o).includes("\\frac") || String(o).includes("\\sqrt") || String(o).includes("\n"),
@@ -138,7 +199,9 @@ function renderSubpartsDocx(
       const letters = ["a", "b", "c", "d", "e", "f"];
       const maxOptLen = Math.max(...sp.options.map((o: unknown) => String(o).length));
       const singleCol = maxOptLen > 35;
-      if (singleCol) {
+      if (hasFigureOptions(sp.options)) {
+        renderFigureOptionGrid(sp.options.map(String), letters.map((l) => `(${l})`), paragraphs, childIndent, font);
+      } else if (singleCol) {
         for (let oIdx = 0; oIdx < sp.options.length; oIdx++) {
           const optText = `(${letters[oIdx] ?? oIdx + 1}) ${cleanOptionText(String(sp.options[oIdx]))}`;
           paragraphs.push(

@@ -23,6 +23,7 @@ import {
 import { getInternalChoiceSeparatorLabel } from "@/lib/internalChoiceRules";
 import { isTextPredominantlySanskrit, type PaperLanguage } from "@/lib/localization";
 import type { PrintFit } from "@/lib/printFit";
+import { figureOptionColumns, hasFigureOptions, splitOptionFigure } from "@/lib/optionFigure";
 import { optionLabel, optionMinWidth, splitStemParagraphs, subpartGridColumns } from "@/lib/compactLayout";
 import { partsAttemptCount, showPartMarks } from "@/lib/marksDisplay";
 import type { QuestionDto } from "@/lib/types";
@@ -37,6 +38,7 @@ const ROMAN_LOWER = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(v
  * option too long for its share takes a row of its own instead of wrapping inside a narrow column.
  */
 export function OptionFlow({ options, forceSingle, isA5, fontSize, marginTop }: { options: string[]; forceSingle?: boolean; isA5?: boolean; fontSize: string; marginTop: string }) {
+  if (hasFigureOptions(options)) return <FigureOptionGrid options={options} isA5={isA5} fontSize={fontSize} marginTop={marginTop} />;
   const cleaned = options.map((o) => cleanOptionText(o));
   const minWidth = optionMinWidth(cleaned, forceSingle);
   const gapMm = isA5 ? 3 : 4;
@@ -61,6 +63,57 @@ export function OptionFlow({ options, forceSingle, isA5, fontSize, marginTop }: 
         </div>
       ))}
     </div>
+  );
+}
+
+/**
+ * Picture options ("Which figure shows a rhombus?"): labelled pictures in a grid, four or two across, every picture
+ * fitted into the same box so none looks bigger than the others. A caption, when the option has one, prints below.
+ */
+function FigureOptionGrid({ options, isA5, fontSize, marginTop }: { options: string[]; isA5?: boolean; fontSize: string; marginTop: string }) {
+  const cols = figureOptionColumns(options, isA5);
+  const boxMm = cols === 4 ? (isA5 ? 20 : 28) : isA5 ? 28 : 38;
+  return (
+    <div
+      className="opt-figure-grid"
+      style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: `${isA5 ? 1.5 : 2}mm ${isA5 ? 3 : 4}mm`, marginTop, breakInside: "avoid" }}
+    >
+      {options.map((o, i) => {
+        const { figure, text } = splitOptionFigure(cleanOptionText(o));
+        const caption = cleanOptionText(text);
+        return (
+          <div key={i} className="opt-text" style={{ display: "flex", alignItems: "flex-start", gap: "1.5mm", fontSize, minWidth: 0 }}>
+            {/* fixed label width so every picture box is the same size, (m) as wide as (i) */}
+            <span style={{ fontWeight: 600, flex: "0 0 auto", width: "1.9em" }}>{optionLabel(i)}</span>
+            <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center" }}>
+              {figure ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={imageUrl(figure)} alt={caption || `Option ${optionLabel(i)}`} style={{ width: "100%", height: `${boxMm}mm`, objectFit: "contain" }} />
+              ) : null}
+              {caption && (
+                <div style={{ marginTop: figure ? "0.8mm" : 0, textAlign: "center", overflowWrap: "anywhere" }}>
+                  <MathText text={caption} />
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** The correct option as an answer key shows it: its picture (small) when it has one, then its text. */
+export function ResolvedOptionText({ figure, text, fallback }: { figure?: string; text?: string; fallback: string }) {
+  const shown = figure ? text ?? "" : text || fallback;
+  return (
+    <>
+      {figure && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={imageUrl(figure)} alt="Correct option" style={{ display: "inline-block", height: "12mm", maxWidth: "24mm", objectFit: "contain", verticalAlign: "middle" }} />
+      )}
+      {shown && <> <MathText text={cleanOptionText(shown)} /></>}
+    </>
   );
 }
 
@@ -484,7 +537,7 @@ function SingleQuestionBody({
           <span style={{ fontWeight: 600 }}>{effectiveLang === "sa" ? "उत्तरम्:" : effectiveLang === "hi" ? "उत्तर:" : "Answer:"}</span>{" "}
           {isMcq && normalizedMcq ? (
             <span>
-              ({normalizedMcq.letter.toLowerCase()}) <MathText text={normalizedMcq.optionText ?? q.answer} />
+              ({normalizedMcq.letter.toLowerCase()})<ResolvedOptionText figure={normalizedMcq.optionFigure} text={normalizedMcq.optionText} fallback={q.answer} />
             </span>
           ) : (
             <MathText text={q.answer} />
