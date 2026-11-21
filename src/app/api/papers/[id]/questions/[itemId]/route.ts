@@ -1,3 +1,4 @@
+import { figureSceneForEdit } from "@/lib/figureBrief";
 import { isTypeAllowed, orTypeRefusal, withEffectiveAllowedTypes } from "@/lib/sectionTypes";
 import { body, HttpError, route, type SessionUser } from "@/lib/api";
 import { applySlotDeltas } from "@/lib/sectionPools";
@@ -254,10 +255,12 @@ async function editOrQuestion(item: EditableItem, mode: "UPDATE_MASTER" | "FORK_
     if (inFinalPapers > 0) {
       throw new HttpError(409, "This question is part of another finalised paper. Choose 'This paper only' instead.");
     }
-    await prisma.question.update({ where: { id: or.id }, data });
+    await prisma.question.update({ where: { id: or.id }, data: { ...data, ...figureSceneForEdit(or.figureScene, or.imagePath, qInput.imagePath) } });
     return;
   }
-  const forked = await prisma.question.create({ data: { ...questionCopyData(or), ...data, createdById: user.id } });
+  const forked = await prisma.question.create({
+    data: { ...questionCopyData(or), ...data, ...figureSceneForEdit(or.figureScene, or.imagePath, qInput.imagePath), createdById: user.id },
+  });
   await prisma.paperQuestion.update({ where: { id: item.id }, data: { orQuestionId: forked.id } });
 }
 
@@ -324,7 +327,10 @@ export const PUT = route(async (req, { id, itemId }, user) => {
         "This question is part of another finalised paper. Choose 'This paper only' instead.",
       );
     }
-    await prisma.question.update({ where: { id: item.questionId }, data });
+    await prisma.question.update({
+      where: { id: item.questionId },
+      data: { ...data, ...figureSceneForEdit(item.question.figureScene, item.question.imagePath, qInput.imagePath) },
+    });
     if (item.orQuestionId && item.orQuestion && item.orQuestion.chapterId !== qInput.chapterId && orChapterRequiredFor(item)) {
       await prisma.paperQuestion.update({
         where: { id: itemId },
@@ -335,7 +341,12 @@ export const PUT = route(async (req, { id, itemId }, user) => {
     // FORK_COPY: create a fresh question entry and re-point this paper's slot
     // the copy keeps what the form does not edit (figure, marking notes, provenance)
     const forked = await prisma.question.create({
-      data: { ...questionCopyData(item.question), ...data, createdById: user.id },
+      data: {
+        ...questionCopyData(item.question),
+        ...data,
+        ...figureSceneForEdit(item.question.figureScene, item.question.imagePath, qInput.imagePath),
+        createdById: user.id,
+      },
     });
     const updateData: { questionId: string; orQuestionId?: null } = { questionId: forked.id };
     if (item.orQuestionId && item.orQuestion && item.orQuestion.chapterId !== qInput.chapterId && orChapterRequiredFor(item)) {

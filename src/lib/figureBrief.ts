@@ -60,3 +60,21 @@ export function sceneAfterImageChange(scene: string | null, imagePath: string | 
     : { ...b, needsFigure: true, autoDrawn: false };
   return JSON.stringify(next);
 }
+
+/**
+ * The figureScene change for a full question edit that sends the image as it now is (`newImagePath`; undefined =
+ * not sent): `{ figureScene }` when the image changed, `{}` when it did not.
+ */
+export function figureSceneForEdit(
+  scene: string | null,
+  oldImagePath: string | null,
+  newImagePath: string | null | undefined,
+): { figureScene?: string | null } {
+  if (newImagePath === undefined || (newImagePath ?? null) === (oldImagePath ?? null)) return {};
+  return { figureScene: sceneAfterImageChange(scene, newImagePath, undefined) };
+}
+
+/** An auto-drawn figure is attached only to a question that still has no image: it never replaces a teacher's. */
+export function canAttachAutoDrawn(existingImagePath: string | null): boolean {
+  return !existingImagePath;
+}

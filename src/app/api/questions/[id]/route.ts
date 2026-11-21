@@ -1,4 +1,4 @@
-import { sceneAfterImageChange } from "@/lib/figureBrief";
+import { canAttachAutoDrawn, sceneAfterImageChange } from "@/lib/figureBrief";
 import { isTypeAllowed, withEffectiveAllowedTypes } from "@/lib/sectionTypes";
 import { body, HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
@@ -52,6 +52,9 @@ export const PATCH = route(async (req, { id }, user) => {
   if (input.showGrid !== undefined) data.showGrid = input.showGrid;
   if (input.passageGroupId !== undefined) data.passageGroupId = input.passageGroupId;
   if (input.imagePath !== undefined) data.imagePath = input.imagePath;
+  if (input.figureAutoDrawn === true && !canAttachAutoDrawn(existing.imagePath)) {
+    throw new HttpError(409, "This question already has a figure; the auto-drawn one was not attached.");
+  }
   if (input.imagePath !== undefined || input.figureAutoDrawn !== undefined) {
     const imagePath = input.imagePath !== undefined ? input.imagePath : existing.imagePath;
     data.figureScene = sceneAfterImageChange(existing.figureScene, imagePath, input.figureAutoDrawn);

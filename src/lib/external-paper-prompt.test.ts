@@ -159,6 +159,10 @@ describe("per-type examples and figures", () => {
     expect(reply).not.toContain('"type": "MCQ"');
   });
 
+  it("figure rule excludes activity and draw questions", () => {
+    expect(prompt).toMatch(/Never add "figure" to KDG_\* activities/);
+  });
+
   it("asks for a figure description wherever a question refers to one", () => {
     expect(prompt).toContain("Never write 'in the figure' without a \"figure\"");
   });

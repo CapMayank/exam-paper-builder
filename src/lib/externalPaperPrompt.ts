@@ -164,7 +164,7 @@ export function buildExternalPaperPrompt(ctx: ExternalPromptContext): ExternalPr
     "",
     "## Question formats",
     ...formatBlocks,
-    `- Figures: if and only if a question refers to a figure, diagram, graph, map or picture, add "figure": "<exact description: what to draw, every label, every value/measurement, nothing that gives away the answer>". Never write 'in the figure' without a "figure". The school's system draws it from your description.`,
+    `- Figures: if and only if a question refers to a figure, diagram, graph, map or picture, add "figure": "<exact description: what to draw, every label, every value/measurement, nothing that gives away the answer>". Never write 'in the figure' without a "figure". The school's system draws it from your description. Never add "figure" to KDG_* activities (their pictures come from the picture set) or to DRAW questions (the student draws).`,
     "",
     "## Sections and questions to write",
     sectionBlocks.join("\n"),

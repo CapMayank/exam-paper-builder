@@ -591,9 +591,12 @@ export function parsePaperJson(jsonStr: string): PaperImportResult {
       });
 
       const figureNote = `${secTitle} Question ${qIdx + 1}: mentions a figure but has no "figure" description.`;
-      const mainMentions = mentionsFigure(qText) || (subparts ?? []).some((sp) => mentionsFigure(sp.text));
+      // activities draw their pictures from the clipart set, and in DRAW the student makes the figure
+      const figureFree = qType.startsWith("KDG_") || qType === "DRAW";
+      const mainMentions = !figureFree && (mentionsFigure(qText) || (subparts ?? []).some((sp) => mentionsFigure(sp.text)));
       if (mainMentions && !importedFigure(q.figure)) warnings.push(figureNote);
-      if (orQuestion && !orQuestion.figure && (mentionsFigure(orQuestion.text) || (orQuestion.subparts ?? []).some((sp) => mentionsFigure(sp.text)))) {
+      const orFigureFree = /^KDG_|^DRAW$/.test(orQuestion?.type ?? qType);
+      if (orQuestion && !orFigureFree && !orQuestion.figure && (mentionsFigure(orQuestion.text) || (orQuestion.subparts ?? []).some((sp) => mentionsFigure(sp.text)))) {
         warnings.push(`${figureNote.replace(/:/, " (OR):")}`);
       }
 

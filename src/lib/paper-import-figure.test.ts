@@ -50,3 +50,14 @@ describe("figure descriptions in pasted replies", () => {
     expect(missingFigureWarnings(res.warnings)).toHaveLength(0);
   });
 });
+
+describe("figure warnings skip activity and draw questions", () => {
+  test("kindergarten and DRAW questions mentioning pictures get no missing-figure warning", () => {
+    const res = parse([
+      { text: "Count the pictures and write the number.", type: "KDG_COUNT_ITEMS", marks: 2 },
+      { text: "Colour the picture.", type: "KDG_COLOUR", marks: 2 },
+      { text: "Draw a labelled diagram of the human heart.", type: "DRAW", marks: 3 },
+    ]);
+    expect(missingFigureWarnings(res.warnings)).toHaveLength(0);
+  });
+});
