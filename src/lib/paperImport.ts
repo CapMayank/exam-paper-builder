@@ -1017,9 +1017,7 @@ export function importedQuestionUnits(
     const byMarks = q.marks > sec.marksEach && sec.marksEach > 0 ? Math.round(q.marks / sec.marksEach) : 1;
     return Math.max(1, Math.min(pairs > 0 ? pairs : byMarks, sec.count));
   }
-  if (Array.isArray(q.subparts) && q.subparts.length > 0 && sec.count >= q.subparts.length) {
-    return q.subparts.length;
-  }
+  // Any other question fills one slot, sub-parts or not; the paper counts it the same way (blueprint.ts getItemUnits).
   return 1;
 }
 

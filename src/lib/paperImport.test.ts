@@ -1055,7 +1055,7 @@ describe("Paper Import & Blueprint Verification Engine", () => {
       expect(q.subparts![1].options).toEqual(["आँख", "कान", "नाक", "स्पर्श"]);
     });
 
-    it("supports MP Board multi-subpart objective questions seamlessly fulfilling section quota", () => {
+    it("counts a multi-subpart objective question as one slot, the way the paper counts it", () => {
       const bp: Blueprint = {
         id: "bp_mp",
         name: "MP Board Class 12 Hindi Blueprint",
@@ -1117,9 +1117,10 @@ describe("Paper Import & Blueprint Verification Engine", () => {
       expect(report.isValid).toBe(true);
       expect(report.canProceed).toBe(true);
 
+      // the paper fills one slot per question (only a match question spans slots), so the check must too
       const secMcq = report.sections.find((s) => s.blueprintSectionId === "sec_mcq");
-      expect(secMcq?.status).toBe("MATCH");
-      expect(secMcq?.importedCount).toBe(6);
+      expect(secMcq?.status).toBe("UNDERFILLED");
+      expect(secMcq?.importedCount).toBe(1);
 
       const secShort = report.sections.find((s) => s.blueprintSectionId === "sec_short");
       expect(secShort?.status).toBe("MATCH");

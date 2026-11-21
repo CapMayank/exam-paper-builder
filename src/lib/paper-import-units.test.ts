@@ -92,3 +92,25 @@ describe("paper completeness engine", () => {
     expect(res.blueprintCompliance.unfulfilledSections).toEqual([]);
   });
 });
+
+describe("a question with sub-parts fills one slot, as it does on the paper", () => {
+  const sec = { type: "VERY_SHORT", count: 12, marksEach: 2 };
+  it("a 2-mark question with (a) and (b) counts once", () => {
+    const q = { type: "VERY_SHORT", text: "Answer:", marks: 2, subparts: [{ text: "a", marks: 1 }, { text: "b", marks: 1 }] };
+    expect(importedQuestionUnits(q as never, sec)).toBe(1);
+  });
+  it("12 questions, 4 of them with sub-parts, match a quota of 12", () => {
+    const bp = {
+      name: "BP", book: { title: "Sci" }, chapters: [{ chapterId: "c1", marks: 24 }],
+      sections: [{ id: "s1", title: "Very Short", type: "VERY_SHORT", count: 12, marksEach: 2, position: 0, instructions: "" }],
+    } as unknown as Blueprint;
+    const questions = Array.from({ length: 12 }, (_, i) => ({
+      text: `q${i}`, type: "VERY_SHORT", marks: 2,
+      ...(i < 4 ? { subparts: [{ text: "a", marks: 1 }, { text: "b", marks: 1 }] } : {}),
+    }));
+    const parsed = parsePaperJson(JSON.stringify({ title: "T", sections: [{ title: "Very Short", questions }] }));
+    const report = verifyPaperAgainstBlueprint(parsed.paper, bp, chapters);
+    expect(report.sections[0].importedCount).toBe(12);
+    expect(report.sections[0].status).toBe("MATCH");
+  });
+});
