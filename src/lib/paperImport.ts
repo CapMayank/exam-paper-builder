@@ -38,11 +38,28 @@ export interface ImportedPaperQuestion {
     answer?: string;
     attemptCount?: number;
     subparts?: ImportedPaperSubpart[];
+    /** What the question's figure shows, for the school's system to draw (or the teacher to add). */
+    figure?: string;
   };
   subparts?: ImportedPaperSubpart[];
+  /** What the question's figure shows, for the school's system to draw (or the teacher to add). */
+  figure?: string;
 }
 
 export { subpartsColumn } from "./questionWrite";
+
+/** A figure description from a pasted reply: a non-empty string, trimmed. */
+function importedFigure(raw: unknown): string | undefined {
+  return typeof raw === "string" && raw.trim() ? raw.trim() : undefined;
+}
+
+/** Whether question text refers to a figure the paper must show ("figure out" does not count). */
+export function mentionsFigure(text: string): boolean {
+  return (
+    /\b(?:figure(?!\s+out)|figures|diagram|graph|picture)s?\b|\b(?:given|outline|following)\s+map\b|\bmap\s+of\b/i.test(text) ||
+    /चित्र|आकृति/.test(text)
+  );
+}
 
 /** A kindergarten activity's settings sent as an "activity" object: stored as the one options entry the printer reads. */
 function importedActivityOptions(raw: unknown): string[] | undefined {
@@ -516,6 +533,7 @@ export function parsePaperJson(jsonStr: string): PaperImportResult {
               (Array.isArray(orObj.options) ? orObj.options.map((opt) => String(opt).trim()) : undefined),
             answer: typeof orObj.answer === "string" ? orObj.answer.trim() : undefined,
             attemptCount: importedAttemptCount(orObj.attemptCount),
+            figure: importedFigure(orObj.figure),
             subparts: Array.isArray(orObj.subparts)
               ? orObj.subparts.map((sp: Record<string, unknown>, spIdx: number) => ({
                   label: typeof sp.label === "string" && sp.label.trim() ? sp.label.trim() : `(${spIdx + 1})`,
@@ -569,7 +587,15 @@ export function parsePaperJson(jsonStr: string): PaperImportResult {
         attemptCount: importedAttemptCount(q.attemptCount),
         orQuestion,
         subparts,
+        figure: importedFigure(q.figure),
       });
+
+      const figureNote = `${secTitle} Question ${qIdx + 1}: mentions a figure but has no "figure" description.`;
+      const mainMentions = mentionsFigure(qText) || (subparts ?? []).some((sp) => mentionsFigure(sp.text));
+      if (mainMentions && !importedFigure(q.figure)) warnings.push(figureNote);
+      if (orQuestion && !orQuestion.figure && (mentionsFigure(orQuestion.text) || (orQuestion.subparts ?? []).some((sp) => mentionsFigure(sp.text)))) {
+        warnings.push(`${figureNote.replace(/:/, " (OR):")}`);
+      }
 
       totalQuestions++;
       totalMarks += qMarks;
