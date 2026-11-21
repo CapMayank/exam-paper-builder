@@ -11,6 +11,7 @@
 import { QUESTION_TYPE_LABEL, type QuestionType } from "./constants";
 import { levelMeaning, planSlotDifficulties, resolveDifficultyProfile, type DifficultyInput } from "./difficultyProfiles";
 import type { PaperAutogenPlan } from "./paperAutogen";
+import { typeFormat } from "./externalTypeFormats";
 import { getSubjectPromptDirectives, slotQuestionForm, UNIVERSAL_QUALITY_RULES } from "./subjectPrompts";
 
 export interface ExternalPromptContext {
@@ -32,8 +33,6 @@ export interface ExternalPrompt {
   totalMarks: number;
 }
 
-const PASSAGE = new Set(["CASE_STUDY", "UNSEEN_PASSAGE", "REFERENCE_CONTEXT"]);
-
 function languageRule(language: string): string {
   if (language === "hi") {
     return "Hindi in Devanagari script, MP Board style. Do not write in English. Match columns use 'स्तम्भ क' / 'स्तम्भ ख'.";
@@ -43,30 +42,6 @@ function languageRule(language: string): string {
   }
   if (language === "bilingual") return "Bilingual: each question and option in English, with its Hindi translation in parentheses.";
   return "English.";
-}
-
-/** How a question of this type has to be written, in the shape the importer reads. */
-function typeFormat(type: string): string {
-  switch (type) {
-    case "MCQ":
-      return 'MCQ: "options" holds exactly 4 distinct options (text only, no "(a)" prefixes). Exactly one option is correct; the other three are plausible distractors built on common student misconceptions.';
-    case "ASSERTION_REASON":
-      return 'ASSERTION_REASON: "text" holds "Assertion (A): ..." and "Reason (R): ..." on separate lines; "options" holds the 4 standard options: "Both (A) and (R) are true and (R) is the correct explanation of (A).", "Both (A) and (R) are true, but (R) is not the correct explanation of (A).", "(A) is true, but (R) is false.", "(A) is false, but (R) is true."';
-    case "TRUE_FALSE":
-      return 'TRUE_FALSE: "text" is one declarative statement only; do not append "True or False?". "options" is [].';
-    case "FILL_BLANK":
-      return 'FILL_BLANK: "text" has the blank as "________" (8 underscores). The blank holds the tested term and nothing else in the sentence gives it away. "options" is [].';
-    case "MATCH_COLUMN":
-      return 'MATCH_COLUMN: the whole section is ONE question. "text" holds the instruction and the Column I items labelled (A), (B), (C)...; "options" holds the Column II items in shuffled order (as many as Column I). Its "marks" is the section total.';
-    case "CASE_STUDY":
-      return 'CASE_STUDY: "text" holds the case/source (a short original scenario, extract, data table or situation); "subparts" holds the graded sub-questions, each {"label": "(i)", "text": ..., "marks": n}, marks adding up to the question\'s marks. A 1-mark subpart may be an MCQ with its own 4 "options".';
-    case "UNSEEN_PASSAGE":
-      return 'UNSEEN_PASSAGE: "text" holds a NEW, ORIGINAL passage of 120-180 words (not from any textbook or published text) followed by nothing else; "subparts" holds the sub-questions, each answerable from the passage alone, marks adding up to the question\'s marks. 1-mark subparts are MCQs with 4 "options".';
-    case "REFERENCE_CONTEXT":
-      return 'REFERENCE_CONTEXT: "text" holds the exact extract from the prescribed lesson/poem and the instruction; "subparts" (if the marks are split) hold the sub-questions.';
-    default:
-      return `${type}: "options" is []. Phrase the question so the expected length matches the marks; when points are wanted, say how many (e.g. "Give any three reasons"). When the question lists several items to do (features to locate on a map, parts to label, tasks (i), (ii), (iii)), keep only the instruction in "text" and give each item as its own entry in "subparts" ({"label": "(i)", "text": "...", "marks": 1}); never run them together in one paragraph or number them "(1)", "(2)" inside "text". If only some are to be attempted ("any four of the following"), list one more than needed and set "attemptCount" on the question.`;
-  }
 }
 
 /** The prompt text plus counts, for the plan's still-empty slots. */
@@ -126,34 +101,34 @@ export function buildExternalPaperPrompt(ctx: ExternalPromptContext): ExternalPr
     return [...head.filter(Boolean), ...slotLines].join("\n");
   });
 
-  const exampleSection = sections[0];
-  const example = exampleSection
-    ? JSON.stringify(
-        {
-          title: plan.title,
-          sections: [
-            {
-              title: exampleSection.sectionTitle,
-              questions: [
-                {
-                  text: "…",
-                  type: exampleSection.sectionType,
-                  marks: exampleSection.sectionType === "MATCH_COLUMN" ? exampleSection.slots.length * exampleSection.marksEach : exampleSection.marksEach,
-                  chapterNumber: exampleSection.slots[0]?.chapterNumber ?? 1,
-                  chapterTitle: exampleSection.slots[0]?.chapterTitle ?? "…",
-                  difficulty: "MEDIUM",
-                  options: exampleSection.sectionType === "MCQ" ? ["…", "…", "…", "…"] : [],
-                  ...(PASSAGE.has(exampleSection.sectionType) ? { subparts: [{ label: "(i)", text: "…", marks: 1 }] } : {}),
-                  ...(anyChoice ? { orQuestion: { text: "… (only where internal choice is required)", marks: exampleSection.marksEach, chapterNumber: exampleSection.slots[0]?.chapterNumber ?? 1, difficulty: "MEDIUM", options: [] } } : {}),
-                },
-              ],
-            },
-          ],
-        },
-        null,
-        2,
-      )
-    : "{}";
+  const envelope = JSON.stringify(
+    {
+      title: plan.title,
+      sections: [{ title: "<section title, copied exactly>", questions: ["<one object per question, in the shape shown for its type above>"] }],
+    },
+    null,
+    2,
+  );
+  const orExample = JSON.stringify(
+    {
+      orQuestion: {
+        text: "<alternative question>",
+        type: "<same type as the main question>",
+        marks: "<same marks>",
+        chapterNumber: "<chapter number>",
+        chapterTitle: "<chapter title>",
+        difficulty: "<same difficulty>",
+        options: [],
+        subparts: [],
+      },
+    },
+    null,
+    2,
+  );
+  const formatBlocks = [...typesUsed].flatMap((t) => {
+    const f = typeFormat(t, plan.language);
+    return [`- ${f.rule}`, "```json", JSON.stringify(f.example, null, 2), "```"];
+  });
 
   const subjectRules = [
     ...directives.solvabilityRules,
@@ -188,7 +163,8 @@ export function buildExternalPaperPrompt(ctx: ExternalPromptContext): ExternalPr
     ctx.teacherFocus ? `- Teacher's instructions: ${ctx.teacherFocus}` : "",
     "",
     "## Question formats",
-    ...[...typesUsed].map((t) => `- ${typeFormat(t)}`),
+    ...formatBlocks,
+    `- Figures: if and only if a question refers to a figure, diagram, graph, map or picture, add "figure": "<exact description: what to draw, every label, every value/measurement, nothing that gives away the answer>". Never write 'in the figure' without a "figure". The school's system draws it from your description.`,
     "",
     "## Sections and questions to write",
     sectionBlocks.join("\n"),
@@ -199,8 +175,9 @@ export function buildExternalPaperPrompt(ctx: ExternalPromptContext): ExternalPr
     "## Reply format",
     `Reply with ONE JSON object in a \`\`\`json code block and nothing else. Use this shape:`,
     "```json",
-    example,
+    envelope,
     "```",
+    anyChoice ? ["Where internal choice is REQUIRED, add to that question:", "```json", orExample, "```"].join("\n") : "",
     `- One entry in "sections" per section above, with "title" copied exactly, and its questions in the order listed (${questionCount} question(s) in all).`,
     `- Copy "type", "marks", "chapterNumber", "chapterTitle" and "difficulty" from the question's line above.`,
     `- Leave out "answer" everywhere.`,

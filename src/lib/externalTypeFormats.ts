@@ -68,7 +68,7 @@ const CLIPART_RULE = `Pictures come only from this picture set; use these ids ex
 /** Kindergarten activities: the "activity" object is the activity's settings, printed by the app. */
 function activityFormat(type: string, what: string, activity: Record<string, unknown>): TypeFormat {
   return {
-    rule: `${type}: ${what} "text" is the instruction for the child (short, simple words). "activity" holds the activity's settings in exactly the shape shown; replace every <...> and keep every key. ${CLIPART_RULE} "options" is [].`,
+    rule: `${type}: ${what} "text" is the instruction for the child (short, simple words). "activity" holds the activity's settings in exactly the shape shown; replace every <...> and keep every key; write numbers and true/false without quotes. ${CLIPART_RULE} "options" is [].`,
     example: { ...base(type, "<instruction for the child>"), options: [], activity },
     needsFigure: false,
   };

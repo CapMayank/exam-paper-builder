@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildExternalPaperPrompt } from "./externalPaperPrompt";
 import { planPaperWithComponents, type PaperAutogenInput } from "./paperAutogen";
 import { extractPaperJsonFromReply, parsePaperImport, subpartsColumn } from "./paperImport";
+import { typeFormat } from "./externalTypeFormats";
 
 const paper: PaperAutogenInput = {
   id: "p1",
@@ -128,5 +129,44 @@ describe("map work and 'any N of' lists", () => {
     expect(q.attemptCount).toBe(2);
     expect(JSON.parse(subpartsColumn(q.subparts, q.attemptCount))).toMatchObject({ attemptCount: 2 });
     expect(JSON.parse(subpartsColumn(q.subparts, undefined))).toHaveLength(3);
+  });
+});
+
+describe("per-type examples and figures", () => {
+  const plan = planPaperWithComponents({
+    ...paper,
+    blueprint: {
+      ...paper.blueprint,
+      sections: [
+        { id: "sA", title: "Section A", type: "MCQ", count: 2, marksEach: 1 },
+        { id: "sM", title: "Section M", type: "MATCH_COLUMN", count: 4, marksEach: 1 },
+        { id: "sL", title: "Section L", type: "LONG", count: 1, marksEach: 5, orChoiceMode: "REQUIRED" } as never,
+      ],
+    },
+  });
+  const { prompt } = buildExternalPaperPrompt({ plan });
+
+  it("each used type gets its rule and example", () => {
+    expect(prompt).toContain(typeFormat("MATCH_COLUMN", "en").rule);
+    expect(prompt).toContain('"<Column II item>"');
+    expect(prompt).toContain('"<option>"');
+    expect(prompt).not.toContain(typeFormat("CASE_STUDY", "en").rule);
+  });
+
+  it("reply envelope no longer carries the first section's type", () => {
+    const reply = prompt.slice(prompt.indexOf("## Reply format"));
+    expect(reply).toContain('"sections"');
+    expect(reply).not.toContain('"type": "MCQ"');
+  });
+
+  it("asks for a figure description wherever a question refers to one", () => {
+    expect(prompt).toContain("Never write 'in the figure' without a \"figure\"");
+  });
+
+  it("OR example carries type, chapterTitle and subparts when choice is required", () => {
+    expect(prompt).toContain("Internal choice REQUIRED");
+    const or = prompt.slice(prompt.indexOf('"orQuestion": {'));
+    expect(prompt).toContain('"orQuestion": {');
+    for (const k of ['"type"', '"chapterTitle"', '"subparts"']) expect(or.slice(0, 600)).toContain(k);
   });
 });
