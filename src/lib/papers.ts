@@ -1,3 +1,4 @@
+import { computeDisplayedPaperNumbering } from "./layout";
 import "server-only";
 import { HttpError, type SessionUser } from "./api";
 import { resolvePaperExamType } from "./constants";
@@ -222,7 +223,9 @@ export async function loadPaperView(id: string) {
     orQuestion: i.orQuestion ? toQuestionDto(i.orQuestion) : null,
   }));
 
+  const printedNumbers = computeDisplayedPaperNumbering(blueprint.sections, dtoItems).itemNumbers;
   const internalChoiceAudit = evaluatePaperInternalChoiceCompliance({
+    questionNumbers: Object.fromEntries(Object.entries(printedNumbers).map(([id, n]) => [id, n.questionNumber])),
     schoolName: rest.schoolName,
     blueprintName: blueprint.name,
     className: blueprint.book.className,
@@ -249,6 +252,9 @@ export async function loadPaperView(id: string) {
         type: i.question.type,
         chapterId: i.question.chapter?.id || i.question.chapterId,
         answer: i.question.answer,
+        options: i.question.options,
+        imagePath: i.question.imagePath,
+        subparts: i.question.subparts,
       },
       orQuestion: i.orQuestion
         ? {
@@ -257,6 +263,9 @@ export async function loadPaperView(id: string) {
             type: i.orQuestion.type,
             chapterId: i.orQuestion.chapter?.id || i.orQuestion.chapterId,
             answer: i.orQuestion.answer,
+            options: i.orQuestion.options,
+            imagePath: i.orQuestion.imagePath,
+            subparts: i.orQuestion.subparts,
           }
         : null,
     })),

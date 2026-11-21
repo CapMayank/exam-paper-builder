@@ -1,3 +1,4 @@
+import { questionContentKey } from "./orIdentity";
 import { cleanOptionText, isMcqLikeType } from "./constants";
 import { evaluatePaperInternalChoiceCompliance, orChapterRequired } from "./internalChoiceRules";
 import { computeDisplayedPaperNumbering } from "./layout";
@@ -180,12 +181,18 @@ export function validatePaperPreflight(paper: PaperData): PreflightReport {
     }
     if (item.orQuestion) {
       const orNorm = item.orQuestion.text.trim().toLowerCase().replace(/\s+/g, " ");
-      if (orNorm && (orNorm === normText || seenTexts.has(orNorm))) {
+      // against its own main question the whole question counts: a shared opening line ("Answer the following.")
+      // with different parts, options or figure is a real alternative
+      const orKey = questionContentKey(item.orQuestion);
+      const copiesMain = orKey !== "" && orKey === questionContentKey(q);
+      const priorOther = orNorm ? seenTexts.get(orNorm) : undefined;
+      const repeatsOther = priorOther !== undefined && priorOther !== qNum;
+      if (copiesMain || repeatsOther) {
         issues.push({
           code: "DUPLICATE_QUESTION_TEXT",
           title: "Repeated wording",
           severity: "warning",
-          message: `Question ${qNum} (OR) has identical wording to ${orNorm === normText ? "its main question" : `Question ${seenTexts.get(orNorm)}`}.`,
+          message: `Question ${qNum} (OR) has identical wording to ${copiesMain ? "its main question" : `Question ${priorOther}`}.`,
           questionNumber: qNum,
           questionId: item.orQuestion.id,
         });
@@ -262,6 +269,7 @@ export function validatePaperPreflight(paper: PaperData): PreflightReport {
 
   // 9. Mandatory / Forbidden Internal Choice (OR / अथवा) Compliance Check
   const choiceAudit = evaluatePaperInternalChoiceCompliance({
+    questionNumbers: Object.fromEntries(Object.entries(numbering.itemNumbers).map(([id, n]) => [id, n.questionNumber])),
     schoolName: paper.schoolName,
     blueprintName: paper.blueprint.name,
     className: paper.blueprint.book.className,
@@ -289,6 +297,9 @@ export function validatePaperPreflight(paper: PaperData): PreflightReport {
         type: i.question.type,
         chapterId: i.question.chapter?.id || i.question.chapterId,
         answer: i.question.answer,
+        options: i.question.options,
+        imagePath: i.question.imagePath,
+        subparts: i.question.subparts,
       },
       orQuestion: i.orQuestion
         ? {
@@ -297,6 +308,9 @@ export function validatePaperPreflight(paper: PaperData): PreflightReport {
             type: i.orQuestion.type,
             chapterId: i.orQuestion.chapter?.id || i.orQuestion.chapterId,
             answer: i.orQuestion.answer,
+            options: i.orQuestion.options,
+            imagePath: i.orQuestion.imagePath,
+            subparts: i.orQuestion.subparts,
           }
         : null,
     })),

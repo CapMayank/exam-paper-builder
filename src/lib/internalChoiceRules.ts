@@ -1,3 +1,4 @@
+import { questionBodiesDiffer, type QuestionBodyLike } from "./orIdentity";
 import { normalizeSession } from "./academicSessionUtils";
 import { isMcqLikeType } from "./constants";
 import { getCanonicalSubjectName } from "./schoolCurriculum";
@@ -997,7 +998,12 @@ export function normalizeSectionInstructionsForInternalChoice(
 export function isParaphraseOrDuplicateChoice(
   primaryText: string,
   alternativeText: string,
+  /** The two questions' options, parts and figure: when these differ, a shared opening line is not a copy. */
+  bodies?: { primary: QuestionBodyLike; alternative: QuestionBodyLike },
 ): { isDuplicateOrParaphrase: boolean; similarity: number; reason?: string } {
+  if (bodies && questionBodiesDiffer(bodies.primary, bodies.alternative)) {
+    return { isDuplicateOrParaphrase: false, similarity: 0 };
+  }
   const normA = (primaryText || "")
     .toLowerCase()
     .replace(/[^a-z0-9\u0900-\u097F]+/g, " ")
@@ -1168,7 +1174,9 @@ export function evaluatePaperInternalChoiceCompliance(params: {
       type: string;
       text: string;
       answer?: string | null;
-      subparts?: Array<{ marks: number }>;
+      options?: string[] | null;
+      imagePath?: string | null;
+      subparts?: Array<{ marks: number; text?: string; options?: string[] | null }>;
     };
     orQuestion?: {
       id?: string;
@@ -1176,12 +1184,20 @@ export function evaluatePaperInternalChoiceCompliance(params: {
       type: string;
       text: string;
       answer?: string | null;
-      subparts?: Array<{ marks: number }>;
+      options?: string[] | null;
+      imagePath?: string | null;
+      subparts?: Array<{ marks: number; text?: string; options?: string[] | null }>;
     } | null;
   }>;
+  /**
+   * The printed question number of each item (by item id). Without it slots are counted one by one, which runs
+   * ahead of the paper wherever a grouped exercise prints several slots as one question.
+   */
+  questionNumbers?: Record<string, number>;
 }): PaperInternalChoiceAuditReport {
   const allSlots: PaperInternalChoiceAuditItem[] = [];
   let qNum = 1;
+  let lastPrinted = 0;
 
   const firstSec = params.sections[0];
   const headerReq = resolveInternalChoiceRequirement({
@@ -1205,7 +1221,11 @@ export function evaluatePaperInternalChoiceCompliance(params: {
 
     for (let idx = 0; idx < slotTotal; idx++) {
       const item = secItems[idx];
-      const currentQNum = qNum++;
+      const counted = qNum++;
+      const printed = item?.id ? params.questionNumbers?.[item.id] : undefined;
+      // an empty slot is numbered after the last printed question
+      const currentQNum = params.questionNumbers ? printed ?? lastPrinted + 1 : counted;
+      lastPrinted = currentQNum;
 
       const req = resolveInternalChoiceRequirement({
         board: params.board,
@@ -1282,7 +1302,7 @@ export function evaluatePaperInternalChoiceCompliance(params: {
         }
 
         // Validate the OR question quality, chapter, marks, and non-paraphrase
-        const paraCheck = isParaphraseOrDuplicateChoice(item.question.text, orQ.text);
+        const paraCheck = isParaphraseOrDuplicateChoice(item.question.text, orQ.text, { primary: item.question, alternative: orQ });
         if (paraCheck.isDuplicateOrParaphrase) {
           allSlots.push({
             itemId: item.id,

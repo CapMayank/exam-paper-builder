@@ -55,3 +55,35 @@ function contentKey(q: QuestionContent): string {
 export function sameQuestionContent(a: QuestionContent, b: QuestionContent): boolean {
   return contentKey(a) === contentKey(b);
 }
+
+/** A question as the paper view carries it (options and parts already parsed). */
+export type QuestionBodyLike = {
+  text?: string | null;
+  options?: readonly string[] | null;
+  subparts?: readonly unknown[] | null;
+  imagePath?: string | null;
+};
+
+function bodyKey(q: QuestionBodyLike): string {
+  return JSON.stringify({
+    o: (q.options ?? []).map(norm),
+    s: partsKey([...(q.subparts ?? [])]),
+    i: q.imagePath ?? null,
+  });
+}
+
+/**
+ * True when two questions differ in their options, parts or figure, whatever their text says. A shared opening
+ * line ("Answer any one of the following.") with different topics is then a real alternative, not a copy.
+ */
+export function questionBodiesDiffer(a: QuestionBodyLike, b: QuestionBodyLike): boolean {
+  return bodyKey(a) !== bodyKey(b);
+}
+
+/** One key for the whole question (text, options, parts, figure), or "" when it has no text and no body. */
+export function questionContentKey(q: QuestionBodyLike): string {
+  const t = norm(q.text);
+  const body = bodyKey(q);
+  if (!t && body === bodyKey({})) return "";
+  return JSON.stringify({ t, b: body });
+}
