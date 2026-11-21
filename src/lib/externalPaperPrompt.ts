@@ -44,6 +44,41 @@ function languageRule(language: string): string {
   return "English.";
 }
 
+/** Question types whose correct answer sits at a position the student could guess from a pattern. */
+const PLACEMENT_TYPES = new Set(["MCQ", "ASSERTION_REASON", "MATCH_COLUMN", "CASE_STUDY", "UNSEEN_PASSAGE", "GRAMMAR"]);
+
+/**
+ * Rules that keep the position of correct answers unpredictable. Another AI tends to put the right option first
+ * (or always at one letter) and to list a match question's second column in the same order as the first, so a
+ * student can score without knowing the answers. Empty when the paper has no such question.
+ */
+export function answerPlacementRules(typesUsed: Iterable<string>): string[] {
+  const types = new Set(typesUsed);
+  if (![...types].some((t) => PLACEMENT_TYPES.has(t))) return [];
+  const rules = [
+    "## Answer placement (the correct answer's position must not be guessable)",
+    "You do not write answers, but you decide where each correct option and each matching item sits. A student must not be able to score by spotting a pattern:",
+  ];
+  if (["MCQ", "CASE_STUDY", "UNSEEN_PASSAGE", "GRAMMAR"].some((t) => types.has(t))) {
+    rules.push(
+      "- Multiple choice (every MCQ, including MCQ subparts and OR alternatives): spread the correct option across the four positions, about equally often over the paper. Never put the correct option first by habit.",
+      "- Never give 3 or more MCQs in a row the correct option at the same position, and never follow a visible cycle such as 1st, 2nd, 3rd, 4th, 1st, 2nd...",
+      "- The correct option must not stand out: not the longest, the most detailed, the only one with a qualifier (\"usually\", \"generally\"), or the only one that repeats the question's words. Keep all four options similar in length and form.",
+      "- Use \"All of the above\" / \"None of the above\" rarely, and never as the correct option every time it appears.",
+      "- Before replying, list the position of the correct option for every MCQ to yourself and rearrange options until no position dominates and no run or cycle remains.",
+    );
+  }
+  if (types.has("ASSERTION_REASON")) {
+    rules.push("- Assertion-Reason: the four options stay in their standard order, so vary the statements instead: across these questions, the correct choice should not be the same option every time.");
+  }
+  if (types.has("MATCH_COLUMN")) {
+    rules.push(
+      "- Match the columns: scramble the second column. No item may be directly opposite (in the same position as) its correct match, and the order must not be the same, reversed, or shifted by one place. Before replying, check each pair's positions.",
+    );
+  }
+  return rules;
+}
+
 /** The prompt text plus counts, for the plan's still-empty slots. */
 export function buildExternalPaperPrompt(ctx: ExternalPromptContext): ExternalPrompt {
   const { plan } = ctx;
@@ -166,6 +201,10 @@ export function buildExternalPaperPrompt(ctx: ExternalPromptContext): ExternalPr
     ...formatBlocks,
     `- Figures: if and only if a question refers to a figure, diagram, graph, map or picture, add "figure": "<exact description: what to draw, every label, every value/measurement, nothing that gives away the answer>". Never write 'in the figure' without a "figure". The school's system draws it from your description. Never add "figure" to KDG_* activities (their pictures come from the picture set) or to DRAW questions (the student draws).`,
     "",
+    ...(() => {
+      const placement = answerPlacementRules(typesUsed);
+      return placement.length ? [...placement, ""] : [];
+    })(),
     "## Sections and questions to write",
     sectionBlocks.join("\n"),
     existing.length

@@ -174,3 +174,33 @@ describe("per-type examples and figures", () => {
     for (const k of ['"type"', '"chapterTitle"', '"subparts"']) expect(or.slice(0, 600)).toContain(k);
   });
 });
+
+describe("answer placement rules in the external prompt", () => {
+  const withTypes = (sections: { id: string; title: string; type: string; count: number; marksEach: number }[]) =>
+    buildExternalPaperPrompt({ plan: planPaperWithComponents({ ...paper, blueprint: { ...paper.blueprint, sections } }) }).prompt;
+
+  it("tells the other AI to spread MCQ answers and scramble match columns", () => {
+    const prompt = withTypes([
+      { id: "sA", title: "Section A", type: "MCQ", count: 4, marksEach: 1 },
+      { id: "sM", title: "Section M", type: "MATCH_COLUMN", count: 4, marksEach: 1 },
+    ]);
+    expect(prompt).toContain("## Answer placement");
+    expect(prompt).toMatch(/spread the correct option across the four positions/);
+    expect(prompt).toMatch(/Never give 3 or more MCQs in a row/);
+    expect(prompt).toMatch(/No item may be directly opposite/);
+    expect(typeFormat("MATCH_COLUMN", "en").rule).toMatch(/no Column II item may sit in the same position/);
+    // the rules come before the questions they apply to
+    expect(prompt.indexOf("## Answer placement")).toBeLessThan(prompt.indexOf("## Sections and questions to write"));
+  });
+
+  it("covers MCQ subparts of case studies too", () => {
+    const prompt = withTypes([{ id: "sC", title: "Section C", type: "CASE_STUDY", count: 1, marksEach: 4 }]);
+    expect(prompt).toMatch(/including MCQ subparts/);
+    expect(prompt).not.toMatch(/Match the columns: scramble/);
+  });
+
+  it("leaves the section out of papers with no choice questions", () => {
+    const prompt = withTypes([{ id: "sB", title: "Section B", type: "SHORT", count: 2, marksEach: 3 }]);
+    expect(prompt).not.toContain("## Answer placement");
+  });
+});

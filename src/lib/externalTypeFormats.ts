@@ -110,7 +110,7 @@ function formatFor(type: string, language: string): TypeFormat {
       };
     case "MATCH_COLUMN":
       return {
-        rule: `MATCH_COLUMN: the whole section is ONE question. "text" holds a one-line instruction ("Match ${col1} with ${col2}:"), then each ${col1} item on its own line labelled (A), (B), (C)...; "options" holds the ${col2} items, one string each, in shuffled order, exactly as many as ${col1}. Never put ${col2} items in "text" and never pair items inside one string. Its "marks" is the section total.`,
+        rule: `MATCH_COLUMN: the whole section is ONE question. "text" holds a one-line instruction ("Match ${col1} with ${col2}:"), then each ${col1} item on its own line labelled (A), (B), (C)...; "options" holds the ${col2} items, one string each, exactly as many as ${col1}, in a scrambled order: no ${col2} item may sit in the same position as its matching ${col1} item, and the order must not simply be the reverse or a shift of ${col1}. Never put ${col2} items in "text" and never pair items inside one string. Its "marks" is the section total.`,
         example: {
           ...base(type, `<one-line instruction>\n(A) <Column I item>\n(B) <Column I item>\n(C) <Column I item>`),
           options: ["<Column II item>", "<Column II item>", "<Column II item>"],
