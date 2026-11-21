@@ -98,11 +98,56 @@ Ans: Photosynthesis occurs in chloroplasts: $6CO_2 + 6H_2O \\rightarrow C_6H_{12
 Space: 50
 Diff: HARD`;
 
+const PAGE_SIZE = 50;
+
+function pageWindow(page: number, pageCount: number): (number | "…")[] {
+  const pages = new Set([1, pageCount, page - 1, page, page + 1].filter((p) => p >= 1 && p <= pageCount));
+  const sorted = Array.from(pages).sort((a, b) => a - b);
+  const out: (number | "…")[] = [];
+  sorted.forEach((p, i) => {
+    if (i > 0 && p - sorted[i - 1] > 1) out.push("…");
+    out.push(p);
+  });
+  return out;
+}
+
+function Pager({ page, pageCount, disabled, onPage }: { page: number; pageCount: number; disabled: boolean; onPage: (p: number) => void }) {
+  return (
+    <nav className="flex flex-wrap items-center justify-center gap-1.5 py-2" aria-label="Question pages">
+      <button type="button" className="btn btn-sm" disabled={disabled || page <= 1} onClick={() => onPage(page - 1)}>
+        ‹ Previous
+      </button>
+      {pageWindow(page, pageCount).map((p, i) =>
+        p === "…" ? (
+          <span key={`gap-${i}`} className="px-1 text-xs text-slate-400">…</span>
+        ) : (
+          <button
+            key={p}
+            type="button"
+            className={`btn btn-sm min-w-9 ${p === page ? "btn-primary" : ""}`}
+            aria-current={p === page ? "page" : undefined}
+            disabled={disabled && p !== page}
+            onClick={() => p !== page && onPage(p)}
+          >
+            {p}
+          </button>
+        ),
+      )}
+      <button type="button" className="btn btn-sm" disabled={disabled || page >= pageCount} onClick={() => onPage(page + 1)}>
+        Next ›
+      </button>
+    </nav>
+  );
+}
+
 export default function QuestionsPage() {
   const confirm = useConfirm();
   const toast = useToast();
   const [books, setBooks] = useState<Book[]>([]);
   const [questions, setQuestions] = useState<QuestionDto[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<Actor & { name: string; email: string } | null>(null);
   const [classFilter, setClassFilter] = useState<string>("");
   const [subjectFilter, setSubjectFilter] = useState<string>("");
@@ -189,41 +234,69 @@ export default function QuestionsPage() {
     });
   }, [books, classFilter, subjectFilter]);
 
+  // Class/subject narrow the bank by book; send the matched book ids so the server pages the right set.
+  const bookIdsParam = useMemo(
+    () => (classFilter || subjectFilter) && !filters.bookId ? filteredBooks.map((b) => b.id).join(",") : null,
+    [classFilter, subjectFilter, filters.bookId, filteredBooks],
+  );
+
+  // Any filter change goes back to page 1 and drops a selection the user can no longer see.
+  useEffect(() => {
+    setPage(1);
+    setSelectedIds(new Set());
+  }, [filters, bookIdsParam]);
+
   const load = useCallback(async () => {
-    const sp = new URLSearchParams();
-    if (classFilter && classFilter !== "ALL") sp.set("className", classFilter);
-    if (subjectFilter && subjectFilter !== "ALL") sp.set("subject", subjectFilter);
+    if ((classFilter || subjectFilter) && books.length === 0) return; // wait for books to resolve the filter
+    const sp = new URLSearchParams({ paged: "1", page: String(page), pageSize: String(PAGE_SIZE) });
     Object.entries(filters).forEach(([k, v]) => {
-      if (k === "freshness") return;
+      if (k === "freshness" && v === "ALL") return;
       if (v) sp.set(k, v);
     });
+    if (bookIdsParam !== null) sp.set("bookIds", bookIdsParam);
+    setLoading(true);
     try {
-      setQuestions(await api<QuestionDto[]>(`/api/questions?${sp}`));
+      const res = await api<{ items: QuestionDto[]; total: number; page: number }>(`/api/questions?${sp}`);
+      setQuestions(res.items);
+      setTotal(res.total);
+      if (res.page !== page) setPage(res.page); // e.g. last page emptied by a delete
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      setLoading(false);
     }
-  }, [filters, classFilter, subjectFilter]);
+  }, [filters, bookIdsParam, page, classFilter, subjectFilter, books.length]);
 
   useEffect(() => {
     const t = setTimeout(() => void load(), 200); // debounce search box
     return () => clearTimeout(t);
   }, [load]);
 
-  const displayedQuestions = useMemo(() => {
-    const allowedBookIds = new Set(filteredBooks.map((b) => b.id));
-    return questions.filter((q) => {
-      if ((classFilter || subjectFilter) && !filters.bookId && !allowedBookIds.has(q.bookId)) {
-        return false;
-      }
-      if (filters.freshness === "FRESH") {
-        return (q.timesUsed ?? q.usages?.length ?? 0) === 0;
-      }
-      if (filters.freshness === "USED") {
-        return (q.timesUsed ?? q.usages?.length ?? 0) > 0;
-      }
-      return true;
+  const displayedQuestions = questions;
+
+  // The duplicate scan compares across the whole filtered set, not just the visible page.
+  const [scanQuestions, setScanQuestions] = useState<QuestionDto[]>([]);
+  const openDuplicateScan = useCallback(async () => {
+    const sp = new URLSearchParams({ take: "1000" });
+    Object.entries(filters).forEach(([k, v]) => {
+      if (k === "freshness" && v === "ALL") return;
+      if (v) sp.set(k, v);
     });
-  }, [questions, filters.freshness, filters.bookId, classFilter, subjectFilter, filteredBooks]);
+    if (bookIdsParam !== null) sp.set("bookIds", bookIdsParam);
+    try {
+      setScanQuestions(await api<QuestionDto[]>(`/api/questions?${sp}`));
+      setDuplicateModalOpen(true);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }, [filters, bookIdsParam]);
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const firstShown = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const lastShown = Math.min(total, page * PAGE_SIZE);
+  const goToPage = (p: number) => {
+    setPage(Math.min(pageCount, Math.max(1, p)));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   const chapters = books.find((b) => b.id === filters.bookId)?.chapters ?? [];
   const set = (k: keyof typeof filters, v: string) =>
@@ -256,7 +329,7 @@ export default function QuestionsPage() {
   }
 
   async function handleBulkDelete() {
-    const selectedList = displayedQuestions.filter((q) => selectedIds.has(q.id));
+    const selectedList = Array.from(selectedIds);
     if (selectedList.length === 0) return;
 
     const ok = await confirm({
@@ -272,7 +345,7 @@ export default function QuestionsPage() {
     try {
       const res = await api<{ success: boolean; deletedCount: number; message: string }>("/api/questions/bulk", {
         method: "DELETE",
-        json: { ids: selectedList.map((q) => q.id) },
+        json: { ids: selectedList },
       });
       const count = res.deletedCount;
       toast.success(`Deleted ${count} question${count === 1 ? "" : "s"}.`);
@@ -376,7 +449,7 @@ export default function QuestionsPage() {
           <button
             className="btn border-slate-300 bg-white text-slate-700 hover:bg-slate-50 shadow-2xs"
             disabled={questions.length < 2}
-            onClick={() => setDuplicateModalOpen(true)}
+            onClick={() => void openDuplicateScan()}
             title="Scan question bank for near-identical duplicate wording"
           >
             <Copy size={15} className="text-slate-600" />
@@ -626,7 +699,13 @@ export default function QuestionsPage() {
       {/* Results Counter Tagline */}
       <div className="flex items-center justify-between text-xs text-slate-500 px-1">
         <span>
-          Showing <strong>{displayedQuestions.length}</strong> question{displayedQuestions.length === 1 ? "" : "s"}
+          {loading && questions.length === 0 ? (
+            "Loading questions…"
+          ) : (
+            <>
+              Showing <strong>{firstShown}–{lastShown}</strong> of <strong>{total}</strong> question{total === 1 ? "" : "s"}
+            </>
+          )}
           {filters.bookId ? ` in selected syllabus` : ""}
           {filters.freshness === "FRESH" ? " · Fresh Only" : filters.freshness === "USED" ? " · Previously Used Only" : ""}
         </span>
@@ -644,16 +723,17 @@ export default function QuestionsPage() {
             <input
               type="checkbox"
               className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-              checked={selectedIds.size > 0 && selectedIds.size === displayedQuestions.length}
+              checked={displayedQuestions.length > 0 && displayedQuestions.every((q) => selectedIds.has(q.id))}
               onChange={() => {
-                if (selectedIds.size === displayedQuestions.length && displayedQuestions.length > 0) {
-                  setSelectedIds(new Set());
-                } else {
-                  setSelectedIds(new Set(displayedQuestions.map((q) => q.id)));
-                }
+                const allOnPage = displayedQuestions.every((q) => selectedIds.has(q.id));
+                setSelectedIds((prev) => {
+                  const next = new Set(prev);
+                  displayedQuestions.forEach((q) => (allOnPage ? next.delete(q.id) : next.add(q.id)));
+                  return next;
+                });
               }}
             />
-            <span>Select all {displayedQuestions.length} questions</span>
+            <span>Select all {displayedQuestions.length} on this page</span>
           </label>
           {selectedIds.size > 0 && (
             <span className="text-indigo-700 font-bold">{selectedIds.size} selected</span>
@@ -661,7 +741,7 @@ export default function QuestionsPage() {
         </div>
       )}
 
-      <ul className="space-y-3">
+      <ul className={`space-y-3 transition-opacity ${loading ? "opacity-60" : ""}`} aria-busy={loading}>
         {displayedQuestions.map((q) => {
           const diffBadgeClass =
             q.difficulty === "EASY"
@@ -798,7 +878,7 @@ export default function QuestionsPage() {
             </li>
           );
         })}
-        {displayedQuestions.length === 0 && (
+        {displayedQuestions.length === 0 && !loading && (
           <li className="card p-12 text-center text-slate-500 space-y-3">
             <HelpCircle size={32} className="mx-auto text-slate-400" />
             <div className="font-semibold text-slate-700">No questions found</div>
@@ -816,6 +896,10 @@ export default function QuestionsPage() {
           </li>
         )}
       </ul>
+
+      {pageCount > 1 && (
+        <Pager page={page} pageCount={pageCount} disabled={loading} onPage={goToPage} />
+      )}
 
       {/* Floating Sticky Bulk Actions Bar */}
       {selectedIds.size > 0 && (
@@ -1019,7 +1103,7 @@ export default function QuestionsPage() {
         <QuestionExportModal
           books={books}
           activeFilters={filters}
-          currentQuestionsCount={questions.length}
+          currentQuestionsCount={total}
           onClose={() => setExportModalOpen(false)}
         />
       )}
@@ -1066,9 +1150,12 @@ export default function QuestionsPage() {
       {/* Duplicate Question Scanner Modal */}
       <QuestionDuplicateModal
         isOpen={duplicateModalOpen}
-        questions={displayedQuestions}
+        questions={scanQuestions}
         onClose={() => setDuplicateModalOpen(false)}
-        onQuestionDeleted={load}
+        onQuestionDeleted={async () => {
+          await load();
+          await openDuplicateScan();
+        }}
       />
     </div>
   );
