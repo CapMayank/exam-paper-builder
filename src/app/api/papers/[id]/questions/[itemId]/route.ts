@@ -16,6 +16,7 @@ import { orChapterRefusal, orChapterRequired } from "@/lib/internalChoiceRules";
 import { parseComponents } from "@/lib/languageComponents";
 import { prisma } from "@/lib/prisma";
 import { questionColumns, questionCopyData } from "@/lib/questionWrite";
+import { sameQuestionContent } from "@/lib/orIdentity";
 import { editPaperItemSchema, moveItemSchema, replaceItemSchema } from "@/lib/schemas";
 import type { z } from "zod";
 
@@ -238,11 +239,10 @@ async function editOrQuestion(item: EditableItem, mode: "UPDATE_MASTER" | "FORK_
   }
   const marksProblem = subpartsMarksProblem(item.section, qInput);
   if (marksProblem) throw new HttpError(400, `Alternate (OR) choice ${marksProblem.replace("total subpart marks", "total marks")}`);
-  if (qInput.text.trim() === item.question.text.trim()) {
+  const data = questionColumns(qInput);
+  if (sameQuestionContent(data, item.question)) {
     throw new HttpError(400, "Alternate question cannot be identical to the primary question");
   }
-
-  const data = questionColumns(qInput);
 
   if (mode === "UPDATE_MASTER") {
     assertCanModifyQuestion(user, or);
