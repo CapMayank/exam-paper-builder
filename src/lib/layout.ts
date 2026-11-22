@@ -210,6 +210,8 @@ export interface DisplayedSectionRange {
   groupRawItemCount: number;
   sectionType?: string;
   subItemCount?: number;
+  /** this row prints as one numbered question with lettered parts (see isGroupedExerciseRow) */
+  isGroupedExercise: boolean;
 }
 
 export interface DisplayedPaperNumbering {
@@ -289,6 +291,18 @@ export function builderQuestionLabel(numbering: DisplayedPaperNumbering, itemId:
 }
 
 /**
+ * Whether a section row prints as one numbered question whose items are lettered parts: true/false and
+ * fill-in-the-blank rows always, MCQ and very-short rows when the heading itself names one question ("Question 2: …").
+ * The one rule numbering, the printed paper and the Word export share.
+ */
+export function isGroupedExerciseRow(section: { title: string; type: string }, itemCount: number): boolean {
+  if (itemCount <= 1) return false;
+  if (section.type === "TRUE_FALSE" || section.type === "FILL_BLANK") return true;
+  if (section.type !== "MCQ" && section.type !== "VERY_SHORT") return false;
+  return /(?:^|[^0-9])(?:प्रश्न\s*[1-5]\b|question\s*[1-5]\b|q[1-5]\b)/i.test(section.title);
+}
+
+/**
  * Computes consistent displayed question numbers across sections and items,
  * accounting for grouped objective exercises (TRUE_FALSE and FILL_BLANK with >1 item)
  * which occupy 1 top-level question number with (a), (b), ... sub-items.
@@ -314,6 +328,7 @@ export function computeDisplayedPaperNumbering(
     rawItemCount: number;
     sectionType?: string;
     subItemCount?: number;
+    isGroupedExercise: boolean;
   }> = [];
 
   let globalCounter = 0;
@@ -334,14 +349,7 @@ export function computeDisplayedPaperNumbering(
       }
       const sLetter = sectionLetter(sec.title) || String.fromCharCode(65 + (headingIdx % 26));
 
-      const isNumberedSingleGroupedExercise =
-        /(?:^|[^0-9])(?:प्रश्न\s*[1-5]\b|question\s*[1-5]\b|q[1-5]\b)/i.test(sec.title);
-
-      const isGroupedObjective =
-        sItems.length > 1 &&
-        (sec.type === "TRUE_FALSE" ||
-          sec.type === "FILL_BLANK" ||
-          ((sec.type === "MCQ" || sec.type === "VERY_SHORT") && isNumberedSingleGroupedExercise));
+      const isGroupedObjective = isGroupedExerciseRow(sec, sItems.length);
 
       if (sItems.length === 0) {
         rawSectionRanges.push({
@@ -353,6 +361,7 @@ export function computeDisplayedPaperNumbering(
           rawItemCount: 0,
           sectionType: sec.type,
           subItemCount: 0,
+          isGroupedExercise: false,
         });
         return;
       }
@@ -380,6 +389,7 @@ export function computeDisplayedPaperNumbering(
           rawItemCount: sItems.length,
           sectionType: sec.type,
           subItemCount: sItems.length,
+          isGroupedExercise: true,
         });
       } else {
         const startQ = globalCounter + 1;
@@ -406,6 +416,7 @@ export function computeDisplayedPaperNumbering(
           rawItemCount: sItems.length,
           sectionType: sec.type,
           subItemCount,
+          isGroupedExercise: false,
         });
       }
     });
@@ -455,6 +466,7 @@ export function computeDisplayedPaperNumbering(
         groupRawItemCount,
         sectionType: r.sectionType,
         subItemCount: r.subItemCount,
+        isGroupedExercise: r.isGroupedExercise,
       };
     }
     i = j + 1;
@@ -608,7 +620,34 @@ export function resolveGroupedExerciseInstruction(
   if (hasMultipleTypes || looksLikeSectionWideOverview) {
     return shared || trimmed;
   }
-  return trimmed;
+  // the exercise line prints its formula beside the prompt, so a sentence about marks only repeats it; a prompt
+  // that was nothing but that sentence ("Each question carries 1 mark.") gets the form's own instruction
+  return withoutMarksNote(trimmed) || shared || trimmed;
+}
+
+const MARK_NUMBER = String.raw`(?:\d+(?:\.\d+)?|[०-९]+|½|one|two|three|four|five|half)`;
+const MARKS_NOTE_SENTENCES = [
+  // Each question carries 1 mark. / All questions carry 2 marks. / Each blank is worth 1 mark.
+  String.raw`(?:each|every|all)\s+(?:questions?|items?|blanks?|statements?|parts?|sub-?questions?|carry|carries)?[^.!?:;।]*?\b(?:carr(?:y|ies)|is\s+worth|are\s+worth|is\s+of|are\s+of)\s+${MARK_NUMBER}\s*marks?`,
+  // (1 mark each) / 1 mark for each question
+  String.raw`\(?\s*${MARK_NUMBER}\s*marks?\s+(?:each|for\s+each\s+\w+)\s*\)?`,
+  // प्रत्येक प्रश्न 1 अंक का है / प्रत्येक प्रश्न के लिए 1 अंक निर्धारित है
+  String.raw`प्रत्येक\s+प्रश्न[^.!?।]*?${MARK_NUMBER}\s*अंक[^.!?।]*`,
+  // प्रत्येकं प्रश्नः 1 अङ्कः / प्रत्येकस्य प्रश्नस्य कृते 1 अङ्कः
+  String.raw`प्रत्येक(?:ं|स्य)\s+प्रश्न[^.!?।]*?${MARK_NUMBER}\s*अङ्क[^.!?।]*`,
+];
+const MARKS_NOTE = new RegExp(String.raw`\s*(?:${MARKS_NOTE_SENTENCES.join("|")})\s*[.!।]?`, "giu");
+
+/**
+ * An instruction without its sentences about marks ("Each question carries 1 mark.", "(1 mark each)",
+ * "प्रत्येक प्रश्न 1 अंक का है।"). Empty when marks were all it said.
+ */
+export function withoutMarksNote(instruction: string): string {
+  const rest = instruction.replace(MARKS_NOTE, " ").replace(/\s{2,}/g, " ").trim().replace(/^[,;:–-]\s*|\s*[,;–-]$/g, "");
+  if (!/[\p{L}\p{N}]/u.test(rest)) return "";
+  // "Write True or False (1 mark each)." keeps its full stop
+  const stop = instruction.trim().match(/[.!?।:]$/)?.[0];
+  return stop && !/[.!?।:]$/.test(rest) ? rest + stop : rest;
 }
 
 

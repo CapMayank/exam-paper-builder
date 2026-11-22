@@ -52,6 +52,7 @@ import {
 } from "@/lib/layout";
 import { resolveBoardAndSubjectCode } from "@/lib/curriculumContract";
 import { sectionLetter } from "@/lib/sectionLetter";
+import { planSectionHeadings } from "@/lib/sectionHeadingPlan";
 import type { PaperData, QuestionDto } from "@/lib/types";
 
 type Block = {
@@ -143,7 +144,7 @@ const CONTENT_H_MM = 267;
  * One item of a grouped exercise (or its OR alternative): its text, its options when the item itself is a choice
  * question, its picture and its stored parts. No marks: the exercise line prints one formula for every item.
  */
-function GroupedItemBody({ q, sectionType, isA5 }: { q: QuestionDto; sectionType: string; isA5?: boolean }) {
+function GroupedItemBody({ q, sectionType, isA5, lang }: { q: QuestionDto; sectionType: string; isA5?: boolean; lang: PaperLanguage }) {
   const lineHeight = isA5 ? 1.35 : 1.45;
   const optFontSize = isA5 ? "8pt" : "8.5pt";
   return (
@@ -151,7 +152,7 @@ function GroupedItemBody({ q, sectionType, isA5 }: { q: QuestionDto; sectionType
       <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight }}>
         <QuestionContent text={cleanQuestionStatement(q.text, sectionType)} isA5={isA5} />
       </div>
-      {groupedItemPrintsOptions(q) && <OptionFlow options={q.options} isA5={isA5} fontSize={optFontSize} marginTop="1.5mm" />}
+      {groupedItemPrintsOptions(q) && <OptionFlow options={q.options} isA5={isA5} fontSize={optFontSize} marginTop="1.5mm" lang={lang} />}
       {q.imagePath && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -176,7 +177,7 @@ function GroupedItemBody({ q, sectionType, isA5 }: { q: QuestionDto; sectionType
                   <QuestionContent text={sp.text} isA5={isA5} />
                 </div>
                 {sp.options && sp.options.length > 0 && (
-                  <OptionFlow options={sp.options} isA5={isA5} fontSize={optFontSize} marginTop="1mm" />
+                  <OptionFlow options={sp.options} isA5={isA5} fontSize={optFontSize} marginTop="1mm" lang={lang} />
                 )}
               </div>
             </div>
@@ -210,6 +211,9 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
     paper.numberingStyle || "CONTINUOUS",
     paperLang
   );
+  const headingPlans = planSectionHeadings(blueprint.sections, paper.items, numbering, locale, {
+    worksheet: blueprint.curriculumMode === WORKSHEET_MODE,
+  });
   const resolvedBoardSubject = resolveBoardAndSubjectCode({
     subject: blueprint.book.subject,
     className: blueprint.book.className,
@@ -468,25 +472,14 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
     }
 
     const sectionItems = paper.items.filter((item) => item.sectionId === s.id);
-    const isNumberedSingleGroupedExercise =
-      /(?:^|[^0-9])(?:प्रश्न\s*[1-5]\b|question\s*[1-5]\b|q[1-5]\b)/i.test(s.title);
+    // who prints what (band, type sub-band, grouped question line): see sectionHeadingPlan
+    const plan = headingPlans[s.id];
+    const isGroupedObjective = plan.grouped;
 
-    const isGroupedObjective =
-      sectionItems.length > 1 &&
-      (s.type === "TRUE_FALSE" ||
-        s.type === "FILL_BLANK" ||
-        ((s.type === "MCQ" || s.type === "VERY_SHORT") && isNumberedSingleGroupedExercise));
-
-    // Worksheets list activities straight away – no "Section A" headings.
-    const isWorksheet = blueprint.curriculumMode === WORKSHEET_MODE;
-
-    // Only render the main SECTION header if it's the first in this title group!
-    if (!isWorksheet && !isSameAsPrev) {
+    if (plan.showBand) {
       const allInGroup = blueprint.sections.filter(
         (x) => x.title.trim().toLowerCase() === s.title.trim().toLowerCase()
       );
-      const groupMarks = allInGroup.reduce((sum, x) => sum + x.count * x.marksEach, 0);
-      const groupCount = allInGroup.reduce((sum, x) => sum + x.count, 0);
       const secRange = numbering.sectionRanges[s.id];
       const groupMatch = paper.items.find(
         (x) => x.question.type === "MATCH_COLUMN" && allInGroup.some((sec) => sec.id === x.sectionId)
@@ -500,11 +493,7 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
         groupMatch?.question.text
       );
 
-      const groupRightLabel = locale.section.formatGroupSummary(groupCount, groupMarks, {
-        displayedCount: secRange?.groupDisplayedCount,
-        rawItemCount: secRange?.groupRawItemCount ?? groupCount,
-        type: s.type,
-      });
+      const groupRightLabel = plan.bandSummary;
       const localizedSectionTitle = locale.section.formatSectionHeader(sectionLetter, s.title);
 
       blocks.push({
@@ -528,7 +517,7 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
                 {groupRightLabel}
               </span>
             </div>
-            {reconciledMainInstruction && !isGroupedObjective && (
+            {reconciledMainInstruction && plan.showBandInstruction && (
               <div style={{ fontStyle: "italic", marginTop: "0.8mm", fontSize: "8.5pt", color: "#334155" }}>
                 {reconciledMainInstruction}
               </div>
@@ -538,8 +527,8 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
       });
     }
 
-    // If section has multiple question types, render a clean sub-heading for this question type!
-    if (!isWorksheet && hasMultipleTypes) {
+    // a heading that mixes forms names each run of separate questions; a grouped question's own line names its form
+    if (plan.showTypeSubBand) {
       const typeLabel = getQuestionTypeLabel(s.type, paperLang);
       const typeFormula = sectionItemsFormula(
         s,
@@ -650,13 +639,13 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
                 <span style={{ fontWeight: 600, minWidth: isA5 ? "5.5mm" : "6.5mm" }}>{subLabel}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   {/* no marks here: the exercise line carries the one formula for every item */}
-                  <GroupedItemBody q={it.question} sectionType={s.type} isA5={isA5} />
+                  <GroupedItemBody q={it.question} sectionType={s.type} isA5={isA5} lang={paperLang} />
                   {it.orQuestion && (
                     <>
                       <div style={{ textAlign: "center", margin: "1.5mm 0", fontWeight: 700, fontSize: isA5 ? "8.5pt" : "9pt" }}>
                         {getInternalChoiceSeparatorLabel(paperLang)}
                       </div>
-                      <GroupedItemBody q={it.orQuestion} sectionType={s.type} isA5={isA5} />
+                      <GroupedItemBody q={it.orQuestion} sectionType={s.type} isA5={isA5} lang={paperLang} />
                     </>
                   )}
                 </div>

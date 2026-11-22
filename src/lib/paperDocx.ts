@@ -60,6 +60,8 @@ import {
   sectionHeadingInstruction,
   resolveGroupedExerciseInstruction,
 } from "@/lib/layout";
+import { planSectionHeadings } from "@/lib/sectionHeadingPlan";
+import { optionLabel } from "@/lib/compactLayout";
 import { resolveBoardAndSubjectCode } from "@/lib/curriculumContract";
 import { sectionLetter as titleSectionLetter } from "@/lib/sectionLetter";
 
@@ -127,11 +129,10 @@ function renderQuestionOptions(
   font = "Times New Roman",
   lang: PaperLanguage = "en",
 ) {
-  const letters = lang === "sa" || lang === "hi"
-    ? ["अ", "ब", "स", "द", "य", "र"]
-    : ["A", "B", "C", "D", "E", "F"];
+  // the printed paper's labels, so the Word file and the PDF letter options alike
+  const labels = opts.map((_, i) => optionLabel(i, lang));
   if (hasFigureOptions(opts)) {
-    renderFigureOptionGrid(opts, letters.map((l) => `(${l})`), paragraphs, indent, font);
+    renderFigureOptionGrid(opts, labels, paragraphs, indent, font);
     return;
   }
   const maxOptionLen = Math.max(...opts.map((o) => String(o).length));
@@ -142,7 +143,7 @@ function renderQuestionOptions(
 
   if (singleColumn) {
     for (let i = 0; i < opts.length; i++) {
-      const optText = `(${letters[i] ?? i + 1}) ${cleanOptionText(opts[i])}`;
+      const optText = `${labels[i]} ${cleanOptionText(opts[i])}`;
       paragraphs.push(
         new Paragraph({
           indent: { left: indent },
@@ -153,8 +154,8 @@ function renderQuestionOptions(
     }
   } else {
     for (let i = 0; i < opts.length; i += 2) {
-      const leftOpt = `(${letters[i]}) ${cleanOptionText(opts[i])}`;
-      const rightOpt = i + 1 < opts.length ? `(${letters[i + 1]}) ${cleanOptionText(opts[i + 1])}` : "";
+      const leftOpt = `${labels[i]} ${cleanOptionText(opts[i])}`;
+      const rightOpt = i + 1 < opts.length ? `${labels[i + 1]} ${cleanOptionText(opts[i + 1])}` : "";
       paragraphs.push(
         new Paragraph({
           indent: { left: indent },
@@ -196,14 +197,14 @@ function renderSubpartsDocx(
     );
 
     if (Array.isArray(sp.options) && sp.options.length > 0) {
-      const letters = ["a", "b", "c", "d", "e", "f"];
+      const letters = sp.options.map((_: unknown, i: number) => optionLabel(i, lang));
       const maxOptLen = Math.max(...sp.options.map((o: unknown) => String(o).length));
       const singleCol = maxOptLen > 35;
       if (hasFigureOptions(sp.options)) {
-        renderFigureOptionGrid(sp.options.map(String), letters.map((l) => `(${l})`), paragraphs, childIndent, font);
+        renderFigureOptionGrid(sp.options.map(String), letters, paragraphs, childIndent, font);
       } else if (singleCol) {
         for (let oIdx = 0; oIdx < sp.options.length; oIdx++) {
-          const optText = `(${letters[oIdx] ?? oIdx + 1}) ${cleanOptionText(String(sp.options[oIdx]))}`;
+          const optText = `${letters[oIdx]} ${cleanOptionText(String(sp.options[oIdx]))}`;
           paragraphs.push(
             new Paragraph({
               indent: { left: childIndent },
@@ -214,8 +215,8 @@ function renderSubpartsDocx(
         }
       } else {
         for (let oIdx = 0; oIdx < sp.options.length; oIdx += 2) {
-          const leftOpt = `(${letters[oIdx] ?? oIdx + 1}) ${cleanOptionText(String(sp.options[oIdx]))}`;
-          const rightOpt = oIdx + 1 < sp.options.length ? `(${letters[oIdx + 1] ?? oIdx + 2}) ${cleanOptionText(String(sp.options[oIdx + 1]))}` : "";
+          const leftOpt = `${letters[oIdx]} ${cleanOptionText(String(sp.options[oIdx]))}`;
+          const rightOpt = oIdx + 1 < sp.options.length ? `${letters[oIdx + 1]} ${cleanOptionText(String(sp.options[oIdx + 1]))}` : "";
           paragraphs.push(
             new Paragraph({
               indent: { left: childIndent },
@@ -418,6 +419,8 @@ export async function buildPaperDocx(
     paper.items,
     (paper.numberingStyle as any) || "CONTINUOUS"
   );
+  // the printed paper's heading plan: each fact once, at the level that owns it
+  const headingPlans = planSectionHeadings(paper.blueprint.sections, paper.items, numbering, locale);
 
   // Group items by section
   const sectionMap = new Map<string, typeof paper.items>();
@@ -611,18 +614,11 @@ export async function buildPaperDocx(
       (x) => x.title.trim().toLowerCase() === section.title.trim().toLowerCase()
     );
     const hasMultipleTypes = allInGroup.length > 1;
+    const plan = headingPlans[section.id];
 
     // Main Section Header (Only if first of its group)
-    if (!isSameAsPrev) {
-      const groupCount = allInGroup.reduce((sum, s) => sum + s.count, 0);
-      const groupMarks = allInGroup.reduce((sum, s) => sum + s.count * s.marksEach, 0);
-      const secRange = numbering.sectionRanges[section.id];
-
-      const groupRightLabel = locale.section.formatGroupSummary(groupCount, groupMarks, {
-        displayedCount: secRange?.groupDisplayedCount,
-        rawItemCount: secRange?.groupRawItemCount ?? groupCount,
-        type: section.type,
-      });
+    if (plan.showBand) {
+      const groupRightLabel = plan.bandSummary;
 
       const sectionTitleDisplay = locale.section.formatSectionHeader(sectionLetter, section.title);
 
@@ -638,27 +634,18 @@ export async function buildPaperDocx(
               size: 24, // 12pt
               font: docFont,
             }),
-            new TextRun({
-              text: ` (${groupRightLabel})`,
-              bold: true,
-              font: docFont,
-            }),
+            ...(groupRightLabel
+              ? [new TextRun({ text: ` (${groupRightLabel})`, bold: true, font: docFont })]
+              : []),
           ],
         }),
       );
     }
 
-    const isNumberedSingleGroupedExercise =
-      /(?:^|[^0-9])(?:प्रश्न\s*[1-5]\b|question\s*[1-5]\b|q[1-5]\b)/i.test(section.title);
+    const isGroupedObjective = plan.grouped;
 
-    const isGroupedObjective =
-      items.length > 1 &&
-      (section.type === "TRUE_FALSE" ||
-        section.type === "FILL_BLANK" ||
-        ((section.type === "MCQ" || section.type === "VERY_SHORT") && isNumberedSingleGroupedExercise));
-
-    // Sub-heading for specific question type within grouped section
-    if (!isSameAsPrev && section.instructions && !isGroupedObjective) {
+    // the heading's instruction line, unless its first row is a grouped question whose own line carries it
+    if (plan.showBand && section.instructions && plan.showBandInstruction) {
       const secRange = numbering.sectionRanges[section.id];
       const reconciledInstruction = sectionHeadingInstruction(
         section.instructions,
@@ -686,7 +673,7 @@ export async function buildPaperDocx(
       }
     }
 
-    if (hasMultipleTypes) {
+    if (plan.showTypeSubBand) {
       const typeLabel = getQuestionTypeLabel(section.type, paperLang);
       const formula = sectionItemsFormula(
         section,

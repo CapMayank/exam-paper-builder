@@ -42,10 +42,15 @@ export function optionMinWidth(options: readonly string[], forceSingle = false):
 }
 
 const OPTION_LETTERS = "abcdefghij";
+const DEVANAGARI_OPTION_LETTERS = ["अ", "ब", "स", "द", "य", "र", "ल", "व"];
 
-/** The printed label of the option at `idx`: (a)…(j), then (11), (12)… */
-export function optionLabel(idx: number): string {
-  return `(${OPTION_LETTERS[idx] ?? idx + 1})`;
+/**
+ * The label of the option at `idx`, the same in print and in the Word file: (a)…(j) on English and bilingual papers,
+ * (अ) (ब) (स) (द)… on Hindi and Sanskrit papers as MP Board sets them; past the letters, (11), (12)…
+ */
+export function optionLabel(idx: number, lang?: string): string {
+  const letters = lang === "hi" || lang === "sa" ? DEVANAGARI_OPTION_LETTERS : OPTION_LETTERS;
+  return `(${letters[idx] ?? idx + 1})`;
 }
 
 /** A grouped exercise prints an item's options when the item itself is a choice question, whatever its section. */

@@ -48,9 +48,15 @@ describe("splitStemParagraphs", () => {
 
 describe("optionLabel", () => {
   it("labels options as a printed question does: (a)…(j), then numbers, with no four-option limit", () => {
-    expect([0, 1, 2, 3, 4, 5].map(optionLabel)).toEqual(["(a)", "(b)", "(c)", "(d)", "(e)", "(f)"]);
+    expect([0, 1, 2, 3, 4, 5].map((i) => optionLabel(i))).toEqual(["(a)", "(b)", "(c)", "(d)", "(e)", "(f)"]);
     expect(optionLabel(9)).toBe("(j)");
     expect(optionLabel(10)).toBe("(11)");
+  });
+
+  it("Hindi and Sanskrit papers letter options (अ) (ब) (स) (द); bilingual papers keep (a)…", () => {
+    expect([0, 1, 2, 3].map((i) => optionLabel(i, "hi"))).toEqual(["(अ)", "(ब)", "(स)", "(द)"]);
+    expect(optionLabel(1, "sa")).toBe("(ब)");
+    expect(optionLabel(1, "bilingual")).toBe("(b)");
   });
 });
 

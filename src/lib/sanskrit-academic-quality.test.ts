@@ -17,6 +17,7 @@ import { STANDARD_BLUEPRINT_TEMPLATES } from "./curriculumTemplates";
 import { resolveInternalChoiceRequirement } from "./internalChoiceRules";
 import { computeDisplayedPaperNumbering } from "./layout";
 import { getPaperLocale } from "./localization";
+import { planSectionHeadings } from "./sectionHeadingPlan";
 import { validateGeneratedQuestion } from "./questionValidator";
 
 describe("Class 10 Sanskrit Academic Quality & Metric Integrity Audit", () => {
@@ -181,32 +182,13 @@ describe("Class 10 Sanskrit Academic Quality & Metric Integrity Audit", () => {
         "CONTINUOUS"
       );
 
-      // Section ख (FILL_BLANK): 1 parent question with 6 fill-in-the-blank items
-      const secB = numbering.sectionRanges["sec_b_fill"];
-      const headerSaB = saLocale.section.formatGroupSummary(6, 6, {
-        displayedCount: secB.displayedCount,
-        rawItemCount: secB.rawItemCount,
-        type: "FILL_BLANK",
-      });
-      expect(headerSaB).toBe("1 प्रश्नः (6 रिक्तस्थानानि) · 6 अङ्काः");
-
-      // Section ग (TRUE_FALSE): 1 parent question with 6 True/False statements
-      const secC = numbering.sectionRanges["sec_c_tf"];
-      const headerSaC = saLocale.section.formatGroupSummary(6, 6, {
-        displayedCount: secC.displayedCount,
-        rawItemCount: secC.rawItemCount,
-        type: "TRUE_FALSE",
-      });
-      expect(headerSaC).toBe("1 प्रश्नः (6 सत्यासत्य-कथनानि) · 6 अङ्काः");
-
-      // Section घ (MATCH_COLUMN): 1 parent question with 6 matching pairs
-      const secD = numbering.sectionRanges["sec_d_match"];
-      const headerSaD = saLocale.section.formatGroupSummary(6, 6, {
-        displayedCount: secD.displayedCount,
-        rawItemCount: 6,
-        type: "MATCH_COLUMN",
-      });
-      expect(headerSaD).toBe("1 प्रश्नः (6 युग्मानि) · 6 अङ्काः");
+      // Sections ख (FILL_BLANK), ग (TRUE_FALSE) and घ (MATCH_COLUMN) each print one numbered question whose own line
+      // carries the marks, so their bands print the section name alone
+      const plans = planSectionHeadings(SANSKRIT_CLASS10_BLUEPRINT.sections, SANSKRIT_CLASS10_PAPER.items, numbering, saLocale);
+      expect(numbering.sectionRanges["sec_b_fill"].displayedCount).toBe(1);
+      expect(plans["sec_b_fill"].bandSummary).toBe("");
+      expect(plans["sec_c_tf"].bandSummary).toBe("");
+      expect(plans["sec_d_match"].bandSummary).toBe("");
 
       // Section च (SHORT): 12 distinct numbered questions
       const secF = numbering.sectionRanges["sec_f_short"];
@@ -217,22 +199,8 @@ describe("Class 10 Sanskrit Academic Quality & Metric Integrity Audit", () => {
       });
       expect(headerSaF).toBe("12 प्रश्नाः · 24 अङ्काः");
 
-      // English Header Verification
-      expect(
-        enLocale.section.formatGroupSummary(6, 6, {
-          displayedCount: 1,
-          rawItemCount: 6,
-          type: "FILL_BLANK",
-        })
-      ).toBe("1 Question (6 Fill-in-the-Blank items) · 6 Marks");
-
-      expect(
-        enLocale.section.formatGroupSummary(6, 6, {
-          displayedCount: 1,
-          rawItemCount: 6,
-          type: "MATCH_COLUMN",
-        })
-      ).toBe("1 Question (6 Matching pairs) · 6 Marks");
+      // English wording of the same labels
+      expect(enLocale.section.formatGroupSummary(12, 24, { displayedCount: 12 })).toBe("12 Questions · 24 Marks");
     });
   });
 

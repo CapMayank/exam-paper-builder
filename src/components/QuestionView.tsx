@@ -37,8 +37,8 @@ const ROMAN_LOWER = ["(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)", "(vii)", "(v
  * Options laid out to use as few lines as they need: short ones four across, medium ones two across, and an
  * option too long for its share takes a row of its own instead of wrapping inside a narrow column.
  */
-export function OptionFlow({ options, forceSingle, isA5, fontSize, marginTop }: { options: string[]; forceSingle?: boolean; isA5?: boolean; fontSize: string; marginTop: string }) {
-  if (hasFigureOptions(options)) return <FigureOptionGrid options={options} isA5={isA5} fontSize={fontSize} marginTop={marginTop} />;
+export function OptionFlow({ options, forceSingle, isA5, fontSize, marginTop, lang }: { options: string[]; forceSingle?: boolean; isA5?: boolean; fontSize: string; marginTop: string; lang?: PaperLanguage }) {
+  if (hasFigureOptions(options)) return <FigureOptionGrid options={options} isA5={isA5} fontSize={fontSize} marginTop={marginTop} lang={lang} />;
   const cleaned = options.map((o) => cleanOptionText(o));
   const minWidth = optionMinWidth(cleaned, forceSingle);
   const gapMm = isA5 ? 3 : 4;
@@ -59,7 +59,7 @@ export function OptionFlow({ options, forceSingle, isA5, fontSize, marginTop }: 
             fontSize,
           }}
         >
-          <span style={{ fontWeight: 600 }}>{optionLabel(i)}</span> <MathText text={o} />
+          <span style={{ fontWeight: 600 }}>{optionLabel(i, lang)}</span> <MathText text={o} />
         </div>
       ))}
     </div>
@@ -70,7 +70,7 @@ export function OptionFlow({ options, forceSingle, isA5, fontSize, marginTop }: 
  * Picture options ("Which figure shows a rhombus?"): labelled pictures in a grid, four or two across, every picture
  * fitted into the same box so none looks bigger than the others. A caption, when the option has one, prints below.
  */
-function FigureOptionGrid({ options, isA5, fontSize, marginTop }: { options: string[]; isA5?: boolean; fontSize: string; marginTop: string }) {
+function FigureOptionGrid({ options, isA5, fontSize, marginTop, lang }: { options: string[]; isA5?: boolean; fontSize: string; marginTop: string; lang?: PaperLanguage }) {
   const cols = figureOptionColumns(options, isA5);
   const boxMm = cols === 4 ? (isA5 ? 20 : 28) : isA5 ? 28 : 38;
   return (
@@ -85,11 +85,11 @@ function FigureOptionGrid({ options, isA5, fontSize, marginTop }: { options: str
         return (
           <div key={i} className="opt-text" style={{ display: "flex", alignItems: "flex-start", gap: "1.5mm", fontSize, minWidth: 0 }}>
             {/* fixed label width so every picture box is the same size, (m) as wide as (i) */}
-            <span style={{ fontWeight: 600, flex: "0 0 auto", width: "1.9em" }}>{optionLabel(i)}</span>
+            <span style={{ fontWeight: 600, flex: "0 0 auto", width: "1.9em" }}>{optionLabel(i, lang)}</span>
             <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center" }}>
               {figure ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={imageUrl(figure)} alt={caption || `Option ${optionLabel(i)}`} style={{ width: "100%", height: `${boxMm}mm`, objectFit: "contain" }} />
+                <img src={imageUrl(figure)} alt={caption || `Option ${optionLabel(i, lang)}`} style={{ width: "100%", height: `${boxMm}mm`, objectFit: "contain" }} />
               ) : null}
               {caption && (
                 <div style={{ marginTop: figure ? "0.8mm" : 0, textAlign: "center", overflowWrap: "anywhere" }}>
@@ -258,7 +258,7 @@ function SingleQuestionBody({
               <MathText text={sp.text} />
             </div>
             {sp.options && sp.options.length > 0 && (
-              <OptionFlow options={sp.options} isA5={isA5} fontSize={optFontSize} marginTop="1.5mm" />
+              <OptionFlow options={sp.options} isA5={isA5} fontSize={optFontSize} marginTop="1.5mm" lang={effectiveLang} />
             )}
             {showAnswer && sp.answer && (
               <div style={{ marginTop: "1mm", fontSize: isA5 ? "7.5pt" : "0.85em", color: "#166534" }}>
@@ -422,7 +422,7 @@ function SingleQuestionBody({
           </div>
           {isLastStemPart && !splitAttachments && figure("2mm")}
           {isLastStemPart && isMcq && q.options.length > 0 && (
-            <OptionFlow options={q.options} forceSingle={singleColumnOptions} isA5={isA5} fontSize={optFontSize} marginTop={dense ? "1mm" : "2mm"} />
+            <OptionFlow options={q.options} forceSingle={singleColumnOptions} isA5={isA5} fontSize={optFontSize} marginTop={dense ? "1mm" : "2mm"} lang={effectiveLang} />
           )}
           {isLastStemPart && !splitAttachments && q.type === "MATCH_COLUMN" && matchPairs.length > 0 && matchTable(0, matchPairs.length, true, true, "2mm")}
           {isLastStemPart && q.type === "TRUE_FALSE" && (
@@ -474,7 +474,7 @@ function SingleQuestionBody({
                       <QuestionContent text={sp.text} isA5={isA5} />
                     </div>
                     {sp.options && sp.options.length > 0 && (
-                      <OptionFlow options={sp.options} isA5={isA5} fontSize={optFontSize} marginTop="1.5mm" />
+                      <OptionFlow options={sp.options} isA5={isA5} fontSize={optFontSize} marginTop="1.5mm" lang={effectiveLang} />
                     )}
                     {/* Level 2 nested subparts support */}
                     {sp.subparts && sp.subparts.length > 0 && (
