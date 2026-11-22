@@ -674,6 +674,8 @@ export function QuestionForm({
       onPasteCapture={(e) => {
         if (isKindergartenType(type) || bookModalOpen || sketching) return;
         const target = e.target as HTMLElement | null;
+        // A picture dialog opened from inside the form (an option's scan, say) takes its own pastes.
+        if (target?.closest('[role="dialog"]')) return;
         const hasPlainText = Boolean(e.clipboardData?.getData("text/plain"));
         if (hasPlainText && target?.closest("[contenteditable], input, textarea, math-field")) return;
         const imgFile = Array.from(e.clipboardData?.files ?? []).find((f) => f.type.startsWith("image/"));
@@ -1266,6 +1268,9 @@ export function QuestionForm({
                             figure={splitOptionFigure(opt).figure}
                             label={`(${String.fromCharCode(97 + optIdx)})`}
                             onError={setError}
+                            subject={book?.subject}
+                            chapterTitle={chapters.find((c) => c.id === effChapterId)?.title}
+                            questionText={text}
                             onChange={(fig) =>
                               setSubparts((subs) =>
                                 subs.map((s, j) =>
@@ -1328,6 +1333,9 @@ export function QuestionForm({
                   figure={splitOptionFigure(o).figure}
                   label={LETTERS[i]}
                   onError={setError}
+                  subject={book?.subject}
+                  chapterTitle={chapters.find((c) => c.id === effChapterId)?.title}
+                  questionText={text}
                   onChange={(fig) => setOptions((opts) => opts.map((x, j) => (j === i ? joinOptionFigure(fig, splitOptionFigure(x).text) : x)))}
                 />
                 <MathRichEditor

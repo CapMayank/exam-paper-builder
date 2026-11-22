@@ -113,3 +113,87 @@ export function applyBookScanFilter(
 
   return out;
 }
+
+/** Largest tilt auto-straighten looks for, in degrees either way. */
+export const MAX_DESKEW_DEGREES = 15;
+
+/**
+ * Finds how far a photographed page is tilted, from the ink's lines (text rows, ruled lines, diagram edges).
+ * Returns the angle in degrees to pass to a canvas rotation (positive = clockwise) to level them, or 0 when
+ * the page already looks level or there is too little ink to tell.
+ *
+ * Method: clean the image to black-and-white, then try every angle in range and keep the one where the ink,
+ * projected onto rows, piles up into the sharpest peaks (lines lie along rows when level).
+ */
+export function detectDeskewAngle(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  maxDegrees: number = MAX_DESKEW_DEGREES,
+): number {
+  if (width < 16 || height < 16) return 0;
+  const bw = applyBookScanFilter(data, width, height, "bw", 0.5);
+
+  // Ink pixel coordinates, centred, skipping a thin border (page edges and shadows).
+  const margin = Math.round(Math.min(width, height) * 0.02);
+  const xs: number[] = [];
+  const ys: number[] = [];
+  const cx = width / 2;
+  const cy = height / 2;
+  for (let y = margin; y < height - margin; y++) {
+    for (let x = margin; x < width - margin; x++) {
+      if (bw[(y * width + x) * 4] < 128) {
+        xs.push(x - cx);
+        ys.push(y - cy);
+      }
+    }
+  }
+  const total = xs.length;
+  if (total < 60) return 0;
+  // Mostly-ink images (a dark photo, a filled shape) carry no line structure to measure.
+  if (total > (width - 2 * margin) * (height - 2 * margin) * 0.5) return 0;
+
+  // Keep the work bounded on dense pages.
+  const step = Math.max(1, Math.floor(total / 40000));
+  const diag = Math.ceil(Math.hypot(width, height)) + 2;
+  const offset = diag / 2;
+  const bins = new Float64Array(diag + 1);
+
+  function score(deg: number): number {
+    const rad = (deg * Math.PI) / 180;
+    const sin = Math.sin(rad);
+    const cos = Math.cos(rad);
+    bins.fill(0);
+    for (let i = 0; i < total; i += step) {
+      // Row of the point once the page is turned by `deg` (canvas rotation, y pointing down).
+      const r = Math.round(xs[i] * sin + ys[i] * cos + offset);
+      if (r >= 0 && r <= diag) bins[r] += 1;
+    }
+    let s = 0;
+    for (let i = 0; i <= diag; i++) s += bins[i] * bins[i];
+    return s;
+  }
+
+  let best = 0;
+  let bestScore = score(0);
+  const levelScore = bestScore;
+  for (let deg = -maxDegrees; deg <= maxDegrees + 1e-9; deg += 0.5) {
+    const s = score(deg);
+    if (s > bestScore) {
+      bestScore = s;
+      best = deg;
+    }
+  }
+  const coarse = best;
+  for (let deg = coarse - 0.5; deg <= coarse + 0.5 + 1e-9; deg += 0.05) {
+    const s = score(deg);
+    if (s > bestScore) {
+      bestScore = s;
+      best = deg;
+    }
+  }
+
+  // Leave the page alone when turning it barely helps or the tilt is too small to see.
+  if (bestScore < levelScore * 1.03 || Math.abs(best) < 0.2) return 0;
+  return Math.round(best * 10) / 10;
+}

@@ -15,9 +15,16 @@ import {
   Smartphone,
   Undo2,
   Upload,
+  Wand2,
 } from "lucide-react";
 import { Modal } from "./ui";
-import { applyBookScanFilter, computeFitDimensions, type ScanFilterMode } from "@/lib/bookScanFilter";
+import {
+  applyBookScanFilter,
+  computeFitDimensions,
+  detectDeskewAngle,
+  MAX_DESKEW_DEGREES,
+  type ScanFilterMode,
+} from "@/lib/bookScanFilter";
 
 export interface BookFigureModalProps {
   isOpen: boolean;
@@ -90,6 +97,27 @@ async function encodeCanvasUnderLimit(canvas: HTMLCanvasElement): Promise<Blob |
   return png;
 }
 
+/** Auto-straighten: the fine tilt (degrees) that levels this image once turned by `rotation`. */
+function measureSkew(bitmap: ImageBitmap, rotation: number): number {
+  const swapped = rotation === 90 || rotation === 270;
+  const rawW = swapped ? bitmap.height : bitmap.width;
+  const rawH = swapped ? bitmap.width : bitmap.height;
+  const { width, height } = computeFitDimensions(rawW, rawH, 700);
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return 0;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, width, height);
+  ctx.translate(width / 2, height / 2);
+  ctx.rotate((rotation * Math.PI) / 180);
+  const drawW = swapped ? height : width;
+  const drawH = swapped ? width : height;
+  ctx.drawImage(bitmap, -drawW / 2, -drawH / 2, drawW, drawH);
+  return detectDeskewAngle(ctx.getImageData(0, 0, width, height).data, width, height);
+}
+
 export function BookFigureModal(props: BookFigureModalProps) {
   if (!props.isOpen) return null;
   return <BookFigureModalInner {...props} />;
@@ -106,6 +134,9 @@ function BookFigureModalInner({
   const [sourceBitmap, setSourceBitmap] = useState<ImageBitmap | null>(null);
   const bitmapRef = useRef<ImageBitmap | null>(null);
   const [rotation, setRotation] = useState<0 | 90 | 180 | 270>(0);
+  // Fine tilt on top of the quarter turns, in degrees. Set by auto-straighten, then adjustable by hand.
+  const [skew, setSkew] = useState(0);
+  const [autoSkew, setAutoSkew] = useState<number | null>(null);
   const [filterMode, setFilterMode] = useState<ScanFilterMode>("bw");
   const [clarity, setClarity] = useState<number>(0.5);
   const [crop, setCrop] = useState<CropRect>(DEFAULT_CROP);
@@ -113,6 +144,16 @@ function BookFigureModalInner({
   const [strokes, setStrokes] = useState<WhiteoutStroke[]>([]);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState("");
+
+  /** Turn to `rot` and level the page automatically; clears the crop and whiteout, which no longer line up. */
+  const straighten = useCallback((bmp: ImageBitmap, rot: 0 | 90 | 180 | 270) => {
+    const angle = measureSkew(bmp, rot);
+    setRotation(rot);
+    setAutoSkew(angle);
+    setSkew(angle);
+    setCrop(DEFAULT_CROP);
+    setStrokes([]);
+  }, []);
 
   // QR session state
   const [qrNonce, setQrNonce] = useState(0);
@@ -148,16 +189,14 @@ function BookFigureModalInner({
       try {
         const bmp = await decodeBlobToBitmap(blob);
         setBitmap(bmp);
-        setRotation(0);
-        setCrop(DEFAULT_CROP);
-        setStrokes([]);
+        straighten(bmp, 0);
         setTool("crop");
         setFilterMode("bw");
       } catch {
         setLoadError("Could not read that image. Try PNG, JPEG, or WebP.");
       }
     },
-    [setBitmap],
+    [setBitmap, straighten],
   );
 
   // Load initialFile or initialImageUrl if provided
@@ -171,9 +210,7 @@ function BookFigureModalInner({
             return;
           }
           setBitmap(bmp);
-          setRotation(0);
-          setCrop(DEFAULT_CROP);
-          setStrokes([]);
+          straighten(bmp, 0);
           setTool("crop");
           setFilterMode("bw");
         })
@@ -196,7 +233,7 @@ function BookFigureModalInner({
     return () => {
       cancelled = true;
     };
-  }, [initialFile, initialImageUrl, loadBlob, setBitmap]);
+  }, [initialFile, initialImageUrl, loadBlob, setBitmap, straighten]);
 
   // Cleanup bitmap on unmount
   useEffect(() => {
@@ -351,13 +388,19 @@ function BookFigureModalInner({
     ctx.restore();
   }, [strokes]);
 
-  // Build filtered base canvas whenever bitmap, rotation, filterMode, or clarity changes
+  // Build filtered base canvas whenever bitmap, rotation, tilt, filterMode, or clarity changes
   useEffect(() => {
     if (!sourceBitmap) return;
     const swapped = rotation === 90 || rotation === 270;
     const rawW = swapped ? sourceBitmap.height : sourceBitmap.width;
     const rawH = swapped ? sourceBitmap.width : sourceBitmap.height;
-    const { width, height } = computeFitDimensions(rawW, rawH, 1400);
+    const fit = computeFitDimensions(rawW, rawH, 1400);
+    // Grow the canvas to hold the tilted image so no corner is cut off.
+    const rad = (skew * Math.PI) / 180;
+    const cos = Math.abs(Math.cos(rad));
+    const sin = Math.abs(Math.sin(rad));
+    const width = Math.round(fit.width * cos + fit.height * sin);
+    const height = Math.round(fit.width * sin + fit.height * cos);
 
     const canvas = document.createElement("canvas");
     canvas.width = width;
@@ -365,15 +408,15 @@ function BookFigureModalInner({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Fill white first so transparent PNGs/SVGs don't turn transparent regions black in lum calculations
+    // Fill white first so transparent PNGs/SVGs (and the corners a tilt uncovers) don't read as black ink
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, width, height);
 
     ctx.save();
     ctx.translate(width / 2, height / 2);
-    ctx.rotate((rotation * Math.PI) / 180);
-    const drawW = swapped ? height : width;
-    const drawH = swapped ? width : height;
+    ctx.rotate(((rotation + skew) * Math.PI) / 180);
+    const drawW = swapped ? fit.height : fit.width;
+    const drawH = swapped ? fit.width : fit.height;
     ctx.drawImage(sourceBitmap, -drawW / 2, -drawH / 2, drawW, drawH);
     ctx.restore();
 
@@ -386,7 +429,7 @@ function BookFigureModalInner({
 
     baseCanvasRef.current = canvas;
     drawPreview();
-  }, [sourceBitmap, rotation, filterMode, clarity, drawPreview]);
+  }, [sourceBitmap, rotation, skew, filterMode, clarity, drawPreview]);
 
   function getNormPoint(e: React.PointerEvent<HTMLDivElement>): { x: number; y: number } {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -698,11 +741,7 @@ function BookFigureModalInner({
               )}
               <button
                 type="button"
-                onClick={() => {
-                  setRotation((r) => ((r + 270) % 360) as 0 | 90 | 180 | 270);
-                  setCrop(DEFAULT_CROP);
-                  setStrokes([]);
-                }}
+                onClick={() => straighten(sourceBitmap, ((rotation + 270) % 360) as 0 | 90 | 180 | 270)}
                 className="btn btn-sm"
                 title="Rotate left 90°"
               >
@@ -710,11 +749,7 @@ function BookFigureModalInner({
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setRotation((r) => ((r + 90) % 360) as 0 | 90 | 180 | 270);
-                  setCrop(DEFAULT_CROP);
-                  setStrokes([]);
-                }}
+                onClick={() => straighten(sourceBitmap, ((rotation + 90) % 360) as 0 | 90 | 180 | 270)}
                 className="btn btn-sm"
                 title="Rotate right 90°"
               >
@@ -744,19 +779,66 @@ function BookFigureModalInner({
             </div>
           </div>
 
-          {filterMode !== "original" && (
-            <div className="flex items-center gap-3 px-1 text-xs text-slate-600">
-              <span className="font-medium">Ink Clarity:</span>
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 px-1 text-xs text-slate-600">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium">Straighten:</span>
               <input
                 type="range"
-                min={0}
-                max={100}
-                value={Math.round(clarity * 100)}
-                onChange={(e) => setClarity(Number(e.target.value) / 100)}
-                className="w-44 accent-indigo-600"
+                min={-MAX_DESKEW_DEGREES}
+                max={MAX_DESKEW_DEGREES}
+                step={0.1}
+                value={skew}
+                aria-label="Straighten angle"
+                onChange={(e) => {
+                  setSkew(Number(e.target.value));
+                  setCrop(DEFAULT_CROP);
+                  setStrokes([]);
+                }}
+                className="w-40 accent-indigo-600"
               />
+              <span className="w-11 tabular-nums">
+                {skew > 0 ? "+" : ""}
+                {skew.toFixed(1)}°
+              </span>
+              <button
+                type="button"
+                onClick={() => straighten(sourceBitmap, rotation)}
+                className="btn btn-sm"
+                title="Level the page automatically from its text lines"
+              >
+                <Wand2 size={13} /> Auto
+              </button>
+              {skew !== 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSkew(0);
+                    setCrop(DEFAULT_CROP);
+                    setStrokes([]);
+                  }}
+                  className="text-[11px] font-medium text-slate-500 hover:text-slate-800 hover:underline"
+                >
+                  Reset
+                </button>
+              )}
+              {autoSkew !== null && autoSkew !== 0 && skew === autoSkew && (
+                <span className="text-[11px] text-emerald-700">Auto-straightened</span>
+              )}
             </div>
-          )}
+            {filterMode !== "original" && (
+              <div className="flex items-center gap-2">
+                <span className="font-medium">Ink Clarity:</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={Math.round(clarity * 100)}
+                  onChange={(e) => setClarity(Number(e.target.value) / 100)}
+                  className="w-44 accent-indigo-600"
+                />
+              </div>
+            )}
+          </div>
 
           {/* Canvas + Interactive Crop Overlay */}
           <div className="flex justify-center rounded-xl border border-slate-200 bg-slate-100 p-2">
