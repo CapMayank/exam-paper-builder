@@ -1,4 +1,5 @@
 import type { QuestionType } from "./constants";
+import { regroupObjectiveSections } from "./boardSections";
 import { ENGLISH_BOOKS, englishSections } from "./englishBlueprint";
 import { FORMATS } from "./officialFormats";
 import { SCHEME_GROUPS_2026_27 } from "./officialSchemeData";
@@ -1302,7 +1303,17 @@ function attachOfficialSource(t: BlueprintTemplate): BlueprintTemplate {
   };
 }
 
-export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
+/** A template in board style: its single-form objective sections become one objective section (see boardSections.ts). */
+function boardStyleTemplate(t: BlueprintTemplate): BlueprintTemplate {
+  // English papers are sectioned by skill (reading, writing, grammar, literature), which is already the board pattern
+  if (/english/i.test(t.subjectName ?? t.title)) return t;
+  const lang = t.language === "hi" || t.language === "sa" ? t.language : "en";
+  const sections = regroupObjectiveSections(t.sections, lang);
+  return sections === t.sections ? t : { ...t, sections };
+}
+
+/** The MPBSE templates as their generators write them, before board-style regrouping. */
+export const UNGROUPED_MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
   ...RAW_MPBSE_BLUEPRINT_TEMPLATES.map(attachOfficialSource),
   // every other written paper in the 2026-27 scheme
   ...buildOfficialTemplates({ getArchetypeHeading, createChoicePolicy }, RAW_MPBSE_BLUEPRINT_TEMPLATES),
@@ -1310,11 +1321,13 @@ export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
   ...buildSchoolDefinedTemplates({ getArchetypeHeading, createChoicePolicy }),
 ];
 
+export const MPBSE_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = UNGROUPED_MPBSE_BLUEPRINT_TEMPLATES.map(boardStyleTemplate);
+
 // =============================================================================
 // LEGACY & STARTER TEMPLATES PRESERVED FOR FULL BACKWARD COMPATIBILITY
 // =============================================================================
 
-export const LEGACY_STARTER_TEMPLATES: BlueprintTemplate[] = [
+export const UNGROUPED_LEGACY_STARTER_TEMPLATES: BlueprintTemplate[] = [
   {
     id: "mpbse-sanskrit-10th-75m",
     templateCode: "mpbse-10th-sanskrit-shemushi-75m",
@@ -1907,6 +1920,8 @@ export const LEGACY_STARTER_TEMPLATES: BlueprintTemplate[] = [
     ],
   },
 ];
+
+export const LEGACY_STARTER_TEMPLATES: BlueprintTemplate[] = UNGROUPED_LEGACY_STARTER_TEMPLATES.map(boardStyleTemplate);
 
 export const STANDARD_BLUEPRINT_TEMPLATES: BlueprintTemplate[] = [
   ...MPBSE_BLUEPRINT_TEMPLATES,

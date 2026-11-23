@@ -138,10 +138,12 @@ describe("MP Board Subject-Based Heading Language & Application Seeding", () => 
           }
         } else if (lang === "sa") {
           const firstSec = sectionsJson[0];
-          expect(firstSec.title).toContain("विकल्पं");
+          expect(firstSec.title).toBe("खण्डः 'क' — वस्तुनिष्ठप्रश्नाः");
+          expect(firstSec.questionTitle).toContain("विकल्पं");
         } else if (lang === "hi") {
           const firstSec = sectionsJson[0];
-          expect(firstSec.title).toContain("सही विकल्प");
+          expect(firstSec.title).toBe("खण्ड 'अ' — वस्तुनिष्ठ प्रश्न");
+          expect(/[ऀ-ॿ]/.test(firstSec.questionTitle ?? "")).toBe(true);
         }
       }
     });
@@ -177,20 +179,21 @@ describe("MP Board Subject-Based Heading Language & Application Seeding", () => 
       const math = templates.find((t) => t.templateCode === "mpbse-10th-mathematics-standard-100-75m");
       expect(math).toBeDefined();
       const mathSections = math?.sectionsJson as any[];
-      expect(mathSections[0].title).toBe("Question 1: Multiple Choice Questions");
+      expect(mathSections[0].title).toBe("Section A — Objective Questions");
       expect(/[\u0900-\u097F]/.test(mathSections[0].title)).toBe(false);
 
       // Verify Sanskrit template has Sanskrit section titles
       const sanskrit = templates.find((t) => t.templateCode === "mpbse-10th-sanskrit-512-75m");
       expect(sanskrit).toBeDefined();
       const sanskritSections = sanskrit?.sectionsJson as any[];
-      expect(sanskritSections[0].title).toContain("विकल्पं");
+      expect(sanskritSections[0].title).toBe("खण्डः 'क' — वस्तुनिष्ठप्रश्नाः");
+      expect(sanskritSections[0].questionTitle).toContain("विकल्पं");
 
       // Verify Physics template has English section titles
       const physics = templates.find((t) => t.templateCode === "mpbse-11th-physics-210-70m");
       expect(physics).toBeDefined();
       const physicsSections = physics?.sectionsJson as any[];
-      expect(physicsSections[0].title).toBe("Question 1: Multiple Choice Questions");
+      expect(physicsSections[0].title).toBe("Section A — Objective Questions");
       expect(/[\u0900-\u097F]/.test(physicsSections[0].title)).toBe(false);
     });
 

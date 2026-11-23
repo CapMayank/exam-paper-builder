@@ -12,7 +12,7 @@ describe("Quota Manager & Internal Choice (OR) Marks Isolation Regression", () =
 
   const sections = sanskritTpl.sections.flatMap((grp, gIdx) =>
     grp.questionTypes.map((qt, qIdx) => ({
-      id: `sec_${gIdx}`,
+      id: `sec_${gIdx}_${qIdx}`,
       title: grp.title,
       instructions: grp.instructions,
       type: qt.type,

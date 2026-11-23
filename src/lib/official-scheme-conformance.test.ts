@@ -9,8 +9,9 @@ function byMarks(t: BlueprintTemplate): Record<number, number> {
   for (const g of t.sections) for (const q of g.questionTypes) out[q.marksEach] = (out[q.marksEach] ?? 0) + q.count;
   return out;
 }
+/** Q1-Q5's 1-mark counts: the first five rows (board style puts them all in one objective section). */
 function objectiveSplit(t: BlueprintTemplate): number[] {
-  return t.sections.slice(0, 5).map((g) => g.questionTypes.reduce((a, q) => a + (q.marksEach === 1 ? q.count : 0), 0));
+  return t.sections.flatMap((g) => g.questionTypes).slice(0, 5).map((q) => (q.marksEach === 1 ? q.count : 0));
 }
 
 describe("official 2026-27 scheme data", () => {

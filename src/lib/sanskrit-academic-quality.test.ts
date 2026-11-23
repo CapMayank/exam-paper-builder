@@ -417,35 +417,34 @@ describe("Class 10 Sanskrit Academic Quality & Metric Integrity Audit", () => {
       expect(tmpl!.targetClasses).toBe("Class 10");
       expect(tmpl!.language).toBe("sa");
       expect(tmpl!.subjectCode).toBe("512");
-      expect(tmpl!.sections.length).toBe(19);
+      // board style: Q1-Q5 share one objective section, then one section per remaining question (15 sections, 19 rows)
+      expect(tmpl!.sections.length).toBe(15);
+      const rows = tmpl!.sections.flatMap((sec) => sec.questionTypes);
+      expect(rows.length).toBe(19);
+      expect(tmpl!.sections[0].questionTypes.length).toBe(5);
 
-      // Verify marks arithmetic across the 19 section records
-      const totalMarks = tmpl!.sections.reduce((sum, sec) => {
-        return sum + sec.questionTypes.reduce((s, qt) => s + qt.count * qt.marksEach, 0);
-      }, 0);
+      // Verify marks arithmetic across the 19 rows
+      const totalMarks = rows.reduce((s, qt) => s + qt.count * qt.marksEach, 0);
       expect(totalMarks).toBe(75);
 
       // Verify no OR choice configured for Q1-Q17
-      for (let sIdx = 0; sIdx <= 12; sIdx++) {
-        const sec = tmpl!.sections[sIdx];
-        for (const qt of sec.questionTypes) {
-          expect(qt.orChoiceMode).toBe("NOT_REQUIRED");
-        }
+      for (let rIdx = 0; rIdx <= 12; rIdx++) {
+        expect(rows[rIdx].orChoiceMode).toBe("NOT_REQUIRED");
       }
 
       // Verify Q18, Q19, Q20 have BOARD_DEFAULT or REQUIRED internal choices
-      expect(["REQUIRED", "BOARD_DEFAULT"]).toContain(tmpl!.sections[13].questionTypes[0].orChoiceMode);
-      expect(["REQUIRED", "BOARD_DEFAULT"]).toContain(tmpl!.sections[14].questionTypes[0].orChoiceMode);
-      expect(["REQUIRED", "BOARD_DEFAULT"]).toContain(tmpl!.sections[15].questionTypes[0].orChoiceMode);
+      expect(["REQUIRED", "BOARD_DEFAULT"]).toContain(rows[13].orChoiceMode);
+      expect(["REQUIRED", "BOARD_DEFAULT"]).toContain(rows[14].orChoiceMode);
+      expect(["REQUIRED", "BOARD_DEFAULT"]).toContain(rows[15].orChoiceMode);
 
       // Verify Q21 has NOT_REQUIRED (choices are via attempt-any-4 subparts)
-      expect(tmpl!.sections[16].questionTypes[0].orChoiceMode).toBe("NOT_REQUIRED");
+      expect(rows[16].orChoiceMode).toBe("NOT_REQUIRED");
 
       // Verify Q22 has BOARD_DEFAULT or REQUIRED
-      expect(["REQUIRED", "BOARD_DEFAULT"]).toContain(tmpl!.sections[17].questionTypes[0].orChoiceMode);
+      expect(["REQUIRED", "BOARD_DEFAULT"]).toContain(rows[17].orChoiceMode);
 
       // Verify Q23 has NOT_REQUIRED (choice is via 4 selectable essay topics)
-      expect(tmpl!.sections[18].questionTypes[0].orChoiceMode).toBe("NOT_REQUIRED");
+      expect(rows[18].orChoiceMode).toBe("NOT_REQUIRED");
     });
 
     it("computes exactly 23 numbered parent questions, 75 maximum marks, and 19 section ranges", () => {
