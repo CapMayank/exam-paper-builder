@@ -170,13 +170,18 @@ import { sectionLetter } from "./sectionLetter";
 
 export { NumberingStyle };
 
-/** Formats a question number according to the chosen NumberingStyle */
+/**
+ * Formats a question number according to the chosen NumberingStyle. Numbers run through the whole paper, so the
+ * section letter and position are no longer printed; they stay in the signature for the callers that pass them.
+ */
 export function formatQuestionNumber(
   style: NumberingStyle,
   globalIdx: number,
-  sectionLetter: string,
-  sectionIdx: number,
+  sectionLetter?: string,
+  sectionIdx?: number,
 ): string {
+  void sectionLetter;
+  void sectionIdx;
   switch (style) {
     case "PREFIXED":
       return `Q.${globalIdx + 1}`;

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { exportQuestionsToCsv } from "./batchQuestionIo";
 import { formatQuestionNumber as formatNumberConstants, normalizeMcqAnswer } from "./constants";
-import { formatQuestionNumber as formatNumberLayout } from "./layout";
 import { permuteMcqOptions } from "./multiset";
 import { toPlacedItems } from "./papers";
 import { questionSchema } from "./schemas";
