@@ -5,7 +5,7 @@ const sec = (id: string, title: string, type: string, marksEach = 1) => ({ id, t
 const item = (id: string, sectionId: string, position: number, type = "SHORT") => ({ id, sectionId, position, question: { type } });
 
 describe("builderQuestionLabel: the label print shows", () => {
-  // Section A: MCQ x2, Section A: True/False x3 (grouped), Section B: short x2
+  // Section A: MCQ x2 (grouped), Section A: True/False x3 (grouped), Section B: short x2
   const sections = [sec("a1", "Section A", "MCQ"), sec("a2", "Section A", "TRUE_FALSE"), sec("b", "Section B", "SHORT", 2)];
   const items = [
     item("m1", "a1", 0, "MCQ"),
@@ -20,29 +20,29 @@ describe("builderQuestionLabel: the label print shows", () => {
   it("numbers a grouped exercise once and labels its items with sub-labels (not by position)", () => {
     const n = computeDisplayedPaperNumbering(sections, items, "CONTINUOUS");
     expect(["m1", "m2", "t1", "t2", "t3", "s1", "s2"].map((id) => builderQuestionLabel(n, id))).toEqual([
-      "1",
-      "2",
-      "3 (a)",
-      "3 (b)",
-      "3 (c)",
+      "1 (a)",
+      "1 (b)",
+      "2 (a)",
+      "2 (b)",
+      "2 (c)",
+      "3",
       "4",
-      "5",
     ]);
   });
 
   it("prefixes as print does", () => {
     const n = computeDisplayedPaperNumbering(sections, items, "PREFIXED");
-    expect(builderQuestionLabel(n, "t2")).toBe("Q.3 (b)");
-    expect(builderQuestionLabel(n, "s2")).toBe("Q.5");
+    expect(builderQuestionLabel(n, "t2")).toBe("Q.2 (b)");
+    expect(builderQuestionLabel(n, "s2")).toBe("Q.4");
   });
 
   it("counts section-relative numbers across every row of one section, as print does", () => {
     const n = computeDisplayedPaperNumbering(sections, items, "SECTION_RELATIVE");
     expect(["m1", "m2", "t1", "t3", "s1", "s2"].map((id) => builderQuestionLabel(n, id))).toEqual([
-      "A1",
-      "A2",
-      "A3 (a)",
-      "A3 (c)",
+      "A1 (a)",
+      "A1 (b)",
+      "A2 (a)",
+      "A2 (c)",
       "B1",
       "B2",
     ]);
@@ -57,9 +57,9 @@ describe("builderQuestionLabel: the label print shows", () => {
 
   it("uses Devanagari sub-labels on a Hindi or Sanskrit paper even when the title is in English", () => {
     const n = computeDisplayedPaperNumbering(sections, items, "CONTINUOUS", "hi");
-    expect(builderQuestionLabel(n, "t1")).toBe("3 (क)");
+    expect(builderQuestionLabel(n, "t1")).toBe("2 (क)");
     const en = computeDisplayedPaperNumbering(sections, items, "CONTINUOUS", "en");
-    expect(builderQuestionLabel(en, "t1")).toBe("3 (a)");
+    expect(builderQuestionLabel(en, "t1")).toBe("2 (a)");
   });
 
   it("has no label for an item that is not on the paper", () => {

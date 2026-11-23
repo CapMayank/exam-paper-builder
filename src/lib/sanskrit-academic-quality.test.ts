@@ -76,16 +76,16 @@ describe("Class 10 Sanskrit Academic Quality & Metric Integrity Audit", () => {
   };
 
   describe("Requirement 1: Question Counting & Separate Metrics", () => {
-    it("computes exact separate metrics for 33 numbered questions, 48 allocation units, and 75 marks", () => {
+    it("computes exact separate metrics for 23 numbered questions, 48 allocation units, and 75 marks", () => {
       const numbering = computeDisplayedPaperNumbering(
         SANSKRIT_CLASS10_BLUEPRINT.sections,
         SANSKRIT_CLASS10_PAPER.items,
         "CONTINUOUS"
       );
 
-      // 1. Numbered Parent Questions: exactly 33
-      expect(numbering.numberedParentQuestions).toBe(33);
-      expect(numbering.totalDisplayedQuestions).toBe(33);
+      // 1. Numbered Parent Questions: exactly 23 (board style: each objective form is one question)
+      expect(numbering.numberedParentQuestions).toBe(23);
+      expect(numbering.totalDisplayedQuestions).toBe(23);
 
       // 2. Blueprint Allocation Units: exactly 48 (6+6+6+6+6+12+3+3)
       expect(numbering.blueprintAllocationUnits).toBe(48);
@@ -96,12 +96,12 @@ describe("Class 10 Sanskrit Academic Quality & Metric Integrity Audit", () => {
       // 4. Maximum marks: 75
       expect(numbering.totalMarks).toBe(75);
 
-      // 5. Grouped Sub-items exist (Q7, Q8, Q9)
+      // 5. Grouped Sub-items exist (Q1, Q2, Q3, Q5)
       expect(numbering.hasGroupedSubItems).toBe(true);
 
       // Verify that OR alternatives do NOT add extra question numbers or marks
       expect(SANSKRIT_CLASS10_PAPER.items.filter((i) => i.orQuestion).length).toBe(6);
-      expect(numbering.numberedParentQuestions).toBe(33);
+      expect(numbering.numberedParentQuestions).toBe(23);
     });
 
     it("verifies section-level ranges and item counts", () => {
@@ -111,58 +111,58 @@ describe("Class 10 Sanskrit Academic Quality & Metric Integrity Audit", () => {
         "CONTINUOUS"
       );
 
-      // Section क: MCQs (Q1 to Q6) -> 6 questions, 6 marks
+      // Section क: MCQs (Q1 with 6 parts) -> 1 parent question, 6 items
       const secA = numbering.sectionRanges["sec_a_mcq"];
       expect(secA.startQ).toBe(1);
-      expect(secA.endQ).toBe(6);
-      expect(secA.displayedCount).toBe(6);
+      expect(secA.endQ).toBe(1);
+      expect(secA.displayedCount).toBe(1);
       expect(secA.rawItemCount).toBe(6);
 
-      // Section ख: Fill in Blanks (Q7 with 6 items a to f) -> 1 parent question, 6 items
+      // Section ख: Fill in Blanks (Q2 with 6 parts) -> 1 parent question, 6 items
       const secB = numbering.sectionRanges["sec_b_fill"];
-      expect(secB.startQ).toBe(7);
-      expect(secB.endQ).toBe(7);
+      expect(secB.startQ).toBe(2);
+      expect(secB.endQ).toBe(2);
       expect(secB.displayedCount).toBe(1);
       expect(secB.rawItemCount).toBe(6);
 
-      // Section ग: True/False (Q8 with 6 statements a to f) -> 1 parent question, 6 items
+      // Section ग: True/False (Q3 with 6 statements) -> 1 parent question, 6 items
       const secC = numbering.sectionRanges["sec_c_tf"];
-      expect(secC.startQ).toBe(8);
-      expect(secC.endQ).toBe(8);
+      expect(secC.startQ).toBe(3);
+      expect(secC.endQ).toBe(3);
       expect(secC.displayedCount).toBe(1);
       expect(secC.rawItemCount).toBe(6);
 
-      // Section घ: Match Column (Q9 with 6 pairs) -> 1 parent question
+      // Section घ: Match Column (Q4 with 6 pairs) -> 1 parent question
       const secD = numbering.sectionRanges["sec_d_match"];
-      expect(secD.startQ).toBe(9);
-      expect(secD.endQ).toBe(9);
+      expect(secD.startQ).toBe(4);
+      expect(secD.endQ).toBe(4);
       expect(secD.displayedCount).toBe(1);
 
-      // Section ङ: Very Short (Q10 to Q15) -> 6 questions
+      // Section ङ: one-word answers (Q5 with 6 parts) -> 1 parent question
       const secE = numbering.sectionRanges["sec_e_vshort"];
-      expect(secE.startQ).toBe(10);
-      expect(secE.endQ).toBe(15);
-      expect(secE.displayedCount).toBe(6);
+      expect(secE.startQ).toBe(5);
+      expect(secE.endQ).toBe(5);
+      expect(secE.displayedCount).toBe(1);
 
-      // Section च: Short (Q16 to Q27) -> 12 questions
+      // Section च: Short (Q6 to Q17) -> 12 questions
       const secF = numbering.sectionRanges["sec_f_short"];
-      expect(secF.startQ).toBe(16);
-      expect(secF.endQ).toBe(27);
+      expect(secF.startQ).toBe(6);
+      expect(secF.endQ).toBe(17);
       expect(secF.displayedCount).toBe(12);
 
-      // Section छ: Passage Short (Q28 to Q30) -> 3 questions
+      // Section छ: Passage Short (Q18 to Q20) -> 3 questions
       const secG = numbering.sectionRanges["sec_g_passage"];
-      expect(secG.startQ).toBe(28);
-      expect(secG.endQ).toBe(30);
+      expect(secG.startQ).toBe(18);
+      expect(secG.endQ).toBe(20);
       expect(secG.displayedCount).toBe(3);
 
-      // Section ज: Long (Q31 to Q33) -> 3 questions
+      // Section ज: Long (Q21 to Q23) -> 3 questions
       const secH = numbering.sectionRanges["sec_h_long"];
-      expect(secH.startQ).toBe(31);
-      expect(secH.endQ).toBe(33);
+      expect(secH.startQ).toBe(21);
+      expect(secH.endQ).toBe(23);
       expect(secH.displayedCount).toBe(3);
 
-      // Sum of displayed question counts across all sections = 33
+      // Sum of displayed question counts across all sections = 23
       const sumDisplayed =
         secA.displayedCount +
         secB.displayedCount +
@@ -172,7 +172,7 @@ describe("Class 10 Sanskrit Academic Quality & Metric Integrity Audit", () => {
         secF.displayedCount +
         secG.displayedCount +
         secH.displayedCount;
-      expect(sumDisplayed).toBe(33);
+      expect(sumDisplayed).toBe(23);
     });
 
     it("formats section headers with correct academic terminology rather than misleading question counts", () => {

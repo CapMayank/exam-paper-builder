@@ -49,10 +49,10 @@ describe("planSectionHeadings: each fact is printed once, by the level that owns
   });
 
   it("a heading of separate very-short questions: the band owns the instruction and the count", () => {
-    const p = plan([{ id: "vs", title: "Section B", type: "VERY_SHORT", count: 8, marksEach: 1, order: 1 }]);
+    const p = plan([{ id: "vs", title: "Section B", type: "VERY_SHORT", count: 8, marksEach: 2, order: 1 }]);
     expect(p.vs).toEqual({
       showBand: true,
-      bandSummary: "8 Questions · 8 Marks",
+      bandSummary: "8 Questions · 16 Marks",
       showBandInstruction: true,
       showTypeSubBand: false,
       grouped: false,
@@ -72,15 +72,15 @@ describe("planSectionHeadings: each fact is printed once, by the level that owns
     expect(p.lg.showBandInstruction).toBe(true);
   });
 
-  it("a mixed heading: runs of several questions get a type sub-band; a grouped question or a lone match does not", () => {
+  it("a mixed heading of objective forms: each is one grouped question, so no type sub-bands", () => {
     const p = plan([
       { id: "mcq", title: "Section A", type: "MCQ", count: 4, marksEach: 1, order: 1 },
       { id: "fb", title: "Section A", type: "FILL_BLANK", count: 5, marksEach: 1, order: 2 },
       { id: "tf", title: "Section A", type: "TRUE_FALSE", count: 5, marksEach: 1, order: 3 },
       { id: "m", title: "Section A", type: "MATCH_COLUMN", count: 4, marksEach: 1, order: 4 },
     ]);
-    // the band counts what is numbered: 4 MCQs + blanks + true/false + match
-    expect(p.mcq).toMatchObject({ showBand: true, bandSummary: "7 Questions · 18 Marks", showTypeSubBand: true });
+    // the band counts what is numbered: MCQs + blanks + true/false + match, one question each
+    expect(p.mcq).toMatchObject({ showBand: true, bandSummary: "4 Questions · 18 Marks", showTypeSubBand: false, grouped: true });
     expect(p.fb).toMatchObject({ showBand: false, showTypeSubBand: false, grouped: true });
     expect(p.tf).toMatchObject({ showBand: false, showTypeSubBand: false, grouped: true });
     expect(p.m).toMatchObject({ showBand: false, showTypeSubBand: false, grouped: false });

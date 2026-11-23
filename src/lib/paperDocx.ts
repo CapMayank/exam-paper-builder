@@ -58,7 +58,8 @@ import {
   computeDisplayedPaperNumbering,
   mergeSameFormRows,
   sectionHeadingInstruction,
-  resolveGroupedExerciseInstruction,
+  groupedQuestionPrompt,
+  rowRunLabel,
 } from "@/lib/layout";
 import { planSectionHeadings } from "@/lib/sectionHeadingPlan";
 import { optionLabel } from "@/lib/compactLayout";
@@ -674,7 +675,7 @@ export async function buildPaperDocx(
     }
 
     if (plan.showTypeSubBand) {
-      const typeLabel = getQuestionTypeLabel(section.type, paperLang);
+      const typeLabel = rowRunLabel(section, paperLang);
       const formula = sectionItemsFormula(
         section,
         items.map((x) => x.question as never),
@@ -703,12 +704,7 @@ export async function buildPaperDocx(
       const qNum = globalQNum++;
       const currentSecRelNum = sectionRelativeNum++;
       const qLabel = formatQuestionNumber(qNum, paper.numberingStyle, sectionLetter, currentSecRelNum);
-      const sharedInstruction = resolveGroupedExerciseInstruction(
-        section.instructions,
-        section.type,
-        hasMultipleTypes,
-        paperLang
-      );
+      const sharedInstruction = groupedQuestionPrompt(section, hasMultipleTypes, paperLang);
       const exerciseFormula = sectionItemsFormula(
         section,
         items.map((x) => x.question as never),

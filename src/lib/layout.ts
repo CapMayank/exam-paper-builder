@@ -163,7 +163,7 @@ export function imposeBooklet(realPages: number): Sheet[] {
   return sheets;
 }
 
-import { alignColumnNames, getSharedInstruction, matchColumnScheme, type NumberingStyle, type PaperLanguage, localizeSectionTitle } from "./constants";
+import { alignColumnNames, getQuestionTypeLabel, getSharedInstruction, matchColumnScheme, type NumberingStyle, type PaperLanguage, localizeSectionTitle } from "./constants";
 import { localizeSectionInstruction } from "./localization";
 import { sectionLetter } from "./sectionLetter";
 
@@ -290,27 +290,39 @@ export function builderQuestionLabel(numbering: DisplayedPaperNumbering, itemId:
   return numbering.itemNumbers[itemId]?.displayLabel;
 }
 
+/** Objective forms that print board style, as one numbered question with parts: one-word answers are 1-mark VERY_SHORT. */
+const GROUPED_OBJECTIVE_TYPES = new Set(["MCQ", "ASSERTION_REASON", "TRUE_FALSE", "FILL_BLANK"]);
+
+/** Whether a row's form is an objective one that board papers print as one numbered question with parts. */
+export function isObjectiveRow(row: { type: string; marksEach?: number }): boolean {
+  if (GROUPED_OBJECTIVE_TYPES.has(row.type)) return true;
+  return row.type === "VERY_SHORT" && row.marksEach !== undefined && row.marksEach <= 1;
+}
+
 /**
- * Whether a section row prints as one numbered question whose items are lettered parts: true/false and
- * fill-in-the-blank rows always, MCQ and very-short rows when the heading itself names one question ("Question 2: …").
- * The one rule numbering, the printed paper and the Word export share.
+ * Whether a section row prints as one numbered question whose items are parts (i), (ii)… — every objective row with
+ * more than one item, whatever its heading says. A row holding a question of another form (a match in an MCQ row's
+ * slot) prints its questions separately, since one prompt cannot head both. `itemTypes` are the placed questions'
+ * forms where known. The one rule numbering, the printed paper and the Word export share.
  */
-export function isGroupedExerciseRow(section: { title: string; type: string }, itemCount: number): boolean {
-  if (itemCount <= 1) return false;
-  if (section.type === "TRUE_FALSE" || section.type === "FILL_BLANK") return true;
-  if (section.type !== "MCQ" && section.type !== "VERY_SHORT") return false;
-  return /(?:^|[^0-9])(?:प्रश्न\s*[1-5]\b|question\s*[1-5]\b|q[1-5]\b)/i.test(section.title);
+export function isGroupedExerciseRow(
+  section: { type: string; marksEach?: number },
+  itemCount: number,
+  itemTypes: ReadonlyArray<string | undefined> = [],
+): boolean {
+  if (itemCount <= 1 || !isObjectiveRow(section)) return false;
+  return itemTypes.every((t) => !t || t === section.type);
 }
 
 /**
  * Computes consistent displayed question numbers across sections and items,
- * accounting for grouped objective exercises (TRUE_FALSE and FILL_BLANK with >1 item)
- * which occupy 1 top-level question number with (a), (b), ... sub-items.
+ * accounting for grouped objective exercises (see isGroupedExerciseRow), each of which
+ * occupies 1 top-level question number with parts.
  * Numbered as the printed paper is: section-relative numbers and the fallback section letter run per heading
  * (consecutive rows with the same title), and `paperLang` picks Devanagari sub-labels as print does.
  */
 export function computeDisplayedPaperNumbering(
-  rawSections: Array<{ id: string; title: string; type: string; order?: number }>,
+  rawSections: Array<{ id: string; title: string; type: string; order?: number; marksEach?: number }>,
   rawItems: Array<{ id: string; sectionId?: string | null; position?: number; question?: { type?: string } }>,
   numberingStyle: NumberingStyle = "CONTINUOUS",
   paperLang?: PaperLanguage
@@ -349,7 +361,7 @@ export function computeDisplayedPaperNumbering(
       }
       const sLetter = sectionLetter(sec.title) || String.fromCharCode(65 + (headingIdx % 26));
 
-      const isGroupedObjective = isGroupedExerciseRow(sec, sItems.length);
+      const isGroupedObjective = isGroupedExerciseRow(sec, sItems.length, sItems.map((it) => it.question?.type));
 
       if (sItems.length === 0) {
         rawSectionRanges.push({
@@ -623,6 +635,21 @@ export function resolveGroupedExerciseInstruction(
   // the exercise line prints its formula beside the prompt, so a sentence about marks only repeats it; a prompt
   // that was nothing but that sentence ("Each question carries 1 mark.") gets the form's own instruction
   return withoutMarksNote(trimmed) || shared || trimmed;
+}
+
+/** The line printed after a grouped question's number: the row's own question title, else its form's prompt. */
+export function groupedQuestionPrompt(
+  section: { questionTitle?: string | null; instructions?: string | null; type: string },
+  hasMultipleTypes: boolean,
+  paperLang: PaperLanguage = "en",
+): string {
+  const own = (section.questionTitle ?? "").trim();
+  return own || resolveGroupedExerciseInstruction(section.instructions, section.type, hasMultipleTypes, paperLang);
+}
+
+/** The name of a run of separate questions in a mixed section's sub-band: the row's question title, else its form. */
+export function rowRunLabel(section: { questionTitle?: string | null; type: string }, paperLang: PaperLanguage = "en"): string {
+  return (section.questionTitle ?? "").trim() || getQuestionTypeLabel(section.type, paperLang);
 }
 
 const MARK_NUMBER = String.raw`(?:\d+(?:\.\d+)?|[०-९]+|½|one|two|three|four|five|half)`;

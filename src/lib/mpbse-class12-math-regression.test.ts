@@ -484,7 +484,7 @@ describe("MPBSE Class 12 Mathematics Regression & Subject Integrity Suite", () =
       expect(lang).toBe("en");
     });
 
-    it("computes displayed paper numbering (34 displayed vs 44 raw items) and reconciles section instructions", () => {
+    it("computes displayed paper numbering (29 displayed vs 44 raw items) and reconciles section instructions", () => {
       const sections = [
         { id: "s1", title: "Section A", type: "MCQ", order: 1 },
         { id: "s2", title: "Section A", type: "FILL_BLANK", order: 2 },
@@ -508,22 +508,22 @@ describe("MPBSE Class 12 Mathematics Regression & Subject Integrity Suite", () =
 
       const numbering = computeDisplayedPaperNumbering(sections, items, "CONTINUOUS");
       expect(numbering.totalRawItems).toBe(44);
-      expect(numbering.totalDisplayedQuestions).toBe(34);
+      expect(numbering.totalDisplayedQuestions).toBe(29);
       expect(numbering.hasGroupedSubItems).toBe(true);
 
-      // Q7 (a)..(f) for Fill in the Blanks, Q8 (a)..(f) for True/False
-      expect(numbering.itemNumbers["fb-0"].displayLabel).toBe("7 (a)");
-      expect(numbering.itemNumbers["fb-5"].displayLabel).toBe("7 (f)");
-      expect(numbering.itemNumbers["tf-0"].displayLabel).toBe("8 (a)");
-      expect(numbering.itemNumbers["mc-0"].displayLabel).toBe("9");
-      expect(numbering.itemNumbers["vsa-0"].displayLabel).toBe("10");
-      expect(numbering.itemNumbers["vsa-4"].displayLabel).toBe("14");
-      expect(numbering.itemNumbers["sb-0"].displayLabel).toBe("15");
-      expect(numbering.itemNumbers["sb-11"].displayLabel).toBe("26");
-      expect(numbering.itemNumbers["sc-0"].displayLabel).toBe("27");
-      expect(numbering.itemNumbers["sc-3"].displayLabel).toBe("30");
-      expect(numbering.itemNumbers["sd-0"].displayLabel).toBe("31");
-      expect(numbering.itemNumbers["sd-3"].displayLabel).toBe("34");
+      // board style: Q1 (a)..(f) MCQ, Q2 (a)..(f) Fill in the Blanks, Q3 (a)..(f) True/False
+      expect(numbering.itemNumbers["fb-0"].displayLabel).toBe("2 (a)");
+      expect(numbering.itemNumbers["fb-5"].displayLabel).toBe("2 (f)");
+      expect(numbering.itemNumbers["tf-0"].displayLabel).toBe("3 (a)");
+      expect(numbering.itemNumbers["mc-0"].displayLabel).toBe("4");
+      expect(numbering.itemNumbers["vsa-0"].displayLabel).toBe("5");
+      expect(numbering.itemNumbers["vsa-4"].displayLabel).toBe("9");
+      expect(numbering.itemNumbers["sb-0"].displayLabel).toBe("10");
+      expect(numbering.itemNumbers["sb-11"].displayLabel).toBe("21");
+      expect(numbering.itemNumbers["sc-0"].displayLabel).toBe("22");
+      expect(numbering.itemNumbers["sc-3"].displayLabel).toBe("25");
+      expect(numbering.itemNumbers["sd-0"].displayLabel).toBe("26");
+      expect(numbering.itemNumbers["sd-3"].displayLabel).toBe("29");
 
       // Reconcile Section B, C, D instructions with actual displayed ranges
       const secBRange = numbering.sectionRanges["s6"];
@@ -533,7 +533,7 @@ describe("MPBSE Class 12 Mathematics Regression & Subject Integrity Suite", () =
           secBRange.groupStartQ,
           secBRange.groupEndQ
         )
-      ).toBe("Question Nos. 15 to 26 are Short Answer Type questions. Each carries 2 marks.");
+      ).toBe("Question Nos. 10 to 21 are Short Answer Type questions. Each carries 2 marks.");
 
       // Grouped exercise prompt must NOT repeat the Section A overview instruction
       const q7Prompt = resolveGroupedExerciseInstruction(

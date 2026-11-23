@@ -48,7 +48,8 @@ import {
   paginateSlices,
   sectionHeadingInstruction,
   type PageSlice,
-  resolveGroupedExerciseInstruction,
+  groupedQuestionPrompt,
+  rowRunLabel,
 } from "@/lib/layout";
 import { resolveBoardAndSubjectCode } from "@/lib/curriculumContract";
 import { sectionLetter } from "@/lib/sectionLetter";
@@ -529,7 +530,7 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
 
     // a heading that mixes forms names each run of separate questions; a grouped question's own line names its form
     if (plan.showTypeSubBand) {
-      const typeLabel = getQuestionTypeLabel(s.type, paperLang);
+      const typeLabel = rowRunLabel(s, paperLang);
       const typeFormula = sectionItemsFormula(
         s,
         sectionItems.map((x) => x.question as never),
@@ -570,12 +571,7 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
       n += 1;
       sectionRelativeCounter += 1;
 
-      const sharedInstruction = resolveGroupedExerciseInstruction(
-        s.instructions,
-        s.type,
-        hasMultipleTypes,
-        paperLang
-      );
+      const sharedInstruction = groupedQuestionPrompt(s, hasMultipleTypes, paperLang);
       const formulaText = sectionItemsFormula(
         s,
         sectionItems.map((x) => x.question as never),

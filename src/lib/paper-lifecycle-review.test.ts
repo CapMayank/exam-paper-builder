@@ -303,9 +303,9 @@ describe("paper lifecycle review", () => {
     const view = (await loadPaperView(paperId))!;
     const report = validatePaperPreflight(view as unknown as PaperData);
     const dup = report.warnings.find((w) => w.code === "DUPLICATE_QUESTION_TEXT");
-    // 2 MCQ + 1 match question + 2 very short: the repeated one is question 5, a repeat of question 4
-    expect(dup?.questionNumber).toBe(5);
-    expect(dup?.message).toMatch(/Question 4/);
+    // 2 MCQ (one grouped question) + 1 match question + 2 very short: the repeated one is question 4, a repeat of question 3
+    expect(dup?.questionNumber).toBe(4);
+    expect(dup?.message).toMatch(/Question 3/);
   });
 
   it("restoring a snapshot brings back each question's instruction, page break and component", async () => {
