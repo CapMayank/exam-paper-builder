@@ -125,6 +125,8 @@ export function findMissingAnswer(q: AnswerSource): AnswerNeed | null {
 
 /** Cleans one generated answer for storage; "" when it can't be trusted for this question type. */
 export function normalizeGeneratedAnswer(type: string, options: string[], raw: unknown): string {
+  // JSON mode sometimes answers a True/False question with a bare boolean
+  if (typeof raw === "boolean" && type === "TRUE_FALSE") return raw ? "True" : "False";
   if (typeof raw !== "string") return "";
   const text = raw.trim();
   if (!text) return "";
@@ -135,14 +137,33 @@ export function normalizeGeneratedAnswer(type: string, options: string[], raw: u
     const idx = resolved.letter.charCodeAt(0) - 65;
     return options.length === 0 || idx < options.length ? resolved.letter : "";
   }
-  if (type === "TRUE_FALSE") {
-    // \b doesn't see Devanagari letters as word characters, so the word end is spelled out
-    const end = String.raw`(?=$|[\s(.,;:/|-])`;
-    if (new RegExp(`^(true|सत्य|सही)${end}`, "i").test(text)) return text.replace(/^true/i, "True");
-    if (new RegExp(`^(false|असत्य|गलत)${end}`, "i").test(text)) return text.replace(/^false/i, "False");
-    return "";
-  }
+  if (type === "TRUE_FALSE") return normalizeTrueFalse(text, options);
   return text;
+}
+
+/**
+ * A True/False answer as stored ("True", "असत्य", "True (सत्य)"), or "" when the reply isn't one.
+ * Tolerates the wrappers the model adds: markdown/quotes, an "Answer:" / "उत्तर:" lead-in,
+ * ग़लत with a nukta, सच/झूठ, T/F, ✓/✗, and an option letter when the question lists options.
+ */
+function normalizeTrueFalse(raw: string, options: string[]): string {
+  let text = raw.normalize("NFC").replace(/[*_`"'“”‘’]/g, "").trim();
+  text = text.replace(/^(answer|ans|उत्तर|उ)\s*[:：.\-–—]\s*/i, "").trim();
+  if (!text) return "";
+  if (options.length > 0) {
+    const letter = /^\(?([a-d])\)?\.?$/i.exec(text)?.[1];
+    if (letter) {
+      const idx = letter.toUpperCase().charCodeAt(0) - 65;
+      return idx < options.length ? normalizeTrueFalse(options[idx], []) : "";
+    }
+  }
+  if (/^(t|✓|✔|☑)$/i.test(text)) return "True";
+  if (/^(f|✗|✘|×|☒)$/i.test(text)) return "False";
+  // \b doesn't see Devanagari letters as word characters, so the word end is spelled out
+  const end = String.raw`(?=$|[\s(.,;:/|।-])`;
+  if (new RegExp(`^(true|सत्य|सही|सच)${end}`, "i").test(text)) return text.replace(/^true/i, "True");
+  if (new RegExp(`^(false|असत्य|गलत|ग़लत|ग़लत|झूठ|झूठा)${end}`, "i").test(text)) return text.replace(/^false/i, "False");
+  return "";
 }
 
 /**

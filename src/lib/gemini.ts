@@ -2411,7 +2411,7 @@ Write correct, textbook-accurate model answers. Use LaTeX inside $...$ for every
 
 Answer format by type:
 - MCQ / ASSERTION_REASON: only the correct option letter, e.g. "B".
-- TRUE_FALSE: "True" or "False" (bilingual: "True (सत्य)" / "False (असत्य)").
+- TRUE_FALSE: the string "True" or "False" (Hindi: "सत्य" / "असत्य"; bilingual: "True (सत्य)" / "False (असत्य)"), never a bare JSON true/false.
 - FILL_BLANK: only the word(s) that fill the blank.
 - MATCH_COLUMN: the correct pairing, one entry per Column I item, using the Column I letters and the Column II numerals in "options", e.g. "(A)-(ii), (B)-(iv), (C)-(i), (D)-(iii)". Work out each match from the subject; Column II is NOT in the same order as Column I, so never answer (A)-(i), (B)-(ii)... unless that is genuinely correct.
 - VERY_SHORT: one word or one sentence.

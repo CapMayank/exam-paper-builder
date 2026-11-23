@@ -79,6 +79,29 @@ describe("normalizeGeneratedAnswer", () => {
     expect(normalizeGeneratedAnswer("TRUE_FALSE", [], "Maybe")).toBe("");
   });
 
+  it("reads True/False however the model phrases it", () => {
+    expect(normalizeGeneratedAnswer("TRUE_FALSE", [], true)).toBe("True");
+    expect(normalizeGeneratedAnswer("TRUE_FALSE", [], false)).toBe("False");
+    expect(normalizeGeneratedAnswer("TRUE_FALSE", [], "**असत्य**")).toBe("असत्य");
+    expect(normalizeGeneratedAnswer("TRUE_FALSE", [], "\"True\"")).toBe("True");
+    expect(normalizeGeneratedAnswer("TRUE_FALSE", [], "उत्तर: असत्य")).toBe("असत्य");
+    expect(normalizeGeneratedAnswer("TRUE_FALSE", [], "Answer - false")).toBe("False");
+    expect(normalizeGeneratedAnswer("TRUE_FALSE", [], "ग़लत")).toBe("ग़लत");
+    expect(normalizeGeneratedAnswer("TRUE_FALSE", [], "सच")).toBe("सच");
+    expect(normalizeGeneratedAnswer("TRUE_FALSE", [], "झूठ")).toBe("झूठ");
+    expect(normalizeGeneratedAnswer("TRUE_FALSE", [], "T")).toBe("True");
+    expect(normalizeGeneratedAnswer("TRUE_FALSE", [], "F")).toBe("False");
+    expect(normalizeGeneratedAnswer("TRUE_FALSE", [], "✓")).toBe("True");
+    expect(normalizeGeneratedAnswer("TRUE_FALSE", [], "✗")).toBe("False");
+    // a statement starting with a T/F word is not an answer
+    expect(normalizeGeneratedAnswer("TRUE_FALSE", [], "Truly unknown")).toBe("");
+  });
+
+  it("maps a True/False option letter to that option", () => {
+    expect(normalizeGeneratedAnswer("TRUE_FALSE", ["सत्य", "असत्य"], "B")).toBe("असत्य");
+    expect(normalizeGeneratedAnswer("TRUE_FALSE", ["True", "False"], "(a)")).toBe("True");
+  });
+
   it("keeps match-the-column pairings and bilingual text as written", () => {
     expect(normalizeGeneratedAnswer("MATCH_COLUMN", ["x", "y"], " (A) → (ii), (B) → (i) ")).toBe("(A) → (ii), (B) → (i)");
     expect(normalizeGeneratedAnswer("SHORT", [], "Photosynthesis (प्रकाश संश्लेषण)")).toBe("Photosynthesis (प्रकाश संश्लेषण)");
