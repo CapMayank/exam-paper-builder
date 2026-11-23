@@ -34,6 +34,8 @@ const QUESTION_PREFIXES = [
   new RegExp(String.raw`^प्रश्नः\s*${DIGITS}(?:\s*तः\s*${DIGITS}(?:\s*पर्यन्तम्)?)?\s*:\s*`),
   // खण्डः 'छ' : …
   /^खण्डः?\s*'[^']+'\s*:\s*/,
+  // Section E – … / SECTION-B: …
+  /^section[\s-]*[A-Z]\s*[–—:-]\s*/i,
 ];
 
 /** A heading without its question-number or khand prefix: "Questions 6 to 17: Very Short …" → "Very Short …". */

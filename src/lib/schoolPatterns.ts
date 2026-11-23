@@ -10,6 +10,7 @@
  * Every question of the school's blueprint grid also names its content (chapter), difficulty (Easy / Average /
  * Difficult) and skill (Knowledge / Understanding / Applying / HOTS); those are carried by the questions.
  */
+import { regroupObjectiveSections } from "./boardSections";
 import type { BlueprintTemplate } from "./curriculumTemplates";
 
 function primarySchoolPattern(): BlueprintTemplate {
@@ -175,13 +176,24 @@ function sanskritPattern(): BlueprintTemplate {
   };
 }
 
-export const SCHOOL_PATTERNS: Array<{ levels: [number, number]; template: BlueprintTemplate }> = [
+/** The school patterns as written above, before board-style regrouping. */
+export const UNGROUPED_SCHOOL_PATTERNS: Array<{ levels: [number, number]; template: BlueprintTemplate }> = [
   { levels: [1, 4], template: primarySchoolPattern() },
   { levels: [5, 8], template: languagePattern("English") },
   { levels: [5, 8], template: languagePattern("Hindi") },
   { levels: [6, 8], template: sanskritPattern() },
   { levels: [5, 8], template: schoolPattern([5, 8], 60, 4, 150) },
 ];
+
+/**
+ * The school patterns in board style: their single-form objective sections become one objective section (see
+ * boardSections.ts). Unlike the board's English papers, the school's language patterns are sectioned by form, so
+ * all of them are regrouped.
+ */
+export const SCHOOL_PATTERNS: Array<{ levels: [number, number]; template: BlueprintTemplate }> = UNGROUPED_SCHOOL_PATTERNS.map((p) => {
+  const lang = p.template.language === "hi" || p.template.language === "sa" ? p.template.language : "en";
+  return { ...p, template: { ...p.template, sections: regroupObjectiveSections(p.template.sections, lang) } };
+});
 
 /** Marks of a pattern by role: what the lessons, grammar, unseen passage and writing each carry. */
 export function marksByRole(template: Pick<BlueprintTemplate, "sections">): Record<string, number> {

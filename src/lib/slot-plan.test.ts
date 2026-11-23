@@ -8,14 +8,15 @@ import { getLanguageNonChapterUnits } from "./syllabusImport";
 
 const presets = builtInBlueprintPresets();
 
-/** A teacher sees one section per form: five MCQs, not four and one. */
+/** A teacher sees one row per form: five MCQs, not four and one (board style puts the MCQ and blanks rows in one section). */
 describe("Classes 5–8 language patterns: one row per form", () => {
   for (const [subject, level] of [["English", 8], ["Hindi", 6], ["Sanskrit", 7]] as const) {
     it(`${subject}: MCQ 5, blanks 5, very short 6, short 6, long 4, one row each`, () => {
       const t = schoolPatternsForLevel(level, subject)[0];
       expect(t.subjectName).toBe(subject);
-      expect(t.sections.map((g) => g.questionTypes.length)).toEqual([1, 1, 1, 1, 1]);
-      expect(t.sections.map((g) => [g.questionTypes[0].type, g.questionTypes[0].count])).toEqual([
+      const rows = t.sections.flatMap((g) => g.questionTypes);
+      expect(t.sections[0].questionTypes.map((q) => q.type)).toEqual(["MCQ", "FILL_BLANK"]);
+      expect(rows.map((q) => [q.type, q.count])).toEqual([
         ["MCQ", 5],
         ["FILL_BLANK", 5],
         ["VERY_SHORT", 6],
@@ -27,7 +28,8 @@ describe("Classes 5–8 language patterns: one row per form", () => {
 
   it("puts the grammar, passage and writing questions where the board paper does (English Q4, Q22, Q25-26)", () => {
     const t = schoolPatternsForLevel(8, "English")[0];
-    const roles = (i: number) => rowSlotSpecs({ ...t.sections[i].questionTypes[0], slotPlanJson: JSON.stringify(t.sections[i].questionTypes[0].slotPlan ?? []) }).map((s) => s.role);
+    const rows = t.sections.flatMap((g) => g.questionTypes);
+    const roles = (i: number) => rowSlotSpecs({ ...rows[i], slotPlanJson: JSON.stringify(rows[i].slotPlan ?? []) }).map((s) => s.role);
     expect(roles(0)).toEqual(["LITERATURE", "LITERATURE", "LITERATURE", "GRAMMAR", "LITERATURE"]);
     expect(roles(3)[5]).toBe("PASSAGE");
     expect(roles(4)).toEqual(["LITERATURE", "LITERATURE", "WRITING", "WRITING"]);

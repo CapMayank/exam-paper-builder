@@ -8,6 +8,7 @@ import {
   type BlueprintTemplate,
 } from "./curriculumTemplates";
 import { boardSectionHeading, regroupObjectiveSections, stripQuestionPrefix } from "./boardSections";
+import { SCHOOL_PATTERNS, UNGROUPED_SCHOOL_PATTERNS } from "./schoolPatterns";
 
 const byId = (id: string) => STANDARD_BLUEPRINT_TEMPLATES.find((t) => t.id === id)!;
 const totals = (t: BlueprintTemplate) => {
@@ -73,5 +74,42 @@ describe("board-style template sections", () => {
     expect(boardSectionHeading(0, "en", "Objective Questions")).toBe("Section A — Objective Questions");
     expect(boardSectionHeading(2, "hi", "x")).toBe("खण्ड 'स' — x");
     expect(boardSectionHeading(3, "sa", "x")).toBe("खण्डः 'घ' — x");
+  });
+});
+
+describe("board-style school presets (Classes 1–8)", () => {
+  const byCode = (code: string) => SCHOOL_PATTERNS.find((p) => p.template.templateCode === code)!.template;
+  const rawByCode = (code: string) => UNGROUPED_SCHOOL_PATTERNS.find((p) => p.template.templateCode === code)!.template;
+
+  test("the primary pattern puts MCQ, blanks, true/false and match in one objective section", () => {
+    const t = SCHOOL_PATTERNS[0].template;
+    expect(t.sections[0].title).toBe("Section A — Objective Questions");
+    expect(t.sections[0].questionTypes.map((q) => q.type)).toEqual(["MCQ", "FILL_BLANK", "TRUE_FALSE", "MATCH_COLUMN"]);
+    expect(t.sections[0].questionTypes[2].questionTitle).toBe("Write True or False.");
+    expect(t.sections[1].title).toBe("Section B — Very Short Answer Questions");
+  });
+
+  test("the Hindi and Sanskrit patterns use their own section letters", () => {
+    const hi = byCode("school-5-8-60m-hindi");
+    expect(hi.sections[0].title).toBe("खण्ड 'अ' — वस्तुनिष्ठ प्रश्न");
+    expect(hi.sections[0].questionTypes.map((q) => q.type)).toEqual(["MCQ", "FILL_BLANK"]);
+    expect(hi.sections[1].title).toBe("खण्ड 'ब' — अति लघु उत्तरीय प्रश्न");
+    const sa = byCode("school-6-8-60m-sanskrit");
+    expect(sa.sections[0].title).toBe("खण्डः 'क' — वस्तुनिष्ठप्रश्नाः");
+  });
+
+  test("the English school pattern, sectioned by form, is regrouped too", () => {
+    expect(byCode("school-5-8-60m-english").sections[0].title).toBe("Section A — Objective Questions");
+  });
+
+  test("every school pattern keeps its rows, question count and marks", () => {
+    expect(SCHOOL_PATTERNS).toHaveLength(UNGROUPED_SCHOOL_PATTERNS.length);
+    UNGROUPED_SCHOOL_PATTERNS.forEach((p, i) => expect(totals(SCHOOL_PATTERNS[i].template)).toEqual(totals(p.template)));
+    expect(rawByCode("school-5-8-60m-hindi").sections).toHaveLength(5);
+  });
+
+  test("an old 'Section E –' letter is dropped from a re-lettered heading", () => {
+    expect(stripQuestionPrefix("Section E – Very Short Answer Questions")).toBe("Very Short Answer Questions");
+    expect(stripQuestionPrefix("SECTION-B: Grammar")).toBe("Grammar");
   });
 });
