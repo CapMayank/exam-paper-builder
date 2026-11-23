@@ -5,3 +5,6 @@
 export function paperOutputTab(paperId: string): string {
   return `paper-output-${paperId}`;
 }
+
+/** The Printables page opens its print view in one reused tab, the same way. */
+export const PRINTABLES_OUTPUT_TAB = "printables-output";
