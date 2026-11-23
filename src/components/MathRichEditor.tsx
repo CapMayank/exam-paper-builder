@@ -23,9 +23,36 @@ function loadMathlive(): Promise<MathfieldCtor> {
     // KaTeX fonts are already loaded globally; skip MathLive's own font/sound fetches.
     MF.fontsDirectory = null;
     MF.soundsDirectory = null;
+    installKeyboardCloseButton();
     return MF;
   });
   return mathliveLoad;
+}
+
+/**
+ * MathLive's on-screen keyboard has no close key in its default layouts, so put a
+ * "Close keyboard" button on its top edge while it is open.
+ */
+function installKeyboardCloseButton() {
+  const kbd = window.mathVirtualKeyboard;
+  if (!kbd || document.querySelector(".mre-vk-close")) return;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "mre-vk-close";
+  btn.textContent = "Close keyboard ✕";
+  btn.setAttribute("aria-label", "Close the on-screen maths keyboard");
+  btn.hidden = true;
+  // keep the focus (and the caret) in the formula box being edited
+  btn.addEventListener("mousedown", (e) => e.preventDefault());
+  btn.addEventListener("click", () => kbd.hide());
+  document.body.appendChild(btn);
+  const update = () => {
+    const height = kbd.visible ? kbd.boundingRect.height : 0;
+    btn.hidden = height <= 0;
+    btn.style.bottom = `${height + 6}px`;
+  };
+  kbd.addEventListener("virtual-keyboard-toggle", update);
+  kbd.addEventListener("geometrychange", update);
 }
 
 const ZWSP = "​";
@@ -152,8 +179,82 @@ export function MathRichEditor({
     field.value = tex;
     field.mathVirtualKeyboardPolicy = "manual";
     field.smartFence = true;
-    wrap.appendChild(field);
+    // Backspace/Delete in an empty formula box removes the box itself.
+    field.addEventListener(
+      "keydown",
+      (e) => {
+        if ((e.key === "Backspace" || e.key === "Delete") && !field.getValue("latex").replace(/\\placeholder(\[[^\]]*\])?\{[^}]*\}/g, "").trim()) {
+          e.preventDefault();
+          e.stopPropagation();
+          removeMath(wrap);
+        } else if (e.key === "Escape") {
+          window.mathVirtualKeyboard?.hide();
+        }
+      },
+      { capture: true },
+    );
+    // The on-screen keyboard belongs to the box being edited: close it when the teacher leaves the box.
+    field.addEventListener("focusout", () => {
+      setTimeout(() => {
+        const active = document.activeElement;
+        if (!(active instanceof HTMLElement && active.tagName === "MATH-FIELD")) window.mathVirtualKeyboard?.hide();
+      }, 0);
+    });
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "mre-math-remove";
+    removeBtn.title = "Remove formula";
+    removeBtn.setAttribute("aria-label", "Remove formula");
+    removeBtn.tabIndex = -1;
+    removeBtn.textContent = "×";
+    // mousedown would move the focus out of the box (and hide this button) before the click lands
+    removeBtn.addEventListener("mousedown", (e) => e.preventDefault());
+    removeBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      removeMath(wrap);
+    });
+
+    wrap.append(field, removeBtn);
     return wrap;
+  }
+
+  /** Delete a formula box and leave the caret where it was. */
+  function removeMath(wrap: HTMLElement) {
+    const root = rootRef.current;
+    if (!root || !root.contains(wrap)) return;
+    window.mathVirtualKeyboard?.hide();
+    const range = document.createRange();
+    range.setStartBefore(wrap);
+    range.collapse(true);
+    // Move the focus first: removing the focused box would drop the focus out of the dialog.
+    root.focus({ preventScroll: true });
+    wrap.remove();
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    emit();
+  }
+
+  /** The formula box right next to a collapsed caret in the text, skipping the invisible spacer characters. */
+  function mathBesideCaret(backward: boolean): HTMLElement | null {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) return null;
+    const { startContainer: node, startOffset: offset } = sel.getRangeAt(0);
+    let sibling: Node | null;
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent ?? "";
+      const rest = backward ? text.slice(0, offset) : text.slice(offset);
+      if (rest.replace(/​/g, "") !== "") return null;
+      sibling = backward ? node.previousSibling : node.nextSibling;
+    } else {
+      sibling = backward ? node.childNodes[offset - 1] ?? null : node.childNodes[offset] ?? null;
+    }
+    while (sibling && sibling.nodeType === Node.TEXT_NODE && (sibling.textContent ?? "").replace(/​/g, "") === "") {
+      sibling = backward ? sibling.previousSibling : sibling.nextSibling;
+    }
+    return sibling instanceof HTMLElement && sibling.dataset.math ? sibling : null;
   }
 
   function createTable(rawLatex: string, parsed: ParsedTableData): HTMLElement {
@@ -374,6 +475,15 @@ export function MathRichEditor({
       if (e.key === "Enter") e.preventDefault();
       return;
     }
+    // Backspace/Delete next to a formula box removes the whole box in one go.
+    if (e.key === "Backspace" || e.key === "Delete") {
+      const box = mathBesideCaret(e.key === "Backspace");
+      if (box) {
+        e.preventDefault();
+        removeMath(box);
+      }
+      return;
+    }
     if (e.key !== "Enter") return;
     e.preventDefault();
     if (!multiline) return;
@@ -424,9 +534,13 @@ export function MathRichEditor({
   }
 
   // Typed "$x^2$" becomes a real formula box once the teacher leaves the field.
-  function onBlur() {
+  function onBlur(e: React.FocusEvent<HTMLDivElement>) {
     const root = rootRef.current;
     if (!root) return;
+    // Focus moving into a formula box (or back out to the text) is not leaving the field:
+    // rebuilding here would throw away a freshly inserted, still-empty formula box.
+    const next = e.relatedTarget as Node | null;
+    if (next && root.contains(next)) return;
     const text = serialize(root, multiline);
     const boxes = root.querySelectorAll("[data-math], [data-table]").length;
     if (findMathRanges(text).length !== boxes) {

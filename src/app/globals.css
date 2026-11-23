@@ -726,6 +726,58 @@ input[type="range"] {
   display: inline-block;
   vertical-align: middle;
   margin: 0 2px;
+  position: relative;
+}
+/* little × in the box's corner: shown while the box is hovered or being edited */
+.mre .mre-math-remove {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  z-index: 1;
+  display: none;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  border: 1px solid #fecaca;
+  background: #ffffff;
+  color: #dc2626;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.15);
+}
+.mre .mre-math:hover .mre-math-remove,
+.mre .mre-math:focus-within .mre-math-remove {
+  display: inline-flex;
+}
+.mre .mre-math-remove:hover {
+  background: #fee2e2;
+}
+/* "Close keyboard" button sitting on the top edge of MathLive's on-screen keyboard */
+.mre-vk-close {
+  position: fixed;
+  right: 12px;
+  z-index: 110;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  border: 1px solid #c7d2fe;
+  background: #ffffff;
+  color: #3730a3;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgb(15 23 42 / 0.2);
+}
+.mre-vk-close[hidden] {
+  display: none;
+}
+.mre-vk-close:hover {
+  background: #eef2ff;
 }
 .mre .mre-math[data-display] {
   display: block;
