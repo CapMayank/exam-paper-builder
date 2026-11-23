@@ -2,21 +2,15 @@ import { isTypeAllowed } from "@/lib/sectionTypes";
 import { HttpError, route } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { autoFillPaper } from "@/lib/autofill";
-import { quotaRepresentatives, slotPlacement, subpartsMarksProblem, whyCannotAdd, type PlacedItem } from "@/lib/blueprint";
+import { slotPlacement, subpartsMarksProblem, whyCannotAdd, type PlacedItem } from "@/lib/blueprint";
 import { suggestComponentsForPaper } from "@/lib/paperComponents";
-import {
-  buildAndValidateGenerationContract,
-  generateCurriculumGroundedSectionQuestions,
-} from "@/lib/curriculumContract";
 import { isParaphraseOrDuplicateChoice, paperSectionChoiceRequirement } from "@/lib/internalChoiceRules";
 import { assertCanModifyPaper, loadPaperView, toPlacedItems } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
-import { devanagariShare, isQuestionContaminated, MIN_DEVANAGARI_SHARE } from "@/lib/questionValidator";
+import { isQuestionContaminated } from "@/lib/questionValidator";
 import { parseMatchColumnPairs } from "@/lib/constants";
 import { attemptedSubpartsMarks, parseSubpartsPayload } from "@/lib/types";
 import { isVariantCopy } from "@/lib/questionWrite";
-import { detectPaperLanguage } from "@/lib/localization";
-import { TEMPLATE_FALLBACK_PROVENANCE } from "@/lib/templateFiller";
 
 function safeJsonArray(json: string | null): string[] {
   try {
@@ -31,6 +25,9 @@ function safeJsonArray(json: string | null): string[] {
  * 1-Click Smart Auto-Fill:
  * Automatically assembles remaining questions for a draft paper from the question bank,
  * strictly abiding by section question types and mandatory/forbidden internal choice (OR / अथवा) rules.
+ * It only uses the paper's own book (its class and subject) and the chapters its blueprint covers. A slot the
+ * bank cannot fill stays empty and the message says so: no generic template stands in for it, since their
+ * stock content is written for other classes.
  */
 export const POST = route(async (req, { id }, user) => {
   const paper = await loadPaperView(id);
@@ -39,7 +36,9 @@ export const POST = route(async (req, { id }, user) => {
   if (paper.status === "FINAL") throw new HttpError(409, "This paper is finalised. Reopen it to make changes.");
 
   const raw = await req.clone().json().catch(() => ({}));
-  const targetSectionId = typeof raw.sectionId === "string" ? raw.sectionId : undefined;
+  // the workbench's per-section button sends `targetSectionId`; `sectionId` is the older name
+  const targetSectionId =
+    typeof raw.sectionId === "string" ? raw.sectionId : typeof raw.targetSectionId === "string" ? raw.targetSectionId : undefined;
   const preferredDifficulty = typeof raw.difficulty === "string" ? raw.difficulty : undefined;
 
   const internalChoiceSectionIds = new Set<string>();
@@ -101,9 +100,14 @@ export const POST = route(async (req, { id }, user) => {
     };
   }
 
-  // Fetch all available questions for this book including subparts and text/options for subject integrity filtering
+  // The paper's bank: its own book's questions (the book is the class and subject), from chapters of that book
+  // the blueprint covers. Text/options are fetched for the subject integrity filter below.
   const bankQuestions = await prisma.question.findMany({
-    where: { bookId: paper.blueprint.bookId },
+    where: {
+      bookId: paper.blueprint.bookId,
+      chapterId: { in: paper.blueprint.chapters.map((c) => c.chapterId) },
+      chapter: { bookId: paper.blueprint.bookId },
+    },
     select: {
       id: true,
       chapterId: true,
@@ -126,7 +130,7 @@ export const POST = route(async (req, { id }, user) => {
         {
           text: q.text,
           options: q.optionsJson,
-          subparts: q.subpartsJson as any,
+          subparts: q.subpartsJson,
           answer: q.answer,
           explanation: q.explanation,
         },
@@ -180,21 +184,15 @@ export const POST = route(async (req, { id }, user) => {
     },
   );
 
+
+  const sectionMap = new Map(paper.blueprint.sections.map((s) => [s.id, s]));
+  const scopeLabel = `${paper.blueprint.book.className} ${paper.blueprint.book.subject}`;
   const unfilledSummary = result.unfilled.length > 0
-    ? ` Unfilled: ${result.unfilled.map((u) => `${u.title} (${u.count} needed)`).join(", ")}.`
+    ? ` Still empty: ${result.unfilled.map((u) => `${u.title} (${u.count} needed)`).join(", ")}. The ${scopeLabel} question bank has no more questions that fit these slots: add some to the bank, or write them for the paper.`
     : "";
 
-  const chapterMap = new Map(paper.blueprint.chapters.map((c) => [c.chapterId, c.chapter]));
-  const sectionMap = new Map(paper.blueprint.sections.map((s) => [s.id, s]));
-
-  // A Hindi/Sanskrit paper must not receive English filler (the offline templates are English). The language
-  // is resolved as the print path does: a stored "en" means "not chosen", so subject and content decide.
-  const paperLang = detectPaperLanguage(paper, paper.items);
-  const needsDevanagari = paperLang === "hi" || paperLang === "sa";
-  const wrongScript = (text: string) => needsDevanagari && devanagariShare(text) < MIN_DEVANAGARI_SHARE;
-
-  // What the paper will hold once this auto-fill is saved: its items, the bank picks and, as they are accepted,
-  // the template questions. Template questions and OR alternatives are checked against it.
+  // What the paper will hold once this auto-fill is saved: its items and the bank picks. OR alternatives are
+  // checked against it.
   const plannedItems: PlacedItem[] = [
     ...toPlacedItems(paper.blueprint.sections, paper.items),
     ...result.added.map((a) => {
@@ -230,200 +228,40 @@ export const POST = route(async (req, { id }, user) => {
     });
   };
 
-  // Template questions (primary or OR) and bank OR alternatives left out because they failed those checks
-  let skippedTemplateCount = 0;
+  // Bank OR alternatives left out because they failed those checks
   const skippedBankOrIds = new Set<string>();
+  // Slots that need an OR alternative but the bank had none to give
+  let missingOrCount = 0;
 
-  // Track used IDs and texts for pairing/synthesizing distinct OR alternatives
+  // Track used IDs for pairing distinct OR alternatives
   const usedIds = new Set<string>([
     ...paper.items.map((i) => i.question.id),
     ...orQuestionIds,
     ...result.added.map((a) => a.questionId),
-    ...result.added.map((a) => a.orQuestionId).filter((id): id is string => Boolean(id)),
+    ...result.added.map((a) => a.orQuestionId).filter((qid): qid is string => Boolean(qid)),
   ]);
-  const usedTexts = new Set<string>(
-    paper.items.flatMap((i) => [i.question.text, i.orQuestion?.text].filter((t): t is string => Boolean(t))),
-  );
-  for (const a of result.added) {
-    const bq = bankById.get(a.questionId);
-    if (bq?.text) usedTexts.add(bq.text);
-    if (a.orQuestionId) {
-      const oq = bankById.get(a.orQuestionId);
-      if (oq?.text) usedTexts.add(oq.text);
-    }
-  }
 
-  // Synthesize curriculum-grounded questions for any slots unfilled from the bank
-  const synthesizedItems: Array<{
-    sectionId: string;
-    chapterId: string;
-    question: any;
-    orQuestion?: any;
-  }> = [];
-
-  if (result.unfilled.length > 0) {
-    // quota groups: lessons of one unit share a budget
-    const repOf = quotaRepresentatives(paper.blueprint.chapters);
-    const rep = (id: string) => repOf.get(id) ?? id;
-    const chapterRemainingMarks = new Map<string, number>();
-    for (const c of paper.blueprint.chapters) {
-      chapterRemainingMarks.set(rep(c.chapterId), (chapterRemainingMarks.get(rep(c.chapterId)) ?? 0) + c.marks);
-    }
-    for (const item of paper.items) {
-      const sec = sectionMap.get(item.sectionId);
-      const marks = (item as any).marks || sec?.marksEach || 1;
-      const chId = item.question.chapter?.id || (item.question as any).chapterId;
-      const cur = (chapterRemainingMarks.get(rep(chId)) ?? 0);
-      chapterRemainingMarks.set(rep(chId), cur - marks);
-    }
-    for (const a of result.added) {
-      const sec = sectionMap.get(a.sectionId);
-      const cur = (chapterRemainingMarks.get(rep(a.chapterId)) ?? 0);
-      chapterRemainingMarks.set(rep(a.chapterId), cur - (sec?.marksEach ?? 0));
-    }
-
-    for (const u of result.unfilled) {
-      const sec = sectionMap.get(u.sectionId);
-      if (!sec) continue;
-
-      // A passage cannot be faked from a template, and a multi-pair match section is one question.
-      if (["UNSEEN_PASSAGE", "REFERENCE_CONTEXT"].includes(sec.type)) continue;
-      const collapsedMatch = sec.type === "MATCH_COLUMN" && sec.count > 1 && sec.marksEach > 0 && sec.marksEach <= 1;
-      const synthSlots = collapsedMatch ? 1 : u.count;
-      const synthTargetMarks = collapsedMatch ? u.count * sec.marksEach : sec.marksEach;
-      for (let slotI = 0; slotI < synthSlots; slotI++) {
-        // Find best chapter with quota deficit (preferring exact quota matches)
-        // Syllabus-component entries ("Section A: Reading") are not topics; a template question
-        // built from their title would be meaningless, so leave those slots for the teacher.
-        const sortedChapters = paper.blueprint.chapters
-          .filter((c) => !/^section\s+[a-z]\b/i.test(c.chapter.title.trim()))
-          .sort((a, b) => {
-          const remA = (chapterRemainingMarks.get(rep(a.chapterId)) ?? 0);
-          const remB = (chapterRemainingMarks.get(rep(b.chapterId)) ?? 0);
-
-          // 1. Exact match first (remaining quota exactly equals slot marks)
-          const exactA = remA === synthTargetMarks ? 1 : 0;
-          const exactB = remB === synthTargetMarks ? 1 : 0;
-          if (exactA !== exactB) return exactB - exactA;
-
-          // 2. Chapters that have enough quota (rem >= synthTargetMarks) prioritized
-          const enoughA = remA >= synthTargetMarks ? 1 : 0;
-          const enoughB = remB >= synthTargetMarks ? 1 : 0;
-          if (enoughA !== enoughB) return enoughB - enoughA;
-
-          // 3. Largest remaining quota
-          return remB - remA;
-        });
-
-        const chosenBpChapter = sortedChapters[0];
-        if (!chosenBpChapter) break;
-        // chapter targets only decide which chapter a template question goes to, never whether it is placed
-
-        const currentPlacedInSection =
-          paper.items.filter((i) => i.sectionId === sec.id).length +
-          result.added.filter((a) => a.sectionId === sec.id).length +
-          synthesizedItems.filter((s) => s.sectionId === sec.id).length;
-
-        const slotReq = paperSectionChoiceRequirement(paper, sec, currentPlacedInSection);
-
-        const contractRes = buildAndValidateGenerationContract({
-          schoolName: paper.schoolName,
-          blueprintName: paper.blueprint.name,
-          className: paper.blueprint.book.className,
-          academicSession: paper.academicSession || paper.blueprint.academicSession,
-          examType: paper.examType || paper.blueprint.examType,
-          bookId: paper.blueprint.bookId,
-          subject: paper.blueprint.book.subject,
-          subjectCode: paper.subjectCode || paper.blueprint.subjectCode,
-          sectionTitle: sec.title,
-          sectionInstructions: sec.instructions,
-          orChoiceMode: sec.orChoiceMode,
-          orSlotsJson: sec.orSlotsJson,
-          questionType: sec.type,
-          marksEach: synthTargetMarks,
-          ...(collapsedMatch && sec.marksEach < 1 ? { pairMarks: sec.marksEach } : {}),
-          slots: [
-            {
-              slotIndex: currentPlacedInSection,
-              chapterId: chosenBpChapter.chapterId,
-              chapterNumber: chosenBpChapter.chapter.number,
-              chapterTitle: chosenBpChapter.chapter.title,
-              marks: synthTargetMarks,
-              requiresInternalChoice: slotReq.required,
-            },
-          ],
-        });
-
-        if (contractRes.valid && contractRes.contract) {
-          const grounded = generateCurriculumGroundedSectionQuestions(contractRes.contract, {
-            generateDiagrams: false,
-            existingQuestionTexts: Array.from(usedTexts),
-          })[0];
-
-          // a template question in the wrong script or that does not fit the slot is left out: the slot stays empty
-          if (grounded && (wrongScript(grounded.text) || placementProblem(sec.id, chosenBpChapter.chapterId, grounded))) {
-            skippedTemplateCount++;
-            continue;
-          }
-
-          if (grounded) {
-            let orQuestion = slotReq.required ? grounded.orQuestion : undefined;
-            // its OR alternative is held to the same checks; one that fails is dropped and the slot keeps its primary
-            if (orQuestion && (wrongScript(orQuestion.text) || placementProblem(sec.id, chosenBpChapter.chapterId, orQuestion))) {
-              skippedTemplateCount++;
-              orQuestion = undefined;
-            }
-            usedTexts.add(grounded.text);
-            if (orQuestion) usedTexts.add(orQuestion.text);
-
-            synthesizedItems.push({
-              sectionId: sec.id,
-              chapterId: chosenBpChapter.chapterId,
-              question: grounded,
-              orQuestion,
-            });
-            plannedItems.push({ sectionId: sec.id, chapterId: chosenBpChapter.chapterId, ...slotPlacement(sec, grounded) });
-
-            const cur = (chapterRemainingMarks.get(rep(chosenBpChapter.chapterId)) ?? 0);
-            chapterRemainingMarks.set(rep(chosenBpChapter.chapterId), cur - (collapsedMatch ? u.count * sec.marksEach : slotPlacement(sec, grounded).marks));
-          }
-        }
-      }
-    }
-  }
-
-  if (result.added.length === 0 && itemsToRepairChoice.length === 0 && synthesizedItems.length === 0) {
+  if (result.added.length === 0 && itemsToRepairChoice.length === 0) {
     return {
       success: false,
       addedCount: 0,
       unfilled: result.unfilled,
       complete: false,
-      message: `No matching questions found in question bank for the remaining slots.${
-        skippedTemplateCount > 0
-          ? ` Left out ${skippedTemplateCount} offline template question${skippedTemplateCount > 1 ? "s" : ""} that did not fit ${skippedTemplateCount > 1 ? "their" : "its"} slot's type, marks or language.`
-          : ""
-      }${unfilledSummary}`,
+      message: `No matching questions found in the ${scopeLabel} question bank for the remaining slots.${unfilledSummary}`,
       paper,
     };
   }
 
-  // OR alternatives written from offline templates (not found in the bank); counted for the final notice
-  let synthesizedOrCount = 0;
-
-  const pickOrSynthesizeOrQuestionId = async (
-    tx: any,
-    params: {
-      sectionId: string;
-      chapterId: string;
-      primaryQuestionText: string;
-      /** The primary question this OR is for; the OR is checked as if it took that question's slot. */
-      primaryQuestionId?: string;
-    },
-  ): Promise<string | null> => {
+  /** An unused bank question from the same chapter that can stand as `params`' OR alternative; null when there is none. */
+  const pickBankOrQuestionId = (params: {
+    sectionId: string;
+    chapterId: string;
+    primaryQuestionText: string;
+    /** The primary question this OR is for; the OR is checked as if it took that question's slot. */
+    primaryQuestionId?: string;
+  }): string | null => {
     const sec = sectionMap.get(params.sectionId);
     if (!sec) return null;
-
-    // 1. Try finding an unused distinct bank question from the same chapter and type that fits the slot
     const bankMatch = validBankQuestions.find((q) => {
       if (
         usedIds.has(q.id) ||
@@ -439,77 +277,12 @@ export const POST = route(async (req, { id }, user) => {
       }
       return true;
     });
-    if (bankMatch) {
-      usedIds.add(bankMatch.id);
-      usedTexts.add(bankMatch.text);
-      return bankMatch.id;
-    }
-
-    // 2. Synthesize a curriculum-grounded distinct OR question for the same chapter
-    const ch = chapterMap.get(params.chapterId) || paper.blueprint.chapters[0]?.chapter;
-    const contractRes = buildAndValidateGenerationContract({
-      schoolName: paper.schoolName,
-      blueprintName: paper.blueprint.name,
-      className: paper.blueprint.book.className,
-      academicSession: paper.academicSession || paper.blueprint.academicSession,
-      examType: paper.examType || paper.blueprint.examType,
-      bookId: paper.blueprint.bookId,
-      subject: paper.blueprint.book.subject,
-      subjectCode: paper.subjectCode || paper.blueprint.subjectCode,
-      sectionTitle: sec.title,
-      sectionInstructions: sec.instructions,
-      orChoiceMode: sec.orChoiceMode,
-      orSlotsJson: sec.orSlotsJson,
-      questionType: sec.type,
-      marksEach: sec.marksEach,
-      slots: [
-        {
-          slotIndex: 0,
-          chapterId: params.chapterId,
-          chapterNumber: ch?.number || 1,
-          chapterTitle: ch?.title || "Syllabus Chapter",
-          marks: sec.marksEach,
-          requiresInternalChoice: true,
-        },
-      ],
-    });
-
-    if (!contractRes.valid || !contractRes.contract) return null;
-    const grounded = generateCurriculumGroundedSectionQuestions(contractRes.contract, {
-      generateDiagrams: false,
-      existingQuestionTexts: [...Array.from(usedTexts), params.primaryQuestionText],
-    })[0];
-    const candidate =
-      grounded?.orQuestion && !isParaphraseOrDuplicateChoice(params.primaryQuestionText, grounded.orQuestion.text).isDuplicateOrParaphrase
-        ? grounded.orQuestion
-        : grounded;
-    if (!candidate) return null;
-    // the same script and placement checks as a template primary; a failing one leaves the slot without an OR
-    if (wrongScript(candidate.text) || placementProblem(params.sectionId, params.chapterId, candidate, params.primaryQuestionId)) {
-      skippedTemplateCount++;
+    if (!bankMatch) {
+      missingOrCount++;
       return null;
     }
-
-    usedTexts.add(candidate.text);
-    synthesizedOrCount++;
-    const createdOr = await tx.question.create({
-      data: {
-        bookId: paper.blueprint.bookId,
-        chapterId: params.chapterId,
-        type: candidate.type || sec.type,
-        text: candidate.text,
-        optionsJson: JSON.stringify(candidate.options || []),
-        subpartsJson: JSON.stringify(candidate.subparts || []),
-        answer: candidate.answer || "",
-        difficulty: candidate.difficulty || "MEDIUM",
-        cognitiveLevel: candidate.cognitiveLevel || "APPLYING",
-        explanation: candidate.explanation || null,
-        sourceProvenance: TEMPLATE_FALLBACK_PROVENANCE,
-        createdById: user.id,
-      },
-    });
-    usedIds.add(createdOr.id);
-    return createdOr.id;
+    usedIds.add(bankMatch.id);
+    return bankMatch.id;
   };
 
   // Find max position per section among existing items
@@ -532,9 +305,9 @@ export const POST = route(async (req, { id }, user) => {
         });
         repairedChoicesCount++;
       } else {
-        const orQId = await pickOrSynthesizeOrQuestionId(tx, {
+        const orQId = pickBankOrQuestionId({
           sectionId: existing.sectionId,
-          chapterId: existing.question.chapter?.id || (existing.question as any).chapterId,
+          chapterId: existing.question.chapter?.id || existing.question.chapterId,
           primaryQuestionText: existing.question.text,
           primaryQuestionId: existing.question.id,
         });
@@ -569,7 +342,7 @@ export const POST = route(async (req, { id }, user) => {
             bankById.get(orQuestionId) &&
             isParaphraseOrDuplicateChoice(primaryBankQ.text, bankById.get(orQuestionId)!.text).isDuplicateOrParaphrase))
       ) {
-        orQuestionId = await pickOrSynthesizeOrQuestionId(tx, {
+        orQuestionId = pickBankOrQuestionId({
           sectionId: item.sectionId,
           chapterId: item.chapterId,
           primaryQuestionText: primaryBankQ?.text || "",
@@ -588,80 +361,14 @@ export const POST = route(async (req, { id }, user) => {
       });
     }
 
-    // 3. Add synthesized curriculum-grounded items for any unfilled slots
-    for (const syn of synthesizedItems) {
-      const nextPos = (maxPosBySection.get(syn.sectionId) ?? -1) + 1;
-      maxPosBySection.set(syn.sectionId, nextPos);
-
-      const createdQ = await tx.question.create({
-        data: {
-          bookId: paper.blueprint.bookId,
-          chapterId: syn.chapterId,
-          type: syn.question.type || sectionMap.get(syn.sectionId)?.type || "SHORT",
-          text: syn.question.text,
-          optionsJson: JSON.stringify(syn.question.options || []),
-          subpartsJson: JSON.stringify(syn.question.subparts || []),
-          answer: syn.question.answer || "",
-          difficulty: syn.question.difficulty || "MEDIUM",
-          cognitiveLevel: syn.question.cognitiveLevel || "APPLYING",
-          explanation: syn.question.explanation || null,
-          sourceProvenance: TEMPLATE_FALLBACK_PROVENANCE,
-          createdById: user.id,
-        },
-      });
-
-      let orQuestionId: string | null = null;
-      if (syn.orQuestion) {
-        const createdOr = await tx.question.create({
-          data: {
-            bookId: paper.blueprint.bookId,
-            chapterId: syn.chapterId,
-            type: syn.orQuestion.type || sectionMap.get(syn.sectionId)?.type || "SHORT",
-            text: syn.orQuestion.text,
-            optionsJson: JSON.stringify(syn.orQuestion.options || []),
-            subpartsJson: JSON.stringify(syn.orQuestion.subparts || []),
-            answer: syn.orQuestion.answer || "",
-            difficulty: syn.orQuestion.difficulty || "MEDIUM",
-            cognitiveLevel: syn.orQuestion.cognitiveLevel || "APPLYING",
-            explanation: syn.orQuestion.explanation || null,
-            sourceProvenance: TEMPLATE_FALLBACK_PROVENANCE,
-            createdById: user.id,
-          },
-        });
-        orQuestionId = createdOr.id;
-      }
-
-      await tx.paperQuestion.create({
-        data: {
-          paperId: id,
-          sectionId: syn.sectionId,
-          questionId: createdQ.id,
-          orQuestionId,
-          position: nextPos,
-        },
-      });
-    }
-
     await tx.paper.update({
       where: { id },
       data: { updatedAt: new Date() },
     });
   });
 
-  const totalAdded = result.added.length + synthesizedItems.length;
-  // Report what is still missing per section, not the pre-synthesis list.
-  const synthesizedBySection = new Map<string, number>();
-  for (const s of synthesizedItems) {
-    synthesizedBySection.set(s.sectionId, (synthesizedBySection.get(s.sectionId) ?? 0) + 1);
-  }
-  const finalUnfilled = result.unfilled
-    .map((u) => {
-      const sec = sectionMap.get(u.sectionId);
-      const collapsed = Boolean(sec && sec.type === "MATCH_COLUMN" && sec.count > 1 && sec.marksEach > 0 && sec.marksEach <= 1);
-      const filled = synthesizedBySection.get(u.sectionId) ?? 0;
-      return { ...u, count: collapsed ? (filled >= 1 ? 0 : u.count) : Math.max(0, u.count - filled) };
-    })
-    .filter((u) => u.count > 0);
+  const totalAdded = result.added.length;
+  const finalUnfilled = result.unfilled;
 
   await recordAudit(user, "PAPER_UPDATE", "PAPER", id, {
     action: "PAPER_AUTOFILL",
@@ -681,30 +388,26 @@ export const POST = route(async (req, { id }, user) => {
     : "";
   const repairNote =
     repairedChoicesCount > 0 ? ` Synchronized ${repairedChoicesCount} internal choice (OR / अथवा) slot(s).` : "";
-  const templateCount = synthesizedItems.length + synthesizedOrCount;
-  const templateNote =
-    templateCount > 0
-      ? ` ${templateCount} question${templateCount > 1 ? "s" : ""} (including OR alternatives) ${templateCount > 1 ? "are" : "is a"} generic offline template${templateCount > 1 ? "s" : ""} (not written by AI or from your bank): review or replace ${templateCount > 1 ? "them" : "it"} before printing.`
-      : "";
-  const skippedCount = skippedTemplateCount + skippedBankOrIds.size;
   const skippedNote =
-    skippedCount > 0
-      ? ` Left out ${skippedCount} candidate question${skippedCount > 1 ? "s" : ""} (offline templates or bank OR alternatives) that did not fit ${skippedCount > 1 ? "their" : "its"} slot's type, marks or language.`
+    skippedBankOrIds.size > 0
+      ? ` Left out ${skippedBankOrIds.size} bank OR alternative${skippedBankOrIds.size > 1 ? "s" : ""} that did not fit ${skippedBankOrIds.size > 1 ? "their" : "its"} slot's type or marks.`
       : "";
-  const finalUnfilledSummary = finalUnfilled.length > 0
-    ? ` Unfilled: ${finalUnfilled.map((u) => `${u.title} (${u.count} needed)`).join(", ")}.`
-    : "";
+  const missingOrNote =
+    missingOrCount > 0
+      ? ` ${missingOrCount} question${missingOrCount > 1 ? "s need" : " needs"} an OR (अथवा) alternative, but the ${scopeLabel} bank has no other question from the same chapter that fits: add ${missingOrCount > 1 ? "them" : "it"} yourself.`
+      : "";
+  const complete = updatedPaper?.progress.complete ?? (finalUnfilled.length === 0);
 
   return {
     success: true,
     addedCount: totalAdded,
     repairedChoicesCount,
     unfilled: finalUnfilled,
-    complete: updatedPaper?.progress.complete ?? (finalUnfilled.length === 0),
+    complete,
     solverMode: result.solverMode,
-    message: (updatedPaper?.progress.complete ?? (finalUnfilled.length === 0))
-      ? `Successfully auto-filled ${totalAdded} questions.${repairNote} Paper is now complete!${templateNote}${skippedNote}${modeNote}`
-      : `Auto-filled ${totalAdded} questions.${repairNote}${templateNote}${skippedNote}${finalUnfilledSummary}${modeNote}`,
+    message: complete
+      ? `Successfully auto-filled ${totalAdded} questions from the ${scopeLabel} question bank.${repairNote} Paper is now complete!${missingOrNote}${skippedNote}${modeNote}`
+      : `Auto-filled ${totalAdded} questions from the ${scopeLabel} question bank.${repairNote}${missingOrNote}${skippedNote}${unfilledSummary}${modeNote}`,
     paper: updatedPaper,
   };
 });

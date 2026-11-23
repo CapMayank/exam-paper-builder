@@ -20,7 +20,6 @@ describe("Full Paper Completion & Robust Generation Suite", () => {
   let ch2Id: string;
   let blueprintId: string;
   let secShortId: string;
-  let secLongId: string;
   let paperId: string;
 
   const testStamp = Date.now();
@@ -99,7 +98,6 @@ describe("Full Paper Completion & Robust Generation Suite", () => {
     });
     blueprintId = bp.id;
     secShortId = bp.sections[0].id;
-    secLongId = bp.sections[1].id;
 
     // 4. Create empty draft Paper
     const paper = await prisma.paper.create({
@@ -130,43 +128,27 @@ describe("Full Paper Completion & Robust Generation Suite", () => {
     await prisma.user.deleteMany({ where: { id: user.id } }).catch(() => {});
   });
 
-  it("1. Smart Auto-Fill synthesizes curriculum-grounded questions with internal choices when bank is empty", async () => {
+  it("1. Smart Auto-Fill leaves every slot empty, and says so, when the bank is empty", async () => {
     const fakeReq = new Request(`http://localhost/api/papers/${paperId}/autofill`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
     });
 
-    const res = await autoFillPaperRoute(fakeReq as any, { params: Promise.resolve({ id: paperId }) });
+    const res = await autoFillPaperRoute(fakeReq, { params: Promise.resolve({ id: paperId }) });
     const data = await res.json();
 
     expect(res.status).toBe(200);
-    expect(data.success).toBe(true);
-    expect(data.addedCount).toBe(2);
-    expect(data.unfilled).toHaveLength(0);
-    expect(data.complete).toBe(true);
+    expect(data.success).toBe(false);
+    expect(data.addedCount).toBe(0);
+    expect(data.complete).toBe(false);
+    expect(data.unfilled).toHaveLength(2);
+    expect(data.message).toMatch(/Class 10 Mathematics question bank/);
 
-    // Verify paper items in database have internal choice pairs for both 3m and 4m
-    const paperItems = await prisma.paperQuestion.findMany({
-      where: { paperId },
-      include: { question: true, orQuestion: true },
-    });
-    expect(paperItems).toHaveLength(2);
-
-    for (const item of paperItems) {
-      expect(item.question).toBeDefined();
-      expect(item.orQuestion).toBeDefined();
-      expect(item.orQuestionId).toBeTruthy();
-      expect(item.question.text).toBeTruthy();
-      expect(item.orQuestion?.text).toBeTruthy();
-      expect(item.question.text).not.toEqual(item.orQuestion?.text);
-      // the bank was empty, so both are offline template filler, and the client can tell
-      expect(isTemplateFiller(item.question)).toBe(true);
-      expect(isTemplateFiller(item.orQuestion!)).toBe(true);
-    }
-    for (const item of data.paper.items) {
-      expect(isTemplateFiller(item.question)).toBe(true);
-    }
+    // no generic template question was written to stand in for the missing ones
+    expect(await prisma.paperQuestion.count({ where: { paperId } })).toBe(0);
+    const written = await prisma.question.findMany({ where: { bookId } });
+    expect(written.filter((q) => isTemplateFiller(q))).toHaveLength(0);
   });
 
   it("2. POST /api/papers/[id]/ai-commit-section reliably commits 3-mark questions with OR choices", async () => {
@@ -206,7 +188,7 @@ describe("Full Paper Completion & Robust Generation Suite", () => {
       }),
     });
 
-    const res = await commitAiSection(req as any, { params: Promise.resolve({ id: paperId }) });
+    const res = await commitAiSection(req, { params: Promise.resolve({ id: paperId }) });
     const data = await res.json();
 
     expect(res.status).toBe(200);
@@ -217,7 +199,7 @@ describe("Full Paper Completion & Robust Generation Suite", () => {
     expect(data.paper.items[0].orQuestion.text).toContain("96 और 404");
   });
 
-  it("2b. Auto-Fill does not attach an English template OR to a Hindi bank question in a Hindi paper", async () => {
+  it("2b. Auto-Fill does not attach a template OR to a bank question when the bank has no second one", async () => {
     await prisma.paperQuestion.deleteMany({ where: { paperId } });
     // only the question below is in the bank: the earlier tests' questions would otherwise be picked
     await prisma.question.deleteMany({ where: { bookId } });
@@ -248,9 +230,10 @@ describe("Full Paper Completion & Robust Generation Suite", () => {
       const items = await prisma.paperQuestion.findMany({ where: { paperId }, include: { orQuestion: true } });
       expect(items).toHaveLength(1);
       expect(items[0].questionId).toBe(bankQ.id);
-      // the only OR on offer is an English template: it is left out (the slot keeps its primary) and counted
+      // the bank has no OR to offer: the slot keeps its primary, nothing is invented, and the teacher is told
       expect(items[0].orQuestion).toBeNull();
-      expect(data.message).toMatch(/Left out 1 candidate question/);
+      expect(await prisma.question.count({ where: { bookId } })).toBe(1);
+      expect(data.message).toMatch(/1 question needs an OR \(अथवा\) alternative/);
     } finally {
       await prisma.paper.update({ where: { id: paperId }, data: { language: "en" } });
     }
