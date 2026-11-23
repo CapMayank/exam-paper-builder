@@ -20,11 +20,11 @@ describe("builderQuestionLabel: the label print shows", () => {
   it("numbers a grouped exercise once and labels its items with sub-labels (not by position)", () => {
     const n = computeDisplayedPaperNumbering(sections, items, "CONTINUOUS");
     expect(["m1", "m2", "t1", "t2", "t3", "s1", "s2"].map((id) => builderQuestionLabel(n, id))).toEqual([
-      "1 (a)",
-      "1 (b)",
-      "2 (a)",
-      "2 (b)",
-      "2 (c)",
+      "1 (i)",
+      "1 (ii)",
+      "2 (i)",
+      "2 (ii)",
+      "2 (iii)",
       "3",
       "4",
     ]);
@@ -32,17 +32,17 @@ describe("builderQuestionLabel: the label print shows", () => {
 
   it("prefixes as print does", () => {
     const n = computeDisplayedPaperNumbering(sections, items, "PREFIXED");
-    expect(builderQuestionLabel(n, "t2")).toBe("Q.2 (b)");
+    expect(builderQuestionLabel(n, "t2")).toBe("Q.2 (ii)");
     expect(builderQuestionLabel(n, "s2")).toBe("Q.4");
   });
 
   it("counts section-relative numbers across every row of one section, as print does", () => {
     const n = computeDisplayedPaperNumbering(sections, items, "SECTION_RELATIVE");
     expect(["m1", "m2", "t1", "t3", "s1", "s2"].map((id) => builderQuestionLabel(n, id))).toEqual([
-      "A1 (a)",
-      "A1 (b)",
-      "A2 (a)",
-      "A2 (c)",
+      "A1 (i)",
+      "A1 (ii)",
+      "A2 (i)",
+      "A2 (iii)",
       "B1",
       "B2",
     ]);
@@ -59,7 +59,7 @@ describe("builderQuestionLabel: the label print shows", () => {
     const n = computeDisplayedPaperNumbering(sections, items, "CONTINUOUS", "hi");
     expect(builderQuestionLabel(n, "t1")).toBe("2 (क)");
     const en = computeDisplayedPaperNumbering(sections, items, "CONTINUOUS", "en");
-    expect(builderQuestionLabel(en, "t1")).toBe("2 (a)");
+    expect(builderQuestionLabel(en, "t1")).toBe("2 (i)");
   });
 
   it("has no label for an item that is not on the paper", () => {
@@ -69,11 +69,11 @@ describe("builderQuestionLabel: the label print shows", () => {
 });
 
 describe("groupedSubLabel", () => {
-  it("labels as print does: (a)…(j) then numbers; (क)…(ञ) then numbers", () => {
-    expect(groupedSubLabel(0, false)).toBe("(a)");
-    expect(groupedSubLabel(9, false)).toBe("(j)");
-    expect(groupedSubLabel(10, false)).toBe("(11)");
+  it("labels as print does: (i), (ii)… without a ceiling; (क)…(ञ) then Devanagari numbers", () => {
+    expect(groupedSubLabel(0, false)).toBe("(i)");
+    expect(groupedSubLabel(9, false)).toBe("(x)");
+    expect(groupedSubLabel(10, false)).toBe("(xi)");
     expect(groupedSubLabel(0, true)).toBe("(क)");
-    expect(groupedSubLabel(10, true)).toBe("(11)");
+    expect(groupedSubLabel(10, true)).toBe("(११)");
   });
 });

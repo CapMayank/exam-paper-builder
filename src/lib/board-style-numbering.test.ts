@@ -1,13 +1,14 @@
 import { describe, expect, test } from "vitest";
 import {
   computeDisplayedPaperNumbering,
+  groupedSubLabel,
   groupedQuestionPrompt,
   isGroupedExerciseRow,
   isObjectiveRow,
   resolveGroupedExerciseInstruction,
   rowRunLabel,
 } from "./layout";
-import { getQuestionTypeLabel } from "./constants";
+import { cleanQuestionStatement, getQuestionTypeLabel } from "./constants";
 import { getPaperLocale } from "./localization";
 import { planSectionHeadings } from "./sectionHeadingPlan";
 
@@ -113,5 +114,28 @@ describe("the row's question title is what prints", () => {
   test("a run's sub-band names the question title, else the type", () => {
     expect(rowRunLabel({ questionTitle: "Answer in one sentence.", type: "VERY_SHORT" }, "en")).toBe("Answer in one sentence.");
     expect(rowRunLabel({ questionTitle: "", type: "VERY_SHORT" }, "hi")).toBe(getQuestionTypeLabel("VERY_SHORT", "hi"));
+  });
+});
+
+describe("part labels", () => {
+  test("english parts are lower roman, without a ceiling", () => {
+    expect([0, 1, 3, 8, 9, 10, 11, 39].map((i) => groupedSubLabel(i, false))).toEqual([
+      "(i)", "(ii)", "(iv)", "(ix)", "(x)", "(xi)", "(xii)", "(xl)",
+    ]);
+  });
+
+  test("devanagari parts continue with Devanagari numerals", () => {
+    expect([0, 9, 10, 11].map((i) => groupedSubLabel(i, true))).toEqual(["(क)", "(ञ)", "(११)", "(१२)"]);
+  });
+
+  test("a 12-item one-word row labels through (xii), or (१२) on a Sanskrit paper", () => {
+    const rows = [{ id: "w", title: "Section A", type: "VERY_SHORT", count: 12, marksEach: 1, order: 1 }];
+    const items = itemsFor(rows);
+    expect(computeDisplayedPaperNumbering(rows, items, "CONTINUOUS", "en").itemNumbers["w-11"].displayLabel).toBe("1 (xii)");
+    expect(computeDisplayedPaperNumbering(rows, items, "CONTINUOUS", "sa").itemNumbers["w-11"].displayLabel).toBe("1 (१२)");
+  });
+
+  test("a printed (xi) prefix is still stripped from question text", () => {
+    expect(cleanQuestionStatement("(xi) The sun rises in the east.")).toBe("The sun rises in the east.");
   });
 });

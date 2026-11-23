@@ -511,10 +511,10 @@ describe("MPBSE Class 12 Mathematics Regression & Subject Integrity Suite", () =
       expect(numbering.totalDisplayedQuestions).toBe(29);
       expect(numbering.hasGroupedSubItems).toBe(true);
 
-      // board style: Q1 (a)..(f) MCQ, Q2 (a)..(f) Fill in the Blanks, Q3 (a)..(f) True/False
-      expect(numbering.itemNumbers["fb-0"].displayLabel).toBe("2 (a)");
-      expect(numbering.itemNumbers["fb-5"].displayLabel).toBe("2 (f)");
-      expect(numbering.itemNumbers["tf-0"].displayLabel).toBe("3 (a)");
+      // board style: Q1 (i)..(vi) MCQ, Q2 (i)..(vi) Fill in the Blanks, Q3 (i)..(vi) True/False
+      expect(numbering.itemNumbers["fb-0"].displayLabel).toBe("2 (i)");
+      expect(numbering.itemNumbers["fb-5"].displayLabel).toBe("2 (vi)");
+      expect(numbering.itemNumbers["tf-0"].displayLabel).toBe("3 (i)");
       expect(numbering.itemNumbers["mc-0"].displayLabel).toBe("4");
       expect(numbering.itemNumbers["vsa-0"].displayLabel).toBe("5");
       expect(numbering.itemNumbers["vsa-4"].displayLabel).toBe("9");

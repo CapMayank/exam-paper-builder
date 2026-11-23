@@ -268,13 +268,29 @@ export function mergeSameFormRows<
   return { sections: merged, items: out, aliasOf };
 }
 
-const GROUPED_SUB_LETTERS = "abcdefghij";
 const DEVANAGARI_SUB_LABELS = ["(क)", "(ख)", "(ग)", "(घ)", "(ङ)", "(च)", "(छ)", "(ज)", "(झ)", "(ञ)"];
+const DEVANAGARI_DIGITS = "०१२३४५६७८९";
+const ROMAN: Array<[number, string]> = [
+  [1000, "m"], [900, "cm"], [500, "d"], [400, "cd"], [100, "c"], [90, "xc"],
+  [50, "l"], [40, "xl"], [10, "x"], [9, "ix"], [5, "v"], [4, "iv"], [1, "i"],
+];
 
-/** The printed sub-label of the item at `idx` in a grouped exercise: (a)…(j) or (क)…(ञ), then (11), (12)… */
+/** Lower-case roman numeral of a positive integer: 4 → "iv", 40 → "xl". */
+function toRoman(n: number): string {
+  let out = "";
+  for (const [value, numeral] of ROMAN) {
+    while (n >= value) {
+      out += numeral;
+      n -= value;
+    }
+  }
+  return out;
+}
+
+/** The printed part label of the item at `idx` in a grouped question: (i), (ii)… or (क)…(ञ), then (११), (१२)… */
 export function groupedSubLabel(idx: number, isIndic: boolean): string {
-  const label = isIndic ? DEVANAGARI_SUB_LABELS[idx] : GROUPED_SUB_LETTERS[idx] && `(${GROUPED_SUB_LETTERS[idx]})`;
-  return label || `(${idx + 1})`;
+  if (!isIndic) return `(${toRoman(idx + 1)})`;
+  return DEVANAGARI_SUB_LABELS[idx] ?? `(${String(idx + 1).replace(/[0-9]/g, (d) => DEVANAGARI_DIGITS[Number(d)])})`;
 }
 
 /** Whether a grouped exercise under this heading prints Devanagari sub-labels. */
