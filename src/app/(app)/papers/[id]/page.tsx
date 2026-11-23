@@ -30,6 +30,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
+import { paperOutputTab } from "@/lib/paperTabs";
 import { use, useCallback, useEffect, useRef, useState, Fragment } from "react";
 import { AIPaperAuditModal } from "@/components/AIPaperAuditModal";
 import { AIPaperGeneratorModal } from "@/components/AIPaperGeneratorModal";
@@ -908,7 +909,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                 <div className="absolute right-0 top-full mt-1.5 w-64 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg z-30 space-y-0.5">
                   <Link
                     href={`/papers/${id}/print?view=reading`}
-                    target="_blank"
+                    target={paperOutputTab(id)}
                     onClick={() => setExportMenuOpen(false)}
                     className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition"
                   >
@@ -923,7 +924,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
 
                   <Link
                     href={`/papers/${id}/print?view=sheets`}
-                    target="_blank"
+                    target={paperOutputTab(id)}
                     onClick={() => setExportMenuOpen(false)}
                     className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition"
                   >
@@ -956,7 +957,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
 
                   <Link
                     href={`/papers/${id}/solutions`}
-                    target="_blank"
+                    target={paperOutputTab(id)}
                     onClick={() => setExportMenuOpen(false)}
                     className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition"
                   >
@@ -971,7 +972,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
 
                   <Link
                     href={`/papers/${id}/omr`}
-                    target="_blank"
+                    target={paperOutputTab(id)}
                     onClick={() => setExportMenuOpen(false)}
                     className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition"
                   >
@@ -2458,7 +2459,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                 </div>
                 <Link
                   href={`/papers/${id}/print`}
-                  target="_blank"
+                  target={paperOutputTab(id)}
                   className="text-slate-400 hover:text-indigo-600 transition p-1"
                   title="Open full print view in new tab"
                 >

@@ -20,6 +20,7 @@ import {
   UploadCloud,
 } from "lucide-react";
 import Link from "next/link";
+import { paperOutputTab } from "@/lib/paperTabs";
 import { useEffect, useMemo, useState } from "react";
 import { BrandMark } from "@/components/BrandMark";
 import { PaperRow, Progress } from "@/components/PaperRow";
@@ -276,7 +277,7 @@ export default function DashboardPage() {
             <Link href={`/papers/${c.id}`} className="btn btn-primary btn-lg">
               Continue editing <ArrowRight size={17} />
             </Link>
-            <Link href={`/papers/${c.id}/print`} target="_blank" className="btn">
+            <Link href={`/papers/${c.id}/print`} target={paperOutputTab(c.id)} className="btn">
               <Printer size={15} /> Print preview
             </Link>
           </div>

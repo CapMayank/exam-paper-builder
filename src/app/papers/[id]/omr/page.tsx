@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowLeft, FileText, Printer } from "lucide-react";
-import Link from "next/link";
+import { BackToPaperLink } from "@/components/BackToPaperLink";
 import { use, useEffect, useMemo, useState } from "react";
 import { api, imageUrl } from "@/lib/client";
 import { DEFAULT_SCHOOL_LOGO, DEFAULT_SCHOOL_NAME, EXAM_TYPE_LABEL, resolvePaperExamType } from "@/lib/constants";
@@ -90,12 +90,13 @@ export default function OmrSheetPage({ params }: PageProps<"/papers/[id]/omr">) 
       {/* Top Floating Control Bar (Hidden on Print) */}
       <div className="sticky top-0 z-50 flex items-center justify-between border-b border-slate-300 bg-white/95 px-6 py-3 shadow-sm backdrop-blur print:hidden">
         <div className="flex items-center gap-3">
-          <Link
+          <BackToPaperLink
+            paperId={id}
             href={`/papers/${id}`}
             className="btn btn-ghost btn-sm text-slate-600 hover:text-slate-900"
           >
             <ArrowLeft size={16} /> Back to workbench
-          </Link>
+          </BackToPaperLink>
           <div className="h-4 w-px bg-slate-200" />
           <span className="font-display font-semibold text-slate-800">
             Sarvodaya H.S. School · OMR Answer Sheet
@@ -343,12 +344,13 @@ export default function OmrSheetPage({ params }: PageProps<"/papers/[id]/omr">) 
                 >
                   Generate Standard 20-Question Sheet
                 </button>
-                <Link
+                <BackToPaperLink
+                  paperId={id}
                   href={`/papers/${id}`}
                   className="btn btn-sm btn-ghost border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 text-xs font-medium"
                 >
                   Back to Workbench
-                </Link>
+                </BackToPaperLink>
               </div>
             </div>
           ) : (

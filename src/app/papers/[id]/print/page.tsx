@@ -17,7 +17,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import Link from "next/link";
+import { BackToPaperLink } from "@/components/BackToPaperLink";
 import { use, useCallback, useEffect, useState } from "react";
 import { PaperSheets, type SheetsInfo } from "@/components/PaperSheets";
 import { Modal } from "@/components/ui";
@@ -149,12 +149,13 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 text-sm">
           {/* Left: Back & Title */}
           <div className="flex items-center gap-3">
-            <Link
+            <BackToPaperLink
+              paperId={id}
               href={paper.blueprint.curriculumMode === "KG_WORKSHEET" ? `/worksheets/${id}` : `/papers/${id}`}
               className="btn btn-sm text-slate-700 hover:text-indigo-700 hover:bg-slate-100"
             >
               <ArrowLeft size={13} /> {paper.blueprint.curriculumMode === "KG_WORKSHEET" ? "Worksheet" : "Workbench"}
-            </Link>
+            </BackToPaperLink>
             <div className="border-l border-slate-200 pl-3 flex items-center gap-2">
               <span className="font-bold text-slate-900">{paper.title}</span>
               <span

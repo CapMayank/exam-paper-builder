@@ -2,6 +2,7 @@
 
 import { Copy, KeyRound, Printer, Trash2 } from "lucide-react";
 import Link from "next/link";
+import { paperOutputTab } from "@/lib/paperTabs";
 import { EXAM_TYPE_LABEL, WORKSHEET_MODE, resolvePaperExamType, type ExamType } from "@/lib/constants";
 import { plural, timeAgo } from "@/lib/format";
 import { canModifyPaper, type Actor } from "@/lib/permissions";
@@ -160,10 +161,10 @@ export function PaperRow({
         <Link href={openHref} className="btn btn-sm">
           Open
         </Link>
-        <Link href={`/papers/${p.id}/print`} target="_blank" className="btn btn-sm btn-ghost btn-icon" title="Print preview" aria-label={`Print preview for ${p.title}`}>
+        <Link href={`/papers/${p.id}/print`} target={paperOutputTab(p.id)} className="btn btn-sm btn-ghost btn-icon" title="Print preview" aria-label={`Print preview for ${p.title}`}>
           <Printer size={15} />
         </Link>
-        <Link href={`/papers/${p.id}/solutions`} target="_blank" className="btn btn-sm btn-ghost btn-icon" title="Marking scheme" aria-label={`Marking scheme for ${p.title}`}>
+        <Link href={`/papers/${p.id}/solutions`} target={paperOutputTab(p.id)} className="btn btn-sm btn-ghost btn-icon" title="Marking scheme" aria-label={`Marking scheme for ${p.title}`}>
           <KeyRound size={15} />
         </Link>
         {onDuplicate && (

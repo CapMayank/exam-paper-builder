@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, ArrowLeft, CheckCircle2, FileDown, FileText, Grid3X3, ListChecks, Loader2, Printer, Sparkles, Table } from "lucide-react";
-import Link from "next/link";
+import { BackToPaperLink } from "@/components/BackToPaperLink";
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import { MathText } from "@/components/MathText";
 import { QuestionContent } from "@/components/QuestionContent";
@@ -176,9 +176,9 @@ export default function SolutionsPage({ params }: PageProps<"/papers/[id]/soluti
       {/* Top action bar (hidden in print) */}
       <div className="no-print sticky top-0 z-10 border-b border-slate-300 bg-white px-4 py-2.5 shadow-sm">
         <div className="mx-auto flex max-w-4xl flex-wrap items-center gap-3 text-sm">
-          <Link href={`/papers/${id}`} className="btn btn-sm">
+          <BackToPaperLink paperId={id} href={`/papers/${id}`} className="btn btn-sm">
             <ArrowLeft size={14} /> Back to builder
-          </Link>
+          </BackToPaperLink>
           <span className="font-semibold text-slate-800">{paper.title}</span>
           <div className="flex gap-1 rounded-md bg-slate-100 p-1 text-xs">
             <button

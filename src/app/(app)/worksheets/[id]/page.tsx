@@ -2,6 +2,7 @@
 
 import { ArrowDown, ArrowLeft, ArrowUp, Check, Minus, Pencil, Plus, Printer, Sparkles, Trash2, X } from "lucide-react";
 import Link from "next/link";
+import { paperOutputTab } from "@/lib/paperTabs";
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EmptyState, ErrorBanner, Field, Modal, Spinner, useConfirm, useToast } from "@/components/ui";
 import { api } from "@/lib/client";
@@ -224,7 +225,7 @@ export default function WorksheetPage({ params }: PageProps<"/worksheets/[id]">)
           <button type="button" className="btn" onClick={() => setDetailsOpen(true)}>
             <Pencil size={14} /> Details
           </button>
-          <Link href={`/papers/${id}/print`} target="_blank" className="btn btn-primary">
+          <Link href={`/papers/${id}/print`} target={paperOutputTab(id)} className="btn btn-primary">
             <Printer size={15} /> Print preview
           </Link>
         </div>
