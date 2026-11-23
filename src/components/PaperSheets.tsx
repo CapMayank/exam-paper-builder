@@ -149,7 +149,7 @@ function GroupedItemBody({ q, sectionType, isA5, lang }: { q: QuestionDto; secti
   const optFontSize = isA5 ? "8pt" : "8.5pt";
   return (
     <>
-      <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight }}>
+      <div data-split-lines style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight }}>
         <QuestionContent text={cleanQuestionStatement(q.text, sectionType)} isA5={isA5} />
       </div>
       {groupedItemPrintsOptions(q) && <OptionFlow options={q.options} isA5={isA5} fontSize={optFontSize} marginTop="1.5mm" lang={lang} />}
@@ -620,12 +620,18 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
         const subLabel = numbering.itemNumbers[it.id]?.subLabel ?? groupedSubLabel(itemIdx, isIndic);
         // a line the teacher typed for this item prints above it, unless it repeats the exercise line
         const itemInstruction = groupedItemInstruction(s, it.question.type, it.instruction, sharedInstruction);
+        // An item may be cut between lines of its text or rows of its options, like any other question's parts, so
+        // a tall item fills the foot of the page instead of moving whole; the part that opens a page says whose it is.
         blocks.push({
           key: it.id,
           keepWithNext: itemIdx === 0,
           forceBreakBefore: Boolean(it.pageBreakBefore),
           groupId: `exercise-${s.id}`,
-          node: (
+          cuttable: true,
+          continuationLabel: exerciseLabel,
+          render: ({ isContinuation }) => (
+            <>
+            {isContinuation && <ContinuationBanner label={exerciseLabel} lang={paperLang} isA5={isA5} />}
             <div style={{ paddingLeft: isA5 ? "4mm" : "5mm", paddingBottom: isLastItem ? questionBottomPadding : g(isA5 ? 1.5 : 2) }}>
               {itemInstruction && (
                 <div style={{ fontStyle: "italic", fontWeight: 500, paddingBottom: g(isA5 ? 0.75 : 1) }}>{itemInstruction}</div>
@@ -646,6 +652,7 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
                 </div>
               </div>
             </div>
+            </>
           ),
         });
       });
