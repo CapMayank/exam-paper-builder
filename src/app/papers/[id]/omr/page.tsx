@@ -4,7 +4,7 @@ import { ArrowLeft, FileText, Printer } from "lucide-react";
 import Link from "next/link";
 import { use, useEffect, useMemo, useState } from "react";
 import { api, imageUrl } from "@/lib/client";
-import { DEFAULT_SCHOOL_LOGO, DEFAULT_SCHOOL_NAME, EXAM_TYPE_LABEL, isMcqLikeType, resolvePaperExamType } from "@/lib/constants";
+import { normalizeNumberingStyle, DEFAULT_SCHOOL_LOGO, DEFAULT_SCHOOL_NAME, EXAM_TYPE_LABEL, isMcqLikeType, resolvePaperExamType } from "@/lib/constants";
 import { formatQuestionNumber } from "@/lib/layout";
 import { sectionLetter as titleSectionLetter } from "@/lib/sectionLetter";
 import type { PaperData } from "@/lib/types";
@@ -63,7 +63,7 @@ export default function OmrSheetPage({ params }: PageProps<"/papers/[id]/omr">) 
           numCount++;
           sectionRelativeCounter++;
           const mainLabel = formatQuestionNumber(
-            paper.numberingStyle || "CONTINUOUS",
+            normalizeNumberingStyle(paper.numberingStyle),
             numCount - 1,
             sectionLetter,
             sectionRelativeCounter - 1
@@ -112,7 +112,7 @@ export default function OmrSheetPage({ params }: PageProps<"/papers/[id]/omr">) 
             itemsList.push({
               globalIndex: numCount,
               label: formatQuestionNumber(
-                paper.numberingStyle || "CONTINUOUS",
+                normalizeNumberingStyle(paper.numberingStyle),
                 numCount - 1,
                 sectionLetter,
                 sectionRelativeCounter - 1

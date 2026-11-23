@@ -8,7 +8,14 @@ import {
   resolveGroupedExerciseInstruction,
   rowRunLabel,
 } from "./layout";
-import { cleanQuestionStatement, getQuestionTypeLabel } from "./constants";
+import {
+  cleanQuestionStatement,
+  formatQuestionNumber as formatQuestionNumberLegacy,
+  getQuestionTypeLabel,
+  normalizeNumberingStyle,
+  NUMBERING_STYLES,
+} from "./constants";
+import { paperCreateSchema } from "./schemas";
 import { getPaperLocale } from "./localization";
 import { planSectionHeadings } from "./sectionHeadingPlan";
 
@@ -137,5 +144,29 @@ describe("part labels", () => {
 
   test("a printed (xi) prefix is still stripped from question text", () => {
     expect(cleanQuestionStatement("(xi) The sun rises in the east.")).toBe("The sun rises in the east.");
+  });
+});
+
+describe("numbering styles", () => {
+  test("section-relative numbering is retired and reads as continuous", () => {
+    expect(NUMBERING_STYLES).toEqual(["CONTINUOUS", "PREFIXED"]);
+    expect(normalizeNumberingStyle("SECTION_RELATIVE")).toBe("CONTINUOUS");
+    expect(normalizeNumberingStyle("PREFIXED")).toBe("PREFIXED");
+    expect(normalizeNumberingStyle(undefined)).toBe("CONTINUOUS");
+    expect(normalizeNumberingStyle("nonsense")).toBe("CONTINUOUS");
+  });
+
+  test("a paper still stored as section-relative numbers 1, 2, 3", () => {
+    const rows = [
+      { id: "a", title: "Section A", type: "SHORT", count: 2, marksEach: 2, order: 1 },
+      { id: "b", title: "Section B", type: "LONG", count: 1, marksEach: 4, order: 2 },
+    ];
+    const n = computeDisplayedPaperNumbering(rows, itemsFor(rows), normalizeNumberingStyle("SECTION_RELATIVE"), "en");
+    expect(["a-0", "a-1", "b-0"].map((id) => n.itemNumbers[id].displayLabel)).toEqual(["1", "2", "3"]);
+    expect(formatQuestionNumberLegacy(3, "SECTION_RELATIVE", "B", 1)).toBe("3.");
+  });
+
+  test("the paper settings schema stores an old section-relative value as continuous", () => {
+    expect(paperCreateSchema.shape.numberingStyle.parse("SECTION_RELATIVE")).toBe("CONTINUOUS");
   });
 });

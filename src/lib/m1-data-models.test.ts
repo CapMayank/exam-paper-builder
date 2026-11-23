@@ -99,12 +99,6 @@ describe("Milestone 1: Question Numbering Styles", () => {
     expect(formatQuestionNumber("PREFIXED", 9, "A", 9)).toBe("Q.10");
   });
 
-  it("formats SECTION_RELATIVE style: A1, A2... B1, B2...", () => {
-    expect(formatQuestionNumber("SECTION_RELATIVE", 0, "A", 0)).toBe("A1");
-    expect(formatQuestionNumber("SECTION_RELATIVE", 1, "A", 1)).toBe("A2");
-    expect(formatQuestionNumber("SECTION_RELATIVE", 5, "B", 0)).toBe("B1");
-    expect(formatQuestionNumber("SECTION_RELATIVE", 8, "C", 2)).toBe("C3");
-  });
 });
 
 describe("Milestone 1: Constants & Enums Integrity", () => {
@@ -119,7 +113,7 @@ describe("Milestone 1: Constants & Enums Integrity", () => {
   });
 
   it("has valid NUMBERING_STYLES matching specifications", () => {
-    expect(NUMBERING_STYLES).toEqual(["CONTINUOUS", "PREFIXED", "SECTION_RELATIVE"]);
+    expect(NUMBERING_STYLES).toEqual(["CONTINUOUS", "PREFIXED"]);
     expect(DEFAULT_NUMBERING_STYLE).toBe("CONTINUOUS");
   });
 

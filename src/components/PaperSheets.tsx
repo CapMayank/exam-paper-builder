@@ -12,7 +12,7 @@ import { getInternalChoiceSeparatorLabel } from "@/lib/internalChoiceRules";
 import { resolveMarksStyle } from "@/lib/marksDisplay";
 import { QuestionContent } from "@/components/QuestionContent";
 import { imageUrl } from "@/lib/client";
-import {
+import { normalizeNumberingStyle,
   cleanQuestionStatement,
   DEFAULT_SCHOOL_LOGO,
   DEFAULT_SCHOOL_NAME,
@@ -209,7 +209,7 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
   const numbering = computeDisplayedPaperNumbering(
     blueprint.sections,
     paper.items,
-    paper.numberingStyle || "CONTINUOUS",
+    normalizeNumberingStyle(paper.numberingStyle),
     paperLang
   );
   const headingPlans = planSectionHeadings(blueprint.sections, paper.items, numbering, locale, {
@@ -567,7 +567,7 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
       // the paper's one numbering (the builder shows the same); the local count only covers an item it does not know
       const exerciseLabel =
         numbering.itemNumbers[sectionItems[0].id]?.questionLabel ??
-        formatQuestionNumber(paper.numberingStyle || "CONTINUOUS", exerciseN, sectionLetter, sectionRelativeCounter);
+        formatQuestionNumber(normalizeNumberingStyle(paper.numberingStyle), exerciseN, sectionLetter, sectionRelativeCounter);
       n += 1;
       sectionRelativeCounter += 1;
 
@@ -656,7 +656,7 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
         const currentN = n;
         const numberLabel =
           numbering.itemNumbers[it.id]?.questionLabel ??
-          formatQuestionNumber(paper.numberingStyle || "CONTINUOUS", currentN, sectionLetter, sectionRelativeCounter);
+          formatQuestionNumber(normalizeNumberingStyle(paper.numberingStyle), currentN, sectionLetter, sectionRelativeCounter);
         n += 1;
         sectionRelativeCounter += 1;
 

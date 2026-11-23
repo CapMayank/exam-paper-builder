@@ -867,14 +867,24 @@ export const PRINT_DENSITY_LABEL: Record<PrintDensity, string> = {
 };
 export const DEFAULT_PRINT_DENSITY: PrintDensity = "STANDARD";
 
-export const NUMBERING_STYLES = ["CONTINUOUS", "PREFIXED", "SECTION_RELATIVE"] as const;
+/** Board style: question numbers run through the whole paper, never restarting at a section. */
+export const NUMBERING_STYLES = ["CONTINUOUS", "PREFIXED"] as const;
 export type NumberingStyle = (typeof NUMBERING_STYLES)[number];
 export const NUMBERING_STYLE_LABEL: Record<NumberingStyle, string> = {
   CONTINUOUS: "Continuous (1, 2, 3...)",
   PREFIXED: "Prefixed (Q.1, Q.2, Q.3...)",
-  SECTION_RELATIVE: "Section-relative (A1, A2... / B1, B2...)",
 };
 export const DEFAULT_NUMBERING_STYLE: NumberingStyle = "CONTINUOUS";
+
+/** An incoming numbering style with the retired section-relative style mapped to continuous; other values pass through. */
+export function retiredNumberingStyle(value: unknown): unknown {
+  return value === "SECTION_RELATIVE" ? DEFAULT_NUMBERING_STYLE : value;
+}
+
+/** A stored numbering style as print uses it: the retired section-relative style, or anything unknown, is continuous. */
+export function normalizeNumberingStyle(value: unknown): NumberingStyle {
+  return (NUMBERING_STYLES as readonly unknown[]).includes(value) ? (value as NumberingStyle) : DEFAULT_NUMBERING_STYLE;
+}
 
 export function formatQuestionNumber(
   arg0: number | string,
@@ -901,11 +911,9 @@ export function formatQuestionNumber(
     secIdx = arg3 != null ? (arg3 === 0 ? 1 : arg3) : num;
   }
 
+  void secLetter;
+  void secIdx;
   if (style === "PREFIXED") return `Q.${num}`;
-  if (style === "SECTION_RELATIVE" && secLetter) {
-    const s = secIdx != null ? secIdx : num;
-    return `${secLetter}${s}.`;
-  }
   return `${num}.`;
 }
 

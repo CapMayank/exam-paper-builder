@@ -1,4 +1,5 @@
 import { HttpError, route } from "@/lib/api";
+import { normalizeNumberingStyle } from "@/lib/constants";
 import { recordAudit } from "@/lib/audit";
 import { assertCanModifyPaper, loadPaperView, snapshotItems } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
@@ -66,7 +67,7 @@ export const POST = route(async (req, params, user) => {
     printDensity: (current.printDensity as any) || "STANDARD",
     twoColumn: current.twoColumn,
     targetPages: current.targetPages,
-    numberingStyle: (current.numberingStyle as any) || "CONTINUOUS",
+    numberingStyle: normalizeNumberingStyle(current.numberingStyle),
     marksStyle: (current.marksStyle as any) || "INLINE",
     showCandidateDetails: current.showCandidateDetails,
     showSignatures: current.showSignatures,

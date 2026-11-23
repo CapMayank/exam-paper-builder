@@ -29,7 +29,7 @@ import { formatMathTextRuns, formatOptionPairRuns } from "@/lib/docxMath";
 import { getInternalChoiceSeparatorLabel } from "@/lib/internalChoiceRules";
 import { getPaperLocale, type PaperLanguage } from "@/lib/localization";
 import { extractTableFromText } from "@/lib/math";
-import {
+import { normalizeNumberingStyle,
   canHaveSubparts,
   cleanMatchItem,
   cleanOptionText,
@@ -418,7 +418,7 @@ export async function buildPaperDocx(
   const numbering = computeDisplayedPaperNumbering(
     paper.blueprint.sections,
     paper.items,
-    (paper.numberingStyle as any) || "CONTINUOUS"
+    normalizeNumberingStyle(paper.numberingStyle)
   );
   // the printed paper's heading plan: each fact once, at the level that owns it
   const headingPlans = planSectionHeadings(paper.blueprint.sections, paper.items, numbering, locale);

@@ -7,7 +7,7 @@ import { MathText } from "@/components/MathText";
 import { QuestionContent } from "@/components/QuestionContent";
 import { ResolvedOptionText } from "@/components/QuestionView";
 import { api, imageUrl } from "@/lib/client";
-import {
+import { normalizeNumberingStyle,
   cleanOptionText,
   DEFAULT_SCHOOL_LOGO,
   DEFAULT_SCHOOL_NAME,
@@ -104,7 +104,7 @@ export default function SolutionsPage({ params }: PageProps<"/papers/[id]/soluti
   const displayedNumbering = computeDisplayedPaperNumbering(
     blueprint.sections,
     paper.items,
-    paper.numberingStyle || "CONTINUOUS",
+    normalizeNumberingStyle(paper.numberingStyle),
     detectPaperLanguage(paper, paper.items)
   );
   const allNumberedItems: {
@@ -136,7 +136,7 @@ export default function SolutionsPage({ params }: PageProps<"/papers/[id]/soluti
     for (const it of items) {
       const globalIdx = numCount;
       const fallbackLabel = formatQuestionNumber(
-        paper.numberingStyle || "CONTINUOUS",
+        normalizeNumberingStyle(paper.numberingStyle),
         globalIdx,
         sectionLetter,
         sectionRelativeCounter

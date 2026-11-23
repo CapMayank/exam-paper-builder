@@ -180,8 +180,6 @@ export function formatQuestionNumber(
   switch (style) {
     case "PREFIXED":
       return `Q.${globalIdx + 1}`;
-    case "SECTION_RELATIVE":
-      return `${sectionLetter}${sectionIdx + 1}`;
     case "CONTINUOUS":
     default:
       return `${globalIdx + 1}`;

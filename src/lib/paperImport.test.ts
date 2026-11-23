@@ -261,7 +261,7 @@ describe("Paper Import & Blueprint Verification Engine", () => {
       // Question numbering styles
       expect(formatQuestionNumber(5, "CONTINUOUS")).toBe("5.");
       expect(formatQuestionNumber(5, "PREFIXED")).toBe("Q.5");
-      expect(formatQuestionNumber(5, "SECTION_RELATIVE", "B", 2)).toBe("B2.");
+      expect(formatQuestionNumber(5, "SECTION_RELATIVE", "B", 2)).toBe("5."); // retired style prints continuous
     });
 
     it("correctly routes questions in composite multi-type sections (e.g. Class 12 Math Section A with MCQ, FIB, TF, Match, Short)", () => {

@@ -1,6 +1,6 @@
 import { questionContentKey } from "./orIdentity";
 import { questionAnswerStatus } from "./answerKeyStatus";
-import { cleanOptionText, isMcqLikeType } from "./constants";
+import { normalizeNumberingStyle, cleanOptionText, isMcqLikeType } from "./constants";
 import { evaluatePaperInternalChoiceCompliance, orChapterRequired } from "./internalChoiceRules";
 import { computeDisplayedPaperNumbering } from "./layout";
 import { isTemplateFiller } from "./templateFiller";
@@ -93,7 +93,7 @@ export function validatePaperPreflight(paper: PaperData): PreflightReport {
   const seenIds = new Map<string, number>();
   const blueprintChapters = new Set(paper.blueprint.chapters.map((c) => c.chapterId));
   // numbered as on the printed paper: section by section, not by raw position
-  const numbering = computeDisplayedPaperNumbering(paper.blueprint.sections, paper.items, paper.numberingStyle || "CONTINUOUS");
+  const numbering = computeDisplayedPaperNumbering(paper.blueprint.sections, paper.items, normalizeNumberingStyle(paper.numberingStyle));
   const sectionOrder = new Map(paper.blueprint.sections.map((s, i) => [s.id, i]));
   const orderedItems = [...paper.items].sort(
     (a, b) => (sectionOrder.get(a.sectionId) ?? 999) - (sectionOrder.get(b.sectionId) ?? 999) || a.position - b.position,

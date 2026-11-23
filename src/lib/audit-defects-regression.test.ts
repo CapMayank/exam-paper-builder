@@ -148,21 +148,15 @@ describe("Audit Defect Fixes Regression Test Suite (DEF-01 to DEF-15)", () => {
   });
 
   describe("DEF-10: Conflicting formatQuestionNumber Signatures & Index Collision", () => {
-    it("formats sequential section-relative numbers without 0/1 index collision", () => {
-      // Index 0 -> A1, Index 1 -> A2, Index 2 -> A3
-      expect(formatNumberLayout("SECTION_RELATIVE", 0, "A", 0)).toBe("A1");
-      expect(formatNumberLayout("SECTION_RELATIVE", 1, "A", 1)).toBe("A2");
-      expect(formatNumberLayout("SECTION_RELATIVE", 2, "A", 2)).toBe("A3");
-    });
-
     it("constants formatQuestionNumber handles both layout and constants signatures gracefully", () => {
       // Constants signature (num, style, secLetter, secIndex)
-      expect(formatNumberConstants(1, "SECTION_RELATIVE", "A", 1)).toBe("A1.");
-      expect(formatNumberConstants(2, "SECTION_RELATIVE", "A", 2)).toBe("A2.");
+      // the retired section-relative style prints continuous numbers
+      expect(formatNumberConstants(1, "SECTION_RELATIVE", "A", 1)).toBe("1.");
+      expect(formatNumberConstants(2, "SECTION_RELATIVE", "A", 2)).toBe("2.");
 
       // Layout signature (style, globalIdx, secLetter, secIndex)
-      expect(formatNumberConstants("SECTION_RELATIVE", 0, "B", 0)).toBe("B1.");
-      expect(formatNumberConstants("SECTION_RELATIVE", 1, "B", 1)).toBe("B2.");
+      expect(formatNumberConstants("SECTION_RELATIVE", 0, "B", 0)).toBe("1.");
+      expect(formatNumberConstants("SECTION_RELATIVE", 1, "B", 1)).toBe("2.");
       expect(formatNumberConstants("PREFIXED", 0, "A", 0)).toBe("Q.1");
       expect(formatNumberConstants("CONTINUOUS", 4, "A", 4)).toBe("5.");
     });

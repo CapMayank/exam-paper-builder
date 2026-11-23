@@ -536,13 +536,6 @@ describe("Adversarial Challenge: formatQuestionNumber Extreme Values", () => {
     expect(formatQuestionNumber("PREFIXED", -1, "A", -1)).toBe("Q.0");
   });
 
-  it("handles boundary indices and complex section letters for SECTION_RELATIVE style", () => {
-    expect(formatQuestionNumber("SECTION_RELATIVE", 0, "A", 0)).toBe("A1");
-    expect(formatQuestionNumber("SECTION_RELATIVE", 99, "Section-E", 99)).toBe("Section-E100");
-    expect(formatQuestionNumber("SECTION_RELATIVE", 999, "IV", 999)).toBe("IV1000");
-    expect(formatQuestionNumber("SECTION_RELATIVE", 0, "", 0)).toBe("1");
-  });
-
   it("falls back to continuous style on unknown or invalid style strings", () => {
     expect(formatQuestionNumber("UNKNOWN" as unknown as typeof NUMBERING_STYLES[0], 4, "A", 0)).toBe("5");
   });

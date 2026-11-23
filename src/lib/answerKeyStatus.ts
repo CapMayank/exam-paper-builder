@@ -2,6 +2,7 @@
 // number, and how the correct options are spread. Pure, from the paper view the workbench already holds.
 
 import { findMissingAnswer } from "./answerKeyFill";
+import { normalizeNumberingStyle } from "./constants";
 import { positionReport, type MatchUnit, type McqUnit, type PositionReport } from "./answerPositions";
 import { computeDisplayedPaperNumbering } from "./layout";
 import type { PaperData, QuestionDto } from "./types";
@@ -56,7 +57,7 @@ function preview(q: QuestionDto): string {
 
 /** Every question and OR alternative of the paper, in printed order. */
 export function answerKeyRows(paper: PaperData): AnswerKeyRow[] {
-  const numbering = computeDisplayedPaperNumbering(paper.blueprint.sections, paper.items, paper.numberingStyle || "CONTINUOUS");
+  const numbering = computeDisplayedPaperNumbering(paper.blueprint.sections, paper.items, normalizeNumberingStyle(paper.numberingStyle));
   const order = new Map(paper.blueprint.sections.map((s, i) => [s.id, i]));
   const items = [...paper.items].sort((a, b) => (order.get(a.sectionId) ?? 0) - (order.get(b.sectionId) ?? 0) || a.position - b.position);
   return items.flatMap((it) => {

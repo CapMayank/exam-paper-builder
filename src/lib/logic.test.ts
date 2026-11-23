@@ -75,10 +75,10 @@ describe("whyCannotAdd / paperStatus", () => {
     expect(implications.some((imp) => imp.code === "SECTION_OVERFILLED")).toBe(true);
     expect(implications.some((imp) => imp.code === "SECTION_UNDERFILLED")).toBe(false);
   });
-  it("formats section-relative question number without falsy zero error", () => {
-    expect(formatQuestionNumber(0, "SECTION_RELATIVE", "A", 0)).toBe("A1.");
-    expect(formatQuestionNumber(1, "SECTION_RELATIVE", "A", 1)).toBe("A1.");
-    expect(formatQuestionNumber(2, "SECTION_RELATIVE", "A", 2)).toBe("A2.");
+  it("formats a stored section-relative style as continuous, without falsy zero error", () => {
+    expect(formatQuestionNumber(0, "SECTION_RELATIVE", "A", 0)).toBe("1.");
+    expect(formatQuestionNumber(1, "SECTION_RELATIVE", "A", 1)).toBe("1.");
+    expect(formatQuestionNumber(2, "SECTION_RELATIVE", "A", 2)).toBe("2.");
   });
 });
 

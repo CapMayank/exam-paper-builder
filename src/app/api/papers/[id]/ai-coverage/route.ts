@@ -1,4 +1,5 @@
 import { HttpError, route } from "@/lib/api";
+import { normalizeNumberingStyle } from "@/lib/constants";
 import { buildCoverageReport } from "@/lib/aiCoverage";
 import { classifyPaperChaptersWithGemini, quotaErrorText } from "@/lib/gemini";
 import { computeDisplayedPaperNumbering } from "@/lib/layout";
@@ -24,7 +25,7 @@ export const POST = route(async (req, { id }, user) => {
   );
   const placed = toPlacedItems(paper.blueprint.sections, ordered);
   // the number each question carries on the printed paper, so the teacher can find what the AI is talking about
-  const printed = computeDisplayedPaperNumbering(paper.blueprint.sections, paper.items, (paper.numberingStyle as "CONTINUOUS" | "PREFIXED" | "SECTION_RELATIVE" | undefined) || "CONTINUOUS");
+  const printed = computeDisplayedPaperNumbering(paper.blueprint.sections, paper.items, normalizeNumberingStyle(paper.numberingStyle));
   const items = ordered.map((it, i) => ({
     itemId: it.id,
     questionId: it.question.id,

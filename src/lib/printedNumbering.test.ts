@@ -36,25 +36,6 @@ describe("builderQuestionLabel: the label print shows", () => {
     expect(builderQuestionLabel(n, "s2")).toBe("Q.4");
   });
 
-  it("counts section-relative numbers across every row of one section, as print does", () => {
-    const n = computeDisplayedPaperNumbering(sections, items, "SECTION_RELATIVE");
-    expect(["m1", "m2", "t1", "t3", "s1", "s2"].map((id) => builderQuestionLabel(n, id))).toEqual([
-      "A1 (i)",
-      "A1 (ii)",
-      "A2 (i)",
-      "A2 (iii)",
-      "B1",
-      "B2",
-    ]);
-  });
-
-  it("falls back to the section's place among sections with distinct titles, as print does", () => {
-    const s = [sec("x1", "Objective", "MCQ"), sec("x2", "Objective", "SHORT"), sec("y", "Subjective", "LONG")];
-    const it = [item("p", "x1", 0, "MCQ"), item("q", "x2", 0), item("r", "y", 0, "LONG")];
-    const n = computeDisplayedPaperNumbering(s, it, "SECTION_RELATIVE");
-    expect(["p", "q", "r"].map((id) => builderQuestionLabel(n, id))).toEqual(["A1", "A2", "B1"]);
-  });
-
   it("uses Devanagari sub-labels on a Hindi or Sanskrit paper even when the title is in English", () => {
     const n = computeDisplayedPaperNumbering(sections, items, "CONTINUOUS", "hi");
     expect(builderQuestionLabel(n, "t1")).toBe("2 (क)");

@@ -60,7 +60,7 @@ import { autoDrawFigures, createDefaultAutoDrawDeps } from "@/lib/autoDrawFigure
 import { ErrorBanner, Field, Modal, Spinner, useConfirm, useToast } from "@/components/ui";
 import { canModifyPaper, type Actor } from "@/lib/permissions";
 import { api, imageUrl } from "@/lib/client";
-import {
+import { normalizeNumberingStyle,
   ACADEMIC_SESSIONS,
   DEFAULT_SCHOOL_LOGO,
   DEFAULT_SCHOOL_NAME,
@@ -671,7 +671,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
   const paperNumbering = computeDisplayedPaperNumbering(
     blueprint.sections,
     paper.items,
-    paper.numberingStyle || "CONTINUOUS",
+    normalizeNumberingStyle(paper.numberingStyle),
     detectPaperLanguage(paper, paper.items)
   );
 
@@ -1510,7 +1510,7 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                 <Field label="Question Numbering">
                   <select
                     className="input text-xs"
-                    value={paper.numberingStyle || "CONTINUOUS"}
+                    value={normalizeNumberingStyle(paper.numberingStyle)}
                     onChange={(e) => patch({ numberingStyle: e.target.value })}
                   >
                     {NUMBERING_STYLES.map((st) => (
