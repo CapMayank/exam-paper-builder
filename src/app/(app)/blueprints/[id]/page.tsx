@@ -30,7 +30,7 @@ import {
 } from "@/lib/internalChoiceRules";
 import { canManageScope, hasAnyWriteScope, type Actor } from "@/lib/permissions";
 import { api } from "@/lib/client";
-import { DEFAULT_SCHOOL_NAME, EXAM_TYPES, EXAM_TYPE_LABEL, KINDERGARTEN_QUESTION_TYPES, QUESTION_TYPES, QUESTION_TYPE_LABEL, STANDARD_QUESTION_TYPES, defaultExamDurationMin, defaultLayoutForClass, sortClassNames } from "@/lib/constants";
+import { DEFAULT_SCHOOL_NAME, EXAM_TYPES, detectPaperLanguage, getSharedInstruction, EXAM_TYPE_LABEL, KINDERGARTEN_QUESTION_TYPES, QUESTION_TYPES, QUESTION_TYPE_LABEL, STANDARD_QUESTION_TYPES, defaultExamDurationMin, defaultLayoutForClass, sortClassNames } from "@/lib/constants";
 import { BlueprintStartPicker } from "@/components/blueprints/BlueprintStartPicker";
 import { isSubjectMatching } from "@/lib/schoolCurriculum";
 import { distributeMarksByRole, missingUnitRoles } from "@/lib/roleMarks";
@@ -291,6 +291,8 @@ function BlueprintEditor({ params, searchParams }: PageProps<"/blueprints/[id]">
   const canManageBlueprint =
     id === "new" ? hasAnyWriteScope(currentUser) : Boolean(currentUser) && canManageScope(currentUser, savedBook);
   const isReadOnly = id !== "new" && !canManageBlueprint;
+  // the language the paper will print in, for the question-title placeholders
+  const blueprintLang = detectPaperLanguage({ subjectCode, blueprint: { subjectCode, name, book: book ? { subject: book.subject, title: book.title } : null, sections: sectionGroups } });
 
   const currentBlueprintData = useMemo<BlueprintWithExportRelations>(() => {
     const flatSections = flattenSectionGroups(sectionGroups);
@@ -1416,6 +1418,19 @@ function BlueprintEditor({ params, searchParams }: PageProps<"/blueprints/[id]">
                                 </button>
                               )}
                             </div>
+
+                            {/* The line printed after this question's number ("Q2. Fill in the blanks."); empty = the form's usual prompt */}
+                            <input
+                              type="text"
+                              maxLength={300}
+                              className="input text-xs py-1.5 w-full"
+                              value={qt.questionTitle ?? ""}
+                              placeholder={getSharedInstruction(qt.type, blueprintLang) || "Question title"}
+                              onChange={(e) => patchQuestionType(grp.key, qt.key, { questionTitle: e.target.value })}
+                              disabled={isReadOnly}
+                              aria-label="Question title"
+                              title="Printed after the question number. Leave empty for the usual wording."
+                            />
 
                             <div className="flex items-center justify-between text-slate-600 pt-0.5">
                               <div className="flex items-center gap-2">
