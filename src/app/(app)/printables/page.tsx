@@ -1,8 +1,8 @@
 "use client";
 
-import { BookOpenText, FlaskConical, Globe2, Lock, Printer, Sigma, type LucideIcon } from "lucide-react";
+import { BookOpenText, Check, FlaskConical, Globe2, Lock, Minus, Plus, Printer, RotateCcw, Sigma, type LucideIcon } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { PrintableSheet } from "@/components/printables/PrintableSheet";
 import { useAdminGate } from "@/components/printables/useAdminGate";
 import { EmptyState, ListSkeleton, PageHeader } from "@/components/ui";
@@ -34,6 +34,7 @@ export default function PrintablesPage() {
   const gate = useAdminGate();
   const [id, setId] = useState<PrintableId>("graph");
   const [optsById, setOptsById] = useState<Partial<Record<PrintableId, PrintableOptions>>>({});
+  const [lastInGroup, setLastInGroup] = useState<Partial<Record<PrintableGroup, PrintableId>>>({});
   const [school, setSchool] = useState(DEFAULT_PRINTABLE_SCHOOL);
   const [subtitle, setSubtitle] = useState("");
   const [copies, setCopies] = useState(1);
@@ -50,12 +51,34 @@ export default function PrintablesPage() {
   }, []);
 
   const printable = getPrintable(id)!;
+  const group = printable.group;
   const opts = useMemo(() => optsById[id] ?? parseOptions(id, {}), [optsById, id]);
+  const isDefault = useMemo(() => JSON.stringify(opts) === JSON.stringify(parseOptions(id, {})), [opts, id]);
   const schoolName = school.trim() || DEFAULT_PRINTABLE_SCHOOL;
   const printHref = `/printables/print?${toQuery(id, opts, { copies, school: schoolName, subtitle })}`;
+  const inGroup = PRINTABLES.filter((p) => p.group === group);
+
+  function choose(next: PrintableId) {
+    setId(next);
+    const g = getPrintable(next)!.group;
+    setLastInGroup((all) => ({ ...all, [g]: next }));
+  }
+
+  function chooseGroup(g: PrintableGroup) {
+    if (g === group) return;
+    setId(lastInGroup[g] ?? PRINTABLES.find((p) => p.group === g)!.id);
+  }
 
   function setOpt(key: string, value: string | number) {
     setOptsById((all) => ({ ...all, [id]: parseOptions(id, { ...opts, [key]: value }) }));
+  }
+
+  function resetOpts() {
+    setOptsById((all) => {
+      const next = { ...all };
+      delete next[id];
+      return next;
+    });
   }
 
   function saveSchool(value: string) {
@@ -92,86 +115,127 @@ export default function PrintablesPage() {
         description="Graph paper, outline maps and answer sheets to hand out with a paper. Every sheet carries the school name, a Roll No. box and a Q. No. box."
       />
 
-      <div className="grid gap-6 lg:grid-cols-[17rem_minmax(0,1fr)] xl:grid-cols-[17rem_minmax(0,1fr)_19rem]">
-        {/* Catalogue */}
-        <nav aria-label="Printables" className="space-y-5">
-          {PRINTABLE_GROUPS.map((group) => {
-            const Icon = GROUP_ICON[group];
+      {/* Step 1: choose a sheet */}
+      <section aria-labelledby="pr-choose" className="card space-y-4 p-4 sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <StepTitle n={1} id="pr-choose">
+            Choose a sheet
+          </StepTitle>
+          <div aria-label="Subject" className="segmented max-w-full overflow-x-auto">
+            {PRINTABLE_GROUPS.map((g) => {
+              const Icon = GROUP_ICON[g];
+              const count = PRINTABLES.filter((p) => p.group === g).length;
+              return (
+                <button key={g} type="button" aria-pressed={g === group} onClick={() => chooseGroup(g)} className="shrink-0">
+                  <Icon size={14} className={g === group ? "text-indigo-600" : "text-slate-400"} />
+                  {g}
+                  <span className="rounded-full bg-slate-100 px-1.5 text-[10px] leading-4 text-slate-500">{count}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <ul aria-label={`${group} sheets`} className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {inGroup.map((p) => {
+            const active = p.id === id;
             return (
-              <section key={group} aria-labelledby={`grp-${group}`}>
-                <h2 id={`grp-${group}`} className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  <Icon size={14} className="text-indigo-600" /> {group}
-                </h2>
-                <ul className="space-y-1.5">
-                  {PRINTABLES.filter((p) => p.group === group).map((p) => {
-                    const active = p.id === id;
-                    return (
-                      <li key={p.id}>
-                        <button
-                          type="button"
-                          onClick={() => setId(p.id)}
-                          aria-pressed={active}
-                          className={`w-full rounded-xl border px-3 py-2 text-left transition ${
-                            active ? "border-indigo-500 bg-indigo-50 ring-2 ring-indigo-500/20" : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
-                          }`}
-                        >
-                          <span className={`block text-sm font-semibold ${active ? "text-indigo-900" : "text-slate-800"}`}>{p.title}</span>
-                          <span className="mt-0.5 block text-xs leading-snug text-slate-500">{p.blurb}</span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </section>
+              <li key={p.id}>
+                <button
+                  type="button"
+                  onClick={() => choose(p.id)}
+                  aria-pressed={active}
+                  className={`relative flex h-full w-full flex-col rounded-xl border px-3.5 py-3 text-left transition ${
+                    active ? "border-indigo-500 bg-indigo-50/70 ring-2 ring-indigo-500/20" : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                  }`}
+                >
+                  <span className="flex items-start justify-between gap-2">
+                    <span className={`text-sm font-semibold ${active ? "text-indigo-900" : "text-slate-800"}`}>{p.title}</span>
+                    {active ? (
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-white">
+                        <Check size={12} strokeWidth={3} />
+                      </span>
+                    ) : (
+                      p.landscape && <span className="badge shrink-0 px-1.5 text-[10px]">Landscape</span>
+                    )}
+                  </span>
+                  <span className="mt-1 line-clamp-2 text-xs leading-snug text-slate-500">{p.blurb}</span>
+                </button>
+              </li>
             );
           })}
-        </nav>
+        </ul>
+      </section>
 
-        {/* Preview */}
-        <section aria-label="Preview" className="min-w-0 self-start xl:sticky xl:top-16">
-          <div className="card graph-paper flex justify-center p-4 sm:p-6">
-            <div className={`w-full shadow-lg ring-1 ring-slate-300 ${printable.landscape ? "max-w-[46rem]" : "max-w-[32rem]"}`}>
-              <PrintableSheet id={id} opts={opts} school={schoolName} subtitle={subtitle} preview />
+      {/* Steps 2-3: preview beside settings */}
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_21rem]">
+        <section aria-label="Preview" className="min-w-0">
+          <div className="card overflow-hidden p-0">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-2.5">
+              <div className="min-w-0">
+                <h2 className="truncate font-display text-sm font-semibold text-slate-900">{printable.title}</h2>
+                <p className="text-xs text-slate-500">{printable.blurb}</p>
+              </div>
+              <span className="badge shrink-0">A4 · {printable.landscape ? "Landscape" : "Portrait"}</span>
+            </div>
+            <div className="graph-paper flex justify-center bg-slate-50 p-4 sm:p-8">
+              <div className={`w-full bg-white shadow-xl ring-1 ring-slate-300 ${printable.landscape ? "max-w-[46rem]" : "max-w-[34rem]"}`}>
+                <PrintableSheet id={id} opts={opts} school={schoolName} subtitle={subtitle} preview />
+              </div>
             </div>
           </div>
-          <p className="mt-2 text-center text-xs text-slate-500">
-            Preview of one A4 {printable.landscape ? "landscape" : "portrait"} page. Grids print true to size; set the printer to 100% / “Actual size”.
-          </p>
+          <p className="mt-2 text-center text-xs text-slate-500">Grids print true to size. Set the printer to 100% / “Actual size”.</p>
         </section>
 
-        {/* Options */}
-        <aside aria-label="Options" className="lg:col-start-2 xl:col-start-auto">
-          <div className="card space-y-4 xl:sticky xl:top-20">
-            <div>
-              <h2 className="font-display text-base font-semibold text-slate-900">{printable.title}</h2>
-              <p className="text-xs text-slate-500">{printable.group}</p>
-            </div>
-
-            {printable.options.map((o) => (
-              <div key={o.key}>
-                <label className="label" htmlFor={`opt-${o.key}`}>
-                  {o.label}
-                </label>
-                {o.kind === "select" ? (
-                  <select id={`opt-${o.key}`} className="input" value={String(opts[o.key])} onChange={(e) => setOpt(o.key, e.target.value)}>
-                    {o.choices.map((c) => (
-                      <option key={c.value} value={c.value}>
-                        {c.label}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <NumberField id={`opt-${o.key}`} value={Number(opts[o.key])} min={o.min} max={o.max} step={o.step} onCommit={(n) => setOpt(o.key, n)} />
+        <aside aria-label="Settings" className="lg:sticky lg:top-20 lg:self-start">
+          <div className="card divide-y divide-slate-200 p-0">
+            <div className="space-y-4 p-4 sm:p-5">
+              <div className="flex items-center justify-between gap-2">
+                <StepTitle n={2}>Sheet options</StepTitle>
+                {printable.options.length > 0 && !isDefault && (
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={resetOpts}>
+                    <RotateCcw size={13} /> Reset
+                  </button>
                 )}
               </div>
-            ))}
+              {printable.options.length === 0 && <p className="text-xs text-slate-500">This sheet has no options. It prints as shown.</p>}
+              {printable.options.map((o) =>
+                o.kind === "select" ? (
+                  <fieldset key={o.key}>
+                    <legend className="label">{o.label}</legend>
+                    <div className={o.choices.length === 2 && o.choices.every((c) => c.label.length <= 12) ? "segmented w-full" : "space-y-1.5"}>
+                      {o.choices.map((c) =>
+                        o.choices.length === 2 && o.choices.every((x) => x.label.length <= 12) ? (
+                          <button key={c.value} type="button" aria-pressed={String(opts[o.key]) === c.value} onClick={() => setOpt(o.key, c.value)} className="flex-1">
+                            {c.label}
+                          </button>
+                        ) : (
+                          <ChoiceRow key={c.value} name={`opt-${o.key}`} checked={String(opts[o.key]) === c.value} onChange={() => setOpt(o.key, c.value)}>
+                            {c.label}
+                          </ChoiceRow>
+                        ),
+                      )}
+                    </div>
+                  </fieldset>
+                ) : (
+                  <div key={o.key}>
+                    <label className="label" htmlFor={`opt-${o.key}`}>
+                      {o.label}
+                    </label>
+                    <NumberField id={`opt-${o.key}`} value={Number(opts[o.key])} min={o.min} max={o.max} step={o.step} onCommit={(n) => setOpt(o.key, n)} />
+                  </div>
+                ),
+              )}
+            </div>
 
-            <div className="space-y-4 border-t border-slate-200 pt-4">
+            <div className="space-y-4 p-4 sm:p-5">
+              <StepTitle n={3}>Sheet header</StepTitle>
               <div>
                 <label className="label" htmlFor="pr-school">
                   School name
                 </label>
                 <input id="pr-school" className="input" value={school} onChange={(e) => saveSchool(e.target.value)} placeholder={DEFAULT_PRINTABLE_SCHOOL} />
+                <p className="mt-1 text-xs text-slate-500">Saved on this device for next time.</p>
               </div>
               <div>
                 <label className="label" htmlFor="pr-sub">
@@ -179,22 +243,56 @@ export default function PrintablesPage() {
                 </label>
                 <input id="pr-sub" className="input" value={subtitle} onChange={(e) => setSubtitle(e.target.value)} placeholder="e.g. Half-Yearly Exam · Class 9 · Mathematics" />
               </div>
-              <div>
-                <label className="label" htmlFor="pr-copies">
-                  Copies
-                </label>
-                <NumberField id="pr-copies" value={copies} min={1} max={MAX_COPIES} step={1} onCommit={(n) => setCopies(clampCopies(n))} />
-                <p className="mt-1 text-xs text-slate-500">Up to {MAX_COPIES} per print. Each copy is its own A4 page.</p>
-              </div>
             </div>
 
-            <Link href={printHref} target={PRINTABLES_OUTPUT_TAB} className="btn btn-primary btn-lg w-full">
-              <Printer size={17} /> Print {copies > 1 ? `${copies} copies` : ""}
-            </Link>
+            <div className="space-y-3 rounded-b-2xl bg-slate-50 p-4 sm:p-5">
+              <div className="flex items-center justify-between gap-3">
+                <label className="text-sm font-medium text-slate-700" htmlFor="pr-copies">
+                  Copies
+                </label>
+                <div className="flex items-center gap-1">
+                  <button type="button" className="btn btn-icon" aria-label="One copy fewer" disabled={copies <= 1} onClick={() => setCopies((c) => clampCopies(c - 1))}>
+                    <Minus size={14} />
+                  </button>
+                  <div className="w-16">
+                    <NumberField id="pr-copies" value={copies} min={1} max={MAX_COPIES} step={1} onCommit={(n) => setCopies(clampCopies(n))} className="text-center" />
+                  </div>
+                  <button type="button" className="btn btn-icon" aria-label="One copy more" disabled={copies >= MAX_COPIES} onClick={() => setCopies((c) => clampCopies(c + 1))}>
+                    <Plus size={14} />
+                  </button>
+                </div>
+              </div>
+              <p className="text-xs text-slate-500">Up to {MAX_COPIES} per print. Each copy is its own A4 page.</p>
+              <Link href={printHref} target={PRINTABLES_OUTPUT_TAB} className="btn btn-primary btn-lg w-full">
+                <Printer size={17} /> Print {copies > 1 ? `${copies} copies` : "sheet"}
+              </Link>
+            </div>
           </div>
         </aside>
       </div>
     </div>
+  );
+}
+
+function StepTitle({ n, id, children }: { n: number; id?: string; children: ReactNode }) {
+  return (
+    <h2 id={id} className="flex items-center gap-2 font-display text-base font-semibold text-slate-900">
+      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-600 text-xs font-semibold text-white">{n}</span>
+      {children}
+    </h2>
+  );
+}
+
+function ChoiceRow({ name, checked, onChange, children }: { name: string; checked: boolean; onChange: () => void; children: ReactNode }) {
+  return (
+    <label
+      className={`flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2 text-sm transition ${
+        checked ? "border-indigo-500 bg-indigo-50/70 text-indigo-900" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+      }`}
+    >
+      <input type="radio" name={name} checked={checked} onChange={onChange} className="shrink-0" />
+      <span>{children}</span>
+    </label>
   );
 }
 
@@ -209,6 +307,7 @@ function NumberField({
   max,
   step,
   onCommit,
+  className = "",
 }: {
   id: string;
   value: number;
@@ -216,13 +315,14 @@ function NumberField({
   max: number;
   step: number;
   onCommit: (n: number) => void;
+  className?: string;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
   const parse = (raw: string) => (raw.trim() === "" ? Number.NaN : Number(raw));
   return (
     <input
       id={id}
-      className="input"
+      className={`input ${className}`}
       type="number"
       inputMode="numeric"
       min={min}

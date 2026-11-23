@@ -74,7 +74,7 @@ export const PRINTABLES: Printable[] = [
           { value: "2", label: "2 mm (bold every 1 cm)" },
           { value: "5", label: "5 mm (bold every 1 cm)" },
         ],
-        default: "1",
+        default: "2",
       },
     ],
   },
