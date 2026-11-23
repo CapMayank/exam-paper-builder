@@ -43,6 +43,7 @@ function sectionData(s: BlueprintInput["sections"][number], position: number) {
     orSlotsJson: s.orSlotsJson || "[]",
     allowedTypesJson: s.allowedTypesJson || "[]",
     slotPlanJson: s.slotPlanJson || "[]",
+    questionTitle: s.questionTitle || "",
     role: s.role || "STANDARD",
     groupKey: s.groupKey || "",
     position,

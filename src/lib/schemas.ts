@@ -238,6 +238,7 @@ export const blueprintSchema = z.object({
         orSlotsJson: z.string().default("[]"),
         allowedTypesJson: z.string().max(2000).default("[]"),
         slotPlanJson: z.string().max(4000).default("[]"),
+        questionTitle: z.string().trim().max(300).default(""),
         role: z.enum(["STANDARD", "PASSAGE", "GRAMMAR", "WRITING", "LITERATURE"]).default("STANDARD"),
         groupKey: z.string().trim().max(100).default(""),
       }),

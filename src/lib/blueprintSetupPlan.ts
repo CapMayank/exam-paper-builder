@@ -26,6 +26,7 @@ export type SetupSection = {
   slotPlanJson: string;
   role: "STANDARD" | "PASSAGE" | "GRAMMAR" | "WRITING" | "LITERATURE";
   groupKey: string;
+  questionTitle: string;
 };
 
 export function classLevel(className: string): number | null {
@@ -111,6 +112,7 @@ export function presetSections(preset: BlueprintPreset, subject: string): SetupS
         slotPlanJson,
         role,
         groupKey: qt.groupKey ?? "",
+        questionTitle: qt.questionTitle ?? "",
       };
     }),
   );

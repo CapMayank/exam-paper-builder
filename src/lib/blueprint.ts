@@ -98,6 +98,8 @@ export type QuestionTypeItem = {
   slotPlanJson?: string;
   role?: string;
   groupKey?: string;
+  /** printed after the question number (grouped) or as the run's sub-band; "" = the type's default prompt */
+  questionTitle?: string;
 };
 
 export type SectionGroup = {
@@ -150,6 +152,7 @@ export function groupSectionsFromFlat(
     slotPlanJson?: string | null;
     role?: string | null;
     groupKey?: string | null;
+    questionTitle?: string | null;
   }[]
 ): SectionGroup[] {
   const groups: SectionGroup[] = [];
@@ -163,6 +166,7 @@ export function groupSectionsFromFlat(
     const slotPlanJson = s.slotPlanJson || "[]";
     const role = s.role || "STANDARD";
     const groupKey = s.groupKey || "";
+    const questionTitle = s.questionTitle || "";
     if (last && last.title.trim().toLowerCase() === s.title.trim().toLowerCase()) {
       last.questionTypes.push({
         key: `qt-${s.id || seq++}`,
@@ -177,6 +181,7 @@ export function groupSectionsFromFlat(
         slotPlanJson,
         role,
         groupKey,
+        questionTitle,
       });
       if (!last.instructions && s.instructions) {
         last.instructions = s.instructions;
@@ -200,6 +205,7 @@ export function groupSectionsFromFlat(
             slotPlanJson,
             role,
             groupKey,
+            questionTitle,
           },
         ],
       });
@@ -234,6 +240,7 @@ export function flattenSectionGroups(groups: SectionGroup[]): {
   slotPlanJson: string;
   role: string;
   groupKey: string;
+  questionTitle: string;
 }[] {
   return groups.flatMap((g) =>
     g.questionTypes.map((qt) => ({
@@ -250,6 +257,7 @@ export function flattenSectionGroups(groups: SectionGroup[]): {
       slotPlanJson: qt.slotPlanJson || "[]",
       role: qt.role || "STANDARD",
       groupKey: qt.groupKey || "",
+      questionTitle: qt.questionTitle || "",
     }))
   );
 }

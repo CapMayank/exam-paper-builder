@@ -39,6 +39,8 @@ export interface BlueprintTemplateSectionGroup {
     groupKey?: string;
     /** Per-slot roles when the row's slots are not all of one kind (see slotPlan.ts). */
     slotPlan?: Array<{ role: "STANDARD" | "PASSAGE" | "GRAMMAR" | "WRITING" | "LITERATURE"; type?: QuestionType }>;
+    /** the line printed after the question number; "" or absent = the type's default prompt */
+    questionTitle?: string;
   }>;
 }
 

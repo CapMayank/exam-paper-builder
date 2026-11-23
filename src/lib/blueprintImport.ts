@@ -10,6 +10,8 @@ export interface ImportedSection {
   orChoiceMode?: "BOARD_DEFAULT" | "REQUIRED" | "NOT_REQUIRED";
   orAlternativeCount?: number;
   orSlotsJson?: string;
+  /** the line printed after the question number; "" = the type's default prompt */
+  questionTitle?: string;
 }
 
 export interface ImportedChapterQuota {
@@ -603,6 +605,7 @@ function parseJsonBlueprint(parsed: any): BlueprintImportResult {
             orChoiceMode,
             orAlternativeCount,
             orSlotsJson,
+            questionTitle: (qt.questionTitle ?? "").toString().trim(),
           });
         });
       } else {
@@ -630,6 +633,7 @@ function parseJsonBlueprint(parsed: any): BlueprintImportResult {
           orChoiceMode,
           orAlternativeCount,
           orSlotsJson,
+          questionTitle: (s.questionTitle ?? "").toString().trim(),
         });
       }
     });

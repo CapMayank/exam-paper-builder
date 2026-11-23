@@ -102,6 +102,7 @@ export async function mapCurriculumTemplateToBlueprintInput(
     orSlotsJson?: string | null;
     allowedTypesJson?: string | null;
     slotPlanJson?: string | null;
+    questionTitle?: string | null;
     choicePolicy?: { policyType: string };
     role?: string | null;
     groupKey?: string | null;
@@ -124,6 +125,7 @@ export async function mapCurriculumTemplateToBlueprintInput(
         role: qt.role,
         groupKey: qt.groupKey,
         slotPlanJson: qt.slotPlan ? JSON.stringify(qt.slotPlan) : "[]",
+        questionTitle: qt.questionTitle ?? "",
       }))
     );
   }
@@ -155,6 +157,7 @@ export async function mapCurriculumTemplateToBlueprintInput(
       orSlotsJson: s.orSlotsJson || "[]",
       allowedTypesJson: s.allowedTypesJson || "[]",
       slotPlanJson: s.slotPlanJson || "[]",
+      questionTitle: s.questionTitle || "",
       role: (["PASSAGE", "GRAMMAR", "WRITING", "LITERATURE"].includes(s.role ?? "") ? s.role : "STANDARD") as "STANDARD" | "PASSAGE" | "GRAMMAR" | "WRITING" | "LITERATURE",
       groupKey: s.groupKey || "",
     };

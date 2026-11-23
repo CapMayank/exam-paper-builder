@@ -24,6 +24,7 @@ export interface BlueprintWithExportRelations {
     orChoiceMode?: string;
     orAlternativeCount?: number;
     orSlotsJson?: string;
+    questionTitle?: string;
   }>;
   chapters: Array<{
     id?: string;
@@ -54,6 +55,7 @@ export interface ExportedBlueprintJson {
       orChoiceMode?: string;
       orAlternativeCount?: number;
       orSlots?: boolean[];
+      questionTitle?: string;
     }>;
   }>;
   chapters: Array<{
@@ -96,6 +98,7 @@ export function exportBlueprintToJsonObject(
         orChoiceMode: qt.orChoiceMode || "BOARD_DEFAULT",
         orAlternativeCount: qt.orAlternativeCount ?? 1,
         orSlots,
+        ...(qt.questionTitle ? { questionTitle: qt.questionTitle } : {}),
       };
     }),
   }));

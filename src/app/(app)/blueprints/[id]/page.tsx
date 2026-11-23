@@ -663,6 +663,7 @@ function BlueprintEditor({ params, searchParams }: PageProps<"/blueprints/[id]">
         slotPlanJson: qt.slotPlan?.length ? JSON.stringify(qt.slotPlan) : "[]",
         role: (qt as any).role ?? "STANDARD",
         groupKey: (qt as any).groupKey ?? "",
+        questionTitle: qt.questionTitle ?? "",
       })),
     }));
     setSectionGroups(newGroups);
@@ -702,6 +703,7 @@ function BlueprintEditor({ params, searchParams }: PageProps<"/blueprints/[id]">
         slotPlanJson: qt.slotPlan?.length ? JSON.stringify(qt.slotPlan) : "[]",
         role: (qt as any).role ?? "STANDARD",
         groupKey: (qt as any).groupKey ?? "",
+        questionTitle: qt.questionTitle ?? "",
       })),
     }));
     setSectionGroups(newGroups);
@@ -857,6 +859,7 @@ function BlueprintEditor({ params, searchParams }: PageProps<"/blueprints/[id]">
           slotPlanJson: s.slotPlanJson ?? "[]",
           role: (s as any).role ?? "STANDARD",
           groupKey: (s as any).groupKey ?? "",
+          questionTitle: s.questionTitle ?? "",
         })),
       };
       let savedBlueprintId = id;

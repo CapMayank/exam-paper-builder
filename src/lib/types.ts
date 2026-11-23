@@ -53,6 +53,7 @@ export type Section = {
   orSlotsJson?: string;
   allowedTypesJson?: string;
   slotPlanJson?: string;
+  questionTitle?: string;
   role?: "STANDARD" | "PASSAGE" | "GRAMMAR" | "WRITING" | "LITERATURE";
   groupKey?: string;
 };
