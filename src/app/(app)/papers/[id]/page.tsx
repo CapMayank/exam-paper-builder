@@ -396,7 +396,8 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
     try {
       const res = await api<{ assigned: number; paper: PaperData }>(`/api/papers/${id}/suggest-components`, { method: "POST", json: {} });
       adopt(res.paper);
-      toast.success(`Suggested a component for ${res.assigned} question(s). You can change any of them.`);
+      if (res.assigned > 0) toast.success(`Suggested a component for ${res.assigned} question(s). You can change any of them.`);
+      else toast.error("No question could be matched to a component. Set them one by one from each question's Edit dialog.");
     } catch (e) {
       showError((e as Error).message);
     }
@@ -1722,6 +1723,16 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
                       {imp.code.replace(/_/g, " ")}
                     </span>
                     <p className="min-w-0 break-words leading-snug font-medium">{imp.message}</p>
+                    {imp.code === "COMPONENT_UNTAGGED" && imp.severity === "warning" && canEditPaper && (
+                      <button
+                        type="button"
+                        className="btn border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 !px-2.5 !py-1 text-[11px] font-semibold shadow-2xs flex items-center gap-1"
+                        onClick={handleSuggestComponents}
+                      >
+                        <Sparkles size={12} />
+                        Suggest components
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -1769,7 +1780,13 @@ export default function PaperBuilderPage({ params }: PageProps<"/papers/[id]">) 
               <div className="mb-1.5 flex items-center justify-between gap-2 font-semibold text-slate-800">
                 <span>Syllabus components (official allocation)</span>
                 {canEditPaper && !final && (
-                  <button type="button" className="btn btn-ghost !px-2 !py-0.5 text-[11px]" onClick={handleSuggestComponents}>
+                  <button
+                    type="button"
+                    className="btn border border-indigo-200 bg-indigo-50 text-indigo-800 hover:bg-indigo-100 !px-2.5 !py-1 text-[11px] font-semibold shadow-2xs flex items-center gap-1"
+                    onClick={handleSuggestComponents}
+                    title="Tag every untagged question with a syllabus component so each component gets its official marks"
+                  >
+                    <Sparkles size={12} />
                     Suggest components
                   </button>
                 )}
