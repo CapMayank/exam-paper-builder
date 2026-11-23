@@ -1,5 +1,6 @@
 import { computeDisplayedPaperNumbering } from "./layout";
 import { normalizeNumberingStyle } from "./constants";
+import { detectPaperLanguage } from "./localization";
 import type { PaperStatus } from "./blueprint";
 import type { PaperData } from "./types";
 
@@ -49,9 +50,10 @@ export function buildGeneralInstructions(
 ): string {
   const sections = paper.blueprint.sections;
   const numbering = computeDisplayedPaperNumbering(
-    sections.map((s) => ({ id: s.id, title: s.title, type: s.type, order: s.position })),
+    sections.map((s) => ({ ...s, order: s.position })),
     paper.items,
     normalizeNumberingStyle(paper.numberingStyle),
+    detectPaperLanguage(paper, paper.items),
   );
   const hasChoice = paper.items.some((i) => i.orQuestion);
   const lines: string[] = [];

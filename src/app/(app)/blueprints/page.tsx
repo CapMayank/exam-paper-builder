@@ -349,6 +349,7 @@ export default function BlueprintsPage() {
             slotPlanJson: s.slotPlanJson || "[]",
             role: s.role || "STANDARD",
             groupKey: s.groupKey || "",
+            questionTitle: s.questionTitle || "",
           })),
           chapters: b.chapters.map((c) => ({
             chapterId: c.chapterId,

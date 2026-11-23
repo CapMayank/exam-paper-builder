@@ -238,10 +238,11 @@ export interface DisplayedPaperNumbering {
  * the row it was merged into.
  */
 export function mergeSameFormRows<
-  S extends { id: string; title: string; type: string; marksEach?: number; count?: number },
+  S extends { id: string; title: string; type: string; marksEach?: number; count?: number; questionTitle?: string | null },
   I extends { sectionId?: string | null; position?: number },
 >(sections: S[], items: I[]): { sections: S[]; items: I[]; aliasOf: Record<string, string> } {
-  const key = (s: S) => `${s.title.trim().toLowerCase()}|${s.type}|${s.marksEach ?? ""}`;
+  // rows with their own question titles are separate questions even in one form under one heading
+  const key = (s: S) => `${s.title.trim().toLowerCase()}|${s.type}|${s.marksEach ?? ""}|${(s.questionTitle ?? "").trim()}`;
   const merged: S[] = [];
   const aliasOf: Record<string, string> = {};
   for (const s of sections) {
@@ -341,7 +342,7 @@ export function isGroupedExerciseRow(
  * (consecutive rows with the same title), and `paperLang` picks Devanagari sub-labels as print does.
  */
 export function computeDisplayedPaperNumbering(
-  rawSections: Array<{ id: string; title: string; type: string; order?: number; marksEach?: number }>,
+  rawSections: Array<{ id: string; title: string; type: string; order?: number; marksEach?: number; questionTitle?: string | null }>,
   rawItems: Array<{ id: string; sectionId?: string | null; position?: number; question?: { type?: string } }>,
   numberingStyle: NumberingStyle = "CONTINUOUS",
   paperLang?: PaperLanguage

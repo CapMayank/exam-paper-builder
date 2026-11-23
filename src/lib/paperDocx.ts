@@ -59,6 +59,8 @@ import {
   mergeSameFormRows,
   sectionHeadingInstruction,
   groupedQuestionPrompt,
+  groupedSubLabel,
+  groupedSubLabelsIndic,
   rowRunLabel,
 } from "@/lib/layout";
 import { planSectionHeadings } from "@/lib/sectionHeadingPlan";
@@ -418,7 +420,8 @@ export async function buildPaperDocx(
   const numbering = computeDisplayedPaperNumbering(
     paper.blueprint.sections,
     paper.items,
-    normalizeNumberingStyle(paper.numberingStyle)
+    normalizeNumberingStyle(paper.numberingStyle),
+    paperLang
   );
   // the printed paper's heading plan: each fact once, at the level that owns it
   const headingPlans = planSectionHeadings(paper.blueprint.sections, paper.items, numbering, locale);
@@ -723,13 +726,10 @@ export async function buildPaperDocx(
         }),
       );
 
-      const LETTERS = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"];
-      const DEVANAGARI_SUB_LABELS = ["(क)", "(ख)", "(ग)", "(घ)", "(ङ)", "(च)", "(छ)", "(ज)", "(झ)", "(ञ)"];
-      const isIndic = paperLang === "sa" || paperLang === "hi" || /[\u0900-\u097F]/.test(section.title);
+      // the paper's one numbering gives each part its label, as print and the builder show it
+      const isIndic = groupedSubLabelsIndic(section.title, paperLang);
       items.forEach((item, itemIdx) => {
-        const subLabel = isIndic
-          ? (DEVANAGARI_SUB_LABELS[itemIdx] ?? `(${itemIdx + 1})`)
-          : `(${LETTERS[itemIdx] ?? itemIdx + 1})`;
+        const subLabel = numbering.itemNumbers[item.id]?.subLabel ?? groupedSubLabel(itemIdx, isIndic);
         const cleanedStem = cleanQuestionStatement(item.question.text, section.type);
 
         paragraphs.push(

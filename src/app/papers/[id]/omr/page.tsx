@@ -4,9 +4,8 @@ import { ArrowLeft, FileText, Printer } from "lucide-react";
 import Link from "next/link";
 import { use, useEffect, useMemo, useState } from "react";
 import { api, imageUrl } from "@/lib/client";
-import { normalizeNumberingStyle, DEFAULT_SCHOOL_LOGO, DEFAULT_SCHOOL_NAME, EXAM_TYPE_LABEL, isMcqLikeType, resolvePaperExamType } from "@/lib/constants";
-import { formatQuestionNumber } from "@/lib/layout";
-import { sectionLetter as titleSectionLetter } from "@/lib/sectionLetter";
+import { DEFAULT_SCHOOL_LOGO, DEFAULT_SCHOOL_NAME, EXAM_TYPE_LABEL, resolvePaperExamType } from "@/lib/constants";
+import { omrItems } from "@/lib/omrItems";
 import type { PaperData } from "@/lib/types";
 
 export default function OmrSheetPage({ params }: PageProps<"/papers/[id]/omr">) {
@@ -30,103 +29,8 @@ export default function OmrSheetPage({ params }: PageProps<"/papers/[id]/omr">) 
     );
   }, [id]);
 
-  // Extract objective (MCQ-like) items with their real paper question numbering
-  const objectiveItems = useMemo(() => {
-    if (!paper) return [];
-    const itemsList: {
-      globalIndex: number;
-      label: string;
-      itemId?: string;
-      sectionTitle: string;
-      type: string;
-      optionCount?: number;
-    }[] = [];
-
-    let numCount = 0;
-    let sectionGroupCounter = 0;
-    let sectionRelativeCounter = 0;
-
-    for (let i = 0; i < paper.blueprint.sections.length; i++) {
-      const s = paper.blueprint.sections[i];
-      const prev = i > 0 ? paper.blueprint.sections[i - 1] : null;
-      const isSameAsPrev = Boolean(prev && prev.title.trim().toLowerCase() === s.title.trim().toLowerCase());
-      if (!isSameAsPrev) {
-        if (i > 0) sectionGroupCounter++;
-        sectionRelativeCounter = 0;
-      }
-      const sectionLetter = titleSectionLetter(s.title) ?? String.fromCharCode(65 + sectionGroupCounter);
-
-      const items = paper.items.filter((item) => item.sectionId === s.id);
-
-      if (items.length > 0) {
-        for (const it of items) {
-          numCount++;
-          sectionRelativeCounter++;
-          const mainLabel = formatQuestionNumber(
-            normalizeNumberingStyle(paper.numberingStyle),
-            numCount - 1,
-            sectionLetter,
-            sectionRelativeCounter - 1
-          );
-
-          // Check for subparts with MCQ options (e.g. Case Study with objective subparts)
-          let subparts: any[] = [];
-          if (it.question.subparts && Array.isArray(it.question.subparts)) {
-            subparts = it.question.subparts;
-          } else if (it.question.subpartsJson) {
-            try {
-              subparts = JSON.parse(it.question.subpartsJson);
-            } catch {}
-          }
-
-          const mcqSubparts = subparts.filter((sp) => Array.isArray(sp.options) && sp.options.length > 0);
-
-          if (mcqSubparts.length > 0) {
-            mcqSubparts.forEach((sp, spIdx) => {
-              itemsList.push({
-                globalIndex: numCount,
-                label: `${mainLabel}(${sp.label || spIdx + 1})`,
-                itemId: `${it.id}-sp-${spIdx}`,
-                sectionTitle: s.title,
-                type: "MCQ",
-                optionCount: Array.isArray(sp.options) ? sp.options.length : 4,
-              });
-            });
-          } else if (isMcqLikeType(it.question.type) || isMcqLikeType(s.type)) {
-            itemsList.push({
-              globalIndex: numCount,
-              label: mainLabel,
-              itemId: it.id,
-              sectionTitle: s.title,
-              type: it.question.type || s.type,
-              optionCount: Array.isArray(it.question.options) ? it.question.options.length : 4,
-            });
-          }
-        }
-      } else {
-        // Fallback to blueprint question count slots if paper is still being drafted
-        for (let slot = 0; slot < s.count; slot++) {
-          numCount++;
-          sectionRelativeCounter++;
-          if (isMcqLikeType(s.type)) {
-            itemsList.push({
-              globalIndex: numCount,
-              label: formatQuestionNumber(
-                normalizeNumberingStyle(paper.numberingStyle),
-                numCount - 1,
-                sectionLetter,
-                sectionRelativeCounter - 1
-              ),
-              sectionTitle: s.title,
-              type: s.type,
-              itemId: `slot-${s.id}-${slot}`,
-            });
-          }
-        }
-      }
-    }
-    return itemsList;
-  }, [paper]);
+  // Objective (MCQ-like) answers, each labelled with the paper's own numbering
+  const objectiveItems = useMemo(() => (paper ? omrItems(paper) : []), [paper]);
 
   const itemsToRender = useMemo(() => {
     if (overrideCount !== null) {
