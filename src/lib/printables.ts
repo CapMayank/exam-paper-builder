@@ -40,7 +40,6 @@ export type Printable = {
 };
 
 export const DEFAULT_PRINTABLE_SCHOOL = "Sarvodaya Higher Secondary School, Lakhnadon";
-export const MAX_COPIES = 60;
 export const PRINTABLE_GROUPS: PrintableGroup[] = ["Maths", "Social Science", "Science", "Languages"];
 
 const DATAMEET_INDIA = "Boundary: DataMeet india-composite (official Survey of India boundary), CC0.";
@@ -271,11 +270,6 @@ export function getPrintable(id: string | null | undefined): Printable | undefin
   return PRINTABLES.find((p) => p.id === id);
 }
 
-export function clampCopies(n: number): number {
-  if (!Number.isFinite(n)) return 1;
-  return Math.min(MAX_COPIES, Math.max(1, Math.floor(n)));
-}
-
 /** Options for one sheet, every value checked: unknown choices and junk numbers fall back to the default. */
 export function parseOptions(id: string, raw: Record<string, string | number | undefined>): PrintableOptions {
   const p = getPrintable(id);
@@ -292,10 +286,11 @@ export function parseOptions(id: string, raw: Record<string, string | number | u
   return out;
 }
 
-export type PrintableCommon = { copies: number; school: string; subtitle: string };
+/** The number of copies is set in the browser's print dialog, so the print view holds one sheet. */
+export type PrintableCommon = { school: string; subtitle: string };
 
 export function toQuery(id: PrintableId, opts: PrintableOptions, common: PrintableCommon): string {
-  const q = new URLSearchParams({ type: id, copies: String(clampCopies(common.copies)), school: common.school });
+  const q = new URLSearchParams({ type: id, school: common.school });
   if (common.subtitle.trim()) q.set("sub", common.subtitle);
   for (const [k, v] of Object.entries(opts)) q.set(`o_${k}`, String(v));
   return q.toString();
@@ -310,7 +305,6 @@ export function fromQuery(params: URLSearchParams): PrintableCommon & { id: Prin
   return {
     id,
     opts: parseOptions(id, raw),
-    copies: clampCopies(Number(params.get("copies") ?? 1)),
     school: params.get("school")?.trim() || DEFAULT_PRINTABLE_SCHOOL,
     subtitle: params.get("sub") ?? "",
   };

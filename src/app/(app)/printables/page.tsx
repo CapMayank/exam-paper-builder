@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpenText, Check, FlaskConical, Globe2, Lock, Minus, Plus, Printer, RotateCcw, Sigma, type LucideIcon } from "lucide-react";
+import { BookOpenText, Check, FlaskConical, Globe2, Lock, Printer, RotateCcw, Sigma, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { PrintableSheet } from "@/components/printables/PrintableSheet";
@@ -8,10 +8,8 @@ import { useAdminGate } from "@/components/printables/useAdminGate";
 import { EmptyState, ListSkeleton, PageHeader } from "@/components/ui";
 import { PRINTABLES_OUTPUT_TAB } from "@/lib/paperTabs";
 import {
-  clampCopies,
   DEFAULT_PRINTABLE_SCHOOL,
   getPrintable,
-  MAX_COPIES,
   parseOptions,
   PRINTABLE_GROUPS,
   PRINTABLES,
@@ -37,7 +35,6 @@ export default function PrintablesPage() {
   const [lastInGroup, setLastInGroup] = useState<Partial<Record<PrintableGroup, PrintableId>>>({});
   const [school, setSchool] = useState(DEFAULT_PRINTABLE_SCHOOL);
   const [subtitle, setSubtitle] = useState("");
-  const [copies, setCopies] = useState(1);
 
   useEffect(() => {
     try {
@@ -55,7 +52,7 @@ export default function PrintablesPage() {
   const opts = useMemo(() => optsById[id] ?? parseOptions(id, {}), [optsById, id]);
   const isDefault = useMemo(() => JSON.stringify(opts) === JSON.stringify(parseOptions(id, {})), [opts, id]);
   const schoolName = school.trim() || DEFAULT_PRINTABLE_SCHOOL;
-  const printHref = `/printables/print?${toQuery(id, opts, { copies, school: schoolName, subtitle })}`;
+  const printHref = `/printables/print?${toQuery(id, opts, { school: schoolName, subtitle })}`;
   const inGroup = PRINTABLES.filter((p) => p.group === group);
 
   function choose(next: PrintableId) {
@@ -246,25 +243,9 @@ export default function PrintablesPage() {
             </div>
 
             <div className="space-y-3 rounded-b-2xl bg-slate-50 p-4 sm:p-5">
-              <div className="flex items-center justify-between gap-3">
-                <label className="text-sm font-medium text-slate-700" htmlFor="pr-copies">
-                  Copies
-                </label>
-                <div className="flex items-center gap-1">
-                  <button type="button" className="btn btn-icon" aria-label="One copy fewer" disabled={copies <= 1} onClick={() => setCopies((c) => clampCopies(c - 1))}>
-                    <Minus size={14} />
-                  </button>
-                  <div className="w-16">
-                    <NumberField id="pr-copies" value={copies} min={1} max={MAX_COPIES} step={1} onCommit={(n) => setCopies(clampCopies(n))} className="text-center" />
-                  </div>
-                  <button type="button" className="btn btn-icon" aria-label="One copy more" disabled={copies >= MAX_COPIES} onClick={() => setCopies((c) => clampCopies(c + 1))}>
-                    <Plus size={14} />
-                  </button>
-                </div>
-              </div>
-              <p className="text-xs text-slate-500">Up to {MAX_COPIES} per print. Each copy is its own A4 page.</p>
+              <p className="text-xs text-slate-500">Opens one sheet. Set how many copies you need in the print dialog.</p>
               <Link href={printHref} target={PRINTABLES_OUTPUT_TAB} className="btn btn-primary btn-lg w-full">
-                <Printer size={17} /> Print {copies > 1 ? `${copies} copies` : "sheet"}
+                <Printer size={17} /> Print sheet
               </Link>
             </div>
           </div>

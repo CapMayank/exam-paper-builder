@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clampCopies, DEFAULT_PRINTABLE_SCHOOL, fromQuery, getPrintable, gridWeight, parseOptions, PRINTABLES, schoolFontSize, toQuery } from "./printables";
+import { DEFAULT_PRINTABLE_SCHOOL, fromQuery, getPrintable, gridWeight, parseOptions, PRINTABLES, schoolFontSize, toQuery } from "./printables";
 
 describe("printables registry", () => {
   it("has unique ids and every option default is valid", () => {
@@ -39,27 +39,17 @@ describe("parseOptions", () => {
   });
 });
 
-describe("clampCopies", () => {
-  it("keeps copies between 1 and 60", () => {
-    expect(clampCopies(0)).toBe(1);
-    expect(clampCopies(500)).toBe(60);
-    expect(clampCopies(Number.NaN)).toBe(1);
-    expect(clampCopies(12.7)).toBe(12);
-  });
-});
-
 describe("query round trip", () => {
   it("survives toQuery → fromQuery", () => {
     const opts = parseOptions("ruled", { spacing: "10" });
-    const q = toQuery("ruled", opts, { copies: 5, school: "Test School", subtitle: "Class 8 · English" });
+    const q = toQuery("ruled", opts, { school: "Test School", subtitle: "Class 8 · English" });
     const back = fromQuery(new URLSearchParams(q));
-    expect(back).toEqual({ id: "ruled", opts, copies: 5, school: "Test School", subtitle: "Class 8 · English" });
+    expect(back).toEqual({ id: "ruled", opts, school: "Test School", subtitle: "Class 8 · English" });
   });
 
   it("a bogus type or missing school falls back to defaults", () => {
-    const back = fromQuery(new URLSearchParams("type=bogus&copies=-3"));
+    const back = fromQuery(new URLSearchParams("type=bogus"));
     expect(back.id).toBe("graph");
-    expect(back.copies).toBe(1);
     expect(back.school).toBe(DEFAULT_PRINTABLE_SCHOOL);
   });
 });

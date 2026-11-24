@@ -11,7 +11,7 @@ import { fromQuery, getPrintable } from "@/lib/printables";
 
 type Job = ReturnType<typeof fromQuery>;
 
-/** Print view for one printable: N copies, each its own A4 page. Opened from /printables in a reused tab. */
+/** Print view for one printable: a single A4 sheet; copies are set in the print dialog. Opened from /printables in a reused tab. */
 export default function PrintablesPrintPage() {
   const gate = useAdminGate();
   const [job, setJob] = useState<Job | null>(null);
@@ -52,7 +52,7 @@ export default function PrintablesPrintPage() {
           <div className="h-4 w-px bg-slate-200" />
           <span className="font-display font-semibold text-slate-800">{p.title}</span>
           <span className="text-sm text-slate-500">
-            {job.copies} {job.copies === 1 ? "copy" : "copies"} · A4 {orientation}
+            A4 {orientation} · set copies in the print dialog
           </span>
         </div>
         <button type="button" className="btn btn-primary" onClick={() => window.print()} autoFocus>
@@ -60,15 +60,9 @@ export default function PrintablesPrintPage() {
         </button>
       </div>
       <div className="flex flex-col items-center gap-6 py-8 print:block print:gap-0 print:p-0">
-        {Array.from({ length: job.copies }, (_, i) => (
-          <div
-            key={i}
-            className="bg-white shadow-lg print:shadow-none"
-            style={{ width: `${w}mm`, height: `${h}mm`, breakAfter: i < job.copies - 1 ? "page" : "auto", overflow: "hidden" }}
-          >
-            <PrintableSheet id={job.id} opts={job.opts} school={job.school} subtitle={job.subtitle} />
-          </div>
-        ))}
+        <div className="bg-white shadow-lg print:shadow-none" style={{ width: `${w}mm`, height: `${h}mm`, overflow: "hidden" }}>
+          <PrintableSheet id={job.id} opts={job.opts} school={job.school} subtitle={job.subtitle} />
+        </div>
       </div>
     </div>
   );
