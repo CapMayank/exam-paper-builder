@@ -53,14 +53,7 @@ function run(name, args, target) {
 // India – official outline only.
 run("india", `-i ${outline} -proj ${JSON.stringify(INDIA_PROJ)} -simplify interval=1500 keep-shapes -filter-islands min-area=0.3km2 -style ${bold}`);
 
-// India – states and UTs inside the official outline.
-run(
-  "india-states",
-  `-i combine-files ${states} ${outline} -proj ${JSON.stringify(INDIA_PROJ)} -simplify interval=1500 keep-shapes target=* ` +
-    `-filter-islands min-area=0.3km2 target=* -innerlines target=Admin2 + name=inner -style ${thin} target=inner ` +
-    `-style ${bold} target=india-composite`,
-  "inner,india-composite",
-);
+// India – states and UTs: built from the Survey of India PDF by scripts/build-india-states-soi.py, not here.
 
 // India – outline with the major rivers (Natural Earth, clipped to the outline).
 run(

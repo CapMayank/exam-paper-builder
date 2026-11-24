@@ -44,6 +44,7 @@ export const MAX_COPIES = 60;
 export const PRINTABLE_GROUPS: PrintableGroup[] = ["Maths", "Social Science", "Science", "Languages"];
 
 const DATAMEET_INDIA = "Boundary: DataMeet india-composite (official Survey of India boundary), CC0.";
+const SOI_STATES = "Boundaries: Survey of India, State Boundary outline map (1:16M).";
 const DATAMEET_STATES = "States: DataMeet India Admin2 boundaries, CC BY 4.0 (github.com/datameet/maps).";
 const NATURAL_EARTH = "Natural Earth (naturalearthdata.com), India point of view, public domain.";
 
@@ -176,7 +177,7 @@ export const PRINTABLES: Printable[] = [
     title: "India – states and UTs",
     blurb: "Political outline with state and union territory boundaries.",
     options: [],
-    map: { file: "/printables/maps/india-states.svg", credit: `${DATAMEET_INDIA} ${DATAMEET_STATES}` },
+    map: { file: "/printables/maps/india-states.svg", credit: SOI_STATES },
   },
   {
     id: "map-india-rivers",
