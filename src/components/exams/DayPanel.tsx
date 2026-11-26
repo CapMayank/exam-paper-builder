@@ -14,6 +14,8 @@ import { SLOT_WARNING_TEXT, SlotStatusBadge } from "./SlotStatusBadge";
 export function DayPanel({ exam, isAdmin, date, slots, onChange, onClose }: { exam: ExamView; isAdmin: boolean; date: string; slots: SlotView[]; onChange: (v: ExamView) => void; onClose: () => void }) {
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
+  // the switch moves at once; it falls back to the saved state if the save fails
+  const [optimistic, setOptimistic] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -23,11 +25,17 @@ export function DayPanel({ exam, isAdmin, date, slots, onChange, onClose }: { ex
 
   const setPrinted = async (s: SlotView, printed: boolean) => {
     setBusy(s.id);
+    setOptimistic((o) => ({ ...o, [s.id]: printed }));
     try {
       onChange(await api<ExamView>(`/api/exams/${exam.id}/slots/${s.id}`, { method: "PATCH", json: { printed } }));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not save");
     } finally {
+      setOptimistic((o) => {
+        const rest = { ...o };
+        delete rest[s.id];
+        return rest;
+      });
       setBusy(null);
     }
   };
@@ -117,7 +125,7 @@ export function DayPanel({ exam, isAdmin, date, slots, onChange, onClose }: { ex
                           <input
                             type="checkbox"
                             className="h-4 w-4 accent-emerald-600"
-                            checked={!!s.printedAt}
+                            checked={optimistic[s.id] ?? !!s.printedAt}
                             disabled={busy === s.id}
                             onChange={(e) => setPrinted(s, e.target.checked)}
                           />
