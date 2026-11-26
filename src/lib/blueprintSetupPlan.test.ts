@@ -57,6 +57,30 @@ describe("the blueprint a pattern makes", () => {
     expect(JSON.parse(threeMark[0].allowedTypesJson)).toEqual(expect.arrayContaining(["SHORT", "GRAMMAR", "UNSEEN_PASSAGE"]));
   });
 
+  it("offers each subject's own forms in every Class 6–8 pattern", () => {
+    // subject → marks → forms every section of those marks must accept
+    const want: Record<string, Record<number, string[]>> = {
+      English: { 1: ["GRAMMAR"], 2: ["GRAMMAR"], 3: ["GRAMMAR", "REFERENCE_CONTEXT", "UNSEEN_PASSAGE"], 5: ["GRAMMAR", "REFERENCE_CONTEXT", "UNSEEN_PASSAGE", "WRITING_SKILL"] },
+      Hindi: { 1: ["GRAMMAR"], 2: ["GRAMMAR"], 3: ["GRAMMAR", "REFERENCE_CONTEXT", "UNSEEN_PASSAGE"], 5: ["GRAMMAR", "REFERENCE_CONTEXT", "UNSEEN_PASSAGE", "WRITING_SKILL"] },
+      Sanskrit: { 1: ["GRAMMAR"], 2: ["GRAMMAR"], 3: ["GRAMMAR", "REFERENCE_CONTEXT"], 5: ["GRAMMAR", "REFERENCE_CONTEXT", "UNSEEN_PASSAGE", "WRITING_SKILL"] },
+      Science: { 2: ["DRAW"], 3: ["DRAW"], 5: ["DRAW"] },
+      Mathematics: { 2: ["DRAW"], 3: ["DRAW"], 5: ["DRAW", "CASE_STUDY"] },
+      "Social Science": { 2: ["DRAW", "MAP_WORK"], 3: ["DRAW", "MAP_WORK"], 5: ["DRAW", "MAP_WORK"] },
+    };
+    for (const className of ["Class 6", "Class 7", "Class 8"]) {
+      for (const [subject, byMarks] of Object.entries(want)) {
+        for (const preset of presetsForBook(presets, { className, subject })) {
+          const input = buildSetupInput(preset, { id: "b1", className, subject, chapters: chapters(8) }, { examType: "ANNUAL", academicSession: "2026–27" });
+          for (const s of input.sections) {
+            const forms = byMarks[s.marksEach];
+            if (!forms || ["DRAW", "TRUE_FALSE", "MATCH_COLUMN"].includes(s.type)) continue;
+            expect(JSON.parse(s.allowedTypesJson), `${className} ${subject} ${preset.title} ${s.type}@${s.marksEach}`).toEqual(expect.arrayContaining(forms));
+          }
+        }
+      }
+    }
+  });
+
   it("uses the chosen time when one is given for every subject", () => {
     const preset = suggestPreset(presets, { className: "Class 3", subject: "Maths" })!;
     const input = buildSetupInput(preset, { id: "b", className: "Class 3", subject: "Maths", chapters: chapters(4) }, {

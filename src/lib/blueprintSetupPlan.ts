@@ -122,15 +122,15 @@ export function presetSections(preset: BlueprintPreset, subject: string): SetupS
 }
 
 /**
- * Forms a school-pattern slot accepts. A slot with its own role takes only forms of that kind; when a pattern has
- * such rows, its lesson rows stop offering passage, writing and grammar forms, so those marks stay where they belong.
+ * Forms a school-pattern slot accepts. A passage, writing or grammar slot takes only forms of that kind; a lesson
+ * slot takes every form the subject uses at its marks (teachers set grammar, a passage or a reference-to-context
+ * question in a lesson slot too). The slot's role, not the question's form, decides which unit its marks count to.
  */
 export function schoolAllowedTypes(type: string, marksEach: number, subject: string, role?: string | null): string[] {
   if (role === "PASSAGE") return ["UNSEEN_PASSAGE"];
   if (role === "WRITING") return Array.from(new Set([type, "WRITING_SKILL", "LONG"]));
   if (role === "GRAMMAR") return Array.from(new Set([type, "GRAMMAR"]));
-  const all = defaultAllowedTypes(type, marksEach, subject);
-  return role === "LITERATURE" ? all.filter((t) => t === type || !["UNSEEN_PASSAGE", "WRITING_SKILL", "GRAMMAR"].includes(t)) : all;
+  return defaultAllowedTypes(type, marksEach, subject);
 }
 
 /** Forms a school-pattern row accepts: those of every kind of slot it has (a lesson MCQ row with one grammar slot). */

@@ -18,6 +18,7 @@ import {
   Sparkles,
   Trash2,
   UploadCloud,
+  Wand2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { QuestionForm } from "@/components/QuestionForm";
@@ -25,6 +26,7 @@ import { QuestionUsagePills } from "@/components/QuestionUsageHistory";
 import { QuestionView } from "@/components/QuestionView";
 import { AIQuestionGeneratorModal } from "@/components/AIQuestionGeneratorModal";
 import { QuestionDuplicateModal } from "@/components/QuestionDuplicateModal";
+import { QuestionTypeCheckModal } from "@/components/QuestionTypeCheckModal";
 import { ErrorBanner, Field, Modal, useConfirm, useToast } from "@/components/ui";
 import type { BatchImportReport } from "@/lib/batchQuestionIo";
 import { parseBulkQuestions } from "@/lib/bulkImport";
@@ -276,6 +278,23 @@ export default function QuestionsPage() {
 
   // The duplicate scan compares across the whole filtered set, not just the visible page.
   const [scanQuestions, setScanQuestions] = useState<QuestionDto[]>([]);
+  const [typeCheckQuestions, setTypeCheckQuestions] = useState<QuestionDto[] | null>(null);
+  const fetchScanSet = useCallback(async () => {
+    const sp = new URLSearchParams({ take: "1000" });
+    Object.entries(filters).forEach(([k, v]) => {
+      if (k === "freshness" && v === "ALL") return;
+      if (v) sp.set(k, v);
+    });
+    if (bookIdsParam !== null) sp.set("bookIds", bookIdsParam);
+    return api<QuestionDto[]>(`/api/questions?${sp}`);
+  }, [filters, bookIdsParam]);
+  const openTypeCheck = useCallback(async () => {
+    try {
+      setTypeCheckQuestions(await fetchScanSet());
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }, [fetchScanSet]);
   const openDuplicateScan = useCallback(async () => {
     const sp = new URLSearchParams({ take: "1000" });
     Object.entries(filters).forEach(([k, v]) => {
@@ -454,6 +473,17 @@ export default function QuestionsPage() {
           >
             <Copy size={15} className="text-slate-600" />
             <span>Scan Duplicates</span>
+          </button>
+
+          {/* Check Types Button */}
+          <button
+            className="btn border-slate-300 bg-white text-slate-700 hover:bg-slate-50 shadow-2xs"
+            disabled={questions.length === 0 || !canCreate}
+            onClick={() => void openTypeCheck()}
+            title="Find questions saved under a general type that are really an unseen passage, reference to context, writing, grammar, map or drawing question"
+          >
+            <Wand2 size={15} className="text-slate-600" />
+            <span>Check Types</span>
           </button>
 
           {/* AI Question Co-Pilot */}
@@ -1144,6 +1174,16 @@ export default function QuestionsPage() {
               createdAt: new Date().toISOString(),
             });
           }}
+        />
+      )}
+
+      {/* Question Type Check Modal */}
+      {typeCheckQuestions && (
+        <QuestionTypeCheckModal
+          questions={typeCheckQuestions}
+          books={books}
+          onClose={() => setTypeCheckQuestions(null)}
+          onApplied={load}
         />
       )}
 

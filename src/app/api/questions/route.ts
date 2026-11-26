@@ -198,10 +198,10 @@ function matchesMarksDto(type: string, subparts: SubPart[] | undefined, attemptC
       "ONE_WORD",
     ].includes(type);
   }
-  if (targetMarks === 2) return ["SA", "SHORT", "DRAW", "VERY_SHORT", "GRAMMAR"].includes(type);
-  if (targetMarks === 3) return ["SA", "SHORT", "DRAW", "GRAMMAR", "REFERENCE_CONTEXT"].includes(type);
+  if (targetMarks === 2) return ["SA", "SHORT", "DRAW", "MAP_WORK", "VERY_SHORT", "GRAMMAR"].includes(type);
+  if (targetMarks === 3) return ["SA", "SHORT", "DRAW", "MAP_WORK", "GRAMMAR", "REFERENCE_CONTEXT"].includes(type);
   if (targetMarks === 4) return ["CASE_STUDY", "PASSAGE", "UNSEEN_PASSAGE", "REFERENCE_CONTEXT", "WRITING_SKILL", "MATCH_COLUMN"].includes(type);
-  if (targetMarks === 5) return ["LA", "LONG", "WRITING_SKILL", "MAP_WORK", "CASE_STUDY", "MATCH_COLUMN"].includes(type);
+  if (targetMarks === 5) return ["LA", "LONG", "WRITING_SKILL", "MAP_WORK", "DRAW", "GRAMMAR", "CASE_STUDY", "MATCH_COLUMN"].includes(type);
   if (targetMarks === 6) return ["LA", "LONG", "WRITING_SKILL"].includes(type);
   return true;
 }

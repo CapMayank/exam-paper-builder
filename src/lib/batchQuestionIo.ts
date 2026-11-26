@@ -9,6 +9,7 @@ import {
 } from "./constants";
 import type { QuestionDto } from "./dto";
 import { parseSubparts, subpartsTotalMarks, type SubPart } from "./types";
+import { suggestQuestionType } from "./typeInference";
 
 export type BatchIoFormat = "csv" | "json";
 
@@ -55,6 +56,8 @@ export interface ValidatedQuestionPayload {
   bloomsLevel?: string;
   tags?: string[];
   explanation?: string;
+  /** The general type the row gave, when the import saved a closer one (see typeInference.ts). */
+  retypedFrom?: QuestionType;
 }
 
 export interface BatchImportError {
@@ -90,6 +93,8 @@ export interface BatchParseOptions {
   existingQuestions?: Array<{ id: string; chapterId: string; text: string }>;
   skipDuplicates?: boolean;
   defaultType?: QuestionType;
+  /** The book's subject, so a row saved under a general type gets the closer one it really is. */
+  subject?: string | null;
 }
 
 export interface BatchImportOptions extends BatchParseOptions {
@@ -998,10 +1003,16 @@ export function parseQuestionJson(
  * Universal batch parser supporting CSV and JSON format.
  */
 export function parseAndValidateBatch(opts: BatchImportOptions): BatchImportReport {
-  if (opts.format === "csv") {
-    return parseQuestionCsv(opts.content, opts);
-  }
-  return parseQuestionJson(opts.content, opts);
+  const report = opts.format === "csv" ? parseQuestionCsv(opts.content, opts) : parseQuestionJson(opts.content, opts);
+  return { ...report, items: report.items.map((item) => withInferredType(item, opts)) };
+}
+
+/** A row given a general type (a passage typed as Short answer with parts, say) gets the type it really is. */
+function withInferredType(item: ValidatedQuestionPayload, opts: BatchParseOptions): ValidatedQuestionPayload {
+  const chapterTitle = opts.chapters?.find((c) => c.id === item.chapterId)?.title;
+  const s = suggestQuestionType({ type: item.type, text: item.text, subparts: item.subparts, chapterTitle, subject: opts.subject });
+  if (!s) return item;
+  return { ...item, type: s.type as QuestionType, retypedFrom: item.type, showGrid: (s.type === "DRAW" || s.type === "MAP_WORK") && item.showGrid };
 }
 
 /**

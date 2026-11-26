@@ -866,6 +866,8 @@ export function QuestionPicker({
                   initial={initialForEdit}
                   fixedBookId={paper.blueprint.bookId}
                   typeFromParent={pickType}
+                  allowedTypes={allowedTypes}
+                  onTypeChange={chips ? setPickType : undefined}
                   targetMarks={section.marksEach}
                   allowedChapterIds={chapterOptionIds(
                     paper.blueprint.chapters.map((c) => c.chapterId),

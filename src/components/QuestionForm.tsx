@@ -81,6 +81,7 @@ import { BookFigureModal } from "./BookFigureModal";
 import { OptionFigureButton } from "./OptionFigureButton";
 import { joinOptionFigure, splitOptionFigure } from "@/lib/optionFigure";
 import { ErrorBanner, Field } from "./ui";
+import { suggestQuestionType } from "@/lib/typeInference";
 
 /** Pre-primary worksheets are written on: they keep blank answer space under each question. */
 const PRE_PRIMARY_SPACE: Record<string, number> = {
@@ -158,6 +159,8 @@ export function QuestionForm({
   allowedChapterIds,
   openMarks,
   typeFromParent,
+  allowedTypes,
+  onTypeChange,
   detailsExtra,
   chapterHint,
   preferredChapterId,
@@ -176,6 +179,10 @@ export function QuestionForm({
   openMarks?: Record<string, number>;
   /** The parent owns the type (picker chips, edit on a paper): no type dropdown is rendered. When it changes, the form switches type and keeps the typed text. */
   typeFromParent?: string;
+  /** With `typeFromParent`: the types the parent's slot accepts, so a closer type is only ever picked from these. */
+  allowedTypes?: string[];
+  /** With `typeFromParent`: switches the parent's type (its chips) to a closer type the form found. */
+  onTypeChange?: (type: string) => void;
   /** Rendered at the top of "More details" (paper-only fields). */
   detailsExtra?: React.ReactNode;
   /** A line under the Chapter select (the OR chapter rule). */
@@ -307,6 +314,8 @@ export function QuestionForm({
   const [bookModalUrl, setBookModalUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // "SHORT>UNSEEN_PASSAGE": the teacher chose to keep their type over the one the form found
+  const [keptType, setKeptType] = useState<string | null>(null);
   const activeEditorRef = useRef<MathRichEditorHandle | null>(null);
   const editorsMounted = useRef<Set<MathRichEditorHandle>>(new Set());
   const [activeField, setActiveField] = useState<
@@ -486,6 +495,11 @@ export function QuestionForm({
     setError(null);
     const payload = buildPayload();
     const unchanged = !!initial && samePayload(payload, openedPayload);
+    // the closer type the form found is saved in place of a general one (an untouched question is not rewritten)
+    if (typeHint && !unchanged) {
+      payload.type = typeHint.type;
+      payload.showGrid = (typeHint.type === "DRAW" || typeHint.type === "MAP_WORK") && showGrid;
+    }
     // an untouched question is not rewritten by a custom handler, so a legacy flaw in it cannot block saving the rest
     const problem = customSaveHandler && unchanged ? null : validationError();
     if (problem) return setError(problem);
@@ -667,6 +681,21 @@ export function QuestionForm({
   // The type field: none when the parent owns the type; plain text when the type is locked; else a dropdown.
   const typeField = typeFromParent ? null : typeLocked ? "text" : "select";
   const rowColumns = (bookLocked ? 1 : 2) + (typeField ? 1 : 0);
+  // A closer type for what the teacher has written (sub-parts over a passage → Unseen passage, and so on). It is
+  // saved in place of the general type unless the teacher keeps theirs; where the parent owns the type (a paper
+  // slot), only a type that slot accepts is picked. A type locked by use is never changed.
+  const foundType = typeLocked
+    ? null
+    : suggestQuestionType({ type, text, subparts, chapterTitle: chapters.find((c) => c.id === effChapterId)?.title, subject: book?.subject });
+  const typeHint =
+    foundType && (!typeFromParent || (allowedTypes ?? []).includes(foundType.type)) && keptType !== `${type}>${foundType.type}`
+      ? foundType
+      : null;
+  const switchToHint = () => {
+    if (!typeHint) return;
+    if (typeFromParent) onTypeChange?.(typeHint.type);
+    else changeType(typeHint.type);
+  };
 
   return (
     <form
@@ -690,6 +719,24 @@ export function QuestionForm({
       className="space-y-4"
     >
       <ErrorBanner message={error} />
+      {typeHint && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-900">
+          <span>
+            This looks like <b>{QUESTION_TYPE_LABEL[typeHint.type as keyof typeof QUESTION_TYPE_LABEL] ?? typeHint.type}</b> ({typeHint.reason}), so it
+            will be saved as that type instead of {QUESTION_TYPE_LABEL[type as keyof typeof QUESTION_TYPE_LABEL] ?? type}.
+          </span>
+          <span className="flex gap-1.5">
+            {(!typeFromParent || onTypeChange) && (
+              <button type="button" className="btn btn-sm border-indigo-300 bg-white text-indigo-700" onClick={switchToHint}>
+                Switch now
+              </button>
+            )}
+            <button type="button" className="btn btn-sm" onClick={() => setKeptType(`${type}>${typeHint.type}`)}>
+              Keep {QUESTION_TYPE_LABEL[type as keyof typeof QUESTION_TYPE_LABEL] ?? type}
+            </button>
+          </span>
+        </div>
+      )}
 
       {/* 1. Where the question goes */}
       <div className={`grid gap-3 ${rowColumns === 1 ? "sm:grid-cols-1" : rowColumns === 2 ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>

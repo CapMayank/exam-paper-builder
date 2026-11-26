@@ -101,6 +101,8 @@ export function subjectFamily(subject: string | null | undefined): SubjectFamily
 export function defaultAllowedTypes(type: string, marksEach: number, subject: string | null | undefined): string[] {
   const fam = subjectFamily(subject);
   const list: string[] = [];
+  // a labelled diagram (science), a construction or graph (maths), a sketch of a landform (SST)
+  const draws = fam === "SCIENCE" || fam === "MATHS" || fam === "SST";
   if (marksEach > 0 && marksEach <= 1) {
     // "One word" is the VERY_SHORT form: a one-mark slot takes it beside the objective forms
     list.push("MCQ", "FILL_BLANK", "TRUE_FALSE", "MATCH_COLUMN", "VERY_SHORT");
@@ -108,16 +110,17 @@ export function defaultAllowedTypes(type: string, marksEach: number, subject: st
   } else if (marksEach === 2) {
     list.push("VERY_SHORT");
     if (fam === "LANGUAGE") list.push("GRAMMAR");
-    if (fam === "SCIENCE") list.push("DRAW");
+    if (draws) list.push("DRAW");
+    if (fam === "SST") list.push("MAP_WORK");
   } else if (marksEach <= 4) {
     list.push("SHORT", "LONG");
     if (fam === "LANGUAGE") list.push("GRAMMAR", "REFERENCE_CONTEXT", "UNSEEN_PASSAGE");
-    if (fam === "SCIENCE") list.push("DRAW");
+    if (draws) list.push("DRAW");
     if (fam === "SST") list.push("MAP_WORK");
   } else {
     list.push("LONG", "SHORT");
-    if (fam === "LANGUAGE") list.push("WRITING_SKILL", "UNSEEN_PASSAGE", "GRAMMAR");
-    if (fam === "SCIENCE") list.push("DRAW");
+    if (fam === "LANGUAGE") list.push("WRITING_SKILL", "UNSEEN_PASSAGE", "REFERENCE_CONTEXT", "GRAMMAR");
+    if (draws) list.push("DRAW");
     if (fam === "SST") list.push("MAP_WORK");
     if (fam === "MATHS") list.push("CASE_STUDY");
   }

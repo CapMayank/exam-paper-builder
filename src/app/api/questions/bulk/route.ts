@@ -73,6 +73,7 @@ export const POST = route(async (req, _params, user) => {
       chapters: book.chapters,
       existingQuestions,
       skipDuplicates: input.skipDuplicates,
+      subject: book.subject,
     });
 
     // If dryRun requested, return validation report without persistence

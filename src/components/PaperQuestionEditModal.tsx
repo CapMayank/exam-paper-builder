@@ -7,6 +7,7 @@ import { api } from "@/lib/client";
 import { OR_CHAPTER_GUIDELINE, OR_CHAPTER_REQUIRED, orChapterRequired } from "@/lib/internalChoiceRules";
 import { parseComponents } from "@/lib/languageComponents";
 import { chapterOptionIds, modalTitle, paperFieldsPatch, samePayload } from "@/lib/questionModal";
+import { allowedTypesFor } from "@/lib/sectionTypes";
 import type { Book, PaperData, PaperItem, Section } from "@/lib/types";
 
 type Target = "primary" | "or";
@@ -169,6 +170,7 @@ export function PaperQuestionEditModal({
         initial={editing}
         fixedBookId={paper.blueprint.bookId}
         typeFromParent={editing.type}
+        allowedTypes={allowedTypesFor(section)}
         targetMarks={section.marksEach}
         allowedChapterIds={chapterOptionIds(
           paper.blueprint.chapters.map((c) => c.chapterId),
