@@ -23,3 +23,18 @@ export function shortClassLabel(className: string): string {
   const m = /^class\s+(\d{1,2})$/i.exec(name);
   return m ? ordinal(Number(m[1])) : name;
 }
+
+const SHORT_SUBJECT: Record<string, string> = {
+  mathematics: "Math",
+  "mathematics standard": "Math",
+  "mathematics basic": "Math (Basic)",
+  "social science": "SST",
+  biology: "Bio",
+  "gk/drawing": "GK/Draw.",
+  "gk / drawing": "GK/Draw.",
+};
+
+/** The short subject name the printed date sheet uses: "Mathematics" → "Math", "Social Science" → "SST". */
+export function shortSubjectLabel(subject: string): string {
+  return SHORT_SUBJECT[subject.trim().toLowerCase()] ?? subject;
+}

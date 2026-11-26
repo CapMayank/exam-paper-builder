@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { shortClassLabel } from "./labels";
+import { shortClassLabel, shortSubjectLabel } from "./labels";
 
 describe("shortClassLabel", () => {
   it("turns numbered classes into ordinals", () => {
@@ -17,5 +17,19 @@ describe("shortClassLabel", () => {
   });
   it("leaves anything else as it is", () => {
     expect(shortClassLabel("Something Else")).toBe("Something Else");
+  });
+});
+
+describe("shortSubjectLabel", () => {
+  it("uses the short names the school prints on date sheets", () => {
+    expect(shortSubjectLabel("Mathematics")).toBe("Math");
+    expect(shortSubjectLabel("Mathematics Standard")).toBe("Math");
+    expect(shortSubjectLabel("Social Science")).toBe("SST");
+    expect(shortSubjectLabel("Biology")).toBe("Bio");
+    expect(shortSubjectLabel("GK/Drawing")).toBe("GK/Draw.");
+  });
+  it("leaves other subjects as they are", () => {
+    expect(shortSubjectLabel("Chemistry")).toBe("Chemistry");
+    expect(shortSubjectLabel("Disaster Management")).toBe("Disaster Management");
   });
 });
