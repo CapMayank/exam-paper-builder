@@ -166,14 +166,19 @@ async function blockOf(examId: string, blockId: string) {
 
 export async function addBlock(examId: string, input: { title: string; timeText: string }, user: SessionUser) {
   const exam = await loadExamView(examId);
-  await prisma.examBlock.create({ data: { examId, title: input.title, timeText: input.timeText, position: exam.blocks.length } });
+  const last = exam.blocks.reduce((m, b) => Math.max(m, b.position), -1);
+  await prisma.examBlock.create({ data: { examId, title: input.title, timeText: input.timeText, position: last + 1 } });
   await recordAudit(user, "EXAM_UPDATE", "EXAM", examId, { addBlock: input.title });
   return loadExamView(examId);
 }
 
 export async function deleteBlock(examId: string, blockId: string, user: SessionUser) {
-  const { block } = await blockOf(examId, blockId);
-  await prisma.examBlock.delete({ where: { id: blockId } });
+  const { exam, block } = await blockOf(examId, blockId);
+  const rest = exam.blocks.filter((b) => b.id !== blockId);
+  await prisma.$transaction([
+    prisma.examBlock.delete({ where: { id: blockId } }),
+    ...rest.map((b, i) => prisma.examBlock.update({ where: { id: b.id }, data: { position: i } })),
+  ]);
   await recordAudit(user, "EXAM_UPDATE", "EXAM", examId, { deleteBlock: block.title });
   return loadExamView(examId);
 }
@@ -419,7 +424,12 @@ export async function createMissingDrafts(examId: string, user: SessionUser, onl
       ...paperSyncFields(exam, slot.examDate),
     });
     const paper = await createPaperFromBlueprint(input, user.id, user);
-    await prisma.examSlot.update({ where: { id: slot.id }, data: { paperId: paper.id } });
+    // link only if the slot is still empty: a second click (or tab) that got there first keeps its paper
+    const claimed = await prisma.examSlot.updateMany({ where: { id: slot.id, paperId: null }, data: { paperId: paper.id } });
+    if (claimed.count === 0) {
+      await prisma.paper.delete({ where: { id: paper.id } });
+      continue;
+    }
     created++;
   }
   await recordAudit(user, "EXAM_UPDATE", "EXAM", examId, { createdDrafts: created, skipped: skipped.length });

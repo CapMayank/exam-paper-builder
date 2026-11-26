@@ -13,7 +13,7 @@ import { GET as listExams, POST as createExam } from "../../app/api/exams/route"
 import { DELETE as deleteExam, GET as getExam, PATCH as patchExam } from "../../app/api/exams/[id]/route";
 import { POST as copyExam } from "../../app/api/exams/[id]/copy/route";
 import { POST as addBlock } from "../../app/api/exams/[id]/blocks/route";
-import { PATCH as patchBlock } from "../../app/api/exams/[id]/blocks/[blockId]/route";
+import { DELETE as deleteBlockRoute, PATCH as patchBlock } from "../../app/api/exams/[id]/blocks/[blockId]/route";
 import { PUT as putCell } from "../../app/api/exams/[id]/cells/route";
 import { PATCH as patchSlot } from "../../app/api/exams/[id]/slots/[slotId]/route";
 import { GET as printedPrompt } from "../../app/api/exams/printed-prompt/route";
@@ -77,6 +77,21 @@ describe("exams API", () => {
       patchBlock(req("", "PATCH", { addDate: "2026-02-30" }), p({ id: made.json.id, blockId: block.json.blocks[0].id })),
     );
     expect(bad.status).toBe(400);
+  });
+
+  it("keeps block positions unique after a block is deleted and another added", async () => {
+    const made = await as<ExamView>(ids.admin, () =>
+      createExam(req("/api/exams", "POST", { name: `Order ${stamp}`, examType: "UNIT_TEST", academicSession: "2026–27" }), p()),
+    );
+    const examId = made.json.id;
+    examIds.push(examId);
+    let view = made.json;
+    for (const title of ["A", "B", "C"]) view = (await as<ExamView>(ids.admin, () => addBlock(req("", "POST", { title, timeText: "" }), p({ id: examId })))).json;
+    const a = view.blocks.find((b) => b.title === "A")!.id;
+    await as(ids.admin, () => deleteBlockRoute(req("", "DELETE"), p({ id: examId, blockId: a })));
+    view = (await as<ExamView>(ids.admin, () => addBlock(req("", "POST", { title: "D", timeText: "" }), p({ id: examId })))).json;
+    expect(view.blocks.map((b) => b.title)).toEqual(["B", "C", "D"]);
+    expect(new Set(view.blocks.map((b) => b.position)).size).toBe(3);
   });
 
   it("builds a date sheet, moves a date and tracks printing", async () => {
@@ -247,6 +262,15 @@ describe("exams API", () => {
 
       const again = await as<{ created: number }>(ids.admin, () => createDrafts(req("", "POST", {}), p({ id: examId })));
       expect(again.json.created).toBe(0);
+
+      // two clicks at once never make two papers for one slot
+      await prisma.examSlot.updateMany({ where: { examId }, data: { paperId: null } });
+      await prisma.paper.deleteMany({ where: { blueprintId: bp.id } });
+      mockSessionUserId = ids.admin;
+      const both = await Promise.all([createDrafts(req("", "POST", {}), p({ id: examId })), createDrafts(req("", "POST", {}), p({ id: examId }))]);
+      const created = (await Promise.all(both.map((r) => r.json()))).reduce((n: number, r: { created: number }) => n + r.created, 0);
+      expect(created).toBe(1);
+      expect(await prisma.paper.count({ where: { blueprintId: bp.id } })).toBe(1);
       expect((await as(ids.teacher, () => createDrafts(req("", "POST", {}), p({ id: examId })))).status).toBe(403);
     } finally {
       await prisma.examSlot.deleteMany({ where: { className: cls } });
