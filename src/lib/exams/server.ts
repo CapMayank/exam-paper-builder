@@ -6,6 +6,7 @@ import { todayIST } from "./dates";
 import { checkAddClass, checkAddDate, checkMoveDate, copyLayout } from "./grid";
 import { filterByExamType, paperCandidateWhere, pickPaper } from "./paperMatch";
 import { examSummary, slotStatus, slotWarnings } from "./status";
+import { paperSyncFields } from "./sync";
 import type { BlockView, ExamListItem, ExamStatus, ExamView, SignatureMode, SlotView } from "./types";
 
 const parseList = (json: string): string[] => {
@@ -114,6 +115,10 @@ export async function updateExam(
   user: SessionUser,
 ) {
   await prisma.exam.update({ where: { id }, data: input });
+  if (input.examType !== undefined || input.academicSession !== undefined) {
+    const linked = await prisma.examSlot.findMany({ where: { examId: id, paperId: { not: null } }, select: { id: true } });
+    for (const s of linked) await syncLinkedPaper(s.id, user, id);
+  }
   await recordAudit(user, "EXAM_UPDATE", "EXAM", id, input);
   return loadExamView(id);
 }
@@ -228,8 +233,11 @@ export async function patchBlock(examId: string, blockId: string, patch: BlockPa
   return loadExamView(examId);
 }
 
-/** Phase 2 hook: linked papers follow a moved date. */
-async function syncMovedPapers(_examId: string, _blockId: string, _date: string, _user: SessionUser): Promise<void> {}
+/** Linked papers follow a moved date column, Final ones included (the date sheet is the authority on dates). */
+async function syncMovedPapers(examId: string, blockId: string, date: string, user: SessionUser): Promise<void> {
+  const slots = await prisma.examSlot.findMany({ where: { blockId, examDate: date, paperId: { not: null } }, select: { id: true } });
+  for (const s of slots) await syncLinkedPaper(s.id, user, examId);
+}
 
 type Candidate = { id: string; title: string; paperSet: string };
 
@@ -272,8 +280,20 @@ export async function setCell(
   return { exam: await loadExamView(examId), ...(pick.ambiguous ? { ambiguousCandidates: candidates } : {}) };
 }
 
-/** Phase 2 hook: a newly linked paper takes the exam's date, type and session. */
-async function syncLinkedPaper(_slotId: string, _user: SessionUser): Promise<void> {}
+/**
+ * A linked paper takes the exam's date, type and session. This deliberately writes past the Final lock: the printed
+ * header must match the date sheet, and a printed slot is flagged for a reprint when its date moves.
+ */
+async function syncLinkedPaper(slotId: string, user: SessionUser, examId?: string): Promise<void> {
+  const slot = await prisma.examSlot.findUnique({ where: { id: slotId }, include: { exam: { select: { id: true, examType: true, academicSession: true } } } });
+  if (!slot?.paperId) return;
+  const fields = paperSyncFields(slot.exam, slot.examDate);
+  const paper = await prisma.paper.findUnique({ where: { id: slot.paperId }, select: { examDate: true, examType: true, academicSession: true, updatedAt: true } });
+  if (!paper || (paper.examDate === fields.examDate && paper.examType === fields.examType && paper.academicSession === fields.academicSession)) return;
+  // keep updatedAt as it was, so a date sync never reads as "paper changed after printing"
+  await prisma.paper.update({ where: { id: slot.paperId }, data: { ...fields, updatedAt: paper.updatedAt } });
+  await recordAudit(user, "PAPER_UPDATE", "PAPER", slot.paperId, { reason: "exam date sheet", examId: examId ?? slot.exam.id, ...fields });
+}
 
 async function slotIn(examId: string, slotId: string) {
   const slot = await prisma.examSlot.findUnique({ where: { id: slotId } });

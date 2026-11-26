@@ -157,6 +157,49 @@ describe("exams API", () => {
     expect(await prisma.examSlot.count({ where: { examId: copy.json.id } })).toBe(0);
   });
 
+  it("gives linked papers the exam's date and moves it with the date column", async () => {
+    const cls = `Exam Sync ${stamp}`;
+    const book = await prisma.book.create({ data: { title: "Maths", subject: "Mathematics", className: cls, academicSession: "2026–27" } });
+    const bp = await prisma.blueprint.create({
+      data: { name: "HY Maths", bookId: book.id, academicSession: "2026–27", examType: "HALF_YEARLY", durationMin: 180 },
+    });
+    const paper = await prisma.paper.create({
+      data: { title: "HY Maths", blueprintId: bp.id, layout: "PAGE", schoolName: "S", academicSession: "2026–27", examType: "HALF_YEARLY", status: "FINAL", createdById: ids.admin },
+    });
+    try {
+      const made = await as<ExamView>(ids.admin, () =>
+        createExam(req("/api/exams", "POST", { name: `Sync ${stamp}`, examType: "HALF_YEARLY", academicSession: "2026–27" }), p()),
+      );
+      const examId = made.json.id;
+      examIds.push(examId);
+      const withBlock = await as<ExamView>(ids.admin, () => addBlock(req("", "POST", { title: "Only", timeText: "11 to 2" }), p({ id: examId })));
+      const b = withBlock.json.blocks[0].id;
+      await as(ids.admin, () => patchBlock(req("", "PATCH", { addDate: "2026-12-10" }), p({ id: examId, blockId: b })));
+      await as(ids.admin, () => patchBlock(req("", "PATCH", { addClass: cls }), p({ id: examId, blockId: b })));
+      const set = await as<{ exam: ExamView }>(ids.admin, () =>
+        putCell(req("", "PUT", { blockId: b, className: cls, date: "2026-12-10", subject: "Mathematics" }), p({ id: examId })),
+      );
+      const slot = set.json.exam.slots[0];
+      expect(slot.paper?.id).toBe(paper.id);
+      expect(slot.status).toBe("FINAL");
+      expect((await prisma.paper.findUniqueOrThrow({ where: { id: paper.id } })).examDate).toBe("2026-12-10");
+
+      await as(ids.admin, () => patchSlot(req("", "PATCH", { printed: true }), p({ id: examId, slotId: slot.id })));
+      const moved = await as<ExamView>(ids.admin, () => patchBlock(req("", "PATCH", { moveDate: { from: "2026-12-10", to: "2026-12-15" } }), p({ id: examId, blockId: b })));
+      expect((await prisma.paper.findUniqueOrThrow({ where: { id: paper.id } })).examDate).toBe("2026-12-15");
+      expect(moved.json.slots[0].warnings).toContain("DATE_CHANGED_AFTER_PRINT");
+      expect(moved.json.slots[0].warnings).not.toContain("PAPER_CHANGED_AFTER_PRINT");
+
+      await as(ids.admin, () => patchExam(req("", "PATCH", { examType: "PRE_BOARD" }), p({ id: examId })));
+      expect((await prisma.paper.findUniqueOrThrow({ where: { id: paper.id } })).examType).toBe("PRE_BOARD");
+    } finally {
+      await prisma.examSlot.deleteMany({ where: { paperId: paper.id } });
+      await prisma.paper.delete({ where: { id: paper.id } });
+      await prisma.blueprint.delete({ where: { id: bp.id } });
+      await prisma.book.delete({ where: { id: book.id } });
+    }
+  });
+
   it("lists unprinted upcoming slots for a paper's print prompt, for managers only", async () => {
     const res = await as<unknown[]>(ids.examCell, () => printedPrompt(req("/api/exams/printed-prompt?paperId=nope", "GET"), p()));
     expect(res.status).toBe(200);
