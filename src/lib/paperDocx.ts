@@ -394,7 +394,12 @@ export async function buildPaperDocx(
   );
   const flexItems = loaded.items.map((i) => ({ ...i, question: { ...i.question, pairMarks: i.pairMarks } }));
   const view = mergeSameFormRows(flexSections, flexItems);
-  const paper = { ...loaded, blueprint: { ...loaded.blueprint, sections: view.sections }, items: view.items };
+  // the exam date sheet's time, when set, is the time this paper prints (same rule as loadPaperView)
+  const paper = {
+    ...loaded,
+    blueprint: { ...loaded.blueprint, sections: view.sections, durationMin: loaded.durationMin ?? loaded.blueprint.durationMin },
+    items: view.items,
+  };
 
   const marksStyle = resolveMarksStyle(paper.marksStyle);
   const paperLang = detectPaperLanguage(paper, paper.items);

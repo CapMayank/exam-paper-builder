@@ -6,6 +6,8 @@ const SESSION = "2098–99";
 
 describe("GK and Drawing on every class from Nursery to Class 8", () => {
   afterAll(async () => {
+    const ids = (await prisma.academicClass.findMany({ where: { academicSession: SESSION }, select: { id: true } })).map((c) => c.id);
+    await prisma.schoolSetting.deleteMany({ where: { key: { in: ids.map((id) => `minorSubjectsAdded:${id}`) } } });
     await prisma.academicClass.deleteMany({ where: { academicSession: SESSION } });
   });
 
@@ -23,5 +25,14 @@ describe("GK and Drawing on every class from Nursery to Class 8", () => {
       expect(list.filter((s) => s === "Drawing")).toHaveLength(1);
     }
     expect(await subjects("Class 9")).not.toContain("Drawing");
+  });
+
+  it("adds them once: a school that removes one keeps it removed", async () => {
+    const nursery = await prisma.academicClass.findFirstOrThrow({ where: { name: "Nursery", academicSession: SESSION } });
+    await prisma.classSubject.deleteMany({ where: { classId: nursery.id, name: "Drawing" } });
+    await ensureSchoolSubjects(SESSION);
+    const names = (await prisma.classSubject.findMany({ where: { classId: nursery.id } })).map((s) => s.name);
+    expect(names).toContain("General Knowledge");
+    expect(names).not.toContain("Drawing");
   });
 });

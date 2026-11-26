@@ -133,20 +133,32 @@ export async function ensureSchoolSubjects(sessionFilter?: string | null) {
   const where =
     sessionFilter && sessionFilter !== "ALL" ? { academicSession: normalizeAcademicSession(sessionFilter) } : undefined;
   const classes = await prisma.academicClass.findMany({ where, include: { subjects: true } });
-  for (const c of classes) {
-    // General Knowledge and Drawing for Nursery to Class 8 (usually examined together on one day)
+  // General Knowledge and Drawing for Nursery to Class 8 (usually examined together on one day), added once per
+  // class: a school that removes one keeps it removed
+  const minorClasses = classes.filter((c) => {
     const order = inferClassOrder(c.name);
-    if (order >= -2 && order <= 8) {
-      const have = new Set(c.subjects.map((s) => s.name.trim().toLowerCase()));
-      for (const name of MINOR_SUBJECTS) {
-        if (have.has(name.toLowerCase())) continue;
-        await prisma.classSubject.upsert({
-          where: { classId_name: { classId: c.id, name } },
-          update: {},
-          create: { classId: c.id, name, code: "" },
-        });
-      }
+    return order >= -2 && order <= 8;
+  });
+  const done = new Set(
+    (await prisma.schoolSetting.findMany({ where: { key: { in: minorClasses.map((c) => `minorSubjectsAdded:${c.id}`) } }, select: { key: true } })).map(
+      (r) => r.key,
+    ),
+  );
+  for (const c of minorClasses) {
+    const key = `minorSubjectsAdded:${c.id}`;
+    if (done.has(key)) continue;
+    const have = new Set(c.subjects.map((s) => s.name.trim().toLowerCase()));
+    for (const name of MINOR_SUBJECTS) {
+      if (have.has(name.toLowerCase())) continue;
+      await prisma.classSubject.upsert({
+        where: { classId_name: { classId: c.id, name } },
+        update: {},
+        create: { classId: c.id, name, code: "" },
+      });
     }
+    await prisma.schoolSetting.upsert({ where: { key }, create: { key, value: "1" }, update: {} });
+  }
+  for (const c of classes) {
     const level = classLevelOf(c.name);
     if (!level || !(PROFILE_CLASS_LEVELS as readonly number[]).includes(level)) continue;
     const have = new Set(c.subjects.map((s) => canonicalSubject(s.name)).filter(Boolean));

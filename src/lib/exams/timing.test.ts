@@ -8,6 +8,10 @@ describe("minutesBetween", () => {
     expect(minutesBetween("9:30 AM - 12:00 PM")).toBe(150);
     expect(minutesBetween("11 am – 2 pm")).toBe(180);
   });
+  it("skips other numbers on the line and reads the times", () => {
+    expect(minutesBetween("Day 2: 10 am to 1 pm")).toBe(180);
+    expect(minutesBetween("Shift 1 – 11:00 to 13:30")).toBe(150);
+  });
   it("reads a 24-hour clock", () => {
     expect(minutesBetween("10:00 to 13:00")).toBe(180);
   });

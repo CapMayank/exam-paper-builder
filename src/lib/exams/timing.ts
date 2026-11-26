@@ -16,7 +16,10 @@ function toMinutes(h: number, m: number, meridiem: string | undefined): number |
  * the line can't be read. An unmarked end earlier than the start is taken as afternoon ("11:00 to 2:00" → 180).
  */
 export function minutesBetween(timeText: string): number | null {
-  const found = [...timeText.matchAll(TIME)];
+  const all = [...timeText.matchAll(TIME)];
+  // numbers that look like times (11:00, 10 am) win over stray ones ("Day 2", "Shift 1")
+  const timeLike = all.filter((m) => m[2] !== undefined || m[3] !== undefined);
+  const found = timeLike.length >= 2 ? timeLike : all;
   if (found.length < 2) return null;
   const [a, b] = found;
   const start = toMinutes(Number(a[1]), Number(a[2] ?? 0), a[3]);

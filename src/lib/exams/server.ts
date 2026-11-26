@@ -288,13 +288,15 @@ export async function setCell(
   const { exam, block } = await blockOf(examId, input.blockId);
   if (!block.dates.includes(input.date)) throw new HttpError(400, "That date is not in this block");
   if (!block.classes.includes(input.className)) throw new HttpError(400, "That class is not in this block");
-  const refusal = checkCellSubjects(exam.slots, input.className, input.date, input.subjects);
-  if (refusal) throw new HttpError(400, refusal);
-
   const cell = { blockId: input.blockId, className: input.className, examDate: input.date };
   const existing = await prisma.examSlot.findMany({ where: cell });
   const dropped = existing.filter((s) => !input.subjects.includes(s.subject));
   const added = input.subjects.filter((sub) => !existing.some((s) => s.subject === sub));
+  // the whole cell: at most two papers, none repeated; "already on another date" only for subjects being added,
+  // so an older exam that already repeats a subject can still be edited
+  const refusal =
+    checkCellSubjects([], input.className, input.date, input.subjects) ?? checkCellSubjects(exam.slots, input.className, input.date, added);
+  if (refusal) throw new HttpError(400, refusal);
   if (dropped.length) {
     await prisma.examSlot.deleteMany({ where: { id: { in: dropped.map((s) => s.id) } } });
     await releasePapers(dropped.map((s) => s.paperId));
@@ -309,12 +311,35 @@ export async function setCell(
     await create(pick.paperId).catch((e) => (isUniqueViolation(e) ? create(null) : Promise.reject(e)));
     if (pick.ambiguous) ambiguousCandidates = candidates;
   }
+  await dedupeCell(cell);
   // the papers' time depends on how many share the day, so every paper in the cell is brought up to date
   await syncCell(examId, cell, user);
   if (dropped.length || added.length) {
     await recordAudit(user, "EXAM_UPDATE", "EXAM", examId, { cell: `${input.className} ${input.date}`, subjects: input.subjects });
   }
   return { exam: await loadExamView(examId), ...(ambiguousCandidates ? { ambiguousCandidates } : {}) };
+}
+
+/**
+ * One slot per subject in a cell. Two edits of the same cell at once can both add a subject (the database keeps no
+ * unique rule here, so deploys never need a data-loss prompt); the extra slots go, keeping the one with a paper or
+ * printed mark, else the oldest.
+ */
+async function dedupeCell(cell: { blockId: string; className: string; examDate: string }) {
+  const slots = await prisma.examSlot.findMany({ where: cell, orderBy: { id: "asc" } });
+  const keep = new Map<string, (typeof slots)[number]>();
+  const extra: typeof slots = [];
+  for (const s of slots) {
+    const kept = keep.get(s.subject);
+    if (!kept) keep.set(s.subject, s);
+    else if (!kept.paperId && !kept.printedAt && (s.paperId || s.printedAt)) {
+      extra.push(kept);
+      keep.set(s.subject, s);
+    } else extra.push(s);
+  }
+  if (!extra.length) return;
+  await prisma.examSlot.deleteMany({ where: { id: { in: extra.map((s) => s.id) } } });
+  await releasePapers(extra.map((s) => s.paperId));
 }
 
 /** Brings every linked paper of one cell up to date (date, type, session, and time from the date sheet). */

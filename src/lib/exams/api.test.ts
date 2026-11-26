@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { loadPaperView } from "@/lib/papers";
+import { buildPaperDocx } from "@/lib/paperDocx";
 import type { ExamListItem, ExamView } from "./types";
 
 let mockSessionUserId: string | null = null;
@@ -143,6 +144,27 @@ describe("exams API", () => {
     expect(again.status).toBe(400);
     expect(again.json.error).toBe("English is already on 11/12/2026 for Class 5");
 
+    // two edits of one cell at the same moment never leave the same subject twice
+    mockSessionUserId = ids.admin;
+    await Promise.all([
+      putCell(req("", "PUT", { blockId: b, className: "Class 5", date: "2026-12-22", subjects: ["General Knowledge"] }), p({ id: examId })),
+      putCell(req("", "PUT", { blockId: b, className: "Class 5", date: "2026-12-22", subjects: ["General Knowledge"] }), p({ id: examId })),
+    ]);
+    await put("2026-12-22", []);
+    await Promise.all([
+      putCell(req("", "PUT", { blockId: b, className: "Class 5", date: "2026-12-22", subjects: ["Drawing"] }), p({ id: examId })),
+      putCell(req("", "PUT", { blockId: b, className: "Class 5", date: "2026-12-22", subjects: ["Drawing"] }), p({ id: examId })),
+    ]);
+    expect(await prisma.examSlot.count({ where: { examId, className: "Class 5", examDate: "2026-12-22", subject: "Drawing" } })).toBe(1);
+
+    // an older exam may already repeat a subject on two dates: editing that cell must still work
+    await prisma.examSlot.create({ data: { examId, blockId: b, className: "Class 5", examDate: "2026-12-22", subject: "English" } });
+    const legacy = await put("2026-12-22", ["Drawing", "English"]);
+    expect(legacy.status).toBe(200);
+    // adding a repeat is still refused
+    await put("2026-12-22", ["Drawing"]);
+    expect((await put("2026-12-22", ["Drawing", "English"])).status).toBe(400);
+
     // the old single-subject form still works: it replaces the cell
     const single = await as<{ exam: ExamView }>(ids.admin, () =>
       putCell(req("", "PUT", { blockId: b, className: "Class 5", date: "2026-12-22", subject: "Drawing" }), p({ id: examId })),
@@ -262,6 +284,11 @@ describe("exams API", () => {
       expect((await loadPaperView(paper.id))!.blueprint.durationMin).toBe(180);
       await as(ids.admin, () => patchBlock(req("", "PATCH", { timeText: "11:00 am to 01:30 pm" }), p({ id: examId, blockId: b })));
       expect((await prisma.paper.findUniqueOrThrow({ where: { id: paper.id } })).durationMin).toBe(150);
+      // the Word export prints the same time as the printed paper
+      const docx = await buildPaperDocx(paper.id, false, { id: ids.admin, name: "admin", email: "a@x", role: "ADMIN", active: true, assignments: [] });
+      const { default: JSZip } = await import("jszip");
+      const docText = (await (await JSZip.loadAsync(docx.buffer)).file("word/document.xml")!.async("string")).replace(/<[^>]+>/g, "");
+      expect(docText).toMatch(/Time Allowed: 2 hr 30/);
       await as(ids.admin, () => patchBlock(req("", "PATCH", { timeText: "to be announced" }), p({ id: examId, blockId: b })));
       expect((await prisma.paper.findUniqueOrThrow({ where: { id: paper.id } })).durationMin).toBeNull();
       expect((await loadPaperView(paper.id))!.blueprint.durationMin).toBe(180);
