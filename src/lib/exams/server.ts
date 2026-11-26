@@ -90,6 +90,8 @@ export async function loadExamView(id: string): Promise<ExamView> {
     academicSession: exam.academicSession,
     status: exam.status as ExamStatus,
     signatureMode: exam.signatureMode as SignatureMode,
+    showInstructions: exam.showInstructions,
+    instructions: exam.instructions,
     blocks,
     slots,
   };
@@ -118,7 +120,7 @@ export async function createExam(input: { name: string; examType: string; academ
 
 export async function updateExam(
   id: string,
-  input: Partial<{ name: string; examType: string; academicSession: string; status: ExamStatus; signatureMode: SignatureMode }>,
+  input: Partial<{ name: string; examType: string; academicSession: string; status: ExamStatus; signatureMode: SignatureMode; showInstructions: boolean; instructions: string }>,
   user: SessionUser,
 ) {
   await prisma.exam.update({ where: { id }, data: input });
@@ -143,7 +145,7 @@ export async function copyExam(id: string, user: SessionUser): Promise<{ id: str
   const layout = copyLayout(source);
   const copy = await prisma.$transaction(async (tx) => {
     const exam = await tx.exam.create({
-      data: { name: `${source.name} (copy)`, examType: source.examType, academicSession: source.academicSession, signatureMode: source.signatureMode, createdById: user.id },
+      data: { name: `${source.name} (copy)`, examType: source.examType, academicSession: source.academicSession, signatureMode: source.signatureMode, showInstructions: source.showInstructions, instructions: source.instructions, createdById: user.id },
     });
     const blockIds: string[] = [];
     for (const b of layout.blocks) {

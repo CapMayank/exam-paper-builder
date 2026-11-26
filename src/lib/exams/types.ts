@@ -33,6 +33,9 @@ export type ExamView = {
   academicSession: string;
   status: ExamStatus;
   signatureMode: SignatureMode;
+  showInstructions: boolean;
+  /** One instruction per line; empty until someone writes them. */
+  instructions: string;
   blocks: BlockView[];
   slots: SlotView[];
 };

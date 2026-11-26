@@ -239,11 +239,19 @@ describe("exams API", () => {
     );
     expect(circulated.json).toMatchObject({ status: "CIRCULATED", signatureMode: "BLANK" });
 
+    // instructions are off until turned on, and keep the text they are given
+    expect(circulated.json).toMatchObject({ showInstructions: false, instructions: "" });
+    const notes = await as<ExamView>(ids.admin, () =>
+      patchExam(req("", "PATCH", { showInstructions: true, instructions: "Reach by 10:45 am.\nBring your ID card." }), p({ id: examId })),
+    );
+    expect(notes.json).toMatchObject({ showInstructions: true, instructions: "Reach by 10:45 am.\nBring your ID card." });
+
     const copy = await as<{ id: string }>(ids.admin, () => copyExam(req("", "POST"), p({ id: examId })));
     examIds.push(copy.json.id);
     const copied = (await as<ExamView>(ids.admin, () => getExam(req("", "GET"), p({ id: copy.json.id })))).json;
     expect(copied.name).toBe(`Half Yearly ${stamp} (copy)`);
     expect(copied.status).toBe("DRAFT");
+    expect(copied).toMatchObject({ showInstructions: true, instructions: "Reach by 10:45 am.\nBring your ID card." });
     expect(copied.blocks.map((b) => b.title)).toEqual(["High School", "Middle School"]);
     expect(copied.slots).toHaveLength(1);
     expect(copied.slots[0]).toMatchObject({ subject: "Mathematics", examDate: "2026-12-14", printedAt: null, paper: null });

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Lock, Pencil, Printer, Send, Undo2 } from "lucide-react";
+import { ArrowLeft, CalendarDays, ListChecks, Lock, Pencil, Printer, Send, Table2, Undo2, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 import { DateSheetBuilder } from "@/components/exams/DateSheetBuilder";
@@ -15,10 +15,10 @@ import type { ExamView } from "@/lib/exams/types";
 import type { AcademicClassDto } from "@/lib/types";
 
 type Tab = "setup" | "calendar" | "sheet";
-const TABS: { id: Tab; label: string }[] = [
-  { id: "setup", label: "Setup" },
-  { id: "calendar", label: "Calendar" },
-  { id: "sheet", label: "Date sheet" },
+const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
+  { id: "calendar", label: "Calendar", icon: CalendarDays },
+  { id: "sheet", label: "Date sheet", icon: Table2 },
+  { id: "setup", label: "Checklist", icon: ListChecks },
 ];
 
 export default function ExamPage({ params }: PageProps<"/exams/[id]">) {
@@ -29,11 +29,12 @@ export default function ExamPage({ params }: PageProps<"/exams/[id]">) {
   const [exam, setExam] = useState<ExamView | null>(null);
   const [classes, setClasses] = useState<AcademicClassDto[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTabState] = useState<Tab>("calendar");
+  // null until the exam loads (unless the URL names a tab)
+  const [tab, setTabState] = useState<Tab | null>(null);
 
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get("tab");
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- load on mount; state is set after the fetch resolves
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- read the URL once on mount
     if (t === "sheet" || t === "calendar" || t === "setup") setTabState(t);
   }, []);
 
@@ -48,6 +49,8 @@ export default function ExamPage({ params }: PageProps<"/exams/[id]">) {
     try {
       const view = await api<ExamView>(`/api/exams/${id}`);
       setExam(view);
+      // picked once: an exam with papers opens on its calendar, an empty one on its date sheet
+      setTabState((t) => t ?? (view.slots.length ? "calendar" : "sheet"));
       const all = await api<AcademicClassDto[]>(`/api/classes?session=${encodeURIComponent(view.academicSession)}`);
       setClasses([...all].sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name, undefined, { numeric: true })));
     } catch (e) {
@@ -93,43 +96,50 @@ export default function ExamPage({ params }: PageProps<"/exams/[id]">) {
   if (error) return <ErrorBanner message={error} />;
   if (!exam) return <ListSkeleton />;
 
+  const circulated = exam.status === "CIRCULATED";
+  const current = tab ?? "calendar";
+
   return (
     <div className="space-y-5">
-      <Link href="/exams" className="inline-flex items-center gap-1 text-sm text-slate-600 hover:text-slate-900">
-        <ArrowLeft size={14} /> Exams
-      </Link>
-
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <h1 className="font-display text-lg font-bold text-slate-900 sm:text-2xl">{exam.name}</h1>
-          <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
-            <span>{EXAM_TYPE_LABEL[exam.examType as ExamType] ?? exam.examType}</span>
-            <span aria-hidden>·</span>
-            <span>Session {exam.academicSession}</span>
-            <span
-              className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${exam.status === "CIRCULATED" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}
-            >
-              {exam.status === "CIRCULATED" ? "Circulated" : "Draft"}
-            </span>
+      <header className="space-y-3">
+        <Link href="/exams" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-900">
+          <ArrowLeft size={14} /> All exams
+        </Link>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="font-display text-xl font-bold text-slate-900 sm:text-2xl">{exam.name}</h1>
+              <span
+                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${circulated ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-amber-50 text-amber-800 ring-amber-200"}`}
+              >
+                <span className={`h-1.5 w-1.5 rounded-full ${circulated ? "bg-emerald-500" : "bg-amber-500"}`} />
+                {circulated ? "Circulated" : "Draft"}
+              </span>
+            </div>
+            <p className="text-sm text-slate-500">
+              {EXAM_TYPE_LABEL[exam.examType as ExamType] ?? exam.examType} · Session {exam.academicSession}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(true)}>
-              <Pencil size={13} /> Edit details
+              <Pencil size={14} /> Edit details
             </button>
-            <button type="button" className="btn btn-ghost btn-sm" disabled={saving} onClick={toggleStatus}>
-              {exam.status === "CIRCULATED" ? (
+            <button type="button" className="btn btn-secondary btn-sm" disabled={saving} onClick={toggleStatus}>
+              {circulated ? (
                 <>
-                  <Undo2 size={13} /> Back to draft
+                  <Undo2 size={14} /> Back to draft
                 </>
               ) : (
                 <>
-                  <Send size={13} /> Mark circulated
+                  <Send size={14} /> Mark circulated
                 </>
               )}
             </button>
+            <Link href={`/exams/${id}/print`} className="btn btn-primary btn-sm" target="_blank">
+              <Printer size={14} /> Print date sheet
+            </Link>
           </div>
         </div>
-        <Link href={`/exams/${id}/print`} className="btn btn-primary" target="_blank">
-          <Printer size={15} /> Print date sheet
-        </Link>
       </header>
 
       {editing && (
@@ -151,27 +161,27 @@ export default function ExamPage({ params }: PageProps<"/exams/[id]">) {
         />
       )}
 
-      <nav className="flex gap-1 border-b border-slate-200" aria-label="Exam views">
+      <nav className="inline-flex rounded-xl bg-slate-100 p-1" aria-label="Exam views">
         {TABS.map((t) => (
           <button
             key={t.id}
             type="button"
-            aria-current={tab === t.id ? "page" : undefined}
-            className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold ${tab === t.id ? "border-indigo-600 text-indigo-700" : "border-transparent text-slate-600 hover:text-slate-900"}`}
+            aria-current={current === t.id ? "page" : undefined}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-semibold transition ${current === t.id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
             onClick={() => setTab(t.id)}
           >
-            {t.label}
+            <t.icon size={15} /> {t.label}
           </button>
         ))}
       </nav>
 
-      {tab === "setup" && <SetupChecklist exam={exam} isAdmin={gate.isAdmin} onChange={setExam} onEditSheet={() => setTab("sheet")} />}
-      {tab === "calendar" && <ExamCalendar exam={exam} isAdmin={gate.isAdmin} onChange={setExam} onEditSheet={() => setTab("sheet")} />}
-      {tab === "sheet" && (
+      {current === "setup" && <SetupChecklist exam={exam} isAdmin={gate.isAdmin} onChange={setExam} onEditSheet={() => setTab("sheet")} />}
+      {current === "calendar" && <ExamCalendar exam={exam} isAdmin={gate.isAdmin} onChange={setExam} onEditSheet={() => setTab("sheet")} />}
+      {current === "sheet" && (
         <>
           {exam.status === "CIRCULATED" && (
-            <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-              Already circulated — reprint and recirculate the date sheet after changes.
+            <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              This date sheet is already circulated. Reprint and recirculate it after making changes.
             </p>
           )}
           <DateSheetBuilder exam={exam} classes={classes} onChange={setExam} />

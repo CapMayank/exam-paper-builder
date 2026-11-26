@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { daysUntil, formatDMY, monthGrid, todayIST, weekdayName } from "./dates";
+import { daysUntil, formatDMY, monthGrid, nextExamDay, shortDateLabel, todayIST, weekdayName } from "./dates";
 
 describe("todayIST", () => {
   it("is the next day just after midnight in India while UTC is still on the previous day", () => {
@@ -44,5 +44,23 @@ describe("monthGrid", () => {
   });
   it("is empty without dates", () => {
     expect(monthGrid([])).toEqual([]);
+  });
+});
+
+describe("shortDateLabel", () => {
+  it("shows weekday, day and month", () => {
+    expect(shortDateLabel("2026-12-10")).toBe("Thu, 10 Dec");
+  });
+});
+
+describe("nextExamDay", () => {
+  it("is the following day", () => {
+    expect(nextExamDay("2026-12-10")).toBe("2026-12-11");
+  });
+  it("skips Sundays", () => {
+    expect(nextExamDay("2026-12-12")).toBe("2026-12-14");
+  });
+  it("skips dates already taken", () => {
+    expect(nextExamDay("2026-12-10", ["2026-12-11", "2026-12-12"])).toBe("2026-12-14");
   });
 });

@@ -43,7 +43,7 @@ describe("copyLayout", () => {
     paper: null, hasBlueprint: true, printedAt: null, printedByName: null, printedPaperAt: null, dateChangedAfterPrint: false, status: "NO_PAPER", warnings: [],
   };
   const exam: ExamView = {
-    id: "e1", name: "Half Yearly", examType: "HALF_YEARLY", academicSession: "2026–27", status: "CIRCULATED", signatureMode: "SIGNED",
+    id: "e1", name: "Half Yearly", examType: "HALF_YEARLY", academicSession: "2026–27", status: "CIRCULATED", signatureMode: "SIGNED", showInstructions: false, instructions: "",
     blocks: [middle, high],
     slots: [
       { ...base, id: "s1", blockId: "b1", className: "Class 12", subject: "Chemistry", examDate: "2026-12-10", paper: { id: "p1", title: "Chem", status: "FINAL", updatedAt: "x" }, printedAt: "2026-12-01T00:00:00Z", status: "PRINTED" },

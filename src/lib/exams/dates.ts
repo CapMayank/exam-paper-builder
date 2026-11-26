@@ -48,3 +48,22 @@ export function monthGrid(dates: string[]): { month: string; weeks: (string | nu
     return { month: `${MONTHS[m - 1]} ${y}`, weeks };
   });
 }
+
+const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "2026-12-10" → "Thu, 10 Dec": the compact label the date sheet editor shows. */
+export function shortDateLabel(date: string): string {
+  const d = utc(date);
+  return `${WEEKDAYS[d.getUTCDay()].slice(0, 3)}, ${d.getUTCDate()} ${SHORT_MONTHS[d.getUTCMonth()]}`;
+}
+
+/** The next exam day after `date`, skipping Sundays and any date in `taken`. */
+export function nextExamDay(date: string, taken: string[] = []): string {
+  const skip = new Set(taken);
+  let t = utc(date).getTime();
+  for (;;) {
+    t += DAY_MS;
+    const d = new Date(t);
+    if (d.getUTCDay() !== 0 && !skip.has(ymd(d))) return ymd(d);
+  }
+}

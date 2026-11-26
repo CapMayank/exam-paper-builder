@@ -297,6 +297,8 @@ model Exam {
   academicSession String
   status          String      @default("DRAFT")   // DRAFT | CIRCULATED
   signatureMode   String      @default("SIGNED")  // SIGNED | BLANK
+  showInstructions Boolean    @default(false)     // print the instructions under the date sheet
+  instructions    String      @default("")        // one instruction per line
   createdById     String
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt

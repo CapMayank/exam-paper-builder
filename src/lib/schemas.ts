@@ -385,6 +385,8 @@ export const examUpdateSchema = z
     academicSession: examSession,
     status: z.enum(["DRAFT", "CIRCULATED"]),
     signatureMode: z.enum(["SIGNED", "BLANK"]),
+    showInstructions: z.boolean(),
+    instructions: z.string().max(2000),
   })
   .partial();
 
