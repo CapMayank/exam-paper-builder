@@ -169,7 +169,7 @@ export function MathToolbar({
   return (
     <div className="rounded-lg border border-indigo-100 bg-indigo-50/40 p-2 text-xs">
       {/* Top Header Row with Categories & Toggle */}
-      <div className="flex flex-wrap items-center justify-between gap-1.5 pb-1.5 border-b border-indigo-100/80">
+      <div className="flex flex-wrap items-center justify-between gap-1.5 pb-1.5 pr-7 border-b border-indigo-100/80">
         <div className="flex items-center gap-1.5 font-semibold text-indigo-950">
           <Calculator size={13} className="text-indigo-600" />
           <span>Math Assistant:</span>
@@ -280,7 +280,7 @@ export function MathToolbar({
       </div>
 
       {/* Buttons Palette */}
-      <div className="pt-2 flex flex-wrap gap-1.5 items-center">
+      <div className="scroll-thin -mx-2 flex items-center gap-1.5 overflow-x-auto px-2 pt-2 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0 [&>*]:shrink-0">
         {activeTab !== "tables" &&
           SNIPPETS[activeTab as keyof typeof SNIPPETS]?.map((s) => (
             <button
@@ -304,6 +304,8 @@ export function MathToolbar({
 
       {/* Table Generator Modal */}
       <TableModal
+        // the mode is read once on mount, so remount when "+ Table" / "+ Stat Table" asks for the other one
+        key={tableModalMode}
         isOpen={showTableModal}
         onClose={() => setShowTableModal(false)}
         onInsert={onInsert}

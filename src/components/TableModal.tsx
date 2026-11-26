@@ -147,8 +147,20 @@ export function TableModal({
       title="Insert Table into Question"
       subtitle="Design a custom table with required rows and columns, or a board-standard statistics table."
       onClose={onClose}
+      size="lg"
+      footer={
+        <>
+          <button type="button" className="btn" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="button" className="btn btn-primary flex items-center gap-1.5" onClick={handleInsert}>
+            <Plus size={14} />
+            Insert Table into Question
+          </button>
+        </>
+      }
     >
-      <div className="space-y-4 max-h-[80vh] overflow-y-auto pr-1">
+      <div className="space-y-4">
         {/* Mode Selector Tabs */}
         <div className="flex border-b border-slate-200">
           <button
@@ -403,7 +415,7 @@ export function TableModal({
         {/* MODE 2: CBSE STATISTICS TABLE */}
         {mode === "stat" && (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label className="label">Header 1 (Row 1 - Interval)</label>
                 <input
@@ -442,12 +454,12 @@ export function TableModal({
                 </button>
               </div>
 
-              <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+              <div className="space-y-1.5">
                 {statCols.map((r, i) => (
                   <div key={i} className="flex items-center gap-2">
-                    <span className="w-6 text-xs text-slate-400">#{i + 1}</span>
+                    <span className="w-6 shrink-0 text-xs text-slate-400">#{i + 1}</span>
                     <input
-                      className="input text-xs flex-1"
+                      className="input min-w-0 flex-1 text-xs"
                       placeholder="e.g. 0-10"
                       value={r.col1}
                       onChange={(e) => {
@@ -457,7 +469,7 @@ export function TableModal({
                       }}
                     />
                     <input
-                      className="input text-xs w-28"
+                      className="input w-24 shrink-0 text-xs sm:w-28"
                       placeholder="Frequency"
                       value={r.col2}
                       onChange={(e) => {
@@ -493,21 +505,6 @@ export function TableModal({
           <div className="overflow-x-auto py-1">
             <QuestionContent text={previewSnippet} />
           </div>
-        </div>
-
-        {/* Footer Actions */}
-        <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
-          <button type="button" className="btn" onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary flex items-center gap-1.5"
-            onClick={handleInsert}
-          >
-            <Plus size={14} />
-            Insert Table into Question
-          </button>
         </div>
       </div>
     </Modal>

@@ -966,9 +966,10 @@ export function QuestionForm({
           </div>
 
           {/* Maths toolbar: a direct child of the form, so it stays pinned to the top of the modal all the way down
-              to the options, match rows and parts (tall windows only; on short ones it would cover the field). */}
+              to the options, match rows and parts. Only on windows that are both wide and tall: on phones and short laptop
+              screens a pinned bar covers most of the form, so there it scrolls away with the content. */}
           {mathBarOpen && (
-            <div className="z-20 -mx-5 !mt-1.5 border-b border-slate-200 bg-white/95 px-5 py-1.5 shadow-[0_6px_12px_-10px_rgb(15_23_42/0.35)] backdrop-blur-xs [@media(min-height:640px)]:sticky [@media(min-height:640px)]:-top-5">
+            <div className="z-20 -mx-5 !mt-1.5 border-b border-slate-200 bg-white/95 px-5 py-1.5 shadow-[0_6px_12px_-10px_rgb(15_23_42/0.35)] backdrop-blur-xs [@media(min-width:640px)_and_(min-height:820px)]:sticky [@media(min-width:640px)_and_(min-height:820px)]:-top-5">
               <div className="relative">
                 <MathToolbar onInsert={handleInsertSnippet} onNewFormula={handleNewFormula} />
                 <button
@@ -1027,15 +1028,18 @@ export function QuestionForm({
           </div>
 
           <div className="space-y-2">
-            <div className="grid grid-cols-12 gap-2 px-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            <div className="hidden grid-cols-12 gap-2 px-1 text-[11px] font-bold uppercase tracking-wider text-slate-500 sm:grid">
               <div className="col-span-6">Column A (स्तम्भ &apos;अ&apos;)</div>
               <div className="col-span-5">Column B (स्तम्भ &apos;ब&apos;)</div>
               <div className="col-span-1 text-right"></div>
             </div>
             {matchPairs.map((pair, idx) => (
-              <div key={idx} className="grid grid-cols-12 items-center gap-2">
-                <div className="col-span-6 flex items-center gap-1.5">
-                  <span className="w-6 text-xs font-bold text-slate-600">
+              <div
+                key={idx}
+                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1.5 border-b border-slate-200/70 pb-2 last:border-b-0 last:pb-0 sm:grid-cols-12 sm:gap-y-2 sm:border-b-0 sm:pb-0"
+              >
+                <div className="col-start-1 flex min-w-0 items-center gap-1.5 sm:col-span-6">
+                  <span className="w-6 shrink-0 text-xs font-bold text-slate-600">
                     ({LETTERS[idx] ?? String.fromCharCode(65 + idx)})
                   </span>
                   <MathRichEditor
@@ -1046,8 +1050,8 @@ export function QuestionForm({
                     onChange={(v) => setMatchPairs((pairs) => pairs.map((p, j) => (j === idx ? { ...p, left: v } : p)))}
                   />
                 </div>
-                <div className="col-span-5 flex items-center gap-1.5">
-                  <span className="w-6 text-xs font-bold text-slate-600">
+                <div className="col-start-1 flex min-w-0 items-center gap-1.5 sm:col-span-5 sm:col-start-auto">
+                  <span className="w-6 shrink-0 text-xs font-bold text-slate-600">
                     {ROMAN_LABELS[idx] ?? `(${idx + 1})`}
                   </span>
                   <MathRichEditor
@@ -1058,7 +1062,7 @@ export function QuestionForm({
                     onChange={(v) => setMatchPairs((pairs) => pairs.map((p, j) => (j === idx ? { ...p, right: v } : p)))}
                   />
                 </div>
-                <div className="col-span-1 flex justify-end">
+                <div className="col-start-2 row-span-2 row-start-1 flex justify-end sm:col-span-1 sm:col-start-auto sm:row-span-1 sm:row-start-auto">
                   <button
                     type="button"
                     disabled={matchPairs.length <= MIN_OPTIONS}
@@ -1205,7 +1209,7 @@ export function QuestionForm({
                 key={i}
                 className="rounded-lg border border-slate-200 bg-white p-3 shadow-2xs space-y-2 transition"
               >
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold text-slate-700">Part</span>
                     <input
