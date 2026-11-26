@@ -281,9 +281,13 @@ export async function setCell(
   const candidates = await candidatesFor(exam, { className: input.className, subject: input.subject });
   const pick = pickPaper(candidates);
   const data = { subject: input.subject, paperId: pick.paperId, printedAt: null, printedById: null, printedPaperAt: null, dateChangedAfterPrint: false };
-  const slot = existing
-    ? await prisma.examSlot.update({ where, data })
-    : await prisma.examSlot.create({ data: { examId, blockId: input.blockId, className: input.className, examDate: input.date, ...data } });
+  const save = (d: typeof data) =>
+    existing
+      ? prisma.examSlot.update({ where, data: d })
+      : prisma.examSlot.create({ data: { examId, blockId: input.blockId, className: input.className, examDate: input.date, ...d } });
+  // the auto-picked paper may have been linked elsewhere a moment ago: then start this cell without a paper
+  const slot = await save(data).catch((e) => (isUniqueViolation(e) ? save({ ...data, paperId: null }) : Promise.reject(e)));
+  if (slot.paperId !== pick.paperId) pick.paperId = null;
   if (pick.paperId) await syncLinkedPaper(slot.id, user);
   await recordAudit(user, "EXAM_UPDATE", "EXAM", examId, { cell: `${input.className} ${input.date}`, subject: input.subject, paperId: pick.paperId });
   return { exam: await loadExamView(examId), ...(pick.ambiguous ? { ambiguousCandidates: candidates } : {}) };
@@ -317,7 +321,13 @@ export async function setSlotPaper(examId: string, slotId: string, paperId: stri
     const other = await prisma.examSlot.findFirst({ where: { paperId, NOT: { id: slotId } }, include: { exam: { select: { name: true } } } });
     if (other) throw new HttpError(400, `That paper is already on ${other.exam.name} (${other.className}, ${formatDMY(other.examDate)})`);
   }
-  await prisma.examSlot.update({ where: { id: slotId }, data: { paperId } });
+  try {
+    await prisma.examSlot.update({ where: { id: slotId }, data: { paperId } });
+  } catch (e) {
+    // another tab linked the same paper a moment ago: the database keeps one paper on one slot
+    if (isUniqueViolation(e)) throw new HttpError(400, "That paper was just linked to another exam day. Reload to see where.");
+    throw e;
+  }
   if (paperId) await syncLinkedPaper(slotId, user);
   await recordAudit(user, "EXAM_UPDATE", "EXAM", examId, { slotId, paperId });
   return loadExamView(examId);
@@ -364,6 +374,10 @@ export async function setSignature(fileName: string | null, user: SessionUser) {
   }
   await recordAudit(user, "EXAM_UPDATE", "SYSTEM", null, { principalSignature: fileName ? "uploaded" : "removed" });
   return { fileName };
+}
+
+function isUniqueViolation(e: unknown): boolean {
+  return typeof e === "object" && e !== null && (e as { code?: string }).code === "P2002";
 }
 
 type SetupRow = { bookId: string; className: string; subject: string };
@@ -432,7 +446,7 @@ export async function createMissingDrafts(examId: string, user: SessionUser, onl
     // link only if the slot is still empty: a second click (or tab) that got there first keeps its paper
     const claimed = await prisma.examSlot.updateMany({ where: { id: slot.id, paperId: null }, data: { paperId: paper.id } });
     if (claimed.count === 0) {
-      await prisma.paper.delete({ where: { id: paper.id } });
+      await prisma.paper.delete({ where: { id: paper.id } }).catch((e) => console.error("Could not remove a duplicate draft", paper.id, e));
       continue;
     }
     created++;

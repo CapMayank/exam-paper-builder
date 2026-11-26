@@ -33,8 +33,12 @@ export function DateSheetBuilder({ exam, classes, onChange }: { exam: ExamView; 
     }
   }
 
-  const patchBlock = (b: BlockView, patch: Record<string, unknown>) =>
-    run(async () => onChange(await api<ExamView>(`/api/exams/${exam.id}/blocks/${b.id}`, { method: "PATCH", json: patch })));
+  /** Resolves true once saved; false (after showing why) when the server refused it. */
+  const patchBlock = async (b: BlockView, patch: Record<string, unknown>): Promise<boolean> =>
+    (await run(async () => {
+      onChange(await api<ExamView>(`/api/exams/${exam.id}/blocks/${b.id}`, { method: "PATCH", json: patch }));
+      return true;
+    })) === true;
 
   const addBlock = () =>
     run(async () =>
@@ -137,7 +141,7 @@ export function DateSheetBuilder({ exam, classes, onChange }: { exam: ExamView; 
                     {b.dates.map((d) => (
                       <th key={d} className="min-w-[150px] border border-slate-200 bg-slate-50 px-1.5 py-1 align-top">
                         <div className="flex items-center gap-1">
-                          <DateInput key={d} value={d} label="Exam date" onCommit={(to) => to !== d && patchBlock(b, { moveDate: { from: d, to } })} />
+                          <DateInput key={d} value={d} label="Exam date" onCommit={(to) => patchBlock(b, { moveDate: { from: d, to } })} />
                           <button type="button" className="btn btn-icon btn-ghost" title="Remove date" onClick={() => removeDate(b, d)}>
                             <X size={13} />
                           </button>
@@ -243,16 +247,18 @@ export function DateSheetBuilder({ exam, classes, onChange }: { exam: ExamView; 
 }
 
 /** A date box that saves when you leave it or press Enter, never mid-typing, and only for a sensible year. */
-function DateInput({ value, label, onCommit }: { value: string; label: string; onCommit: (date: string) => void }) {
+function DateInput({ value, label, onCommit }: { value: string; label: string; onCommit: (date: string) => Promise<boolean> }) {
   const [draft, setDraft] = useState(value);
-  const commit = () => {
-    if (!draft || draft === value) return;
+  const commit = async () => {
+    if (draft === value) return;
     const year = Number(draft.slice(0, 4));
-    if (year < 2000 || year > 2100) {
+    // empty, half-typed or an unlikely year: show the saved date again
+    if (!draft || year < 2000 || year > 2100) {
       setDraft(value);
       return;
     }
-    onCommit(draft);
+    // refused by the server (e.g. that date is already in the block): show the saved date again
+    if (!(await onCommit(draft))) setDraft(value);
   };
   return (
     <input

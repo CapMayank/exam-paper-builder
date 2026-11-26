@@ -90,9 +90,8 @@ export function ExamDetailsModal({
         </div>
         {touchesPapers && (
           <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-            {linkedPapers} linked paper{linkedPapers === 1 ? "" : "s"} will move to {typeChanged ? EXAM_TYPE_LABEL[form.examType] : ""}
-            {typeChanged && sessionChanged ? ", " : ""}
-            {sessionChanged ? `session ${form.academicSession}` : ""} when you save.
+            {linkedPapers} linked paper{linkedPapers === 1 ? "" : "s"} will change to{" "}
+            {[typeChanged ? EXAM_TYPE_LABEL[form.examType] : null, sessionChanged ? `session ${form.academicSession}` : null].filter(Boolean).join(" and ")} when you save.
           </p>
         )}
         <button type="submit" className="hidden" aria-hidden tabIndex={-1} />

@@ -114,6 +114,8 @@ describe("exams API", () => {
     expect(made.json.academicSession).toBe("2026–27");
     const updated = await as<ExamView>(ids.admin, () => patchExam(req("", "PATCH", { academicSession: " 2027-28 " }), p({ id: made.json.id })));
     expect(updated.json.academicSession).toBe("2027–28");
+    const long = await as<ExamView>(ids.admin, () => patchExam(req("", "PATCH", { academicSession: "2026-2027" }), p({ id: made.json.id })));
+    expect(long.json.academicSession).toBe("2026–27");
   });
 
   it("builds a date sheet, moves a date and tracks printing", async () => {
@@ -328,6 +330,16 @@ describe("exams API", () => {
       const manual = await as<{ error: string }>(ids.admin, () => patchSlot(req("", "PATCH", { paperId: paper.id }), p({ id: second.id, slotId: second.slots[0].id })));
       expect(manual.status).toBe(400);
       expect(manual.json.error).toContain(`First ${stamp}`);
+
+      // two tabs linking the same free paper at once: only one wins, the other gets a clear 400
+      await prisma.examSlot.updateMany({ where: { paperId: paper.id }, data: { paperId: null } });
+      mockSessionUserId = ids.admin;
+      const racing = await Promise.all([
+        patchSlot(req("", "PATCH", { paperId: paper.id }), p({ id: first.id, slotId: first.slots[0].id })),
+        patchSlot(req("", "PATCH", { paperId: paper.id }), p({ id: second.id, slotId: second.slots[0].id })),
+      ]);
+      expect(racing.map((r) => r.status).sort()).toEqual([200, 400]);
+      expect(await prisma.examSlot.count({ where: { paperId: paper.id } })).toBe(1);
     } finally {
       await prisma.examSlot.deleteMany({ where: { className: cls } });
       await prisma.paper.delete({ where: { id: paper.id } });

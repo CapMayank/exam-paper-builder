@@ -366,8 +366,11 @@ const examDate = z
 const examSession = z
   .string()
   .trim()
-  .regex(/^\d{4}\s*[-–]\s*\d{2,4}$/, "Session looks like 2026–27")
-  .transform((v) => v.replace(/\s*[-–]\s*/, "–"));
+  .regex(/^\d{4}\s*[-–]\s*(\d{2}|\d{4})$/, "Session looks like 2026–27")
+  .transform((v) => {
+    const [start, end] = v.split(/\s*[-–]\s*/);
+    return `${start}–${end.slice(-2)}`;
+  });
 
 export const examCreateSchema = z.object({
   name: text(160),

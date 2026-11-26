@@ -325,7 +325,7 @@ model ExamSlot {
   className             String
   subject               String
   examDate              String    // YYYY-MM-DD
-  paperId               String?
+  paperId               String?   @unique // one paper, one exam day
   printedAt             DateTime?
   printedById           String?
   printedPaperAt        DateTime? // paper.updatedAt when marked printed; a later change = "paper since changed"
@@ -336,7 +336,6 @@ model ExamSlot {
 
   @@unique([blockId, className, examDate])
   @@index([examDate])
-  @@index([paperId])
 }
 
 model SchoolSetting {
