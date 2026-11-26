@@ -404,6 +404,57 @@ describe("exams API", () => {
     }
   });
 
+  it("links a free paper after wrong entries are cleared, when made later, and by the paper's own exam type", async () => {
+    const cls = `Exam Relink ${stamp}`;
+    const maths = await prisma.book.create({ data: { title: "Maths", subject: "Mathematics", className: cls, academicSession: "2026–27" } });
+    const english = await prisma.book.create({ data: { title: "English", subject: "English", className: cls, academicSession: "2026–27" } });
+    const hy = await prisma.blueprint.create({ data: { name: "HY", bookId: maths.id, academicSession: "2026–27", examType: "HALF_YEARLY", durationMin: 180 } });
+    // a blueprint made for the annual exam, used for a paper set to Half Yearly
+    const annual = await prisma.blueprint.create({ data: { name: "AN", bookId: english.id, academicSession: "2026–27", examType: "ANNUAL", durationMin: 180 } });
+    const base = { layout: "PAGE", schoolName: "S", academicSession: "2026–27", createdById: ids.admin };
+    const mathsPaper = await prisma.paper.create({ data: { ...base, title: "HY Maths", blueprintId: hy.id, examType: "HALF_YEARLY" } });
+    try {
+      const made = await as<ExamView>(ids.admin, () => createExam(req("/api/exams", "POST", { name: `Relink ${stamp}`, examType: "HALF_YEARLY", academicSession: "2026–27" }), p()));
+      const examId = made.json.id;
+      examIds.push(examId);
+      const b = (await as<ExamView>(ids.admin, () => addBlock(req("", "POST", { title: "Only", timeText: "" }), p({ id: examId })))).json.blocks[0].id;
+      for (const date of ["2026-12-10", "2026-12-11", "2026-12-12"]) await as(ids.admin, () => patchBlock(req("", "PATCH", { addDate: date }), p({ id: examId, blockId: b })));
+      await as(ids.admin, () => patchBlock(req("", "PATCH", { addClass: cls }), p({ id: examId, blockId: b })));
+      const cell = (date: string, subjects: string[]) =>
+        as<{ exam: ExamView }>(ids.admin, () => putCell(req("", "PUT", { blockId: b, className: cls, date, subjects }), p({ id: examId })));
+      const mathsSlot = (v: ExamView) => v.slots.find((x) => x.subject === "Mathematics");
+
+      // the legacy data this fix repairs: Maths entered twice, the paper on the wrong day
+      await cell("2026-12-10", ["Mathematics"]);
+      await prisma.examSlot.create({ data: { examId, blockId: b, className: cls, examDate: "2026-12-11", subject: "Mathematics" } });
+      // clearing the wrong day frees the paper for the right one
+      const cleared = (await cell("2026-12-10", [])).json.exam;
+      expect(mathsSlot(cleared)?.examDate).toBe("2026-12-11");
+      expect(mathsSlot(cleared)?.paper?.id).toBe(mathsPaper.id);
+      expect((await prisma.paper.findUniqueOrThrow({ where: { id: mathsPaper.id } })).examDate).toBe("2026-12-11");
+
+      // removing the whole day frees it too
+      await cell("2026-12-12", []);
+      await prisma.examSlot.updateMany({ where: { examId, subject: "Mathematics" }, data: { examDate: "2026-12-12" } });
+      await prisma.examSlot.create({ data: { examId, blockId: b, className: cls, examDate: "2026-12-11", subject: "Mathematics" } });
+      const byDate = (await as<ExamView>(ids.admin, () => patchBlock(req("", "PATCH", { removeDate: "2026-12-12" }), p({ id: examId, blockId: b })))).json;
+      expect(mathsSlot(byDate)?.examDate).toBe("2026-12-11");
+      expect(mathsSlot(byDate)?.paper?.id).toBe(mathsPaper.id);
+
+      // English placed before its paper exists; the paper is set to Half Yearly though its blueprint is Annual
+      const placed = (await cell("2026-12-10", ["English"])).json.exam;
+      expect(placed.slots.find((x) => x.subject === "English")?.paper).toBeNull();
+      const englishPaper = await prisma.paper.create({ data: { ...base, title: "HY English", blueprintId: annual.id, examType: "HALF_YEARLY" } });
+      const opened = (await as<ExamView>(ids.admin, () => getExam(req("", "GET"), p({ id: examId })))).json;
+      expect(opened.slots.find((x) => x.subject === "English")?.paper?.id).toBe(englishPaper.id);
+    } finally {
+      await prisma.examSlot.deleteMany({ where: { className: cls } });
+      await prisma.paper.deleteMany({ where: { blueprintId: { in: [hy.id, annual.id] } } });
+      await prisma.blueprint.deleteMany({ where: { id: { in: [hy.id, annual.id] } } });
+      await prisma.book.deleteMany({ where: { id: { in: [maths.id, english.id] } } });
+    }
+  });
+
   it("never links one paper to two date-sheet slots", async () => {
     const cls = `Exam Shared ${stamp}`;
     const book = await prisma.book.create({ data: { title: "Maths", subject: "Mathematics", className: cls, academicSession: "2026–27" } });

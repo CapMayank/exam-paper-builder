@@ -2,7 +2,7 @@ import "server-only";
 import type { Prisma } from "@prisma/client";
 import { HttpError, type SessionUser } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
-import { DEFAULT_SCHOOL_NAME } from "@/lib/constants";
+import { DEFAULT_SCHOOL_NAME, resolvePaperExamType } from "@/lib/constants";
 import { createPaperFromBlueprint } from "@/lib/paperCreate";
 import { prisma } from "@/lib/prisma";
 import { paperCreateSchema } from "@/lib/schemas";
@@ -11,7 +11,7 @@ import { isSubjectMatching } from "@/lib/schoolCurriculum";
 import { importIntoSubjectBook } from "@/lib/subjectBooks";
 import { formatDMY, todayIST } from "./dates";
 import { checkAddClass, checkAddDate, checkCellSubjects, checkMoveDate, copyLayout } from "./grid";
-import { filterByExamType, paperCandidateWhere, pickPaper } from "./paperMatch";
+import { paperCandidateWhere, pickPaper } from "./paperMatch";
 import { examSummary, slotStatus, slotWarnings } from "./status";
 import { cellDuration, paperSyncFields } from "./sync";
 import type { BlockView, ExamListItem, ExamStatus, ExamView, SignatureMode, SlotView } from "./types";
@@ -129,6 +129,7 @@ export async function updateExam(
     for (const s of linked) await syncLinkedPaper(s.id, user, id);
   }
   await recordAudit(user, "EXAM_UPDATE", "EXAM", id, input);
+  if (input.examType !== undefined || input.academicSession !== undefined) await linkFreePapers(id, user);
   return loadExamView(id);
 }
 
@@ -190,6 +191,7 @@ export async function deleteBlock(examId: string, blockId: string, user: Session
   ]);
   await releasePapers(released);
   await recordAudit(user, "EXAM_UPDATE", "EXAM", examId, { deleteBlock: block.title });
+  await linkFreePapers(examId, user);
   return loadExamView(examId);
 }
 
@@ -256,6 +258,7 @@ export async function patchBlock(examId: string, blockId: string, patch: BlockPa
     await releasePapers(released);
   }
   await recordAudit(user, "EXAM_UPDATE", "EXAM", examId, { block: block.title, ...patch });
+  if ("removeDate" in patch || "removeClass" in patch) await linkFreePapers(examId, user);
   return loadExamView(examId);
 }
 
@@ -274,7 +277,45 @@ async function candidatesFor(exam: { examType: string; academicSession: string }
     select: { id: true, title: true, paperSet: true, examType: true, blueprint: { select: { examType: true } } },
     orderBy: { updatedAt: "desc" },
   });
-  return filterByExamType(papers, exam.examType).map((p) => ({ id: p.id, title: p.title, paperSet: p.paperSet }));
+  // a paper set to this exam's type counts even when its blueprint was made for another one
+  return papers
+    .filter((p) => p.examType === exam.examType || resolvePaperExamType(p) === exam.examType)
+    .map((p) => ({ id: p.id, title: p.title, paperSet: p.paperSet }));
+}
+
+/**
+ * Links every empty slot of the exam that has exactly one free matching paper. Linking used to happen only when a
+ * subject was first placed, so a paper freed by a later edit (a repeated subject or a wrong date removed), made after
+ * the slot, or matching only after the exam's type or session changed stayed unlinked.
+ */
+export async function linkFreePapers(examId: string, user: SessionUser): Promise<number> {
+  const exam = await prisma.exam.findUnique({
+    where: { id: examId },
+    include: { slots: { where: { paperId: null }, orderBy: [{ examDate: "asc" }, { id: "asc" }] } },
+  });
+  if (!exam || !exam.slots.length) return 0;
+  let linked = 0;
+  const tried = new Set<string>();
+  for (const slot of exam.slots) {
+    // one paper fills one slot, so a class-subject that appears twice links only its first slot
+    const key = `${slot.className}|${slot.subject}`;
+    if (tried.has(key)) continue;
+    tried.add(key);
+    const pick = pickPaper(await candidatesFor(exam, slot));
+    if (!pick.paperId) continue;
+    try {
+      const claimed = await prisma.examSlot.updateMany({ where: { id: slot.id, paperId: null }, data: { paperId: pick.paperId } });
+      if (!claimed.count) continue;
+    } catch (e) {
+      // linked elsewhere a moment ago
+      if (isUniqueViolation(e)) continue;
+      throw e;
+    }
+    await syncLinkedPaper(slot.id, user, examId);
+    linked++;
+  }
+  if (linked) await recordAudit(user, "EXAM_UPDATE", "EXAM", examId, { autoLinkedPapers: linked });
+  return linked;
 }
 
 /**
@@ -319,6 +360,8 @@ export async function setCell(
   if (dropped.length || added.length) {
     await recordAudit(user, "EXAM_UPDATE", "EXAM", examId, { cell: `${input.className} ${input.date}`, subjects: input.subjects });
   }
+  // a paper this edit freed can now fill another slot
+  if (dropped.length) await linkFreePapers(examId, user);
   return { exam: await loadExamView(examId), ...(ambiguousCandidates ? { ambiguousCandidates } : {}) };
 }
 
