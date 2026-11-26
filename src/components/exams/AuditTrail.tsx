@@ -25,6 +25,7 @@ export function AuditTrail() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- load on mount; state is set after the fetch resolves
     void load();
   }, [load]);
 
