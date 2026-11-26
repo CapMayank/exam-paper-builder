@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, CalendarDays, FilePlus2, FileText, Printer, Ruler } from "lucide-react";
+import { ArrowRight, BookPlus, CalendarDays, FilePlus2, FileText, Printer, Ruler } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useToast } from "@/components/ui";
@@ -9,7 +9,10 @@ import { EXAM_TYPE_LABEL, type ExamType } from "@/lib/constants";
 import { shortClassLabel } from "@/lib/exams/labels";
 import type { ExamView } from "@/lib/exams/types";
 
-type Setup = { missingBlueprints: { bookId: string; className: string; subject: string }[]; noBook: { className: string; subject: string }[] };
+type Setup = {
+  missingBlueprints: { bookId: string; className: string; subject: string }[];
+  noBook: { className: string; subject: string; presetAvailable: boolean }[];
+};
 type DraftResult = { created: number; skipped: { slotId: string; reason: string }[]; exam: ExamView };
 
 function Step({ n, icon, title, done, total, children }: { n: number; icon: ReactNode; title: string; done: number; total: number; children?: ReactNode }) {
@@ -74,6 +77,20 @@ export function SetupChecklist({ exam, isAdmin, onChange, onEditSheet }: { exam:
     ? `/blueprints/setup?${new URLSearchParams({ examType: exam.examType, session: exam.academicSession, books: setup.missingBlueprints.map((m) => m.bookId).join(",") })}`
     : null;
 
+  const fromPresets = setup?.noBook.filter((m) => m.presetAvailable).length ?? 0;
+  const addBooks = async () => {
+    setBusy(true);
+    try {
+      const r = await api<{ added: string[]; setup: Setup }>(`/api/exams/${exam.id}/add-books`, { method: "POST", json: {} });
+      setSetup(r.setup);
+      toast.success(r.added.length ? `Added ${r.added.length} book${r.added.length === 1 ? "" : "s"} from presets. Set up their blueprints next.` : "No books to add.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not add the books");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const createDrafts = async () => {
     setBusy(true);
     try {
@@ -126,6 +143,11 @@ export function SetupChecklist({ exam, isAdmin, onChange, onEditSheet }: { exam:
                   </Link>{" "}
                   first.
                 </p>
+                {isAdmin && fromPresets > 0 && (
+                  <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={addBooks}>
+                    <BookPlus size={14} /> Add {fromPresets} book{fromPresets === 1 ? "" : "s"} from presets (e.g. GK, Drawing)
+                  </button>
+                )}
                 <List items={setup.noBook} />
               </div>
             )}

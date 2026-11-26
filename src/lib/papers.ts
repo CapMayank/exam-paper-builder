@@ -162,6 +162,8 @@ export async function loadPaperView(id: string) {
   // slots this paper moved between same-mark sections (flexible marks): the section counts every consumer reads
   const blueprint = {
     ...stored,
+    // the exam date sheet's time, when set, is the time this paper prints; the blueprint row is never changed
+    durationMin: paper.durationMin ?? stored.durationMin,
     sections: applySlotDeltas(
       stored.sections.map((s) => withEffectiveAllowedTypes(s, stored.book)),
       paper.slotMoves,

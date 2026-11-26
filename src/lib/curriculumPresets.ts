@@ -1,4 +1,5 @@
 import type { StandardCurriculumPreset } from "./syllabusImport";
+import { MINOR_SUBJECT_BOOK_PRESETS } from "./minorSubjectPresets";
 import { SCHOOL_CLASS_1_TO_8_PRESETS } from "./schoolBookPresets";
 
 export const STANDARD_CURRICULUM_PRESETS: StandardCurriculumPreset[] = [
@@ -191,6 +192,8 @@ export const STANDARD_CURRICULUM_PRESETS: StandardCurriculumPreset[] = [
   // CLASSES 1-8: the school's own textbooks (see schoolBookPresets.ts)
   // ==========================================
   ...SCHOOL_CLASS_1_TO_8_PRESETS,
+  // General Knowledge and Drawing, Nursery to Class 8 (topic lists: the school uses no textbook)
+  ...MINOR_SUBJECT_BOOK_PRESETS,
 
   // ==========================================
   // CLASS 9 (Secondary)

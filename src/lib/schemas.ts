@@ -405,12 +405,17 @@ export const examBlockPatchSchema = z.union([
   z.object({ removeClass: text(60) }).strict(),
 ]);
 
-export const examCellSchema = z.object({
-  blockId: z.string().min(1),
-  className: text(60),
-  date: examDate,
-  subject: z.string().trim().min(1).max(80).nullable(),
-});
+/** One cell: `subjects` (none, one, or two papers sharing the day); the older `subject` (one or null) still works. */
+export const examCellSchema = z
+  .object({
+    blockId: z.string().min(1),
+    className: text(60),
+    date: examDate,
+    subjects: z.array(z.string().trim().min(1).max(80)).max(5).optional(),
+    subject: z.string().trim().min(1).max(80).nullable().optional(),
+  })
+  .refine((v) => v.subjects !== undefined || v.subject !== undefined, "Give the cell's subjects")
+  .transform(({ subject, subjects, ...rest }) => ({ ...rest, subjects: subjects ?? (subject ? [subject] : []) }));
 
 export const examSlotPatchSchema = z.union([
   z.object({ paperId: z.string().min(1).nullable() }).strict(),

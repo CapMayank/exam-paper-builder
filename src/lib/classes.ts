@@ -126,11 +126,27 @@ export async function ensureClassAndSubject(
  * Makes sure every class of 9-12 has the school's required subjects (e.g. Disaster Management).
  * Only adds what is missing; nothing is removed, so books and papers of other subjects stay intact.
  */
+/** Subjects every class from Nursery to Class 8 has, besides those of its books. */
+export const MINOR_SUBJECTS = ["General Knowledge", "Drawing"] as const;
+
 export async function ensureSchoolSubjects(sessionFilter?: string | null) {
   const where =
     sessionFilter && sessionFilter !== "ALL" ? { academicSession: normalizeAcademicSession(sessionFilter) } : undefined;
   const classes = await prisma.academicClass.findMany({ where, include: { subjects: true } });
   for (const c of classes) {
+    // General Knowledge and Drawing for Nursery to Class 8 (usually examined together on one day)
+    const order = inferClassOrder(c.name);
+    if (order >= -2 && order <= 8) {
+      const have = new Set(c.subjects.map((s) => s.name.trim().toLowerCase()));
+      for (const name of MINOR_SUBJECTS) {
+        if (have.has(name.toLowerCase())) continue;
+        await prisma.classSubject.upsert({
+          where: { classId_name: { classId: c.id, name } },
+          update: {},
+          create: { classId: c.id, name, code: "" },
+        });
+      }
+    }
     const level = classLevelOf(c.name);
     if (!level || !(PROFILE_CLASS_LEVELS as readonly number[]).includes(level)) continue;
     const have = new Set(c.subjects.map((s) => canonicalSubject(s.name)).filter(Boolean));

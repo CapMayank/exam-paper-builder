@@ -1,15 +1,19 @@
 import "server-only";
+import type { Prisma } from "@prisma/client";
 import { HttpError, type SessionUser } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { DEFAULT_SCHOOL_NAME } from "@/lib/constants";
 import { createPaperFromBlueprint } from "@/lib/paperCreate";
 import { prisma } from "@/lib/prisma";
 import { paperCreateSchema } from "@/lib/schemas";
+import { STANDARD_CURRICULUM_PRESETS } from "@/lib/curriculumPresets";
+import { isSubjectMatching } from "@/lib/schoolCurriculum";
+import { importIntoSubjectBook } from "@/lib/subjectBooks";
 import { formatDMY, todayIST } from "./dates";
-import { checkAddClass, checkAddDate, checkMoveDate, copyLayout } from "./grid";
+import { checkAddClass, checkAddDate, checkCellSubjects, checkMoveDate, copyLayout } from "./grid";
 import { filterByExamType, paperCandidateWhere, pickPaper } from "./paperMatch";
 import { examSummary, slotStatus, slotWarnings } from "./status";
-import { paperSyncFields } from "./sync";
+import { cellDuration, paperSyncFields } from "./sync";
 import type { BlockView, ExamListItem, ExamStatus, ExamView, SignatureMode, SlotView } from "./types";
 
 const parseList = (json: string): string[] => {
@@ -24,7 +28,7 @@ const parseList = (json: string): string[] => {
 const examInclude = {
   blocks: { orderBy: { position: "asc" as const } },
   slots: {
-    orderBy: [{ examDate: "asc" as const }, { className: "asc" as const }],
+    orderBy: [{ examDate: "asc" as const }, { className: "asc" as const }, { id: "asc" as const }],
     include: { paper: { select: { id: true, title: true, status: true, updatedAt: true } } },
   },
 };
@@ -127,7 +131,9 @@ export async function updateExam(
 }
 
 export async function deleteExam(id: string, user: SessionUser) {
+  const released = await linkedPaperIds({ examId: id });
   const exam = await prisma.exam.delete({ where: { id } });
+  await releasePapers(released);
   await recordAudit(user, "EXAM_DELETE", "EXAM", id, { name: exam.name });
   return { ok: true };
 }
@@ -175,10 +181,12 @@ export async function addBlock(examId: string, input: { title: string; timeText:
 export async function deleteBlock(examId: string, blockId: string, user: SessionUser) {
   const { exam, block } = await blockOf(examId, blockId);
   const rest = exam.blocks.filter((b) => b.id !== blockId);
+  const released = await linkedPaperIds({ blockId });
   await prisma.$transaction([
     prisma.examBlock.delete({ where: { id: blockId } }),
     ...rest.map((b, i) => prisma.examBlock.update({ where: { id: b.id }, data: { position: i } })),
   ]);
+  await releasePapers(released);
   await recordAudit(user, "EXAM_UPDATE", "EXAM", examId, { deleteBlock: block.title });
   return loadExamView(examId);
 }
@@ -202,7 +210,11 @@ export async function patchBlock(examId: string, blockId: string, patch: BlockPa
   const saveClasses = (classes: string[]) => ({ classesJson: JSON.stringify(classes) });
 
   if ("title" in patch) await prisma.examBlock.update({ where: { id: blockId }, data: { title: patch.title } });
-  else if ("timeText" in patch) await prisma.examBlock.update({ where: { id: blockId }, data: { timeText: patch.timeText } });
+  else if ("timeText" in patch) {
+    await prisma.examBlock.update({ where: { id: blockId }, data: { timeText: patch.timeText } });
+    const linked = await prisma.examSlot.findMany({ where: { blockId, paperId: { not: null } }, select: { id: true } });
+    for (const s of linked) await syncLinkedPaper(s.id, user, examId);
+  }
   else if ("position" in patch) {
     const order = exam.blocks.filter((b) => b.id !== blockId);
     order.splice(Math.min(patch.position, order.length), 0, block);
@@ -211,10 +223,12 @@ export async function patchBlock(examId: string, blockId: string, patch: BlockPa
     fail(checkAddDate(block, patch.addDate));
     await prisma.examBlock.update({ where: { id: blockId }, data: saveDates([...block.dates, patch.addDate]) });
   } else if ("removeDate" in patch) {
+    const released = await linkedPaperIds({ blockId, examDate: patch.removeDate });
     await prisma.$transaction([
       prisma.examSlot.deleteMany({ where: { blockId, examDate: patch.removeDate } }),
       prisma.examBlock.update({ where: { id: blockId }, data: saveDates(block.dates.filter((d) => d !== patch.removeDate)) }),
     ]);
+    await releasePapers(released);
   } else if ("moveDate" in patch) {
     const { from, to } = patch.moveDate;
     fail(checkMoveDate(block, from, to));
@@ -232,10 +246,12 @@ export async function patchBlock(examId: string, blockId: string, patch: BlockPa
       await prisma.examBlock.update({ where: { id: blockId }, data: saveClasses([...block.classes, patch.addClass]) });
     }
   } else if ("removeClass" in patch) {
+    const released = await linkedPaperIds({ blockId, className: patch.removeClass });
     await prisma.$transaction([
       prisma.examSlot.deleteMany({ where: { blockId, className: patch.removeClass } }),
       prisma.examBlock.update({ where: { id: blockId }, data: saveClasses(block.classes.filter((c) => c !== patch.removeClass)) }),
     ]);
+    await releasePapers(released);
   }
   await recordAudit(user, "EXAM_UPDATE", "EXAM", examId, { block: block.title, ...patch });
   return loadExamView(examId);
@@ -259,51 +275,81 @@ async function candidatesFor(exam: { examType: string; academicSession: string }
   return filterByExamType(papers, exam.examType).map((p) => ({ id: p.id, title: p.title, paperSet: p.paperSet }));
 }
 
+/**
+ * Sets one cell of the date sheet (a class on a date) to these subjects: none, one, or two papers sharing the day
+ * (GK and Drawing). A subject already in the cell keeps its slot, linked paper and printed mark; a new one is
+ * added and auto-linked; a dropped one is removed.
+ */
 export async function setCell(
   examId: string,
-  input: { blockId: string; className: string; date: string; subject: string | null },
+  input: { blockId: string; className: string; date: string; subjects: string[] },
   user: SessionUser,
 ): Promise<{ exam: ExamView; ambiguousCandidates?: Candidate[] }> {
   const { exam, block } = await blockOf(examId, input.blockId);
   if (!block.dates.includes(input.date)) throw new HttpError(400, "That date is not in this block");
   if (!block.classes.includes(input.className)) throw new HttpError(400, "That class is not in this block");
-  const where = { blockId_className_examDate: { blockId: input.blockId, className: input.className, examDate: input.date } };
+  const refusal = checkCellSubjects(exam.slots, input.className, input.date, input.subjects);
+  if (refusal) throw new HttpError(400, refusal);
 
-  if (input.subject === null) {
-    await prisma.examSlot.deleteMany({ where: { blockId: input.blockId, className: input.className, examDate: input.date } });
-    await recordAudit(user, "EXAM_UPDATE", "EXAM", examId, { clearCell: `${input.className} ${input.date}` });
-    return { exam: await loadExamView(examId) };
+  const cell = { blockId: input.blockId, className: input.className, examDate: input.date };
+  const existing = await prisma.examSlot.findMany({ where: cell });
+  const dropped = existing.filter((s) => !input.subjects.includes(s.subject));
+  const added = input.subjects.filter((sub) => !existing.some((s) => s.subject === sub));
+  if (dropped.length) {
+    await prisma.examSlot.deleteMany({ where: { id: { in: dropped.map((s) => s.id) } } });
+    await releasePapers(dropped.map((s) => s.paperId));
   }
 
-  const existing = await prisma.examSlot.findUnique({ where });
-  if (existing && existing.subject === input.subject) return { exam: await loadExamView(examId) };
+  let ambiguousCandidates: Candidate[] | undefined;
+  for (const subject of added) {
+    const candidates = await candidatesFor(exam, { className: input.className, subject });
+    const pick = pickPaper(candidates);
+    const create = (paperId: string | null) => prisma.examSlot.create({ data: { examId, ...cell, subject, paperId } });
+    // the auto-picked paper may have been linked elsewhere a moment ago: then start without a paper
+    await create(pick.paperId).catch((e) => (isUniqueViolation(e) ? create(null) : Promise.reject(e)));
+    if (pick.ambiguous) ambiguousCandidates = candidates;
+  }
+  // the papers' time depends on how many share the day, so every paper in the cell is brought up to date
+  await syncCell(examId, cell, user);
+  if (dropped.length || added.length) {
+    await recordAudit(user, "EXAM_UPDATE", "EXAM", examId, { cell: `${input.className} ${input.date}`, subjects: input.subjects });
+  }
+  return { exam: await loadExamView(examId), ...(ambiguousCandidates ? { ambiguousCandidates } : {}) };
+}
 
-  const candidates = await candidatesFor(exam, { className: input.className, subject: input.subject });
-  const pick = pickPaper(candidates);
-  const data = { subject: input.subject, paperId: pick.paperId, printedAt: null, printedById: null, printedPaperAt: null, dateChangedAfterPrint: false };
-  const save = (d: typeof data) =>
-    existing
-      ? prisma.examSlot.update({ where, data: d })
-      : prisma.examSlot.create({ data: { examId, blockId: input.blockId, className: input.className, examDate: input.date, ...d } });
-  // the auto-picked paper may have been linked elsewhere a moment ago: then start this cell without a paper
-  const slot = await save(data).catch((e) => (isUniqueViolation(e) ? save({ ...data, paperId: null }) : Promise.reject(e)));
-  if (slot.paperId !== pick.paperId) pick.paperId = null;
-  if (pick.paperId) await syncLinkedPaper(slot.id, user);
-  await recordAudit(user, "EXAM_UPDATE", "EXAM", examId, { cell: `${input.className} ${input.date}`, subject: input.subject, paperId: pick.paperId });
-  return { exam: await loadExamView(examId), ...(pick.ambiguous ? { ambiguousCandidates: candidates } : {}) };
+/** Brings every linked paper of one cell up to date (date, type, session, and time from the date sheet). */
+async function syncCell(examId: string, cell: { blockId: string; className: string; examDate: string }, user: SessionUser) {
+  const slots = await prisma.examSlot.findMany({ where: { ...cell, paperId: { not: null } }, select: { id: true } });
+  for (const s of slots) await syncLinkedPaper(s.id, user, examId);
 }
 
 /**
- * A linked paper takes the exam's date, type and session. This deliberately writes past the Final lock: the printed
- * header must match the date sheet, and a printed slot is flagged for a reprint when its date moves.
+ * A linked paper takes the exam's date, type and session, and the block's time when it is the day's only paper
+ * (otherwise its blueprint's own time). This deliberately writes past the Final lock: the printed header must match
+ * the date sheet, and a printed slot is flagged for a reprint when its date moves.
  */
 async function syncLinkedPaper(slotId: string, user: SessionUser, examId?: string): Promise<void> {
-  const slot = await prisma.examSlot.findUnique({ where: { id: slotId }, include: { exam: { select: { id: true, examType: true, academicSession: true } } } });
+  const slot = await prisma.examSlot.findUnique({
+    where: { id: slotId },
+    include: { exam: { select: { id: true, examType: true, academicSession: true } }, block: { select: { timeText: true } } },
+  });
   if (!slot?.paperId) return;
-  const fields = paperSyncFields(slot.exam, slot.examDate);
-  const paper = await prisma.paper.findUnique({ where: { id: slot.paperId }, select: { examDate: true, examType: true, academicSession: true, updatedAt: true } });
-  if (!paper || (paper.examDate === fields.examDate && paper.examType === fields.examType && paper.academicSession === fields.academicSession)) return;
-  // keep updatedAt as it was, so a date sync never reads as "paper changed after printing"
+  const sharing = await prisma.examSlot.count({ where: { blockId: slot.blockId, className: slot.className, examDate: slot.examDate } });
+  const fields = paperSyncFields(slot.exam, slot.examDate, cellDuration(slot.block.timeText, sharing));
+  const paper = await prisma.paper.findUnique({
+    where: { id: slot.paperId },
+    select: { examDate: true, examType: true, academicSession: true, durationMin: true, updatedAt: true },
+  });
+  if (
+    !paper ||
+    (paper.examDate === fields.examDate &&
+      paper.examType === fields.examType &&
+      paper.academicSession === fields.academicSession &&
+      paper.durationMin === fields.durationMin)
+  ) {
+    return;
+  }
+  // keep updatedAt as it was, so a date-sheet sync never reads as "paper changed after printing"
   await prisma.paper.update({ where: { id: slot.paperId }, data: { ...fields, updatedAt: paper.updatedAt } });
   await recordAudit(user, "PAPER_UPDATE", "PAPER", slot.paperId, { reason: "exam date sheet", examId: examId ?? slot.exam.id, ...fields });
 }
@@ -315,7 +361,7 @@ async function slotIn(examId: string, slotId: string) {
 }
 
 export async function setSlotPaper(examId: string, slotId: string, paperId: string | null, user: SessionUser) {
-  await slotIn(examId, slotId);
+  const before = await slotIn(examId, slotId);
   if (paperId) {
     if (!(await prisma.paper.findUnique({ where: { id: paperId }, select: { id: true } }))) throw new HttpError(400, "Paper not found");
     const other = await prisma.examSlot.findFirst({ where: { paperId, NOT: { id: slotId } }, include: { exam: { select: { name: true } } } });
@@ -328,6 +374,7 @@ export async function setSlotPaper(examId: string, slotId: string, paperId: stri
     if (isUniqueViolation(e)) throw new HttpError(400, "That paper was just linked to another exam day. Reload to see where.");
     throw e;
   }
+  if (before.paperId && before.paperId !== paperId) await releasePapers([before.paperId]);
   if (paperId) await syncLinkedPaper(slotId, user);
   await recordAudit(user, "EXAM_UPDATE", "EXAM", examId, { slotId, paperId });
   return loadExamView(examId);
@@ -376,6 +423,20 @@ export async function setSignature(fileName: string | null, user: SessionUser) {
   return { fileName };
 }
 
+/** Papers leaving the date sheet go back to their blueprint's time (their date and type are left as they are). */
+async function releasePapers(paperIds: (string | null)[]): Promise<void> {
+  const ids = paperIds.filter((x): x is string => !!x);
+  if (!ids.length) return;
+  const papers = await prisma.paper.findMany({ where: { id: { in: ids }, durationMin: { not: null } }, select: { id: true, updatedAt: true } });
+  for (const p of papers) await prisma.paper.update({ where: { id: p.id }, data: { durationMin: null, updatedAt: p.updatedAt } });
+}
+
+/** Linked papers of the slots matching `where`, read before those slots are deleted. */
+async function linkedPaperIds(where: Prisma.ExamSlotWhereInput): Promise<string[]> {
+  const rows = await prisma.examSlot.findMany({ where: { ...where, paperId: { not: null } }, select: { paperId: true } });
+  return rows.map((r) => r.paperId!);
+}
+
 function isUniqueViolation(e: unknown): boolean {
   return typeof e === "object" && e !== null && (e as { code?: string }).code === "P2002";
 }
@@ -403,14 +464,50 @@ async function setupRows(exam: { examType: string; academicSession: string }, sl
   });
 }
 
-export async function examSetup(examId: string): Promise<{ missingBlueprints: SetupRow[]; noBook: { className: string; subject: string }[] }> {
-  const exam = await prisma.exam.findUnique({ where: { id: examId }, include: { slots: { orderBy: [{ examDate: "asc" }] } } });
+export type ExamSetup = {
+  missingBlueprints: SetupRow[];
+  /** `presetAvailable`: a built-in syllabus (e.g. the GK and Drawing topic lists) can create the book in one click. */
+  noBook: { className: string; subject: string; presetAvailable: boolean }[];
+};
+
+/** The built-in syllabus for a class and subject, if there is one. */
+function syllabusPresetFor(className: string, subject: string) {
+  return STANDARD_CURRICULUM_PRESETS.find((p) => p.className === className && isSubjectMatching(p.subject, subject)) ?? null;
+}
+
+export async function examSetup(examId: string): Promise<ExamSetup> {
+  const exam = await prisma.exam.findUnique({ where: { id: examId }, include: { slots: { orderBy: [{ examDate: "asc" }, { id: "asc" }] } } });
   if (!exam) throw new HttpError(404, "Exam not found");
   const rows = await setupRows(exam, exam.slots);
   return {
     missingBlueprints: rows.filter((r) => r.book && !r.blueprintId).map((r) => ({ bookId: r.book!.id, className: r.className, subject: r.subject })),
-    noBook: rows.filter((r) => !r.book).map((r) => ({ className: r.className, subject: r.subject })),
+    noBook: rows
+      .filter((r) => !r.book)
+      .map((r) => ({ className: r.className, subject: r.subject, presetAvailable: !!syllabusPresetFor(r.className, r.subject) })),
   };
+}
+
+/** Creates the missing books that have a built-in syllabus (GK and Drawing topic lists, the school's textbooks). */
+export async function addBooksFromPresets(examId: string, user: SessionUser): Promise<{ added: string[]; setup: ExamSetup }> {
+  const exam = await prisma.exam.findUnique({ where: { id: examId }, select: { academicSession: true } });
+  if (!exam) throw new HttpError(404, "Exam not found");
+  const { noBook } = await examSetup(examId);
+  const added: string[] = [];
+  for (const row of noBook) {
+    const preset = syllabusPresetFor(row.className, row.subject);
+    if (!preset) continue;
+    const result = await prisma.$transaction((tx) =>
+      importIntoSubjectBook(tx, {
+        className: row.className,
+        subject: row.subject,
+        session: exam.academicSession,
+        parts: [{ title: preset.title, chapters: preset.chapters }],
+      }),
+    );
+    await recordAudit(user, "BOOK_IMPORT", "BOOK", result.bookId ?? null, { action: "SYLLABUS_IMPORTED", preset: preset.id, fromExam: examId });
+    added.push(`${row.className} ${row.subject}`);
+  }
+  return { added, setup: await examSetup(examId) };
 }
 
 /** Draft papers for scheduled slots that have a blueprint but no paper; each is dated from the date sheet and linked. */
@@ -449,6 +546,7 @@ export async function createMissingDrafts(examId: string, user: SessionUser, onl
       await prisma.paper.delete({ where: { id: paper.id } }).catch((e) => console.error("Could not remove a duplicate draft", paper.id, e));
       continue;
     }
+    await syncLinkedPaper(slot.id, user, examId);
     created++;
   }
   await recordAudit(user, "EXAM_UPDATE", "EXAM", examId, { createdDrafts: created, skipped: skipped.length });

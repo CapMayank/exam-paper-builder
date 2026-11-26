@@ -32,6 +32,8 @@ const SHORT_SUBJECT: Record<string, string> = {
   biology: "Bio",
   "gk/drawing": "GK/Draw.",
   "gk / drawing": "GK/Draw.",
+  "general knowledge": "GK",
+  drawing: "Draw.",
 };
 
 /** The short subject name the printed date sheet uses: "Mathematics" → "Math", "Social Science" → "SST". */

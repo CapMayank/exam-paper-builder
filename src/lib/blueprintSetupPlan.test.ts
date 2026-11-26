@@ -9,7 +9,11 @@ const chapters = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `c${i
 describe("which pattern suits a book", () => {
   it("reads the class level", () => {
     expect(classLevel("Class 8")).toBe(8);
-    expect(classLevel("LKG")).toBeNull();
+    // pre-primary classes have a level too, so their GK and Drawing patterns can be offered
+    expect(classLevel("Nursery")).toBe(-2);
+    expect(classLevel("LKG")).toBe(-1);
+    expect(classLevel("UKG")).toBe(0);
+    expect(classLevel("Staff room")).toBeNull();
   });
 
   it("offers the school pattern for Classes 1–8 and nothing for pre-primary", () => {

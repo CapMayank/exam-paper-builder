@@ -211,6 +211,8 @@ model Paper {
   showCandidateDetails Boolean         @default(true)
   showSignatures       Boolean         @default(true)
   securityWatermark    Boolean         @default(false)
+  /// Time allowed from the exam date sheet; null = the blueprint's time.
+  durationMin          Int?
   watermarkText        String          @default("")
   status               String          @default("DRAFT") // DRAFT | FINAL
   createdById          String
@@ -334,7 +336,9 @@ model ExamSlot {
   block                 ExamBlock @relation(fields: [blockId], references: [id], onDelete: Cascade)
   paper                 Paper?    @relation(fields: [paperId], references: [id], onDelete: SetNull)
 
-  @@unique([blockId, className, examDate])
+  // a cell may hold two papers on one day (GK and Drawing), each its own slot; one per subject is kept by setCell
+  // (a plain index, so changing the rule never needs a data-loss prompt on deploy)
+  @@index([blockId, className, examDate])
   @@index([examDate])
 }
 

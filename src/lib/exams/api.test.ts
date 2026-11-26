@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/prisma";
+import { loadPaperView } from "@/lib/papers";
 import type { ExamListItem, ExamView } from "./types";
 
 let mockSessionUserId: string | null = null;
@@ -19,6 +20,7 @@ import { PATCH as patchSlot } from "../../app/api/exams/[id]/slots/[slotId]/rout
 import { GET as printedPrompt } from "../../app/api/exams/printed-prompt/route";
 import { GET as getSetup } from "../../app/api/exams/[id]/setup/route";
 import { POST as createDrafts } from "../../app/api/exams/[id]/create-drafts/route";
+import { POST as addBooks } from "../../app/api/exams/[id]/add-books/route";
 
 const stamp = `${Date.now()}`;
 function req(url: string, method: string, json?: unknown) {
@@ -116,6 +118,36 @@ describe("exams API", () => {
     expect(updated.json.academicSession).toBe("2027–28");
     const long = await as<ExamView>(ids.admin, () => patchExam(req("", "PATCH", { academicSession: "2026-2027" }), p({ id: made.json.id })));
     expect(long.json.academicSession).toBe("2026–27");
+  });
+
+  it("holds two papers in one cell and keeps each subject to one day", async () => {
+    const made = await as<ExamView>(ids.admin, () =>
+      createExam(req("/api/exams", "POST", { name: `Pair ${stamp}`, examType: "HALF_YEARLY", academicSession: "2026–27" }), p()),
+    );
+    const examId = made.json.id;
+    examIds.push(examId);
+    const b = (await as<ExamView>(ids.admin, () => addBlock(req("", "POST", { title: "Primary", timeText: "11:00 am to 01:30 pm" }), p({ id: examId })))).json.blocks[0].id;
+    for (const d of ["2026-12-11", "2026-12-22"]) await as(ids.admin, () => patchBlock(req("", "PATCH", { addDate: d }), p({ id: examId, blockId: b })));
+    await as(ids.admin, () => patchBlock(req("", "PATCH", { addClass: "Class 5" }), p({ id: examId, blockId: b })));
+    const put = (date: string, subjects: string[]) =>
+      as<{ exam: ExamView; error?: string }>(ids.admin, () => putCell(req("", "PUT", { blockId: b, className: "Class 5", date, subjects }), p({ id: examId })));
+
+    expect((await put("2026-12-11", ["English"])).status).toBe(200);
+    const pair = await put("2026-12-22", ["General Knowledge", "Drawing"]);
+    expect(pair.status).toBe(200);
+    expect(pair.json.exam.slots.filter((x) => x.examDate === "2026-12-22").map((x) => x.subject).sort()).toEqual(["Drawing", "General Knowledge"]);
+
+    const three = await put("2026-12-22", ["General Knowledge", "Drawing", "Hindi"]);
+    expect(three.status).toBe(400);
+    const again = await put("2026-12-22", ["English"]);
+    expect(again.status).toBe(400);
+    expect(again.json.error).toBe("English is already on 11/12/2026 for Class 5");
+
+    // the old single-subject form still works: it replaces the cell
+    const single = await as<{ exam: ExamView }>(ids.admin, () =>
+      putCell(req("", "PUT", { blockId: b, className: "Class 5", date: "2026-12-22", subject: "Drawing" }), p({ id: examId })),
+    );
+    expect(single.json.exam.slots.filter((x) => x.examDate === "2026-12-22").map((x) => x.subject)).toEqual(["Drawing"]);
   });
 
   it("builds a date sheet, moves a date and tracks printing", async () => {
@@ -225,7 +257,40 @@ describe("exams API", () => {
       expect(slot.status).toBe("FINAL");
       expect((await prisma.paper.findUniqueOrThrow({ where: { id: paper.id } })).examDate).toBe("2026-12-10");
 
-      await as(ids.admin, () => patchSlot(req("", "PATCH", { printed: true }), p({ id: examId, slotId: slot.id })));
+      // the block's time ("11 to 2" = 3 hours) becomes the paper's time; the blueprint's own time stays the default
+      expect((await prisma.paper.findUniqueOrThrow({ where: { id: paper.id } })).durationMin).toBe(180);
+      expect((await loadPaperView(paper.id))!.blueprint.durationMin).toBe(180);
+      await as(ids.admin, () => patchBlock(req("", "PATCH", { timeText: "11:00 am to 01:30 pm" }), p({ id: examId, blockId: b })));
+      expect((await prisma.paper.findUniqueOrThrow({ where: { id: paper.id } })).durationMin).toBe(150);
+      await as(ids.admin, () => patchBlock(req("", "PATCH", { timeText: "to be announced" }), p({ id: examId, blockId: b })));
+      expect((await prisma.paper.findUniqueOrThrow({ where: { id: paper.id } })).durationMin).toBeNull();
+      expect((await loadPaperView(paper.id))!.blueprint.durationMin).toBe(180);
+      await as(ids.admin, () => patchBlock(req("", "PATCH", { timeText: "11 to 2" }), p({ id: examId, blockId: b })));
+
+      // a second paper the same day: both keep their blueprint time
+      const two = await as<{ exam: ExamView }>(ids.admin, () =>
+        putCell(req("", "PUT", { blockId: b, className: cls, date: "2026-12-10", subjects: ["Mathematics", "Drawing"] }), p({ id: examId })),
+      );
+      expect(two.json.exam.slots.map((x) => x.subject).sort()).toEqual(["Drawing", "Mathematics"]);
+      expect(two.json.exam.slots.find((x) => x.subject === "Mathematics")!.paper?.id).toBe(paper.id);
+      expect((await prisma.paper.findUniqueOrThrow({ where: { id: paper.id } })).durationMin).toBeNull();
+      await as(ids.admin, () => putCell(req("", "PUT", { blockId: b, className: cls, date: "2026-12-10", subjects: ["Mathematics"] }), p({ id: examId })));
+      expect((await prisma.paper.findUniqueOrThrow({ where: { id: paper.id } })).durationMin).toBe(180);
+
+      // a paper that leaves the date sheet goes back to its blueprint's time
+      const linkedSlot = (await prisma.examSlot.findFirstOrThrow({ where: { paperId: paper.id } })).id;
+      await as(ids.admin, () => patchSlot(req("", "PATCH", { paperId: null }), p({ id: examId, slotId: linkedSlot })));
+      expect((await prisma.paper.findUniqueOrThrow({ where: { id: paper.id } })).durationMin).toBeNull();
+      await as(ids.admin, () => patchSlot(req("", "PATCH", { paperId: paper.id }), p({ id: examId, slotId: linkedSlot })));
+      expect((await prisma.paper.findUniqueOrThrow({ where: { id: paper.id } })).durationMin).toBe(180);
+      await as(ids.admin, () => putCell(req("", "PUT", { blockId: b, className: cls, date: "2026-12-10", subjects: [] }), p({ id: examId })));
+      expect((await prisma.paper.findUniqueOrThrow({ where: { id: paper.id } })).durationMin).toBeNull();
+      await as(ids.admin, () => putCell(req("", "PUT", { blockId: b, className: cls, date: "2026-12-10", subjects: ["Mathematics"] }), p({ id: examId })));
+      expect((await prisma.paper.findUniqueOrThrow({ where: { id: paper.id } })).durationMin).toBe(180);
+
+      const current = (await prisma.examSlot.findFirstOrThrow({ where: { paperId: paper.id } })).id;
+      const printed = await as(ids.admin, () => patchSlot(req("", "PATCH", { printed: true }), p({ id: examId, slotId: current })));
+      expect(printed.status).toBe(200);
       const moved = await as<ExamView>(ids.admin, () => patchBlock(req("", "PATCH", { moveDate: { from: "2026-12-10", to: "2026-12-15" } }), p({ id: examId, blockId: b })));
       expect((await prisma.paper.findUniqueOrThrow({ where: { id: paper.id } })).examDate).toBe("2026-12-15");
       expect(moved.json.slots[0].warnings).toContain("DATE_CHANGED_AFTER_PRINT");
@@ -265,12 +330,12 @@ describe("exams API", () => {
       await cell("2026-12-12", "Science");
       await cell("2026-12-14", "Hindi");
 
-      const setup = await as<{ missingBlueprints: { bookId: string; className: string; subject: string }[]; noBook: { className: string; subject: string }[] }>(
+      const setup = await as<{ missingBlueprints: { bookId: string; className: string; subject: string }[]; noBook: { className: string; subject: string; presetAvailable: boolean }[] }>(
         ids.admin,
         () => getSetup(req("", "GET"), p({ id: examId })),
       );
       expect(setup.json.missingBlueprints).toEqual([{ bookId: science.id, className: cls, subject: "Science" }]);
-      expect(setup.json.noBook).toEqual([{ className: cls, subject: "Hindi" }]);
+      expect(setup.json.noBook).toEqual([{ className: cls, subject: "Hindi", presetAvailable: false }]);
 
       const res = await as<{ created: number; skipped: { slotId: string; reason: string }[]; exam: ExamView }>(ids.admin, () =>
         createDrafts(req("", "POST", {}), p({ id: examId })),
@@ -345,6 +410,41 @@ describe("exams API", () => {
       await prisma.paper.delete({ where: { id: paper.id } });
       await prisma.blueprint.delete({ where: { id: bp.id } });
       await prisma.book.delete({ where: { id: book.id } });
+    }
+  });
+
+  it("adds GK and Drawing books from their topic presets", async () => {
+    const session = "2097–98";
+    try {
+      const made = await as<ExamView>(ids.admin, () => createExam(req("/api/exams", "POST", { name: `Books ${stamp}`, examType: "HALF_YEARLY", academicSession: session }), p()));
+      const examId = made.json.id;
+      examIds.push(examId);
+      const b = (await as<ExamView>(ids.admin, () => addBlock(req("", "POST", { title: "Primary", timeText: "" }), p({ id: examId })))).json.blocks[0].id;
+      await as(ids.admin, () => patchBlock(req("", "PATCH", { addDate: "2026-12-22" }), p({ id: examId, blockId: b })));
+      await as(ids.admin, () => patchBlock(req("", "PATCH", { addDate: "2026-12-23" }), p({ id: examId, blockId: b })));
+      await as(ids.admin, () => patchBlock(req("", "PATCH", { addClass: "Class 3" }), p({ id: examId, blockId: b })));
+      await as(ids.admin, () => putCell(req("", "PUT", { blockId: b, className: "Class 3", date: "2026-12-22", subjects: ["General Knowledge", "Drawing"] }), p({ id: examId })));
+      await as(ids.admin, () => putCell(req("", "PUT", { blockId: b, className: "Class 3", date: "2026-12-23", subjects: ["Astronomy"] }), p({ id: examId })));
+
+      type Setup = { noBook: { className: string; subject: string; presetAvailable: boolean }[]; missingBlueprints: { subject: string }[] };
+      const before = await as<Setup>(ids.admin, () => getSetup(req("", "GET"), p({ id: examId })));
+      expect(before.json.noBook).toEqual([
+        { className: "Class 3", subject: "General Knowledge", presetAvailable: true },
+        { className: "Class 3", subject: "Drawing", presetAvailable: true },
+        { className: "Class 3", subject: "Astronomy", presetAvailable: false },
+      ]);
+
+      const res = await as<{ added: string[]; setup: Setup }>(ids.admin, () => addBooks(req("", "POST", {}), p({ id: examId })));
+      expect(res.status).toBe(200);
+      expect(res.json.added.sort()).toEqual(["Class 3 Drawing", "Class 3 General Knowledge"]);
+      expect(res.json.setup.noBook.map((x) => x.subject)).toEqual(["Astronomy"]);
+      expect(res.json.setup.missingBlueprints.map((x) => x.subject).sort()).toEqual(["Drawing", "General Knowledge"]);
+      const gk = await prisma.book.findFirstOrThrow({ where: { academicSession: session, className: "Class 3", subject: "General Knowledge" }, include: { chapters: true } });
+      expect(gk.chapters.length).toBe(10);
+      expect((await as(ids.examCell, () => addBooks(req("", "POST", {}), p({ id: examId })))).status).toBe(403);
+    } finally {
+      await prisma.chapter.deleteMany({ where: { book: { academicSession: session } } });
+      await prisma.book.deleteMany({ where: { academicSession: session } });
     }
   });
 

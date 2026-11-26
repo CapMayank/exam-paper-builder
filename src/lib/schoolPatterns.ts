@@ -177,12 +177,57 @@ function sanskritPattern(): BlueprintTemplate {
 }
 
 /** The school patterns as written above, before board-style regrouping. */
+/** General Knowledge, Nursery to Class 8, 50 marks: objective questions and short answers across the topic list. */
+function gkPattern(): BlueprintTemplate {
+  return {
+    id: "school-gk-50m",
+    templateCode: "school-gk-50m",
+    title: "School pattern, 50 marks – General Knowledge",
+    description: "Nursery to Class 8 General Knowledge: MCQ, fill in the blanks, true/false, match the columns and very short answers.",
+    examType: "ANNUAL",
+    durationMin: 60,
+    totalMarks: 50,
+    targetClasses: "Nursery–Class 8",
+    subjectName: "General Knowledge",
+    archetype: "SCHOOL",
+    sections: [
+      { title: "Section A – Multiple Choice Questions", instructions: "Choose the correct option.", questionTypes: [{ type: "MCQ", count: 10, marksEach: 1, orChoiceMode: "NOT_REQUIRED" }] },
+      { title: "Section B – Fill in the Blanks", instructions: "Fill in the blanks.", questionTypes: [{ type: "FILL_BLANK", count: 10, marksEach: 1, orChoiceMode: "NOT_REQUIRED" }] },
+      { title: "Section C – True / False", instructions: "Write True or False.", questionTypes: [{ type: "TRUE_FALSE", count: 5, marksEach: 1, orChoiceMode: "NOT_REQUIRED" }] },
+      { title: "Section D – Match the Columns", instructions: "Match the columns.", questionTypes: [{ type: "MATCH_COLUMN", count: 5, marksEach: 1, orChoiceMode: "NOT_REQUIRED" }] },
+      { title: "Section E – Very Short Answer Questions", instructions: "Answer in one or two sentences.", questionTypes: [{ type: "VERY_SHORT", count: 10, marksEach: 2, orChoiceMode: "NOT_REQUIRED" }] },
+    ],
+  };
+}
+
+/** Drawing, Nursery to Class 8, 50 marks: five drawing tasks with space to draw and colour. */
+function drawingPattern(): BlueprintTemplate {
+  return {
+    id: "school-drawing-50m",
+    templateCode: "school-drawing-50m",
+    title: "School pattern, 50 marks – Drawing",
+    description: "Nursery to Class 8 Drawing: five drawing and colouring tasks of 10 marks each, with space to draw.",
+    examType: "ANNUAL",
+    durationMin: 90,
+    totalMarks: 50,
+    targetClasses: "Nursery–Class 8",
+    subjectName: "Drawing",
+    archetype: "SCHOOL",
+    sections: [
+      { title: "Drawing", instructions: "Draw and colour neatly in the space given.", questionTypes: [{ type: "DRAW", count: 5, marksEach: 10, orChoiceMode: "NOT_REQUIRED" }] },
+    ],
+  };
+}
+
 export const UNGROUPED_SCHOOL_PATTERNS: Array<{ levels: [number, number]; template: BlueprintTemplate }> = [
   { levels: [1, 4], template: primarySchoolPattern() },
   { levels: [5, 8], template: languagePattern("English") },
   { levels: [5, 8], template: languagePattern("Hindi") },
   { levels: [6, 8], template: sanskritPattern() },
   { levels: [5, 8], template: schoolPattern([5, 8], 60, 4, 150) },
+  // Nursery (-2), LKG (-1) and UKG (0) to Class 8
+  { levels: [-2, 8], template: gkPattern() },
+  { levels: [-2, 8], template: drawingPattern() },
 ];
 
 /**

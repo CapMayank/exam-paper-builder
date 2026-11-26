@@ -90,7 +90,12 @@ export default function DateSheetPrintPage({ params }: PageProps<"/exams/[id]/pr
 
   const signed = exam.signatureMode === "SIGNED" && !!signature;
   const blocks = [...exam.blocks].sort((a, b) => a.position - b.position).filter((b) => b.dates.length && b.classes.length);
-  const subjectAt = (blockId: string, c: string, d: string) => exam.slots.find((s) => s.blockId === blockId && s.className === c && s.examDate === d)?.subject;
+  // two papers on one day (GK and Drawing) share the cell: "GK/Draw."
+  const subjectAt = (blockId: string, c: string, d: string) =>
+    exam.slots
+      .filter((s) => s.blockId === blockId && s.className === c && s.examDate === d)
+      .map((s) => shortSubjectLabel(s.subject))
+      .join("/");
 
   return (
     <div className="min-h-screen bg-slate-200 print:bg-white">
@@ -206,7 +211,7 @@ export default function DateSheetPrintPage({ params }: PageProps<"/exams/[id]/pr
                           const s = subjectAt(b.id, c, d);
                           return (
                             <td key={d} className="border border-black px-1 py-[0.5mm] leading-tight">
-                              {s ? shortSubjectLabel(s) : "-"}
+                              {s || "-"}
                             </td>
                           );
                         })}

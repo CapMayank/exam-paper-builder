@@ -35,3 +35,27 @@ export function copyLayout(exam: ExamView): CopiedLayout {
     ),
   };
 }
+
+/** Papers a class may sit on one day (GK and Drawing go together). */
+export const MAX_PAPERS_PER_DAY = 2;
+
+/**
+ * The subjects of one cell (a class on a date): at most two, none repeated, and none the class already has on
+ * another date of the exam. Returns the refusal text, or null.
+ */
+export function checkCellSubjects(
+  placed: { className: string; examDate: string; subject: string }[],
+  className: string,
+  date: string,
+  subjects: string[],
+): string | null {
+  if (subjects.length > MAX_PAPERS_PER_DAY) return "A day can hold at most two papers for a class";
+  const seen = new Set<string>();
+  for (const s of subjects) {
+    if (seen.has(s)) return `${s} is already in this cell`;
+    seen.add(s);
+    const elsewhere = placed.find((p) => p.className === className && p.subject === s && p.examDate !== date);
+    if (elsewhere) return `${s} is already on ${formatDMY(elsewhere.examDate)} for ${className}`;
+  }
+  return null;
+}

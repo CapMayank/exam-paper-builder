@@ -27,6 +27,8 @@ describe("shortSubjectLabel", () => {
     expect(shortSubjectLabel("Social Science")).toBe("SST");
     expect(shortSubjectLabel("Biology")).toBe("Bio");
     expect(shortSubjectLabel("GK/Drawing")).toBe("GK/Draw.");
+    expect(shortSubjectLabel("General Knowledge")).toBe("GK");
+    expect(shortSubjectLabel("Drawing")).toBe("Draw.");
   });
   it("leaves other subjects as they are", () => {
     expect(shortSubjectLabel("Chemistry")).toBe("Chemistry");

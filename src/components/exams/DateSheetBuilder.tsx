@@ -19,6 +19,8 @@ export function DateSheetBuilder({ exam, classes, onChange }: { exam: ExamView; 
   const toast = useToast();
   const confirm = useConfirm();
   const [ambiguous, setAmbiguous] = useState<Ambiguous | null>(null);
+  // cells showing a box for a second paper the same day
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const blocks = [...exam.blocks].sort((a, b) => a.position - b.position);
   const used = new Set(blocks.flatMap((b) => b.classes));
   const freeClasses = classes.filter((c) => !used.has(c.name));
@@ -63,33 +65,50 @@ export function DateSheetBuilder({ exam, classes, onChange }: { exam: ExamView; 
     await patchBlock(b, { removeClass: className });
   };
 
-  const setCell = (b: BlockView, className: string, date: string, subject: string | null) =>
+  const cellSlots = (b: BlockView, className: string, date: string) =>
+    exam.slots.filter((s) => s.blockId === b.id && s.className === className && s.examDate === date);
+
+  /** Saves a cell's subjects (one, or two papers sharing the day such as GK and Drawing). */
+  const saveCell = (b: BlockView, className: string, date: string, subjects: string[]) =>
     run(async () => {
       const res = await api<{ exam: ExamView; ambiguousCandidates?: Candidate[] }>(`/api/exams/${exam.id}/cells`, {
         method: "PUT",
-        json: { blockId: b.id, className, date, subject },
+        json: { blockId: b.id, className, date, subjects },
       });
       onChange(res.exam);
-      const slot = res.exam.slots.find((s) => s.blockId === b.id && s.className === className && s.examDate === date);
-      if (slot && res.ambiguousCandidates?.length) {
-        setAmbiguous({ slotId: slot.id, label: `${shortClassLabel(className)} · ${subject}`, candidates: res.ambiguousCandidates });
+      setExpanded((all) => {
+        const next = new Set(all);
+        next.delete(`${b.id}|${className}|${date}`);
+        return next;
+      });
+      if (res.ambiguousCandidates?.length) {
+        const known = new Set(exam.slots.map((s) => s.id));
+        const fresh = res.exam.slots.find((s) => !known.has(s.id) && s.blockId === b.id && s.className === className && s.examDate === date && !s.paper);
+        if (fresh) setAmbiguous({ slotId: fresh.id, label: `${shortClassLabel(className)} · ${fresh.subject}`, candidates: res.ambiguousCandidates });
       }
     });
 
-  /** Changing or clearing a cell that already has a paper (or printed copies) asks first: the link and printed mark go. */
-  const changeCell = async (b: BlockView, className: string, date: string, subject: string | null) => {
-    const slot = exam.slots.find((s) => s.blockId === b.id && s.className === className && s.examDate === date);
-    if (slot && (slot.paper || slot.printedAt)) {
-      const what = slot.printedAt ? "is marked printed" : `is linked to “${slot.paper!.title}”`;
+  /**
+   * Changes paper `index` of a cell to `subject` (null removes it). Replacing or removing a paper that is linked or
+   * printed asks first: its link and printed mark go.
+   */
+  const changeCell = async (b: BlockView, className: string, date: string, index: number, subject: string | null) => {
+    const current = cellSlots(b, className, date);
+    const old = current[index];
+    if (old && (old.paper || old.printedAt)) {
+      const what = old.printedAt ? "is marked printed" : `is linked to “${old.paper!.title}”`;
       const ok = await confirm({
-        title: subject ? `Change ${shortClassLabel(className)} ${slot.subject} to ${subject}?` : `Remove ${shortClassLabel(className)} ${slot.subject}?`,
+        title: subject ? `Change ${shortClassLabel(className)} ${old.subject} to ${subject}?` : `Remove ${shortClassLabel(className)} ${old.subject}?`,
         message: `This paper ${what}. ${subject ? "The new subject starts without a paper." : "It comes off the date sheet."}`,
         confirmLabel: subject ? "Change subject" : "Remove",
         tone: "danger",
       });
       if (!ok) return;
     }
-    await setCell(b, className, date, subject);
+    const subjects = current.map((s) => s.subject);
+    if (subject) subjects[index] = subject;
+    else subjects.splice(index, 1);
+    await saveCell(b, className, date, subjects.filter(Boolean));
   };
 
   const linkPaper = (slotId: string, paperId: string | null) =>
@@ -107,7 +126,6 @@ export function DateSheetBuilder({ exam, classes, onChange }: { exam: ExamView; 
       )}
 
       {blocks.map((b) => {
-        const slotAt = (c: string, d: string) => exam.slots.find((s) => s.blockId === b.id && s.className === c && s.examDate === d);
         return (
           <section key={b.id} className="card space-y-3 p-4">
             <div className="flex flex-wrap items-center gap-2">
@@ -174,33 +192,58 @@ export function DateSheetBuilder({ exam, classes, onChange }: { exam: ExamView; 
                           )}
                         </th>
                         {b.dates.map((d) => {
-                          const slot = slotAt(c, d);
-                          const options = slot && !subjects.includes(slot.subject) ? [slot.subject, ...subjects] : subjects;
+                          const inCell = cellSlots(b, c, d);
+                          const key = `${b.id}|${c}|${d}`;
+                          // a subject sits on one date per class: those placed on other dates are not offered here
+                          const usedElsewhere = new Set(exam.slots.filter((s) => s.className === c && s.examDate !== d).map((s) => s.subject));
+                          const boxes = inCell.length === 2 || (inCell.length === 1 && expanded.has(key)) ? 2 : 1;
                           return (
                             <td key={d} className="border border-slate-200 px-1.5 py-1 align-top">
-                              <select
-                                className="input w-full py-1 text-sm"
-                                value={slot?.subject ?? ""}
-                                aria-label={`${c} on ${d}`}
-                                onChange={(e) => changeCell(b, c, d, e.target.value || null)}
-                              >
-                                <option value="">–</option>
-                                {options.map((s) => (
-                                  <option key={s} value={s}>
-                                    {s}
-                                  </option>
-                                ))}
-                              </select>
-                              {slot && (
-                                <div className="mt-1 flex flex-wrap items-center gap-1">
-                                  <SlotStatusBadge status={slot.status} warnings={slot.warnings} />
-                                  {slot.paper && (
-                                    <Link href={`/papers/${slot.paper.id}`} className="max-w-[140px] truncate text-[11px] text-indigo-700 hover:underline" title={slot.paper.title}>
-                                      {slot.paper.title}
-                                    </Link>
-                                  )}
-                                </div>
-                              )}
+                              {Array.from({ length: boxes }, (_, i) => {
+                                const slot = inCell[i];
+                                const other = inCell[1 - i]?.subject;
+                                const offered = subjects.filter((s) => !usedElsewhere.has(s) && s !== other);
+                                const options = slot && !offered.includes(slot.subject) ? [slot.subject, ...offered] : offered;
+                                return (
+                                  <div key={i} className={i ? "mt-1.5 border-t border-dashed border-slate-200 pt-1.5" : ""}>
+                                    <select
+                                      className="input w-full py-1 text-sm"
+                                      value={slot?.subject ?? ""}
+                                      aria-label={i ? `${c} on ${d}, second paper` : `${c} on ${d}`}
+                                      onChange={(e) =>
+                                        slot || e.target.value ? changeCell(b, c, d, i, e.target.value || null) : undefined
+                                      }
+                                    >
+                                      <option value="">{i ? "– second paper –" : "–"}</option>
+                                      {options.map((s) => (
+                                        <option key={s} value={s}>
+                                          {s}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    {slot && (
+                                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                                        <SlotStatusBadge status={slot.status} warnings={slot.warnings} />
+                                        {i === 0 && boxes === 1 && subjects.some((s) => !usedElsewhere.has(s) && s !== slot.subject) && (
+                                          <button
+                                            type="button"
+                                            className="rounded-full px-1.5 py-0.5 text-[11px] font-semibold text-indigo-700 ring-1 ring-inset ring-indigo-200 hover:bg-indigo-50"
+                                            title="Another paper the same day, e.g. GK and Drawing"
+                                            onClick={() => setExpanded((all) => new Set(all).add(key))}
+                                          >
+                                            + 2nd paper
+                                          </button>
+                                        )}
+                                        {slot.paper && (
+                                          <Link href={`/papers/${slot.paper.id}`} className="max-w-[140px] truncate text-[11px] text-indigo-700 hover:underline" title={slot.paper.title}>
+                                            {slot.paper.title}
+                                          </Link>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
                             </td>
                           );
                         })}

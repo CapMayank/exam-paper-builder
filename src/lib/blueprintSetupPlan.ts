@@ -1,7 +1,7 @@
 // Pure helpers for setting up many blueprints at once: which pattern suits a book, the blueprint a pattern makes
 // for that book, and how a changed pattern's sections line up with an existing blueprint's. Safe on client and server.
 
-import { EXAM_TYPE_LABEL, type ExamType } from "./constants";
+import { EXAM_TYPE_LABEL, inferClassOrder, type ExamType } from "./constants";
 import { isSchoolPattern, type BlueprintPreset } from "./presets";
 import { isSubjectMatching } from "./schoolCurriculum";
 import { distributeMarksByRole } from "./roleMarks";
@@ -31,7 +31,10 @@ export type SetupSection = {
 
 export function classLevel(className: string): number | null {
   const m = className.match(/\d{1,2}/);
-  return m ? parseInt(m[0], 10) : null;
+  if (m) return parseInt(m[0], 10);
+  // Nursery -2, LKG -1, UKG 0: pre-primary classes have patterns too (GK, Drawing)
+  const order = inferClassOrder(className);
+  return order <= 0 && order >= -2 ? order : null;
 }
 
 /** Patterns offered for a book: the board's pattern for its class and subject, and the school's own patterns. */

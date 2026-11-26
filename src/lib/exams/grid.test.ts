@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkAddClass, checkAddDate, checkMoveDate, copyLayout } from "./grid";
+import { checkAddClass, checkAddDate, checkCellSubjects, checkMoveDate, copyLayout } from "./grid";
 import type { BlockView, ExamView, SlotView } from "./types";
 
 const high: BlockView = { id: "b1", title: "High / Higher Secondary School", position: 0, timeText: "11:00 am to 02:00 pm", dates: ["2026-12-10", "2026-12-12"], classes: ["Class 12", "Class 10"] };
@@ -63,5 +63,28 @@ describe("copyLayout", () => {
       { blockIndex: 0, className: "Class 10", subject: "Math", examDate: "2026-12-12" },
       { blockIndex: 1, className: "Class 8", subject: "SST", examDate: "2026-12-10" },
     ]);
+  });
+});
+
+describe("checkCellSubjects", () => {
+  const placed = [
+    { className: "Class 5", examDate: "2026-12-11", subject: "English" },
+    { className: "Class 5", examDate: "2026-12-15", subject: "Mathematics" },
+    { className: "Class 4", examDate: "2026-12-11", subject: "General Knowledge" },
+  ];
+  it("allows two papers on one day, such as GK and Drawing", () => {
+    expect(checkCellSubjects(placed, "Class 5", "2026-12-22", ["General Knowledge", "Drawing"])).toBeNull();
+  });
+  it("refuses a third paper on one day", () => {
+    expect(checkCellSubjects(placed, "Class 5", "2026-12-22", ["General Knowledge", "Drawing", "Hindi"])).toBe("A day can hold at most two papers for a class");
+  });
+  it("refuses the same subject twice in a cell", () => {
+    expect(checkCellSubjects(placed, "Class 5", "2026-12-22", ["Drawing", "Drawing"])).toBe("Drawing is already in this cell");
+  });
+  it("refuses a subject the class already has on another date", () => {
+    expect(checkCellSubjects(placed, "Class 5", "2026-12-22", ["Mathematics"])).toBe("Mathematics is already on 15/12/2026 for Class 5");
+  });
+  it("ignores the cell's own date and other classes", () => {
+    expect(checkCellSubjects(placed, "Class 5", "2026-12-11", ["English", "General Knowledge"])).toBeNull();
   });
 });
