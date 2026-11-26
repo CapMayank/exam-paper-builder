@@ -200,13 +200,21 @@ function gkPattern(): BlueprintTemplate {
   };
 }
 
-/** Drawing, Nursery to Class 8, 50 marks: five drawing tasks with space to draw and colour. */
-function drawingPattern(): BlueprintTemplate {
+/**
+ * Drawing, Nursery to Class 8, 50 marks: one whole-page drawing on a single portrait page (never the folded booklet).
+ * The teacher picks one of two kinds when setting up the blueprint:
+ *   - colour the outline: the question carries the outline picture, printed to fill the page, to be coloured;
+ *   - draw on a theme: the theme is written at the top and the rest of the page is left blank to draw on.
+ */
+function drawingPattern(kind: "outline" | "theme"): BlueprintTemplate {
+  const outline = kind === "outline";
   return {
-    id: "school-drawing-50m",
-    templateCode: "school-drawing-50m",
-    title: "School pattern, 50 marks – Drawing",
-    description: "Nursery to Class 8 Drawing: five drawing and colouring tasks of 10 marks each, with space to draw.",
+    id: `school-drawing-${kind}-50m`,
+    templateCode: `school-drawing-${kind}-50m`,
+    title: outline ? "School pattern, 50 marks – Drawing: colour the outline" : "School pattern, 50 marks – Drawing: draw on a theme",
+    description: outline
+      ? "Nursery to Class 8 Drawing: an outline picture printed on the whole page to fill with colours. One portrait page."
+      : "Nursery to Class 8 Drawing: a theme written at the top and the rest of the page blank to draw on. One portrait page.",
     examType: "ANNUAL",
     durationMin: 90,
     totalMarks: 50,
@@ -214,7 +222,11 @@ function drawingPattern(): BlueprintTemplate {
     subjectName: "Drawing",
     archetype: "SCHOOL",
     sections: [
-      { title: "Drawing", instructions: "Draw and colour neatly in the space given.", questionTypes: [{ type: "DRAW", count: 5, marksEach: 10, orChoiceMode: "NOT_REQUIRED" }] },
+      {
+        title: outline ? "Colour the Picture" : "Draw on the Theme",
+        instructions: outline ? "Fill the picture with colours neatly." : "Draw and colour a picture on the theme given.",
+        questionTypes: [{ type: "DRAW", count: 1, marksEach: 50, orChoiceMode: "NOT_REQUIRED" }],
+      },
     ],
   };
 }
@@ -227,7 +239,8 @@ export const UNGROUPED_SCHOOL_PATTERNS: Array<{ levels: [number, number]; templa
   { levels: [5, 8], template: schoolPattern([5, 8], 60, 4, 150) },
   // Nursery (-2), LKG (-1) and UKG (0) to Class 8
   { levels: [-2, 8], template: gkPattern() },
-  { levels: [-2, 8], template: drawingPattern() },
+  { levels: [-2, 8], template: drawingPattern("outline") },
+  { levels: [-2, 8], template: drawingPattern("theme") },
 ];
 
 /**

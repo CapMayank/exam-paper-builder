@@ -3,6 +3,7 @@ import { recordAudit } from "@/lib/audit";
 import { assertCanModifyPaper, finaliseBlocker, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { paperUpdateSchema } from "@/lib/schemas";
+import { layoutForSubject } from "@/lib/drawingPaper";
 
 export const GET = route(async (_req, { id }) => {
   const paper = await loadPaperView(id);
@@ -20,6 +21,8 @@ export const PATCH = route(async (req, { id }, user) => {
     const blocker = finaliseBlocker(current);
     if (blocker) throw new HttpError(409, blocker);
   }
+  // Drawing papers always print on single portrait pages
+  if (input.layout) input.layout = layoutForSubject(current.blueprint.book.subject, input.layout);
   await prisma.paper.update({ where: { id }, data: input });
   // A worksheet's exam type lives on its hidden blueprint too (that is where it is read from).
   if (input.examType && (current.blueprint as { curriculumMode?: string }).curriculumMode === "KG_WORKSHEET") {

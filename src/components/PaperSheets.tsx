@@ -12,6 +12,7 @@ import { getInternalChoiceSeparatorLabel } from "@/lib/internalChoiceRules";
 import { resolveMarksStyle } from "@/lib/marksDisplay";
 import { QuestionContent } from "@/components/QuestionContent";
 import { imageUrl } from "@/lib/client";
+import { isDrawingSubject } from "@/lib/drawingPaper";
 import { normalizeNumberingStyle,
   cleanQuestionStatement,
   DEFAULT_SCHOOL_LOGO,
@@ -66,6 +67,8 @@ type Block = {
   cuttable?: boolean;
   /** Question label for the "Q. N (Continued)" banner over the part of a cut block that opens a page. */
   continuationLabel?: string;
+  /** Stretches to the bottom of its page (a Drawing paper's drawing area). */
+  fillPage?: boolean;
 };
 
 type LineBox = { top: number; bottom: number; n: number };
@@ -245,6 +248,8 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
   const logoBoxSize = isA5 ? "12mm" : "15.5mm";
   const sideColW = isA5 ? "24mm" : "30mm";
   const isPrePrimary = isPrePrimaryClass(blueprint.book.className);
+  // Drawing papers: one whole-page drawing (an outline to colour, or a theme and a blank page)
+  const isDrawingPaper = isDrawingSubject(blueprint.book.subject);
 
   if (isPrePrimary) {
     blocks.push({
@@ -853,7 +858,21 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
             : Math.round(Math.max(it.question.spaceMm ?? 0, it.orQuestion?.spaceMm ?? 0) * (fit.space ?? 1));
         const isDrawSpace = [it.question.type, it.orQuestion?.type].some((t) => t === "DRAW" || t === "MAP_WORK");
 
-        if (isPrePrimary || isKindergartenType(it.question.type)) {
+        // the drawing area is the paper itself, so it prints in compact (question-only) mode too
+        const drawingPage = isDrawingPaper && it.question.type === "DRAW" && !it.orQuestion;
+        if (drawingPage) {
+          // the question (theme or instruction) on top; below it the drawing area fills the rest of the page,
+          // with the outline picture in it when the question has one
+          pushBody({ ...it.question, imagePath: null }, false, breakBeforeQuestion, false);
+          const outline = it.question.imagePath ?? null;
+          blocks.push({
+            key: `${it.id}-draw`,
+            keepWithNext: false,
+            groupId: it.id,
+            fillPage: true,
+            render: () => <DrawingArea minMm={Math.max(spaceMm, 80)} outline={outline} lang={paperLang} />,
+          });
+        } else if (isPrePrimary || isKindergartenType(it.question.type)) {
           // nursery–KG activities print whole, as designed
           blocks.push({
             key: it.id,
@@ -1032,10 +1051,14 @@ function Page({
           zIndex: 1,
           ...(zoom !== 1 ? { zoom } : null),
           ...(fit?.layoutZoom && fit.layoutZoom !== zoom ? { width: `${CONTENT_W_MM / fit.layoutZoom}mm`, margin: "0 auto" } : null),
+          // a drawing area stretches to the bottom margin of its page
+          ...(blocks.some((b) => b.fillPage)
+            ? { display: "flex", flexDirection: "column" as const, height: `calc(${isA5 ? 210 - (fit?.padTop ?? 0) - (fit?.padBottom ?? 0) : CONTENT_H_MM}mm - 8px)` }
+            : null),
         }}
       >
         {blocks.map((b) => (
-          <div key={b.key} style={{ display: "flow-root" }}>
+          <div key={b.key} style={b.fillPage ? { display: "flex", flexDirection: "column", flex: "1 1 auto", minHeight: 0 } : { display: "flow-root" }}>
             {renderBlock(b, continuationKeys?.has(b.key) ?? false)}
           </div>
         ))}
@@ -1409,5 +1432,41 @@ export function PaperSheets({
         reading
       )}
     </>
+  );
+}
+
+/** A Drawing paper's drawing area: the outline picture to colour, or a blank box under the theme. Fills its page. */
+function DrawingArea({ minMm, outline, lang }: { minMm: number; outline: string | null; lang: PaperLanguage }) {
+  const label = lang === "hi" ? "[चित्र बनाने हेतु स्थान]" : lang === "bilingual" ? "[Draw here / चित्र बनाइए]" : "[Draw here]";
+  return (
+    <div
+      style={{
+        // measured at its minimum height; on the page it grows to the bottom margin (its block is a flex child)
+        flex: "1 1 auto",
+        height: `${minMm}mm`,
+        minHeight: `${minMm}mm`,
+        marginTop: "2mm",
+        border: "1.2px solid #334155",
+        borderRadius: "2mm",
+        position: "relative",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        overflow: "hidden",
+      }}
+    >
+      {outline ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={imageUrl(outline)}
+          alt="Outline to colour"
+          style={{ position: "absolute", inset: "2%", width: "96%", height: "96%", objectFit: "contain" }}
+        />
+      ) : (
+        <span style={{ position: "absolute", bottom: "1.5mm", right: "2.5mm", fontSize: "7pt", color: "#94a3b8", fontStyle: "italic", userSelect: "none" }}>
+          {label}
+        </span>
+      )}
+    </div>
   );
 }

@@ -8,6 +8,7 @@ import { resolveBoardAndSubjectCode } from "@/lib/curriculumContract";
 import { detectPaperLanguage, type PaperLanguage } from "@/lib/localization";
 import { assertCanManageScope } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
+import { layoutForSubject } from "@/lib/drawingPaper";
 import type { paperCreateSchema } from "@/lib/schemas";
 
 export type PaperCreateInput = z.output<typeof paperCreateSchema>;
@@ -61,6 +62,8 @@ export async function createPaperFromBlueprint(input: PaperCreateInput, ownerId:
   const paper = await prisma.paper.create({
     data: {
       ...input,
+      // Drawing papers always print on single portrait pages
+      layout: layoutForSubject(bp.book.subject, input.layout),
       language: resolvedLanguage,
       subjectCode: resolvedBoardSubject.subjectCode || input.subjectCode || bp.subjectCode || undefined,
       examType: resolvedExamType,
