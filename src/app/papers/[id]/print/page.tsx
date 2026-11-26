@@ -20,6 +20,7 @@ import {
 import { BackToPaperLink } from "@/components/BackToPaperLink";
 import { use, useCallback, useEffect, useState } from "react";
 import { PaperSheets, type SheetsInfo } from "@/components/PaperSheets";
+import { PrintedPrompt } from "@/components/exams/PrintedPrompt";
 import { Modal } from "@/components/ui";
 import { api } from "@/lib/client";
 import { blankSides, BOOKLET_MAX_PAGES } from "@/lib/printFit";
@@ -144,6 +145,9 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
 
   return (
     <div className="min-h-screen bg-slate-200/90 pb-12 print:min-h-0 print:h-auto print:bg-white print:p-0 print:m-0">
+      <div className="no-print">
+        <PrintedPrompt paperId={id} />
+      </div>
       {/* Top Floating Control Bar (Hidden on Print) */}
       <div className="no-print sticky top-0 z-20 border-b border-slate-300 bg-white/95 px-4 py-2.5 shadow-sm backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 text-sm">
