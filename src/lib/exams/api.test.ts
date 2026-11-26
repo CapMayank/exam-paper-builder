@@ -94,6 +94,28 @@ describe("exams API", () => {
     expect(new Set(view.blocks.map((b) => b.position)).size).toBe(3);
   });
 
+  it("refuses a date with an unlikely year, as typed digit by digit into a date box", async () => {
+    const made = await as<ExamView>(ids.admin, () =>
+      createExam(req("/api/exams", "POST", { name: `Year ${stamp}`, examType: "UNIT_TEST", academicSession: "2026–27" }), p()),
+    );
+    examIds.push(made.json.id);
+    const b = (await as<ExamView>(ids.admin, () => addBlock(req("", "POST", { title: "Only", timeText: "" }), p({ id: made.json.id })))).json.blocks[0].id;
+    for (const bad of ["0002-12-10", "0202-12-10", "2201-12-10"]) {
+      const res = await as<{ error: string }>(ids.admin, () => patchBlock(req("", "PATCH", { addDate: bad }), p({ id: made.json.id, blockId: b })));
+      expect(res.status, bad).toBe(400);
+    }
+  });
+
+  it("stores the session with an en dash however it is typed", async () => {
+    const made = await as<ExamView>(ids.admin, () =>
+      createExam(req("/api/exams", "POST", { name: `Dash ${stamp}`, examType: "UNIT_TEST", academicSession: "2026-27" }), p()),
+    );
+    examIds.push(made.json.id);
+    expect(made.json.academicSession).toBe("2026–27");
+    const updated = await as<ExamView>(ids.admin, () => patchExam(req("", "PATCH", { academicSession: " 2027-28 " }), p({ id: made.json.id })));
+    expect(updated.json.academicSession).toBe("2027–28");
+  });
+
   it("builds a date sheet, moves a date and tracks printing", async () => {
     const made = await as<ExamView>(ids.admin, () =>
       createExam(req("/api/exams", "POST", { name: `Half Yearly ${stamp}`, examType: "HALF_YEARLY", academicSession: "2026–27" }), p()),
@@ -277,6 +299,40 @@ describe("exams API", () => {
       await prisma.paper.deleteMany({ where: { blueprintId: bp.id } });
       await prisma.blueprint.delete({ where: { id: bp.id } });
       await prisma.book.deleteMany({ where: { id: { in: [maths.id, science.id] } } });
+    }
+  });
+
+  it("never links one paper to two date-sheet slots", async () => {
+    const cls = `Exam Shared ${stamp}`;
+    const book = await prisma.book.create({ data: { title: "Maths", subject: "Mathematics", className: cls, academicSession: "2026–27" } });
+    const bp = await prisma.blueprint.create({ data: { name: "HY", bookId: book.id, academicSession: "2026–27", examType: "HALF_YEARLY", durationMin: 180 } });
+    const paper = await prisma.paper.create({
+      data: { title: "HY Maths", blueprintId: bp.id, layout: "PAGE", schoolName: "S", academicSession: "2026–27", examType: "HALF_YEARLY", createdById: ids.admin },
+    });
+    try {
+      const sheet = async (name: string, date: string) => {
+        const made = await as<ExamView>(ids.admin, () => createExam(req("/api/exams", "POST", { name, examType: "HALF_YEARLY", academicSession: "2026–27" }), p()));
+        examIds.push(made.json.id);
+        const b = (await as<ExamView>(ids.admin, () => addBlock(req("", "POST", { title: "Only", timeText: "" }), p({ id: made.json.id })))).json.blocks[0].id;
+        await as(ids.admin, () => patchBlock(req("", "PATCH", { addDate: date }), p({ id: made.json.id, blockId: b })));
+        await as(ids.admin, () => patchBlock(req("", "PATCH", { addClass: cls }), p({ id: made.json.id, blockId: b })));
+        const set = await as<{ exam: ExamView }>(ids.admin, () => putCell(req("", "PUT", { blockId: b, className: cls, date, subject: "Mathematics" }), p({ id: made.json.id })));
+        return set.json.exam;
+      };
+      const first = await sheet(`First ${stamp}`, "2026-12-10");
+      expect(first.slots[0].paper?.id).toBe(paper.id);
+      const second = await sheet(`Second ${stamp}`, "2027-03-10");
+      expect(second.slots[0].paper).toBeNull();
+      expect((await prisma.paper.findUniqueOrThrow({ where: { id: paper.id } })).examDate).toBe("2026-12-10");
+
+      const manual = await as<{ error: string }>(ids.admin, () => patchSlot(req("", "PATCH", { paperId: paper.id }), p({ id: second.id, slotId: second.slots[0].id })));
+      expect(manual.status).toBe(400);
+      expect(manual.json.error).toContain(`First ${stamp}`);
+    } finally {
+      await prisma.examSlot.deleteMany({ where: { className: cls } });
+      await prisma.paper.delete({ where: { id: paper.id } });
+      await prisma.blueprint.delete({ where: { id: bp.id } });
+      await prisma.book.delete({ where: { id: book.id } });
     }
   });
 

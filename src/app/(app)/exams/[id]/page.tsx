@@ -1,15 +1,16 @@
 "use client";
 
-import { ArrowLeft, Lock, Printer } from "lucide-react";
+import { ArrowLeft, Lock, Pencil, Printer, Send, Undo2 } from "lucide-react";
 import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 import { DateSheetBuilder } from "@/components/exams/DateSheetBuilder";
+import { ExamDetailsModal, type ExamDetails } from "@/components/exams/ExamDetailsModal";
 import { ExamCalendar } from "@/components/exams/ExamCalendar";
 import { SetupChecklist } from "@/components/exams/SetupChecklist";
 import { useExamsGate } from "@/components/exams/useExamsGate";
-import { EmptyState, ErrorBanner, ListSkeleton, useToast } from "@/components/ui";
+import { EmptyState, ErrorBanner, ListSkeleton, useConfirm, useToast } from "@/components/ui";
 import { api } from "@/lib/client";
-import { EXAM_TYPE_LABEL, EXAM_TYPES, type ExamType } from "@/lib/constants";
+import { EXAM_TYPE_LABEL, type ExamType } from "@/lib/constants";
 import type { ExamView } from "@/lib/exams/types";
 import type { AcademicClassDto } from "@/lib/types";
 
@@ -24,6 +25,7 @@ export default function ExamPage({ params }: PageProps<"/exams/[id]">) {
   const { id } = use(params);
   const gate = useExamsGate();
   const toast = useToast();
+  const confirm = useConfirm();
   const [exam, setExam] = useState<ExamView | null>(null);
   const [classes, setClasses] = useState<AcademicClassDto[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -58,13 +60,32 @@ export default function ExamPage({ params }: PageProps<"/exams/[id]">) {
     if (gate.state === "allowed") void load();
   }, [gate.state, load]);
 
-  const update = async (patch: Partial<Pick<ExamView, "name" | "examType" | "academicSession" | "status">>) => {
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const update = async (patch: Partial<ExamDetails> & { status?: ExamView["status"] }): Promise<boolean> => {
+    setSaving(true);
     try {
       setExam(await api<ExamView>(`/api/exams/${id}`, { method: "PATCH", json: patch }));
       if (patch.academicSession) void load();
+      return true;
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not save");
+      return false;
+    } finally {
+      setSaving(false);
     }
+  };
+
+  const toggleStatus = async () => {
+    if (!exam) return;
+    const toCirculated = exam.status === "DRAFT";
+    const ok = await confirm(
+      toCirculated
+        ? { title: "Mark this date sheet circulated?", message: "It prints without the DRAFT watermark. Later changes show a reminder to recirculate.", confirmLabel: "Mark circulated" }
+        : { title: "Move back to draft?", message: "The date sheet prints with a DRAFT watermark again.", confirmLabel: "Back to draft" },
+    );
+    if (ok) await update({ status: toCirculated ? "CIRCULATED" : "DRAFT" });
   };
 
   if (gate.state === "loading") return <ListSkeleton />;
@@ -79,48 +100,56 @@ export default function ExamPage({ params }: PageProps<"/exams/[id]">) {
       </Link>
 
       <header className="flex flex-wrap items-end justify-between gap-3">
-        <div className="min-w-0 flex-1 space-y-2">
-          <input
-            key={exam.name}
-            className="w-full bg-transparent font-display text-lg font-bold sm:text-2xl text-slate-900 outline-none focus:rounded focus:ring-2 focus:ring-indigo-300"
-            defaultValue={exam.name}
-            aria-label="Exam name"
-            onBlur={(e) => e.target.value.trim() && e.target.value !== exam.name && update({ name: e.target.value.trim() })}
-          />
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <select className="input w-auto py-1 text-sm" value={exam.examType} aria-label="Exam type" onChange={(e) => update({ examType: e.target.value })}>
-              {EXAM_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {EXAM_TYPE_LABEL[t as ExamType]}
-                </option>
-              ))}
-            </select>
-            <input
-              key={exam.academicSession}
-              className="input w-28 py-1 text-sm"
-              defaultValue={exam.academicSession}
-              aria-label="Session"
-              onBlur={(e) => e.target.value.trim() && e.target.value !== exam.academicSession && update({ academicSession: e.target.value.trim() })}
-            />
-            <div className="inline-flex rounded-lg bg-slate-100 p-0.5" role="group" aria-label="Date sheet status">
-              {(["DRAFT", "CIRCULATED"] as const).map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  aria-pressed={exam.status === s}
-                  className={`rounded-md px-2.5 py-1 text-xs font-semibold ${exam.status === s ? "bg-white text-slate-900 shadow-xs" : "text-slate-600"}`}
-                  onClick={() => exam.status !== s && update({ status: s })}
-                >
-                  {s === "DRAFT" ? "Draft" : "Circulated"}
-                </button>
-              ))}
-            </div>
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <h1 className="font-display text-lg font-bold text-slate-900 sm:text-2xl">{exam.name}</h1>
+          <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
+            <span>{EXAM_TYPE_LABEL[exam.examType as ExamType] ?? exam.examType}</span>
+            <span aria-hidden>·</span>
+            <span>Session {exam.academicSession}</span>
+            <span
+              className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${exam.status === "CIRCULATED" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}
+            >
+              {exam.status === "CIRCULATED" ? "Circulated" : "Draft"}
+            </span>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(true)}>
+              <Pencil size={13} /> Edit details
+            </button>
+            <button type="button" className="btn btn-ghost btn-sm" disabled={saving} onClick={toggleStatus}>
+              {exam.status === "CIRCULATED" ? (
+                <>
+                  <Undo2 size={13} /> Back to draft
+                </>
+              ) : (
+                <>
+                  <Send size={13} /> Mark circulated
+                </>
+              )}
+            </button>
           </div>
         </div>
         <Link href={`/exams/${id}/print`} className="btn btn-primary" target="_blank">
           <Printer size={15} /> Print date sheet
         </Link>
       </header>
+
+      {editing && (
+        <ExamDetailsModal
+          title="Edit exam details"
+          initial={{ name: exam.name, examType: exam.examType as ExamType, academicSession: exam.academicSession }}
+          linkedPapers={exam.slots.filter((x) => x.paper).length}
+          saveLabel="Save"
+          busy={saving}
+          onClose={() => setEditing(false)}
+          onSave={async (d) => {
+            const patch: Partial<ExamDetails> = {};
+            if (d.name !== exam.name) patch.name = d.name;
+            if (d.examType !== exam.examType) patch.examType = d.examType;
+            if (d.academicSession !== exam.academicSession) patch.academicSession = d.academicSession;
+            if (Object.keys(patch).length && (await update(patch))) setEditing(false);
+            else if (!Object.keys(patch).length) setEditing(false);
+          }}
+        />
+      )}
 
       <nav className="flex gap-1 border-b border-slate-200" aria-label="Exam views">
         {TABS.map((t) => (

@@ -4,12 +4,13 @@ import { CalendarDays, Copy, History, Lock, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { ExamDetailsModal, type ExamDetails } from "@/components/exams/ExamDetailsModal";
 import { SignatureCard } from "@/components/exams/SignatureCard";
 import { useExamsGate } from "@/components/exams/useExamsGate";
-import { EmptyState, ErrorBanner, Field, ListSkeleton, Modal, PageHeader, useConfirm, useToast } from "@/components/ui";
-import { useAcademicSession } from "@/lib/academicSession";
+import { EmptyState, ErrorBanner, ListSkeleton, PageHeader, useConfirm, useToast } from "@/components/ui";
+import { normalizeSession, useAcademicSession } from "@/lib/academicSession";
 import { api } from "@/lib/client";
-import { EXAM_TYPE_LABEL, EXAM_TYPES, type ExamType } from "@/lib/constants";
+import { EXAM_TYPE_LABEL, type ExamType } from "@/lib/constants";
 import { formatDMY } from "@/lib/exams/dates";
 import type { ExamListItem, ExamView } from "@/lib/exams/types";
 
@@ -36,7 +37,6 @@ export default function ExamsPage() {
   const [exams, setExams] = useState<ExamListItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState<{ name: string; examType: ExamType; academicSession: string }>({ name: "", examType: "HALF_YEARLY", academicSession: "" });
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -52,12 +52,9 @@ export default function ExamsPage() {
     if (gate.state === "allowed") void load();
   }, [gate.state, load]);
 
-  const openNew = () => {
-    setForm({ name: "", examType: "HALF_YEARLY", academicSession: currentSession.replace(/-/g, "–") });
-    setCreating(true);
-  };
+  const openNew = () => setCreating(true);
 
-  const create = async () => {
+  const create = async (form: ExamDetails) => {
     setBusy(true);
     try {
       const exam = await api<ExamView>("/api/exams", { method: "POST", json: form });
@@ -173,46 +170,14 @@ export default function ExamsPage() {
       {gate.isAdmin && <SignatureCard />}
 
       {creating && (
-        <Modal
+        <ExamDetailsModal
           title="New exam"
+          initial={{ name: "", examType: "HALF_YEARLY", academicSession: normalizeSession(currentSession) }}
+          saveLabel="Create and build date sheet"
+          busy={busy}
           onClose={() => setCreating(false)}
-          footer={
-            <>
-              <button type="button" className="btn btn-ghost" onClick={() => setCreating(false)}>
-                Cancel
-              </button>
-              <button type="button" className="btn btn-primary" disabled={busy || !form.name.trim()} onClick={create}>
-                Create and build date sheet
-              </button>
-            </>
-          }
-        >
-          <div className="space-y-4">
-            <Field label="Exam name">
-              <input
-                className="input w-full"
-                autoFocus
-                placeholder="Half Yearly Examination December 2026"
-                value={form.name}
-                onChange={(ev) => setForm({ ...form, name: ev.target.value })}
-              />
-            </Field>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Exam type">
-                <select className="input w-full" value={form.examType} onChange={(ev) => setForm({ ...form, examType: ev.target.value as ExamType })}>
-                  {EXAM_TYPES.map((t) => (
-                    <option key={t} value={t}>
-                      {EXAM_TYPE_LABEL[t]}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Session">
-                <input className="input w-full" value={form.academicSession} onChange={(ev) => setForm({ ...form, academicSession: ev.target.value })} />
-              </Field>
-            </div>
-          </div>
-        </Modal>
+          onSave={create}
+        />
       )}
     </div>
   );

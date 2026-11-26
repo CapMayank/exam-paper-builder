@@ -356,25 +356,30 @@ const realDate = (v: string) => {
   const d = new Date(`${v}T00:00:00Z`);
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
 };
-/** An HH:MM on a 24-hour clock (rejects 99:99). */
-const realTime = (v: string) => {
-  const [h, m] = v.split(":").map(Number);
-  return h >= 0 && h < 24 && m >= 0 && m < 60;
-};
 
-const examDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Must be YYYY-MM-DD").refine(realDate, "Not a real calendar date");
+const examDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Must be YYYY-MM-DD")
+  .refine(realDate, "Not a real calendar date")
+  .refine((v) => Number(v.slice(0, 4)) >= 2000 && Number(v.slice(0, 4)) <= 2100, "Check the year of that date");
+/** "2026-27" and "2026–27" are the same session; the database uses the en dash. */
+const examSession = z
+  .string()
+  .trim()
+  .regex(/^\d{4}\s*[-–]\s*\d{2,4}$/, "Session looks like 2026–27")
+  .transform((v) => v.replace(/\s*[-–]\s*/, "–"));
 
 export const examCreateSchema = z.object({
   name: text(160),
   examType: z.enum(EXAM_TYPES),
-  academicSession: z.string().trim().min(4).max(40),
+  academicSession: examSession,
 });
 
 export const examUpdateSchema = z
   .object({
     name: text(160),
     examType: z.enum(EXAM_TYPES),
-    academicSession: z.string().trim().min(4).max(40),
+    academicSession: examSession,
     status: z.enum(["DRAFT", "CIRCULATED"]),
     signatureMode: z.enum(["SIGNED", "BLANK"]),
   })

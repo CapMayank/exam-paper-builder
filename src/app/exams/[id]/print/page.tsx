@@ -2,7 +2,7 @@
 
 import { ArrowLeft, Lock, Printer } from "lucide-react";
 import Link from "next/link";
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import { useExamsGate } from "@/components/exams/useExamsGate";
 import { EmptyState, Spinner, useToast } from "@/components/ui";
 import { api } from "@/lib/client";
@@ -32,15 +32,29 @@ export default function DateSheetPrintPage({ params }: PageProps<"/exams/[id]/pr
   const toast = useToast();
   const [exam, setExam] = useState<ExamView | null>(null);
   const [signature, setSignature] = useState<string | null | undefined>(undefined);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [overflow, setOverflow] = useState(false);
+  const sheet = useRef<HTMLElement>(null);
 
   useEffect(() => {
     if (gate.state !== "allowed") return;
-    api<ExamView>(`/api/exams/${id}`).then(setExam, (e) => toast.error(e instanceof Error ? e.message : "Could not load the exam"));
+    api<ExamView>(`/api/exams/${id}`).then(setExam, (e) => setLoadError(e instanceof Error ? e.message : "Could not load the exam"));
     api<{ fileName: string | null }>("/api/settings/signature").then(
       (r) => setSignature(r.fileName),
       () => setSignature(null),
     );
-  }, [gate.state, id, toast]);
+  }, [gate.state, id]);
+
+  // a sheet that no longer fits one A4 page is cut off when printed: say so
+  useEffect(() => {
+    const main = sheet.current?.querySelector("main");
+    if (!main) return;
+    const check = () => setOverflow(main.scrollHeight > main.clientHeight + 1);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(main);
+    return () => ro.disconnect();
+  }, [exam, signature]);
 
   const setMode = async (signatureMode: SignatureMode) => {
     if (!exam) return;
@@ -56,6 +70,13 @@ export default function DateSheetPrintPage({ params }: PageProps<"/exams/[id]/pr
     return (
       <main className="mx-auto max-w-lg p-10">
         <EmptyState icon={Lock} title="You don't have access" description="Date sheets are printed by Admins and Exam Cell." />
+      </main>
+    );
+  }
+  if (loadError) {
+    return (
+      <main className="mx-auto max-w-lg p-10">
+        <EmptyState icon={Lock} title="This date sheet could not be opened" description={loadError} action={<Link href="/exams" className="btn btn-secondary">Back to Exams</Link>} />
       </main>
     );
   }
@@ -96,7 +117,9 @@ export default function DateSheetPrintPage({ params }: PageProps<"/exams/[id]/pr
               </button>
             ))}
           </div>
+          {exam.signatureMode === "SIGNED" && !signature && <span className="text-xs text-slate-600">No signature uploaded yet — prints a blank line to sign.</span>}
           {exam.status === "DRAFT" && <span className="text-xs text-amber-700">Draft — prints with a DRAFT watermark. Mark it Circulated to remove it.</span>}
+          {overflow && <span className="text-xs font-semibold text-red-700">Too long for one A4 page — the bottom is cut off. Remove empty dates or classes, or shorten block titles.</span>}
         </div>
         <button type="button" className="btn btn-primary" onClick={() => window.print()} autoFocus>
           <Printer size={15} /> Print / Save as PDF
@@ -104,7 +127,7 @@ export default function DateSheetPrintPage({ params }: PageProps<"/exams/[id]/pr
       </div>
 
       <div className="flex justify-center py-8 print:block print:p-0">
-        <article className="relative flex flex-col overflow-hidden bg-white text-black shadow-lg print:shadow-none" style={{ width: "210mm", height: "297mm" }}>
+        <article ref={sheet} className="relative flex flex-col overflow-hidden bg-white text-black shadow-lg print:shadow-none" style={{ width: "210mm", height: "297mm" }}>
           {/* faint logo watermark */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={DEFAULT_SCHOOL_LOGO} alt="" aria-hidden className="pointer-events-none absolute left-1/2 top-1/2 w-[120mm] -translate-x-1/2 -translate-y-1/2 opacity-[0.06]" />

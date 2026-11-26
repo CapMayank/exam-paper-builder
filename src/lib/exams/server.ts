@@ -5,7 +5,7 @@ import { DEFAULT_SCHOOL_NAME } from "@/lib/constants";
 import { createPaperFromBlueprint } from "@/lib/paperCreate";
 import { prisma } from "@/lib/prisma";
 import { paperCreateSchema } from "@/lib/schemas";
-import { todayIST } from "./dates";
+import { formatDMY, todayIST } from "./dates";
 import { checkAddClass, checkAddDate, checkMoveDate, copyLayout } from "./grid";
 import { filterByExamType, paperCandidateWhere, pickPaper } from "./paperMatch";
 import { examSummary, slotStatus, slotWarnings } from "./status";
@@ -251,7 +251,8 @@ type Candidate = { id: string; title: string; paperSet: string };
 
 async function candidatesFor(exam: { examType: string; academicSession: string }, slot: { className: string; subject: string }): Promise<Candidate[]> {
   const papers = await prisma.paper.findMany({
-    where: paperCandidateWhere(slot, exam),
+    // a paper already on a date sheet stays there: one paper, one exam day
+    where: { ...paperCandidateWhere(slot, exam), examSlots: { none: {} } },
     select: { id: true, title: true, paperSet: true, examType: true, blueprint: { select: { examType: true } } },
     orderBy: { updatedAt: "desc" },
   });
@@ -311,7 +312,11 @@ async function slotIn(examId: string, slotId: string) {
 
 export async function setSlotPaper(examId: string, slotId: string, paperId: string | null, user: SessionUser) {
   await slotIn(examId, slotId);
-  if (paperId && !(await prisma.paper.findUnique({ where: { id: paperId }, select: { id: true } }))) throw new HttpError(400, "Paper not found");
+  if (paperId) {
+    if (!(await prisma.paper.findUnique({ where: { id: paperId }, select: { id: true } }))) throw new HttpError(400, "Paper not found");
+    const other = await prisma.examSlot.findFirst({ where: { paperId, NOT: { id: slotId } }, include: { exam: { select: { name: true } } } });
+    if (other) throw new HttpError(400, `That paper is already on ${other.exam.name} (${other.className}, ${formatDMY(other.examDate)})`);
+  }
   await prisma.examSlot.update({ where: { id: slotId }, data: { paperId } });
   if (paperId) await syncLinkedPaper(slotId, user);
   await recordAudit(user, "EXAM_UPDATE", "EXAM", examId, { slotId, paperId });

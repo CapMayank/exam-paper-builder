@@ -72,6 +72,22 @@ export function DateSheetBuilder({ exam, classes, onChange }: { exam: ExamView; 
       }
     });
 
+  /** Changing or clearing a cell that already has a paper (or printed copies) asks first: the link and printed mark go. */
+  const changeCell = async (b: BlockView, className: string, date: string, subject: string | null) => {
+    const slot = exam.slots.find((s) => s.blockId === b.id && s.className === className && s.examDate === date);
+    if (slot && (slot.paper || slot.printedAt)) {
+      const what = slot.printedAt ? "is marked printed" : `is linked to “${slot.paper!.title}”`;
+      const ok = await confirm({
+        title: subject ? `Change ${shortClassLabel(className)} ${slot.subject} to ${subject}?` : `Remove ${shortClassLabel(className)} ${slot.subject}?`,
+        message: `This paper ${what}. ${subject ? "The new subject starts without a paper." : "It comes off the date sheet."}`,
+        confirmLabel: subject ? "Change subject" : "Remove",
+        tone: "danger",
+      });
+      if (!ok) return;
+    }
+    await setCell(b, className, date, subject);
+  };
+
   const linkPaper = (slotId: string, paperId: string | null) =>
     run(async () => {
       onChange(await api<ExamView>(`/api/exams/${exam.id}/slots/${slotId}`, { method: "PATCH", json: { paperId } }));
@@ -92,6 +108,7 @@ export function DateSheetBuilder({ exam, classes, onChange }: { exam: ExamView; 
           <section key={b.id} className="card space-y-3 p-4">
             <div className="flex flex-wrap items-center gap-2">
               <input
+                key={`t-${b.title}`}
                 className="input min-w-[220px] flex-1 font-semibold"
                 defaultValue={b.title}
                 aria-label="Block title"
@@ -100,6 +117,7 @@ export function DateSheetBuilder({ exam, classes, onChange }: { exam: ExamView; 
               <label className="flex items-center gap-1.5 text-xs text-slate-600">
                 TIME
                 <input
+                  key={`tm-${b.timeText}`}
                   className="input w-48"
                   defaultValue={b.timeText}
                   aria-label="Exam time"
@@ -119,13 +137,7 @@ export function DateSheetBuilder({ exam, classes, onChange }: { exam: ExamView; 
                     {b.dates.map((d) => (
                       <th key={d} className="min-w-[150px] border border-slate-200 bg-slate-50 px-1.5 py-1 align-top">
                         <div className="flex items-center gap-1">
-                          <input
-                            type="date"
-                            className="input w-full py-1 text-xs"
-                            value={d}
-                            aria-label="Exam date"
-                            onChange={(e) => e.target.value && e.target.value !== d && patchBlock(b, { moveDate: { from: d, to: e.target.value } })}
-                          />
+                          <DateInput key={d} value={d} label="Exam date" onCommit={(to) => to !== d && patchBlock(b, { moveDate: { from: d, to } })} />
                           <button type="button" className="btn btn-icon btn-ghost" title="Remove date" onClick={() => removeDate(b, d)}>
                             <X size={13} />
                           </button>
@@ -135,13 +147,7 @@ export function DateSheetBuilder({ exam, classes, onChange }: { exam: ExamView; 
                     ))}
                     <th className="w-[150px] border border-dashed border-slate-300 px-1.5 py-1 align-top">
                       <label className="block text-[11px] font-medium text-slate-500">+ Add date</label>
-                      <input
-                        type="date"
-                        className="input w-full py-1 text-xs"
-                        value=""
-                        aria-label="Add a date"
-                        onChange={(e) => e.target.value && patchBlock(b, { addDate: e.target.value })}
-                      />
+                      <DateInput key={b.dates.length} value="" label="Add a date" onCommit={(d) => patchBlock(b, { addDate: d })} />
                     </th>
                   </tr>
                 </thead>
@@ -150,13 +156,18 @@ export function DateSheetBuilder({ exam, classes, onChange }: { exam: ExamView; 
                     const subjects = classByName.get(c)?.subjects.map((s) => s.name) ?? [];
                     return (
                       <tr key={c}>
-                        <th className="whitespace-nowrap border border-slate-200 px-2 py-1.5 text-left font-semibold text-slate-800">
+                        <th className="whitespace-nowrap border border-slate-200 px-2 py-1.5 text-left align-top font-semibold text-slate-800">
                           <span className="inline-flex items-center gap-1">
                             {shortClassLabel(c)}
                             <button type="button" className="btn btn-icon btn-ghost" title={`Remove ${c}`} onClick={() => removeClass(b, c)}>
                               <X size={12} />
                             </button>
                           </span>
+                          {subjects.length < 3 && (
+                            <Link href="/classes" className="block text-[10px] font-normal text-indigo-700 hover:underline" title={`${c} has ${subjects.length} subject(s) in Classes & subjects`}>
+                              {subjects.length === 0 ? "No subjects yet" : `Only ${subjects.length} subject${subjects.length === 1 ? "" : "s"}`} — add
+                            </Link>
+                          )}
                         </th>
                         {b.dates.map((d) => {
                           const slot = slotAt(c, d);
@@ -167,7 +178,7 @@ export function DateSheetBuilder({ exam, classes, onChange }: { exam: ExamView; 
                                 className="input w-full py-1 text-sm"
                                 value={slot?.subject ?? ""}
                                 aria-label={`${c} on ${d}`}
-                                onChange={(e) => setCell(b, c, d, e.target.value || null)}
+                                onChange={(e) => changeCell(b, c, d, e.target.value || null)}
                               >
                                 <option value="">–</option>
                                 {options.map((s) => (
@@ -228,5 +239,32 @@ export function DateSheetBuilder({ exam, classes, onChange }: { exam: ExamView; 
         </Modal>
       )}
     </div>
+  );
+}
+
+/** A date box that saves when you leave it or press Enter, never mid-typing, and only for a sensible year. */
+function DateInput({ value, label, onCommit }: { value: string; label: string; onCommit: (date: string) => void }) {
+  const [draft, setDraft] = useState(value);
+  const commit = () => {
+    if (!draft || draft === value) return;
+    const year = Number(draft.slice(0, 4));
+    if (year < 2000 || year > 2100) {
+      setDraft(value);
+      return;
+    }
+    onCommit(draft);
+  };
+  return (
+    <input
+      type="date"
+      className="input w-full py-1 text-xs"
+      value={draft}
+      min="2000-01-01"
+      max="2100-12-31"
+      aria-label={label}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => e.key === "Enter" && (e.currentTarget as HTMLInputElement).blur()}
+    />
   );
 }
