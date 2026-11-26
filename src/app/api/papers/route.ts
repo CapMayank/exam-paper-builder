@@ -5,6 +5,7 @@ import { resolvePaperExamType } from "@/lib/constants";
 import { applySlotDeltas } from "@/lib/sectionPools";
 import { withEffectiveAllowedTypes } from "@/lib/sectionTypes";
 import { loadPaperView, toPlacedItems } from "@/lib/papers";
+import { linkNewPaper } from "@/lib/exams/server";
 import { createPaperFromBlueprint } from "@/lib/paperCreate";
 import { prisma } from "@/lib/prisma";
 import { paperCreateSchema } from "@/lib/schemas";
@@ -76,5 +77,7 @@ export const GET = route(async (req) => {
 export const POST = route(async (req, _params, user) => {
   const input = await body(req, paperCreateSchema);
   const { id } = await createPaperFromBlueprint(input, user.id, user);
+  // a date sheet made before the paper gives it its date and time now, not when the exam page is next opened
+  await linkNewPaper(id, user);
   return loadPaperView(id);
 });

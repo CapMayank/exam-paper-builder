@@ -284,6 +284,28 @@ async function candidatesFor(exam: { examType: string; academicSession: string }
 }
 
 /**
+ * Puts a just-made paper on its date-sheet slot right away, so it opens with the exam's date and time instead of
+ * picking them up only the next time someone opens the exam. Runs the same linking as the exam page, for each exam
+ * with an empty slot for this paper's class and subject in its session.
+ */
+export async function linkNewPaper(paperId: string, user: SessionUser): Promise<void> {
+  const paper = await prisma.paper.findUnique({
+    where: { id: paperId },
+    select: { academicSession: true, examSlots: { select: { id: true } }, blueprint: { select: { book: { select: { className: true, subject: true } } } } },
+  });
+  const book = paper?.blueprint?.book;
+  if (!paper || !book || paper.examSlots.length) return;
+  const exams = await prisma.exam.findMany({
+    where: {
+      academicSession: paper.academicSession,
+      slots: { some: { paperId: null, className: book.className, subject: book.subject } },
+    },
+    select: { id: true },
+  });
+  for (const exam of exams) await linkFreePapers(exam.id, user);
+}
+
+/**
  * Links every empty slot of the exam that has exactly one free matching paper. Linking used to happen only when a
  * subject was first placed, so a paper freed by a later edit (a repeated subject or a wrong date removed), made after
  * the slot, or matching only after the exam's type or session changed stayed unlinked.

@@ -22,6 +22,7 @@ import { GET as printedPrompt } from "../../app/api/exams/printed-prompt/route";
 import { GET as getSetup } from "../../app/api/exams/[id]/setup/route";
 import { POST as createDrafts } from "../../app/api/exams/[id]/create-drafts/route";
 import { POST as addBooks } from "../../app/api/exams/[id]/add-books/route";
+import { POST as createPaper } from "../../app/api/papers/route";
 
 const stamp = `${Date.now()}`;
 function req(url: string, method: string, json?: unknown) {
@@ -452,6 +453,39 @@ describe("exams API", () => {
       await prisma.paper.deleteMany({ where: { blueprintId: { in: [hy.id, annual.id] } } });
       await prisma.blueprint.deleteMany({ where: { id: { in: [hy.id, annual.id] } } });
       await prisma.book.deleteMany({ where: { id: { in: [maths.id, english.id] } } });
+    }
+  });
+
+  it("gives a paper made after its date-sheet slot the slot's date and time at once, without opening the exam", async () => {
+    const cls = `Exam NewPaper ${stamp}`;
+    const book = await prisma.book.create({ data: { title: "Science", subject: "Science", className: cls, academicSession: "2026–27" } });
+    const bp = await prisma.blueprint.create({ data: { name: "HY Sci", bookId: book.id, academicSession: "2026–27", examType: "HALF_YEARLY", durationMin: 90 } });
+    try {
+      const made = await as<ExamView>(ids.admin, () => createExam(req("/api/exams", "POST", { name: `NewPaper ${stamp}`, examType: "HALF_YEARLY", academicSession: "2026–27" }), p()));
+      const examId = made.json.id;
+      examIds.push(examId);
+      const b = (await as<ExamView>(ids.admin, () => addBlock(req("", "POST", { title: "Morning", timeText: "10:00 AM – 1:00 PM" }), p({ id: examId })))).json.blocks[0].id;
+      await as(ids.admin, () => patchBlock(req("", "PATCH", { addDate: "2026-12-15" }), p({ id: examId, blockId: b })));
+      await as(ids.admin, () => patchBlock(req("", "PATCH", { addClass: cls }), p({ id: examId, blockId: b })));
+      await as(ids.admin, () => putCell(req("", "PUT", { blockId: b, className: cls, date: "2026-12-15", subjects: ["Science"] }), p({ id: examId })));
+
+      const created = await as<{ id: string; examDate: string; durationMin: number | null }>(ids.admin, () =>
+        createPaper(
+          req("/api/papers", "POST", { title: "HY Science", blueprintId: bp.id, layout: "PAGE", schoolName: "S", academicSession: "2026–27", examType: "HALF_YEARLY" }),
+          p(),
+        ),
+      );
+      expect(created.status).toBe(200);
+      // the paper the teacher sees straight after creating it already carries the date sheet's day and sitting
+      expect(created.json.examDate).toBe("2026-12-15");
+      expect(created.json.durationMin).toBe(180);
+      const slot = await prisma.examSlot.findFirstOrThrow({ where: { examId, className: cls } });
+      expect(slot.paperId).toBe(created.json.id);
+    } finally {
+      await prisma.examSlot.deleteMany({ where: { className: cls } });
+      await prisma.paper.deleteMany({ where: { blueprintId: bp.id } });
+      await prisma.blueprint.deleteMany({ where: { id: bp.id } });
+      await prisma.book.deleteMany({ where: { id: book.id } });
     }
   });
 

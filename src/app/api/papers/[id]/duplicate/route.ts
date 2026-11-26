@@ -3,6 +3,7 @@ import { recordAudit } from "@/lib/audit";
 import { assertCanCopyPaper, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { itemCopyData, paperCopyData } from "@/lib/questionWrite";
+import { linkNewPaper } from "@/lib/exams/server";
 
 /**
  * Duplicate a paper:
@@ -54,6 +55,8 @@ export const POST = route(async (req, params, user) => {
     sourceId: source.id,
     title: newPaper.title,
   });
+  // a date sheet made before the paper gives it its date and time now, not when the exam page is next opened
+  await linkNewPaper(newPaper.id, user);
 
   const view = await loadPaperView(newPaper.id);
 

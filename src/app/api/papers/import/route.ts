@@ -10,6 +10,7 @@ import {
 import { assertCanManageScope, loadPaperView } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { balancePaperAnswerPositions } from "@/lib/answerPositionsDb";
+import { linkNewPaper } from "@/lib/exams/server";
 import {
   importedQuestionUnits,
   matchQuestionToBlueprintSection,
@@ -206,6 +207,8 @@ export const POST = route(async (req, _params, user) => {
     blueprintId: blueprint.id,
     questionsCount: totalImportedQuestions,
   });
+  // a date sheet made before the paper gives it its date and time now, not when the exam page is next opened
+  await linkNewPaper(paper.id, user);
 
   return {
     success: true,
