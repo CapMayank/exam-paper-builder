@@ -43,6 +43,12 @@ const nextConfig: NextConfig = {
         destination: "/papers/:id/print",
         permanent: false,
       },
+      // the old Exam Cell page was replaced by Exams
+      {
+        source: "/exam-cell",
+        destination: "/exams",
+        permanent: false,
+      },
       {
         source: "/solutions",
         destination: "/papers",

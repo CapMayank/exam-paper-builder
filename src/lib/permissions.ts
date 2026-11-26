@@ -9,7 +9,7 @@
  *  - TEACHER    works inside the classes the Admin assigned them:
  *                 Class In-charge  (assignment with subject "")      → every subject of that class + class settings
  *                 Subject Teacher  (assignment with a subject name)  → that subject of that class
- *  - EXAM_CELL  exam logistics: timetable, print runs, audit log; reads papers and blueprints.
+ *  - EXAM_CELL  exams: date sheets, paper readiness and printing, audit log; reads papers and blueprints.
  *
  * Everyone can browse and print the whole bank. Writes are limited to the assigned scope, except that a
  * creator always keeps edit rights on their own draft papers and their own questions. FINAL papers are
@@ -111,13 +111,13 @@ export function canManageUsers(actor: Actor | null | undefined): boolean {
   return isSuperAdmin(actor);
 }
 
-export function canManageTimetable(actor: Actor | null | undefined): boolean {
+export function canManageExams(actor: Actor | null | undefined): boolean {
   if (!actor) return false;
   return isAdmin(actor) || normalizeRole(actor.role) === "EXAM_CELL";
 }
 
 /** Activity of papers, questions, books and blueprints (Admins and the Exam Cell). */
-export const canViewAudit = canManageTimetable;
+export const canViewAudit = canManageExams;
 
 /** The full activity log including sign-ins, failed sign-ins and access changes. */
 export function canViewSecurityLog(actor: Actor | null | undefined): boolean {

@@ -221,6 +221,7 @@ model Paper {
   items                PaperQuestion[]
   slotMoves            PaperSectionSlots[]
   snapshots            PaperSnapshot[]
+  examSlots            ExamSlot[]
 }
 
 model PaperQuestion {
@@ -287,52 +288,61 @@ model AuditLog {
   @@index([action])
 }
 
-model ExamTimetableEntry {
-  id                 String   @id @default(cuid())
-  title              String
-  academicSession    String   @default("2025–26")
-  examType           String   @default("ANNUAL") // QUARTERLY | HALF_YEARLY | ANNUAL
-  className          String
-  subject            String
-  subjectCode        String   @default("")
-  examDate           String   // YYYY-MM-DD
-  startTime          String   // e.g. "09:00"
-  endTime            String   // e.g. "12:00"
-  sessionSlot        String   @default("MORNING") // MORNING | AFTERNOON
-  roomLocations      String   @default("")
-  paperId            String?
-  blueprintId        String?
-  status             String   @default("SCHEDULED") // SCHEDULED | DRAFTED | MODERATED | PRINTED | COMPLETED
-  submissionDeadline String   @default("")
-  printingDeadline   String   @default("")
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+model Exam {
+  id              String      @id @default(cuid())
+  name            String
+  examType        String      // EXAM_TYPES
+  academicSession String
+  status          String      @default("DRAFT")   // DRAFT | CIRCULATED
+  signatureMode   String      @default("SIGNED")  // SIGNED | BLANK
+  createdById     String
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  blocks          ExamBlock[]
+  slots           ExamSlot[]
 
-  @@index([examDate])
-  @@index([className])
+  @@index([academicSession])
 }
 
-model PrintRunCalculation {
-  id                  String   @id @default(cuid())
-  paperId             String?
-  paperTitle          String
-  academicSession     String   @default("2025–26")
-  className           String
-  subject             String
-  layout              String   @default("BOOKLET")
-  pageCount           Int      @default(4)
-  totalStudents       Int      @default(0)
-  sectionsJson        String   @default("[]") // [{ name: "10-A", count: 42 }, ...]
-  setsJson            String   @default("[]") // [{ set: "Set 1", count: 41 }, ...]
-  wastagePercent      Float    @default(3.0)
-  totalSheetsRequired Int      @default(0)
-  totalReamsRequired  Float    @default(0.0)
-  answerBookletCount  Int      @default(0)
-  notes               String   @default("")
-  createdById         String
-  createdAt           DateTime @default(now())
+// One table of the date sheet ("Middle School"): its own time, date columns and class rows.
+model ExamBlock {
+  id          String     @id @default(cuid())
+  examId      String
+  title       String
+  position    Int
+  timeText    String     @default("11:00 am to 02:00 pm")
+  datesJson   String     @default("[]") // ordered YYYY-MM-DD[]
+  classesJson String     @default("[]") // ordered AcademicClass names
+  exam        Exam       @relation(fields: [examId], references: [id], onDelete: Cascade)
+  slots       ExamSlot[]
+}
 
-  @@index([createdAt])
+// One paper on the date sheet: class x date -> subject, linked to its paper.
+model ExamSlot {
+  id                    String    @id @default(cuid())
+  examId                String
+  blockId               String
+  className             String
+  subject               String
+  examDate              String    // YYYY-MM-DD
+  paperId               String?
+  printedAt             DateTime?
+  printedById           String?
+  printedPaperAt        DateTime? // paper.updatedAt when marked printed; a later change = "paper since changed"
+  dateChangedAfterPrint Boolean   @default(false)
+  exam                  Exam      @relation(fields: [examId], references: [id], onDelete: Cascade)
+  block                 ExamBlock @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  paper                 Paper?    @relation(fields: [paperId], references: [id], onDelete: SetNull)
+
+  @@unique([blockId, className, examDate])
+  @@index([examDate])
+  @@index([paperId])
+}
+
+model SchoolSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
 }
 
 // ==========================================

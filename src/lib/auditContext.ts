@@ -23,7 +23,7 @@ const ENTITY_BY_SEGMENT: Record<string, string> = {
   ai: "AI",
   uploads: "UPLOAD",
   curriculum: "CURRICULUM",
-  "exam-cell": "TIMETABLE",
+  exams: "EXAM",
   "academic-rollover": "ACADEMIC_SESSION",
   me: "USER",
 };

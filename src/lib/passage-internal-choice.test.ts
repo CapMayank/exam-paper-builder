@@ -77,22 +77,6 @@ describe("Hindi language check", () => {
   });
 });
 
-import { timetableEntrySchema } from "@/lib/schemas";
-
-describe("Timetable entry validation", () => {
-  const base = { title: "Maths", className: "Class 10", subject: "Mathematics", examDate: "2026-03-10", startTime: "09:00", endTime: "12:00" };
-
-  it("accepts a real date and times", () => {
-    expect(timetableEntrySchema.safeParse(base).success).toBe(true);
-  });
-
-  it("rejects impossible dates and times", () => {
-    expect(timetableEntrySchema.safeParse({ ...base, examDate: "2026-13-45" }).success).toBe(false);
-    expect(timetableEntrySchema.safeParse({ ...base, examDate: "2026-02-30" }).success).toBe(false);
-    expect(timetableEntrySchema.safeParse({ ...base, startTime: "99:99" }).success).toBe(false);
-  });
-});
-
 import { parseBlueprintImport } from "@/lib/blueprintImport";
 
 describe("Blueprint import tolerance", () => {

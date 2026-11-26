@@ -857,6 +857,16 @@ export const SCHOOL_ESTABLISHED = "Established 2002 · Lakhnadon";
 export const SCHOOL_MOTTO_HI = "तमसो माँ ज्योतिर्गमय";
 export const SCHOOL_MOTTO_EN = "Lead us from darkness to light";
 export const DEFAULT_SCHOOL_LOGO = "/school-logo.png";
+/** Printed on the exam date sheet header and footer. */
+export const SCHOOL_PRINT_NAME = "Sarvodaya English Higher Secondary School";
+export const SCHOOL_ADDRESS = "Vinoba Bhave Ward No. 05, Lakhnadon, 480886, Seoni, MP, India";
+export const SCHOOL_PHONES = "8989646850, 9425888317";
+export const SCHOOL_WEBSITE = "www.sarvodayaschool.co.in";
+export const SCHOOL_EMAIL = "sarvodaya816@gmail.com";
+export const SCHOOL_DISE_CODE = "23440600816";
+export const SCHOOL_CODE = "772070";
+export const SCHOOL_AFFILIATION = "Affiliated to MPBSE";
+export const SCHOOL_ESTABLISHED_YEAR = 2002;
 
 export const PRINT_DENSITIES = ["COMPACT", "STANDARD", "COMFORTABLE"] as const;
 export type PrintDensity = (typeof PRINT_DENSITIES)[number];
@@ -947,23 +957,6 @@ export const USER_ROLE_LABEL: Record<UserRole, string> = {
   ADMIN: "Administrator",
   TEACHER: "Teacher",
   EXAM_CELL: "Exam Cell",
-};
-
-export const TIMETABLE_STATUSES = ["SCHEDULED", "DRAFTED", "MODERATED", "PRINTED", "COMPLETED"] as const;
-export type TimetableStatus = (typeof TIMETABLE_STATUSES)[number];
-export const TIMETABLE_STATUS_LABEL: Record<TimetableStatus, string> = {
-  SCHEDULED: "Scheduled",
-  DRAFTED: "Drafted",
-  MODERATED: "Moderated",
-  PRINTED: "Printed & Sealed",
-  COMPLETED: "Exam Completed",
-};
-
-export const SESSION_SLOTS = ["MORNING", "AFTERNOON"] as const;
-export type SessionSlot = (typeof SESSION_SLOTS)[number];
-export const SESSION_SLOT_LABEL: Record<SessionSlot, string> = {
-  MORNING: "Morning (09:00 – 12:00)",
-  AFTERNOON: "Afternoon (14:00 – 17:00)",
 };
 
 /** School exam time: 3 hours for Classes 9–12, 2½ hours for Nursery to Class 8. */

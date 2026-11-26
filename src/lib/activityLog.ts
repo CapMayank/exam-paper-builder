@@ -9,7 +9,7 @@ export const ACTIVITY_CATEGORIES = [
   { key: "PAPERS", label: "Papers", entityTypes: ["PAPER"], securityOnly: false },
   { key: "QUESTIONS", label: "Questions", entityTypes: ["QUESTION"], securityOnly: false },
   { key: "SYLLABUS", label: "Books, blueprints & classes", entityTypes: ["BOOK", "CHAPTER", "BLUEPRINT", "CLASS", "CURRICULUM", "PRESET", "ACADEMIC_SESSION"], securityOnly: false },
-  { key: "EXAM_CELL", label: "Exam cell", entityTypes: ["TIMETABLE", "LOGISTICS"], securityOnly: false },
+  { key: "EXAM_CELL", label: "Exam cell", entityTypes: ["EXAM", "TIMETABLE", "LOGISTICS"], securityOnly: false },
   { key: "OTHER", label: "AI & uploads", entityTypes: ["AI", "UPLOAD", "SYSTEM"], securityOnly: false },
 ] as const;
 
@@ -51,6 +51,11 @@ const ACTION_TEXT: Record<string, string> = {
   USER_PASSWORD_CHANGE: "Changed own password",
   USER_PASSWORD_RESET: "Reset someone's password",
   USER_PROFILE_UPDATE: "Updated a profile",
+  EXAM_CREATE: "Created an exam",
+  EXAM_UPDATE: "Changed an exam",
+  EXAM_DELETE: "Deleted an exam",
+  EXAM_SLOT_PRINTED: "Marked a paper printed",
+  EXAM_SLOT_UNPRINTED: "Unmarked a printed paper",
   CALCULATOR_ESTIMATE: "Ran the print-run calculator",
   TIMETABLE_CREATE: "Added a timetable entry",
   TIMETABLE_UPDATE: "Changed a timetable entry",
@@ -79,6 +84,7 @@ const THING: Record<string, string> = {
   CURRICULUM: "curriculum pattern",
   PRESET: "preset",
   TIMETABLE: "timetable entry",
+  EXAM: "exam",
   ACADEMIC_SESSION: "session",
   SYSTEM: "setting",
 };

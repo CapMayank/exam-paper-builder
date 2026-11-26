@@ -3,7 +3,7 @@ import {
   canManageAiSettings,
   canManageClassSettings,
   canManageScope,
-  canManageTimetable,
+  canManageExams,
   canManageUsers,
   canModifyPaper,
   canModifyQuestion,
@@ -36,7 +36,6 @@ import { GET as getUsers, POST as postUser } from "../app/api/users/route";
 import { PATCH as patchUser } from "../app/api/users/[id]/route";
 import { GET as getMe } from "../app/api/me/route";
 import { GET as getAudit } from "../app/api/audit/route";
-import { POST as postTimetable } from "../app/api/exam-cell/timetable/route";
 
 // ---------------------------------------------------------------------------
 // 1. The matrix as pure functions (shared by API and UI)
@@ -120,9 +119,9 @@ describe("permission matrix (pure)", () => {
     }
     expect(canManageUsers(superAdmin)).toBe(true);
     expect(canManageAiSettings(superAdmin)).toBe(true);
-    expect(canManageTimetable(exam)).toBe(true);
+    expect(canManageExams(exam)).toBe(true);
     expect(canViewAudit(exam)).toBe(true);
-    expect(canManageTimetable(inCharge)).toBe(false);
+    expect(canManageExams(inCharge)).toBe(false);
     expect(canViewAudit(mathsTeacher)).toBe(false);
     expect(hasAnyWriteScope(unassigned)).toBe(false);
     expect(hasAnyWriteScope(mathsTeacher)).toBe(true);
@@ -381,20 +380,7 @@ describe("permission matrix (API routes)", () => {
     expect(byTeacher.status).toBe(403);
   });
 
-  it("exam logistics: timetable and audit for Exam Cell and Admin, not teachers", async () => {
-    const entry = {
-      title: `Exam ${stamp}`,
-      className: CLASS,
-      subject: "Mathematics",
-      examDate: "2027-03-01",
-      startTime: "09:00",
-      endTime: "12:00",
-    };
-    expect((await as(ids.inCharge, () => postTimetable(req("/api/exam-cell/timetable", "POST", entry), p()))).status).toBe(403);
-    const ok = await as<{ id: string }>(ids.exam, () => postTimetable(req("/api/exam-cell/timetable", "POST", entry), p()));
-    expect(ok.status).toBe(200);
-    await prisma.examTimetableEntry.deleteMany({ where: { title: `Exam ${stamp}` } });
-
+  it("audit trail for Exam Cell and Admin, not teachers", async () => {
     expect((await as(ids.maths, () => getAudit(req("/api/audit", "GET"), p()))).status).toBe(403);
     expect((await as(ids.exam, () => getAudit(req("/api/audit", "GET"), p()))).status).toBe(200);
   });

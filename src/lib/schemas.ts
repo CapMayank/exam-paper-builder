@@ -16,8 +16,6 @@ import {
   PRINT_DENSITIES,
   QUESTION_TYPES,
   USER_ROLES,
-  TIMETABLE_STATUSES,
-  SESSION_SLOTS,
 } from "./constants";
 
 const text = (max = 200) => z.string().trim().min(1, "required").max(max);
@@ -364,27 +362,6 @@ const realTime = (v: string) => {
   return h >= 0 && h < 24 && m >= 0 && m < 60;
 };
 
-export const timetableEntrySchema = z.object({
-  title: text(120),
-  academicSession: z.string().trim().max(40).default(DEFAULT_ACADEMIC_SESSION),
-  examType: z.enum(EXAM_TYPES).default("ANNUAL"),
-  className: text(40),
-  subject: text(80),
-  subjectCode: z.string().trim().max(40).default(""),
-  examDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Must be YYYY-MM-DD").refine(realDate, "Not a real calendar date"),
-  startTime: z.string().regex(/^\d{2}:\d{2}$/, "Must be HH:MM").refine(realTime, "Not a valid time"),
-  endTime: z.string().regex(/^\d{2}:\d{2}$/, "Must be HH:MM").refine(realTime, "Not a valid time"),
-  sessionSlot: z.enum(SESSION_SLOTS).default("MORNING"),
-  roomLocations: z.string().trim().max(200).default(""),
-  paperId: z.string().nullable().optional().default(null),
-  blueprintId: z.string().nullable().optional().default(null),
-  status: z.enum(TIMETABLE_STATUSES).default("SCHEDULED"),
-  submissionDeadline: z.string().trim().max(40).default(""),
-  printingDeadline: z.string().trim().max(40).default(""),
-});
-
-export const timetableUpdateSchema = timetableEntrySchema.partial();
-
 export const classSectionInputSchema = z.object({
   name: z.string().trim().min(1).max(50),
   count: z.number().int().min(1).max(500),
@@ -393,22 +370,6 @@ export const classSectionInputSchema = z.object({
 export const setDistributionSchema = z.object({
   set: z.string().trim().min(1).max(50),
   count: z.number().int().min(0).max(5000),
-});
-
-export const printRunCalculationSchema = z.object({
-  paperId: z.string().nullable().optional(),
-  paperTitle: text(120),
-  academicSession: z.string().trim().max(40).default(DEFAULT_ACADEMIC_SESSION),
-  className: text(40),
-  subject: text(80),
-  layout: z.enum(LAYOUTS).default("BOOKLET"),
-  pageCount: z.number().int().min(1).max(100).default(4),
-  totalStudents: z.number().int().min(1).max(10000),
-  sections: z.array(classSectionInputSchema).min(1),
-  sets: z.array(setDistributionSchema).min(1),
-  wastagePercent: z.number().min(0).max(50).default(3.0),
-  answerBookletCount: z.number().int().min(0).max(10000).default(0),
-  notes: z.string().trim().max(500).default(""),
 });
 
 export const syllabusImportSchema = z.object({

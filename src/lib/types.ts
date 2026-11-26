@@ -1,10 +1,10 @@
 import type { QuestionDto } from "./dto";
 import type { PaperImplication, PaperStatus } from "./blueprint";
-import type { MarksStyle, NumberingStyle, PrintDensity, UserRole, TimetableStatus, SessionSlot, PaperLanguage } from "./constants";
+import type { MarksStyle, NumberingStyle, PrintDensity, UserRole, PaperLanguage } from "./constants";
 import type { PaperInternalChoiceAudit } from "./internalChoiceRules";
 
 export type { QuestionDto, PaperImplication, PaperInternalChoiceAudit };
-export type { MarksStyle, NumberingStyle, PrintDensity, UserRole, TimetableStatus, SessionSlot, PaperLanguage };
+export type { MarksStyle, NumberingStyle, PrintDensity, UserRole, PaperLanguage };
 
 export type ClassSubjectDto = {
   id: string;
@@ -558,28 +558,6 @@ export type AuditLogEntry = {
   category?: string;
 };
 
-export type ExamTimetableItem = {
-  id: string;
-  title: string;
-  academicSession: string;
-  examType: string;
-  className: string;
-  subject: string;
-  subjectCode: string;
-  examDate: string;
-  startTime: string;
-  endTime: string;
-  sessionSlot: SessionSlot;
-  roomLocations: string;
-  paperId: string | null;
-  blueprintId: string | null;
-  status: TimetableStatus;
-  submissionDeadline: string;
-  printingDeadline: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
 export type ClassSectionInput = {
   name: string; // e.g. "10-A"
   count: number; // student count
@@ -590,24 +568,5 @@ export type SetDistribution = {
   count: number;
 };
 
-export type PrintRunCalculationDto = {
-  id?: string;
-  paperId?: string | null;
-  paperTitle: string;
-  academicSession: string;
-  className: string;
-  subject: string;
-  layout: string;
-  pageCount: number;
-  totalStudents: number;
-  sections: ClassSectionInput[];
-  sets: SetDistribution[];
-  wastagePercent: number;
-  totalSheetsRequired: number;
-  totalReamsRequired: number;
-  answerBookletCount: number;
-  notes?: string;
-  createdAt?: string;
-};
 
 
