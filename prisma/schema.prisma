@@ -344,6 +344,31 @@ model SchoolSetting {
   updatedAt DateTime @updatedAt
 }
 
+// Legacy: saved runs of the removed Print-Run Calculator. Nothing reads or writes it any more; it stays so a deploy
+// never drops rows a school saved. Export and remove it deliberately if it is no longer wanted.
+model PrintRunCalculation {
+  id                  String   @id @default(cuid())
+  paperId             String?
+  paperTitle          String
+  academicSession     String   @default("2025–26")
+  className           String
+  subject             String
+  layout              String   @default("BOOKLET")
+  pageCount           Int      @default(4)
+  totalStudents       Int      @default(0)
+  sectionsJson        String   @default("[]") // [{ name: "10-A", count: 42 }, ...]
+  setsJson            String   @default("[]") // [{ set: "Set 1", count: 41 }, ...]
+  wastagePercent      Float    @default(3.0)
+  totalSheetsRequired Int      @default(0)
+  totalReamsRequired  Float    @default(0.0)
+  answerBookletCount  Int      @default(0)
+  notes               String   @default("")
+  createdById         String
+  createdAt           DateTime @default(now())
+
+  @@index([createdAt])
+}
+
 // ==========================================
 // MPBSE CURRICULUM ARCHITECTURE (100% ADDITIVE)
 // ==========================================
