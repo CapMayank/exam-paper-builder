@@ -2,7 +2,7 @@
 
 import { AlertTriangle, ArrowLeft, Check, CheckCircle2, CircleSlash, FilePlus2, Layers, RefreshCw, XCircle } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ErrorBanner, PageHeader, Spinner, useToast } from "@/components/ui";
 import { normalizeSession, useAcademicSession } from "@/lib/academicSession";
 import { suggestPreset, presetsForBook, presetTotals } from "@/lib/blueprintSetupPlan";
@@ -30,7 +30,7 @@ const minutesLabel = (m: number) => (m % 60 === 0 ? `${m / 60} h` : m > 60 ? `${
  */
 export default function BlueprintSetupPage() {
   const toast = useToast();
-  const { currentSession } = useAcademicSession();
+  const { currentSession, setSession } = useAcademicSession();
   const session = normalizeSession(currentSession);
   const presets = usePresets("BLUEPRINT");
 
@@ -62,6 +62,38 @@ export default function BlueprintSetupPage() {
       (e) => setError((e as Error).message),
     );
   }, []);
+
+  // Opened from an exam's setup checklist: ?examType=&session=&books=id,id picks exactly those books. Read in the
+  // effect (not at first render): this page can be kept alive between visits, so each new query is applied once.
+  const appliedQuery = useRef<string | null>(null);
+  const sessionSwitchedFor = useRef<string | null>(null);
+  useEffect(() => {
+    const search = window.location.search;
+    const q = new URLSearchParams(search);
+    const ids = (q.get("books") ?? "").split(",").filter(Boolean);
+    if (!ids.length || appliedQuery.current === search || !books || presets.length === 0) return;
+    const wantSession = q.get("session");
+    if (wantSession && normalizeSession(wantSession) !== session && sessionSwitchedFor.current !== search) {
+      // switch the session once; if it does not take, fill in what this session has
+      sessionSwitchedFor.current = search;
+      setSession(wantSession);
+      return;
+    }
+    appliedQuery.current = search;
+    const type = q.get("examType");
+    const chosen = books.filter((b) => ids.includes(b.id));
+    const next: Record<string, string> = {};
+    for (const b of chosen) {
+      const s = suggestPreset(presets, b);
+      if (s && b.chapters.length > 0) next[b.id] = s.id;
+    }
+    /* eslint-disable react-hooks/set-state-in-effect -- applying the URL once books and presets have loaded */
+    if ((EXAM_TYPES as readonly string[]).includes(type ?? "")) setExamType(type as ExamType);
+    setClasses(new Set(chosen.map((b) => b.className)));
+    setPicked(next);
+    setStep(0);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [books, presets, session, setSession]);
 
   // books of this session the user may change, grouped by class in school order
   const byClass = useMemo(() => {

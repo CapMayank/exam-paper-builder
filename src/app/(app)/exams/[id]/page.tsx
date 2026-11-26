@@ -5,6 +5,7 @@ import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 import { DateSheetBuilder } from "@/components/exams/DateSheetBuilder";
 import { ExamCalendar } from "@/components/exams/ExamCalendar";
+import { SetupChecklist } from "@/components/exams/SetupChecklist";
 import { useExamsGate } from "@/components/exams/useExamsGate";
 import { EmptyState, ErrorBanner, ListSkeleton, useToast } from "@/components/ui";
 import { api } from "@/lib/client";
@@ -12,8 +13,9 @@ import { EXAM_TYPE_LABEL, EXAM_TYPES, type ExamType } from "@/lib/constants";
 import type { ExamView } from "@/lib/exams/types";
 import type { AcademicClassDto } from "@/lib/types";
 
-type Tab = "calendar" | "sheet";
+type Tab = "setup" | "calendar" | "sheet";
 const TABS: { id: Tab; label: string }[] = [
+  { id: "setup", label: "Setup" },
   { id: "calendar", label: "Calendar" },
   { id: "sheet", label: "Date sheet" },
 ];
@@ -30,7 +32,7 @@ export default function ExamPage({ params }: PageProps<"/exams/[id]">) {
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get("tab");
     // eslint-disable-next-line react-hooks/set-state-in-effect -- load on mount; state is set after the fetch resolves
-    if (t === "sheet" || t === "calendar") setTabState(t);
+    if (t === "sheet" || t === "calendar" || t === "setup") setTabState(t);
   }, []);
 
   const setTab = (t: Tab) => {
@@ -134,7 +136,8 @@ export default function ExamPage({ params }: PageProps<"/exams/[id]">) {
         ))}
       </nav>
 
-      {tab === "calendar" && <ExamCalendar exam={exam} onChange={setExam} onEditSheet={() => setTab("sheet")} />}
+      {tab === "setup" && <SetupChecklist exam={exam} isAdmin={gate.isAdmin} onChange={setExam} onEditSheet={() => setTab("sheet")} />}
+      {tab === "calendar" && <ExamCalendar exam={exam} isAdmin={gate.isAdmin} onChange={setExam} onEditSheet={() => setTab("sheet")} />}
       {tab === "sheet" && (
         <>
           {exam.status === "CIRCULATED" && (

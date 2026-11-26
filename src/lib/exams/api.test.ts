@@ -17,6 +17,8 @@ import { PATCH as patchBlock } from "../../app/api/exams/[id]/blocks/[blockId]/r
 import { PUT as putCell } from "../../app/api/exams/[id]/cells/route";
 import { PATCH as patchSlot } from "../../app/api/exams/[id]/slots/[slotId]/route";
 import { GET as printedPrompt } from "../../app/api/exams/printed-prompt/route";
+import { GET as getSetup } from "../../app/api/exams/[id]/setup/route";
+import { POST as createDrafts } from "../../app/api/exams/[id]/create-drafts/route";
 
 const stamp = `${Date.now()}`;
 function req(url: string, method: string, json?: unknown) {
@@ -197,6 +199,60 @@ describe("exams API", () => {
       await prisma.paper.delete({ where: { id: paper.id } });
       await prisma.blueprint.delete({ where: { id: bp.id } });
       await prisma.book.delete({ where: { id: book.id } });
+    }
+  });
+
+  it("reports missing blueprints and creates the missing drafts, dated from the date sheet", async () => {
+    const cls = `Exam Setup ${stamp}`;
+    const maths = await prisma.book.create({ data: { title: "Maths", subject: "Mathematics", className: cls, academicSession: "2026–27" } });
+    const science = await prisma.book.create({ data: { title: "Science", subject: "Science", className: cls, academicSession: "2026–27" } });
+    const bp = await prisma.blueprint.create({
+      data: { name: "HY Maths", bookId: maths.id, academicSession: "2026–27", examType: "HALF_YEARLY", durationMin: 180 },
+    });
+    try {
+      const made = await as<ExamView>(ids.admin, () =>
+        createExam(req("/api/exams", "POST", { name: `Setup ${stamp}`, examType: "HALF_YEARLY", academicSession: "2026–27" }), p()),
+      );
+      const examId = made.json.id;
+      examIds.push(examId);
+      const b = (await as<ExamView>(ids.admin, () => addBlock(req("", "POST", { title: "Only", timeText: "11 to 2" }), p({ id: examId })))).json.blocks[0].id;
+      for (const d of ["2026-12-10", "2026-12-12", "2026-12-14"]) {
+        await as(ids.admin, () => patchBlock(req("", "PATCH", { addDate: d }), p({ id: examId, blockId: b })));
+      }
+      await as(ids.admin, () => patchBlock(req("", "PATCH", { addClass: cls }), p({ id: examId, blockId: b })));
+      const cell = (date: string, subject: string) =>
+        as(ids.admin, () => putCell(req("", "PUT", { blockId: b, className: cls, date, subject }), p({ id: examId })));
+      await cell("2026-12-10", "Mathematics");
+      await cell("2026-12-12", "Science");
+      await cell("2026-12-14", "Hindi");
+
+      const setup = await as<{ missingBlueprints: { bookId: string; className: string; subject: string }[]; noBook: { className: string; subject: string }[] }>(
+        ids.admin,
+        () => getSetup(req("", "GET"), p({ id: examId })),
+      );
+      expect(setup.json.missingBlueprints).toEqual([{ bookId: science.id, className: cls, subject: "Science" }]);
+      expect(setup.json.noBook).toEqual([{ className: cls, subject: "Hindi" }]);
+
+      const res = await as<{ created: number; skipped: { slotId: string; reason: string }[]; exam: ExamView }>(ids.admin, () =>
+        createDrafts(req("", "POST", {}), p({ id: examId })),
+      );
+      expect(res.status).toBe(200);
+      expect(res.json.created).toBe(1);
+      expect(res.json.skipped.map((x) => x.reason).sort()).toEqual([`No blueprint for ${cls} Science`, `No book for ${cls} Hindi in 2026–27`]);
+      const slot = res.json.exam.slots.find((x) => x.subject === "Mathematics")!;
+      expect(slot.status).toBe("DRAFT");
+      const paper = await prisma.paper.findUniqueOrThrow({ where: { id: slot.paper!.id } });
+      expect(paper).toMatchObject({ examDate: "2026-12-10", examType: "HALF_YEARLY", academicSession: "2026–27", createdById: ids.admin, blueprintId: bp.id, status: "DRAFT" });
+      expect(paper.title).toBe(`Setup ${stamp} — Mathematics (${cls})`);
+
+      const again = await as<{ created: number }>(ids.admin, () => createDrafts(req("", "POST", {}), p({ id: examId })));
+      expect(again.json.created).toBe(0);
+      expect((await as(ids.teacher, () => createDrafts(req("", "POST", {}), p({ id: examId })))).status).toBe(403);
+    } finally {
+      await prisma.examSlot.deleteMany({ where: { className: cls } });
+      await prisma.paper.deleteMany({ where: { blueprintId: bp.id } });
+      await prisma.blueprint.delete({ where: { id: bp.id } });
+      await prisma.book.deleteMany({ where: { id: { in: [maths.id, science.id] } } });
     }
   });
 

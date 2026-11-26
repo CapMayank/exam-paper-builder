@@ -1,13 +1,11 @@
-import { body, HttpError, route } from "@/lib/api";
+import { body, route } from "@/lib/api";
 import { keepActive, scopeFromRequest } from "@/lib/viewScope";
-import { recordAudit } from "@/lib/audit";
 import { paperStatus } from "@/lib/blueprint";
 import { resolvePaperExamType } from "@/lib/constants";
-import { resolveBoardAndSubjectCode } from "@/lib/curriculumContract";
-import { detectPaperLanguage, type PaperLanguage } from "@/lib/localization";
 import { applySlotDeltas } from "@/lib/sectionPools";
 import { withEffectiveAllowedTypes } from "@/lib/sectionTypes";
-import { assertCanManageScope, loadPaperView, toPlacedItems } from "@/lib/papers";
+import { loadPaperView, toPlacedItems } from "@/lib/papers";
+import { createPaperFromBlueprint } from "@/lib/paperCreate";
 import { prisma } from "@/lib/prisma";
 import { paperCreateSchema } from "@/lib/schemas";
 
@@ -77,63 +75,6 @@ export const GET = route(async (req) => {
 
 export const POST = route(async (req, _params, user) => {
   const input = await body(req, paperCreateSchema);
-  const bp = await prisma.blueprint.findUnique({
-    where: { id: input.blueprintId },
-    select: {
-      id: true,
-      name: true,
-      examType: true,
-      subjectCode: true,
-      language: true,
-      academicSession: true,
-      book: { select: { subject: true, className: true } },
-    },
-  });
-  if (!bp) {
-    throw new HttpError(400, "Blueprint not found");
-  }
-  assertCanManageScope(user, bp.book);
-  const resolvedExamType = resolvePaperExamType({
-    examType: input.examType,
-    title: input.title,
-    blueprint: bp,
-  });
-  const resolvedBoardSubject = resolveBoardAndSubjectCode({
-    subject: bp.book.subject,
-    className: bp.book.className,
-    explicitSubjectCode: input.subjectCode || bp.subjectCode,
-    schoolName: input.schoolName,
-    blueprintName: bp.name,
-    academicSession: input.academicSession || bp.academicSession,
-  });
-  const resolvedLanguage: PaperLanguage =
-    input.language && input.language !== "en"
-      ? input.language
-      : bp.language && bp.language !== "en"
-      ? (bp.language as PaperLanguage)
-      : detectPaperLanguage({
-          title: input.title,
-          subjectCode: input.subjectCode || bp.subjectCode,
-          blueprint: bp,
-        });
-
-  const paper = await prisma.paper.create({
-    data: {
-      ...input,
-      language: resolvedLanguage,
-      subjectCode: resolvedBoardSubject.subjectCode || input.subjectCode || bp.subjectCode || undefined,
-      examType: resolvedExamType,
-      createdById: user.id,
-    },
-  });
-
-  await recordAudit(user, "PAPER_CREATE", "PAPER", paper.id, {
-    title: paper.title,
-    examType: paper.examType,
-    schoolName: paper.schoolName,
-    blueprintId: paper.blueprintId,
-    academicSession: paper.academicSession,
-  });
-
-  return loadPaperView(paper.id);
+  const { id } = await createPaperFromBlueprint(input, user.id, user);
+  return loadPaperView(id);
 });

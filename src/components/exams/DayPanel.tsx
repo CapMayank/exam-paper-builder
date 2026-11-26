@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink, Printer, X } from "lucide-react";
+import { ExternalLink, FilePlus2, Printer, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useToast } from "@/components/ui";
@@ -11,7 +11,7 @@ import type { ExamView, SlotView } from "@/lib/exams/types";
 import { SLOT_WARNING_TEXT, SlotStatusBadge } from "./SlotStatusBadge";
 
 /** One exam day's papers, grouped by block: status, open, print, and the printed switch. */
-export function DayPanel({ exam, date, slots, onChange, onClose }: { exam: ExamView; date: string; slots: SlotView[]; onChange: (v: ExamView) => void; onClose: () => void }) {
+export function DayPanel({ exam, isAdmin, date, slots, onChange, onClose }: { exam: ExamView; isAdmin: boolean; date: string; slots: SlotView[]; onChange: (v: ExamView) => void; onClose: () => void }) {
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -27,6 +27,20 @@ export function DayPanel({ exam, date, slots, onChange, onClose }: { exam: ExamV
       onChange(await api<ExamView>(`/api/exams/${exam.id}/slots/${s.id}`, { method: "PATCH", json: { printed } }));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not save");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const createPaper = async (s: SlotView) => {
+    setBusy(s.id);
+    try {
+      const r = await api<{ created: number; skipped: { reason: string }[]; exam: ExamView }>(`/api/exams/${exam.id}/create-drafts`, { method: "POST", json: { slotId: s.id } });
+      onChange(r.exam);
+      if (r.skipped.length) toast.error(r.skipped[0].reason);
+      else toast.success("Draft paper created, dated from the date sheet.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not create the paper");
     } finally {
       setBusy(null);
     }
@@ -93,6 +107,11 @@ export function DayPanel({ exam, date, slots, onChange, onClose }: { exam: ExamV
                               <Printer size={13} /> Print
                             </Link>
                           </>
+                        )}
+                        {isAdmin && s.status === "NO_PAPER" && (
+                          <button type="button" className="btn btn-secondary btn-sm" disabled={busy === s.id} onClick={() => createPaper(s)}>
+                            <FilePlus2 size={13} /> Create paper
+                          </button>
                         )}
                         <label className="ml-auto inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-slate-700">
                           <input

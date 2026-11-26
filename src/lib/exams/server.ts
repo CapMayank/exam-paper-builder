@@ -1,7 +1,10 @@
 import "server-only";
 import { HttpError, type SessionUser } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
+import { DEFAULT_SCHOOL_NAME } from "@/lib/constants";
+import { createPaperFromBlueprint } from "@/lib/paperCreate";
 import { prisma } from "@/lib/prisma";
+import { paperCreateSchema } from "@/lib/schemas";
 import { todayIST } from "./dates";
 import { checkAddClass, checkAddDate, checkMoveDate, copyLayout } from "./grid";
 import { filterByExamType, paperCandidateWhere, pickPaper } from "./paperMatch";
@@ -351,4 +354,74 @@ export async function setSignature(fileName: string | null, user: SessionUser) {
   }
   await recordAudit(user, "EXAM_UPDATE", "SYSTEM", null, { principalSignature: fileName ? "uploaded" : "removed" });
   return { fileName };
+}
+
+type SetupRow = { bookId: string; className: string; subject: string };
+
+/** The book of each scheduled class-subject in this session, and whether it has a blueprint for this exam. */
+async function setupRows(exam: { examType: string; academicSession: string }, slots: { className: string; subject: string }[]) {
+  const pairs = [...new Map(slots.map((s) => [`${s.className}|${s.subject}`, { className: s.className, subject: s.subject }])).values()];
+  if (!pairs.length) return [];
+  const books = await prisma.book.findMany({
+    where: { academicSession: exam.academicSession, OR: pairs.map((p) => ({ className: p.className, subject: p.subject })) },
+    select: {
+      id: true,
+      className: true,
+      subject: true,
+      blueprints: { where: { examType: exam.examType, academicSession: exam.academicSession }, select: { id: true }, orderBy: { updatedAt: "desc" } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+  return pairs.map((p) => {
+    const matching = books.filter((b) => b.className === p.className && b.subject === p.subject);
+    const withBlueprint = matching.find((b) => b.blueprints.length);
+    return { ...p, book: withBlueprint ?? matching[0] ?? null, blueprintId: withBlueprint?.blueprints[0]?.id ?? null };
+  });
+}
+
+export async function examSetup(examId: string): Promise<{ missingBlueprints: SetupRow[]; noBook: { className: string; subject: string }[] }> {
+  const exam = await prisma.exam.findUnique({ where: { id: examId }, include: { slots: { orderBy: [{ examDate: "asc" }] } } });
+  if (!exam) throw new HttpError(404, "Exam not found");
+  const rows = await setupRows(exam, exam.slots);
+  return {
+    missingBlueprints: rows.filter((r) => r.book && !r.blueprintId).map((r) => ({ bookId: r.book!.id, className: r.className, subject: r.subject })),
+    noBook: rows.filter((r) => !r.book).map((r) => ({ className: r.className, subject: r.subject })),
+  };
+}
+
+/** Draft papers for scheduled slots that have a blueprint but no paper; each is dated from the date sheet and linked. */
+export async function createMissingDrafts(examId: string, user: SessionUser, onlySlotId?: string) {
+  const exam = await prisma.exam.findUnique({
+    where: { id: examId },
+    include: { slots: { where: { paperId: null, ...(onlySlotId ? { id: onlySlotId } : {}) }, orderBy: [{ examDate: "asc" }] } },
+  });
+  if (!exam) throw new HttpError(404, "Exam not found");
+  const rows = await setupRows(exam, exam.slots);
+  const byPair = new Map(rows.map((r) => [`${r.className}|${r.subject}`, r]));
+  let created = 0;
+  const skipped: { slotId: string; reason: string }[] = [];
+  for (const slot of exam.slots) {
+    const row = byPair.get(`${slot.className}|${slot.subject}`);
+    if (!row?.book) {
+      skipped.push({ slotId: slot.id, reason: `No book for ${slot.className} ${slot.subject} in ${exam.academicSession}` });
+      continue;
+    }
+    if (!row.blueprintId) {
+      skipped.push({ slotId: slot.id, reason: `No blueprint for ${slot.className} ${slot.subject}` });
+      continue;
+    }
+    const recent = await prisma.paper.findFirst({ where: { blueprint: { bookId: row.book.id } }, orderBy: { updatedAt: "desc" }, select: { layout: true } });
+    const input = paperCreateSchema.parse({
+      title: `${exam.name} — ${slot.subject} (${slot.className})`,
+      blueprintId: row.blueprintId,
+      layout: recent?.layout ?? "PAGE",
+      schoolName: DEFAULT_SCHOOL_NAME,
+      ...paperSyncFields(exam, slot.examDate),
+    });
+    const paper = await createPaperFromBlueprint(input, user.id, user);
+    await prisma.examSlot.update({ where: { id: slot.id }, data: { paperId: paper.id } });
+    created++;
+  }
+  await recordAudit(user, "EXAM_UPDATE", "EXAM", examId, { createdDrafts: created, skipped: skipped.length });
+  return { created, skipped, exam: await loadExamView(examId) };
 }

@@ -29,7 +29,7 @@ function Bar({ d }: { d: DayRollup }) {
   );
 }
 
-export function ExamCalendar({ exam, onChange, onEditSheet }: { exam: ExamView; onChange: (v: ExamView) => void; onEditSheet: () => void }) {
+export function ExamCalendar({ exam, isAdmin, onChange, onEditSheet }: { exam: ExamView; isAdmin: boolean; onChange: (v: ExamView) => void; onEditSheet: () => void }) {
   const today = todayIST();
   const [blockFilter, setBlockFilter] = useState<string[]>([]);
   const [classFilter, setClassFilter] = useState<string[]>([]);
@@ -131,7 +131,7 @@ export function ExamCalendar({ exam, onChange, onEditSheet }: { exam: ExamView; 
         </section>
       ))}
 
-      {openDate && <DayPanel exam={exam} date={openDate} slots={slots.filter((s) => s.examDate === openDate)} onChange={onChange} onClose={() => setOpenDate(null)} />}
+      {openDate && <DayPanel exam={exam} isAdmin={isAdmin} date={openDate} slots={slots.filter((s) => s.examDate === openDate)} onChange={onChange} onClose={() => setOpenDate(null)} />}
     </div>
   );
 }
