@@ -686,7 +686,7 @@ export function QuestionForm({
   // slot), only a type that slot accepts is picked. A type locked by use is never changed.
   const foundType = typeLocked
     ? null
-    : suggestQuestionType({ type, text, subparts, chapterTitle: chapters.find((c) => c.id === effChapterId)?.title, subject: book?.subject });
+    : suggestQuestionType({ type, text, subparts, chapterTitle: chapters.find((c) => c.id === effChapterId)?.title, subject: book?.subject, className: book?.className });
   const typeHint =
     foundType && (!typeFromParent || (allowedTypes ?? []).includes(foundType.type)) && keptType !== `${type}>${foundType.type}`
       ? foundType

@@ -95,6 +95,8 @@ export interface BatchParseOptions {
   defaultType?: QuestionType;
   /** The book's subject, so a row saved under a general type gets the closer one it really is. */
   subject?: string | null;
+  /** The book's class: from class 9 rows keep the type they give. */
+  className?: string | null;
 }
 
 export interface BatchImportOptions extends BatchParseOptions {
@@ -1010,7 +1012,7 @@ export function parseAndValidateBatch(opts: BatchImportOptions): BatchImportRepo
 /** A row given a general type (a passage typed as Short answer with parts, say) gets the type it really is. */
 function withInferredType(item: ValidatedQuestionPayload, opts: BatchParseOptions): ValidatedQuestionPayload {
   const chapterTitle = opts.chapters?.find((c) => c.id === item.chapterId)?.title;
-  const s = suggestQuestionType({ type: item.type, text: item.text, subparts: item.subparts, chapterTitle, subject: opts.subject });
+  const s = suggestQuestionType({ type: item.type, text: item.text, subparts: item.subparts, chapterTitle, subject: opts.subject, className: opts.className });
   if (!s) return item;
   return { ...item, type: s.type as QuestionType, retypedFrom: item.type, showGrid: (s.type === "DRAW" || s.type === "MAP_WORK") && item.showGrid };
 }

@@ -26,14 +26,14 @@ export function QuestionTypeCheckModal({
   onApplied: () => void | Promise<void>;
 }) {
   const toast = useToast();
-  const subjectOf = useMemo(() => new Map(books.map((b) => [b.id, b.subject])), [books]);
+  const bookOf = useMemo(() => new Map(books.map((b) => [b.id, b])), [books]);
   const rows = useMemo<Row[]>(
     () =>
       questions.flatMap((q) => {
-        const s = suggestQuestionType({ type: q.type, text: q.text, subparts: q.subparts, chapterTitle: q.chapter?.title, subject: subjectOf.get(q.bookId) });
+        const s = suggestQuestionType({ type: q.type, text: q.text, subparts: q.subparts, chapterTitle: q.chapter?.title, subject: bookOf.get(q.bookId)?.subject, className: bookOf.get(q.bookId)?.className });
         return s ? [{ q, s }] : [];
       }),
-    [questions, subjectOf],
+    [questions, bookOf],
   );
   // every row starts ticked; the teacher unticks the ones to keep as they are
   const [unticked, setUnticked] = useState<Set<string>>(new Set());

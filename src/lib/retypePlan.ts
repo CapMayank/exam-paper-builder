@@ -57,6 +57,7 @@ export function retypeCandidate(q: Row): RetypeCandidate | null {
     subparts: parseSubpartsPayload(q.subpartsJson).subparts,
     chapterTitle: q.chapter.title,
     subject: q.book.subject,
+    className: q.book.className,
   });
   if (!s) return null;
   return {

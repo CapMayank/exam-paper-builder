@@ -102,3 +102,28 @@ describe("adding new types to saved blueprint sections", async () => {
     expect(widenedAllowedTypes({ type: "KDG_TRACE_WRITE", count: 1, marksEach: 5, allowedTypesJson: JSON.stringify(["KDG_TRACE_WRITE"]) }, { className: "LKG", subject: "English" })).toBeNull();
   });
 });
+
+describe("where types are not re-read", () => {
+  it("leaves board classes (9 to 12) alone: their sections take one exact type", () => {
+    expect(suggestQuestionType({ type: "VERY_SHORT", text: "सन्धिविच्छेदं कुरुत।", subject: "Sanskrit", chapterTitle: "सन्धयः", className: "Class 10" })).toBeNull();
+    expect(suggestQuestionType({ type: "LONG", text: "Write a letter to your friend.", subject: "English", className: "Class 9" })).toBeNull();
+    expect(suggestQuestionType({ type: "LONG", text: "Write a letter to your friend.", subject: "English", className: "Class 8" })?.type).toBe("WRITING_SKILL");
+    expect(suggestQuestionType({ type: "LONG", text: "Write a letter to your friend.", subject: "English", className: "UKG" })?.type).toBe("WRITING_SKILL");
+  });
+
+  it("never reads a very short answer as writing, a map or a drawing", () => {
+    expect(suggestQuestionType({ type: "VERY_SHORT", text: "Whom did Lencho write a letter to the post office about?", subject: "English", className: "Class 7" })).toBeNull();
+    expect(suggestQuestionType({ type: "VERY_SHORT", text: "Draw the symbol of a cell.", subject: "Science", className: "Class 7" })).toBeNull();
+    // but a very short grammar item in a grammar chapter is grammar
+    expect(suggestQuestionType({ type: "VERY_SHORT", text: "पर्यायवाची लिखिए।", subject: "Hindi", chapterTitle: "पर्यायवाची शब्द", className: "Class 7" })?.type).toBe("GRAMMAR");
+  });
+
+  it("goes by the question's words, not a chapter it may be misfiled under", () => {
+    // lesson questions filed under grammar and writing chapters
+    expect(suggestQuestionType({ type: "VERY_SHORT", text: "श्रीकृष्ण ने अर्जुन को गीता के माध्यम से क्या उपदेश दिया?", subject: "Hindi", chapterTitle: "व्याकरण परिवार", className: "Class 6" })).toBeNull();
+    expect(suggestQuestionType({ type: "LONG", text: "रानी गयी सिधार, चिता अब उसकी दिव्य सवारी थी।", subject: "Hindi", chapterTitle: "रचनात्मक लेखन (निबंध, पत्र)", className: "Class 6" })).toBeNull();
+    // an explanation of lines under a writing chapter is reference to context
+    expect(suggestQuestionType({ type: "LONG", text: "निम्नलिखित पद्यांश की संदर्भ, प्रसंग सहित व्याख्या कीजिये-", subject: "Hindi", chapterTitle: "रचनात्मक लेखन (निबंध, पत्र)", className: "Class 6" })?.type).toBe("REFERENCE_CONTEXT");
+    expect(suggestQuestionType({ type: "VERY_SHORT", text: "Make plurals of the following words: (i) Prince (ii) Mouse", subject: "English", className: "Class 6" })?.type).toBe("GRAMMAR");
+  });
+});

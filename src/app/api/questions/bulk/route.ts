@@ -74,6 +74,7 @@ export const POST = route(async (req, _params, user) => {
       existingQuestions,
       skipDuplicates: input.skipDuplicates,
       subject: book.subject,
+      className: book.className,
     });
 
     // If dryRun requested, return validation report without persistence
