@@ -362,6 +362,57 @@ const realTime = (v: string) => {
   return h >= 0 && h < 24 && m >= 0 && m < 60;
 };
 
+const examDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Must be YYYY-MM-DD").refine(realDate, "Not a real calendar date");
+
+export const examCreateSchema = z.object({
+  name: text(160),
+  examType: z.enum(EXAM_TYPES),
+  academicSession: z.string().trim().min(4).max(40),
+});
+
+export const examUpdateSchema = z
+  .object({
+    name: text(160),
+    examType: z.enum(EXAM_TYPES),
+    academicSession: z.string().trim().min(4).max(40),
+    status: z.enum(["DRAFT", "CIRCULATED"]),
+    signatureMode: z.enum(["SIGNED", "BLANK"]),
+  })
+  .partial();
+
+export const examBlockCreateSchema = z.object({
+  title: text(120),
+  timeText: z.string().trim().max(80).default("11:00 am to 02:00 pm"),
+});
+
+/** One change to a block per request. */
+export const examBlockPatchSchema = z.union([
+  z.object({ title: text(120) }).strict(),
+  z.object({ timeText: z.string().trim().max(80) }).strict(),
+  z.object({ position: z.number().int().min(0).max(50) }).strict(),
+  z.object({ addDate: examDate }).strict(),
+  z.object({ removeDate: examDate }).strict(),
+  z.object({ moveDate: z.object({ from: examDate, to: examDate }) }).strict(),
+  z.object({ addClass: text(60) }).strict(),
+  z.object({ removeClass: text(60) }).strict(),
+]);
+
+export const examCellSchema = z.object({
+  blockId: z.string().min(1),
+  className: text(60),
+  date: examDate,
+  subject: z.string().trim().min(1).max(80).nullable(),
+});
+
+export const examSlotPatchSchema = z.union([
+  z.object({ paperId: z.string().min(1).nullable() }).strict(),
+  z.object({ printed: z.boolean() }).strict(),
+]);
+
+export const signatureSettingSchema = z.object({
+  fileName: z.string().regex(/^[\w-]+\.(png|jpg|webp)$/, "Upload a PNG, JPEG or WebP image").nullable(),
+});
+
 export const classSectionInputSchema = z.object({
   name: z.string().trim().min(1).max(50),
   count: z.number().int().min(1).max(500),
