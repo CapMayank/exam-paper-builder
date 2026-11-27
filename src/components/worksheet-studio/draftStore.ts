@@ -1,27 +1,51 @@
 /**
  * Local copies of the activities being edited, each saved a moment after its last change.
- * Edits always build on the latest copy (not on what the last render saw), so an editor that
- * changes two things in one click keeps both. Each activity has its own timer, so moving to
- * another activity never drops a pending save.
+ *
+ * - Edits always build on the latest copy (not on what the last render saw), so an editor that
+ *   changes two things in one click keeps both.
+ * - Each activity has its own timer, so moving to another activity never drops a pending save.
+ * - Saves of one activity go out one after another, so an older save can never land last.
+ * - Once a copy is saved and has not changed since, it is handed back (`onSaved`) and forgotten,
+ *   so the page's own data is the truth again. A failed save keeps the copy.
+ * - `flushAll` sends everything still waiting at once, marked urgent (the page is closing).
  */
-export function createDraftStore<D extends object>(opts: { delayMs: number; save: (id: string, draft: D) => Promise<void>; onChange?: () => void }) {
+export function createDraftStore<D extends object>(opts: {
+  delayMs: number;
+  save: (id: string, draft: D, urgent: boolean) => Promise<void>;
+  onSaved?: (id: string, draft: D) => void;
+  onChange?: () => void;
+}) {
   const drafts = new Map<string, D>();
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
+  const chains = new Map<string, Promise<void>>();
   let inFlight = 0;
   const notify = () => opts.onChange?.();
+  const savedListeners = new Set<(id: string, draft: D) => void>();
+  if (opts.onSaved) savedListeners.add(opts.onSaved);
 
-  async function run(id: string) {
+  function run(id: string, urgent: boolean) {
     timers.delete(id);
     const draft = drafts.get(id);
     if (!draft) return;
     inFlight++;
     notify();
-    try {
-      await opts.save(id, draft);
-    } finally {
-      inFlight--;
-      notify();
-    }
+    const previous = chains.get(id) ?? Promise.resolve();
+    const next = previous.then(async () => {
+      try {
+        await opts.save(id, draft, urgent);
+        if (drafts.get(id) === draft) {
+          drafts.delete(id);
+          savedListeners.forEach((l) => l(id, draft));
+        }
+      } catch {
+        // keep the draft; the caller reports the error
+      } finally {
+        inFlight--;
+        if (chains.get(id) === next) chains.delete(id);
+        notify();
+      }
+    });
+    chains.set(id, next);
   }
 
   return {
@@ -32,18 +56,24 @@ export function createDraftStore<D extends object>(opts: { delayMs: number; save
       clearTimeout(timers.get(id));
       timers.set(
         id,
-        setTimeout(() => void run(id), opts.delayMs),
+        setTimeout(() => run(id, false), opts.delayMs),
       );
       notify();
       return next;
     },
+    /** Hear about drafts that were saved and forgotten; returns a function that stops listening. */
+    subscribeSaved(listener: (id: string, draft: D) => void) {
+      savedListeners.add(listener);
+      return () => {
+        savedListeners.delete(listener);
+      };
+    },
     /** Saves still waiting for their timer plus saves on their way to the server. */
     pending: () => timers.size + inFlight,
-    /** Send everything still waiting right away (when leaving the page). */
     flushAll() {
-      for (const [id, t] of timers) {
+      for (const [id, t] of [...timers]) {
         clearTimeout(t);
-        void run(id);
+        run(id, true);
       }
     },
   };

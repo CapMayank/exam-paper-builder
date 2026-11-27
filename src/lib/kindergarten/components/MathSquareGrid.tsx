@@ -1,5 +1,5 @@
 import React from "react";
-import { gridOrder, type GridDirection } from "../gridPlacement";
+import { gridOrder, gridShape, type GridDirection } from "../gridPlacement";
 import type { NumberGridCell } from "../types";
 
 interface MathSquareGridProps {
@@ -11,9 +11,8 @@ interface MathSquareGridProps {
 }
 
 export function MathSquareGrid({ cells = [], columns = 10, direction = "ROW", className = "" }: MathSquareGridProps) {
-  const colCount = Math.max(2, Math.min(10, columns));
-  const slots = gridOrder(cells.length, colCount, direction);
-  const rowCount = Math.ceil(slots.length / colCount);
+  const { columns: colCount, rows: rowCount } = gridShape(cells.length, columns, direction);
+  const slots = gridOrder(cells.length, columns, direction);
 
   return (
     <div className={`my-3 overflow-x-auto ${className}`}>

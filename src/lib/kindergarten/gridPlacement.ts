@@ -1,17 +1,29 @@
 export type GridDirection = "COLUMN" | "ROW";
 
 /**
+ * How many rows and columns a grid of `count` numbers really uses. The column count is kept
+ * between 2 and 10 (as printed). Counting down, it never uses so many that a whole column stays empty.
+ */
+export function gridShape(count: number, columns: number, direction: GridDirection): { rows: number; columns: number } {
+  if (count <= 0) return { rows: 0, columns: 0 };
+  const asked = Math.max(2, Math.min(10, Math.floor(columns) || 10));
+  // across rows keeps the layout older papers were printed with
+  if (direction === "ROW") return { rows: Math.ceil(count / asked), columns: asked };
+  const rows = Math.ceil(count / asked);
+  return { rows, columns: Math.ceil(count / rows) };
+}
+
+/**
  * Where each number goes in a writing grid, in the order a CSS grid paints its slots
  * (left to right, then top to bottom). Each entry is the index of the cell shown in that slot,
- * or null for an empty slot at the foot of the last column.
+ * or null for an empty slot at the foot of the last column. Lay it out with `gridShape(...).columns`.
  *
  * ROW: 1 2 3 runs across. COLUMN: 1 2 3 runs down, so 1–10 fill the first column.
  */
 export function gridOrder(count: number, columns: number, direction: GridDirection): (number | null)[] {
   if (count <= 0) return [];
-  const cols = Math.max(1, Math.floor(columns));
   if (direction === "ROW") return Array.from({ length: count }, (_, i) => i);
-  const rows = Math.ceil(count / cols);
+  const { rows, columns: cols } = gridShape(count, columns, direction);
   const out: (number | null)[] = [];
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {

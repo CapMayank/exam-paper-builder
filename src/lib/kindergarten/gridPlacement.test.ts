@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blankPattern, gridOrder, numberCells } from "./gridPlacement";
+import { blankPattern, gridOrder, gridShape, numberCells } from "./gridPlacement";
 
 describe("gridOrder", () => {
   it("keeps row order for ROW", () => {
@@ -49,5 +49,27 @@ describe("number grid blanks", () => {
     const cells = numberCells(1, 10, "NONE");
     cells[3] = { ...cells[3], isBlank: true };
     expect(blankPattern(cells)).toBe("CUSTOM");
+  });
+});
+
+describe("gridShape", () => {
+  it("never leaves a whole column empty when counting down", () => {
+    expect(gridShape(6, 5, "COLUMN")).toEqual({ rows: 2, columns: 3 });
+    expect(gridOrder(6, 5, "COLUMN")).toEqual([0, 2, 4, 1, 3, 5]);
+  });
+
+  it("keeps the asked-for columns when they all get numbers", () => {
+    expect(gridShape(50, 5, "COLUMN")).toEqual({ rows: 10, columns: 5 });
+    expect(gridShape(23, 5, "COLUMN")).toEqual({ rows: 5, columns: 5 });
+  });
+
+  it("keeps the old across-rows layout exactly, so saved papers print the same", () => {
+    expect(gridShape(3, 10, "ROW")).toEqual({ rows: 1, columns: 10 });
+    expect(gridShape(23, 5, "ROW")).toEqual({ rows: 5, columns: 5 });
+  });
+
+  it("keeps columns between 2 and 10 like the printed grid", () => {
+    expect(gridShape(40, 12, "ROW").columns).toBe(10);
+    expect(gridShape(40, 1, "ROW").columns).toBe(2);
   });
 });

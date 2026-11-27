@@ -39,7 +39,19 @@ export function WorksheetStudio({ id }: { id: string }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState<Record<string, boolean>>({});
   const subject = paper?.blueprint.book.subject;
-  const drafts = useActivityDrafts(id, subject);
+  // a saved draft becomes the page's own data again
+  const drafts = useActivityDrafts(id, subject, (itemId, d) =>
+    setPaper((p) =>
+      p
+        ? {
+            ...p,
+            items: p.items.map((i) =>
+              i.id === itemId ? { ...i, question: { ...i.question, text: d.text, options: [JSON.stringify(d.config)] } } : i,
+            ),
+          }
+        : p,
+    ),
+  );
 
   const load = useCallback(async () => {
     try {
@@ -55,8 +67,18 @@ export function WorksheetStudio({ id }: { id: string }) {
   }, [id]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    let live = true;
+    api<PaperData>(`/api/papers/${id}`)
+      .then((p) => {
+        if (!live) return;
+        if ((p.blueprint as { curriculumMode?: string }).curriculumMode !== WORKSHEET_MODE) window.location.replace(`/papers/${id}`);
+        else setPaper(p);
+      })
+      .catch((e: Error) => live && setError(e.message));
+    return () => {
+      live = false;
+    };
+  }, [id]);
 
   // Escape puts the editor away (but not while typing in a field)
   useEffect(() => {

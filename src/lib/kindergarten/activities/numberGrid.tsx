@@ -5,7 +5,7 @@ import { ChoiceChips, EditorShell, Field, InstructionField, NumberStepper } from
 import React from "react";
 import { MathSquareGrid } from "../components/MathSquareGrid";
 import { PreviewBox } from "./_shared";
-import { blankPattern, gridOrder, numberCells, type BlankPattern, type GridDirection } from "../gridPlacement";
+import { blankPattern, gridOrder, gridShape, numberCells, type BlankPattern, type GridDirection } from "../gridPlacement";
 import type {
   KindergartenActivityPlugin,
   KindergartenEditorProps,
@@ -54,6 +54,8 @@ const PRESETS: { label: string; start: number; end: number; columns: number; pat
 function NumberGridEditor({ config, onChange, instructionText, onInstructionChange }: KindergartenEditorProps<NumberGridConfig>) {
   const pattern = blankPattern(config.cells);
   const direction = config.fillDirection ?? "ROW";
+  const shape = gridShape(config.cells.length, config.columns, direction);
+  const columnOptions = [5, 10].includes(config.columns) ? [5, 10] : [config.columns, 5, 10].sort((a, b) => a - b);
 
   /** New range or pattern; a hand-made pattern keeps the blanks it had for numbers still in range. */
   const rebuild = (start: number, end: number, next: BlankPattern | "CUSTOM" = pattern) => {
@@ -118,13 +120,10 @@ function NumberGridEditor({ config, onChange, instructionText, onInstructionChan
               label="Columns"
               value={config.columns}
               onChange={(columns) => onChange({ ...config, columns })}
-              options={[
-                { value: 5, label: "5" },
-                { value: 10, label: "10" },
-              ]}
+              options={columnOptions.map((n) => ({ value: n, label: String(n) }))}
             />
             <Field label="Tap a box to blank it or fill it in" hint={`${config.cells.filter((c) => c.isBlank).length} blanks`}>
-              <div className="grid max-h-64 overflow-y-auto rounded-md border-2 border-slate-900 bg-white" style={{ gridTemplateColumns: `repeat(${config.columns}, minmax(0, 1fr))` }}>
+              <div className="grid max-h-64 overflow-y-auto rounded-md border-2 border-slate-900 bg-white" style={{ gridTemplateColumns: `repeat(${Math.max(1, shape.columns)}, minmax(0, 1fr))` }}>
                 {gridOrder(config.cells.length, config.columns, direction).map((idx, pos) => {
                   const cell = idx === null ? undefined : config.cells[idx];
                   if (!cell || idx === null) return <span key={pos} className="aspect-square border-r border-b border-slate-200 bg-slate-50" />;

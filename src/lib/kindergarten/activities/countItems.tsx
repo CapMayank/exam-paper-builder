@@ -86,6 +86,7 @@ function CountItemsEditor({ config, onChange, instructionText, onInstructionChan
                 values={(config.choiceOptions ?? []).map(String)}
                 onChange={(v) => onChange({ ...config, choiceOptions: v.map(Number).filter((n) => Number.isFinite(n) && n >= 0) })}
                 placeholder="e.g. 3 5 8"
+                hint=""
               />
             )}
             <Field label="Name of the things">

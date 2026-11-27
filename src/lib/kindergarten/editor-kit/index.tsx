@@ -9,9 +9,9 @@ import React, { useContext, useState } from "react";
 import { ArrowDown, ArrowUp, ChevronDown, ImagePlus, Minus, Plus, RotateCcw, X } from "lucide-react";
 import { ClipartPickerModal } from "../components/ClipartPickerModal";
 import { getClipartById } from "../clipartLibrary";
-import { splitList } from "./splitList";
+import { joinPrompt, splitList, splitPrompt } from "./splitList";
 
-export { splitList };
+export { joinPrompt, splitList, splitPrompt };
 
 /* ------------------------------------------------------------------ shell */
 
@@ -179,11 +179,13 @@ export function TextListField({
   values,
   onChange,
   placeholder = "Type and press Enter",
+  hint = "Use commas to keep words together, e.g. ice cream, apple",
 }: {
   label: string;
   values: string[];
   onChange: (v: string[]) => void;
   placeholder?: string;
+  hint?: string;
 }) {
   const [draft, setDraft] = useState("");
   const add = (raw: string) => {
@@ -208,7 +210,7 @@ export function TextListField({
           placeholder={values.length ? "" : placeholder}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === ",") {
+            if (e.key === "Enter") {
               e.preventDefault();
               add(draft);
             } else if (e.key === "Backspace" && !draft && values.length) {
@@ -223,6 +225,7 @@ export function TextListField({
           className="min-w-24 flex-1 border-0 bg-transparent px-1 py-0.5 text-sm focus:outline-none"
         />
       </div>
+      {hint && <p className="mt-1 text-[11px] text-slate-400">{hint}</p>}
     </div>
   );
 }

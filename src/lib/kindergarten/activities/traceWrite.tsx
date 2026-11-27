@@ -1,6 +1,6 @@
 "use client";
 
-import { ChoiceChips, EditorShell, InstructionField, NumberStepper, TextListField, ToggleRow, splitList } from "../editor-kit";
+import { ChoiceChips, EditorShell, InstructionField, NumberStepper, TextListField, ToggleRow, joinPrompt, splitPrompt } from "../editor-kit";
 
 import { PreviewBox } from "./_shared";
 import React from "react";
@@ -47,8 +47,8 @@ function TraceWriteEditor({ config, onChange, instructionText, onInstructionChan
             <InstructionField value={instructionText} onChange={onInstructionChange} defaultValue={config.instruction} />
             <TextListField
               label="Letters or words to copy"
-              values={splitList(line.promptText)}
-              onChange={(v) => updateLine({ promptText: v.join("  ") })}
+              values={splitPrompt(line.promptText)}
+              onChange={(v) => updateLine({ promptText: joinPrompt(v) })}
               placeholder="A B C or Apple Ball"
             />
             <NumberStepper label="Writing rows" value={line.repeatCount} min={1} max={6} onChange={(n) => updateLine({ repeatCount: n })} />
