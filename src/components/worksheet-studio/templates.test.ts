@@ -5,7 +5,7 @@ import { templateSnapshots } from "./templates";
 
 describe("templateSnapshots", () => {
   it("fills built-in activities with their defaults for the worksheet's subject", () => {
-    const hindi = BUILT_IN_TEMPLATES.find((t) => t.className === "Nursery" && t.subject === "Hindi")!;
+    const hindi = BUILT_IN_TEMPLATES.find((t) => t.className === "UKG" && t.subject === "Hindi")!;
     const snaps = templateSnapshots(hindi, "Hindi");
     const trace = snaps.find((s) => s.type === "KDG_TRACE_WRITE")!;
     const expected = getKindergartenActivity("KDG_TRACE_WRITE")!.defaultConfig("Hindi") as { instruction: string };

@@ -213,3 +213,35 @@ describe("Number grid fill direction", () => {
     expect(parseKindergartenConfig<NumberGridConfig>("KDG_NUMBER_GRID", stored).fillDirection).toBe("COLUMN");
   });
 });
+
+describe("Hindi and EVS activities", () => {
+  const NEW = {
+    KDG_HINDI_VARNAMALA: "hindi",
+    KDG_HINDI_MISSING: "hindi",
+    KDG_HINDI_FIRST_LETTER: "hindi",
+    KDG_HINDI_LETTER_MATCH: "hindi",
+    KDG_EVS_SORT: "evs",
+    KDG_EVS_NAME: "evs",
+    KDG_EVS_ODD_ONE: "evs",
+    KDG_EVS_HOME: "evs",
+  } as const;
+
+  it("registers all eight in their subject", () => {
+    for (const [type, category] of Object.entries(NEW)) {
+      const p = getKindergartenActivity(type);
+      expect(p, type).toBeDefined();
+      expect(p!.category).toBe(category);
+      expect(isKindergartenType(type)).toBe(true);
+    }
+  });
+
+  it("gives each a usable default that survives saving and loading", () => {
+    for (const type of Object.keys(NEW)) {
+      const p = getKindergartenActivity(type)!;
+      const cfg = p.defaultConfig("Hindi") as { instruction: string };
+      expect(cfg.instruction, type).toBeTruthy();
+      expect(p.validateConfig(cfg).valid, type).toBe(true);
+      expect(parseKindergartenConfig(type, serializeKindergartenConfig(cfg))).toEqual(cfg);
+    }
+  });
+});

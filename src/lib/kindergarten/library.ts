@@ -11,11 +11,6 @@ export const CATEGORY_LABEL: Record<KindergartenCategory, string> = {
 
 const CATEGORY_ORDER: KindergartenCategory[] = ["english", "math", "general", "hindi", "evs"];
 
-/** Groups shown next to a subject's own while that subject has no activities of its own yet. */
-const STAND_IN: Partial<Record<KindergartenCategory, KindergartenCategory[]>> = {
-  hindi: ["english"],
-};
-
 export type LibraryGroup = { category: KindergartenCategory; label: string; plugins: AnyActivityPlugin[] };
 
 export function subjectCategory(subject?: string | null): KindergartenCategory {
@@ -30,31 +25,22 @@ export function subjectCategory(subject?: string | null): KindergartenCategory {
 /**
  * What the worksheet's activity library lists: the subject's own group first, then fun & drawing
  * (they suit any subject). `showAll` adds the rest; a search looks through everything.
- * `comingSoon` is true when the subject has no activities of its own yet.
  */
-export function libraryGroups(opts: { subject?: string | null; showAll: boolean; query: string }): {
-  groups: LibraryGroup[];
-  comingSoon: boolean;
-} {
+export function libraryGroups(opts: { subject?: string | null; showAll: boolean; query: string }): LibraryGroup[] {
   const all = getAllKindergartenActivities();
   const own = subjectCategory(opts.subject);
-  const byCategory = (c: KindergartenCategory) => all.filter((p) => p.category === c);
-  const comingSoon = byCategory(own).length === 0;
   const q = opts.query.trim().toLowerCase();
-
-  let order: KindergartenCategory[];
-  if (q || opts.showAll) order = [own, ...CATEGORY_ORDER];
-  else order = [own, ...(comingSoon ? (STAND_IN[own] ?? []) : []), "general"];
+  const order: KindergartenCategory[] = q || opts.showAll ? [own, ...CATEGORY_ORDER] : [own, "general"];
 
   const seen = new Set<KindergartenCategory>();
   const groups: LibraryGroup[] = [];
   for (const category of order) {
     if (seen.has(category)) continue;
     seen.add(category);
-    const plugins = byCategory(category).filter(
-      (p) => !q || `${p.label} ${p.shortLabel} ${p.description}`.toLowerCase().includes(q),
+    const plugins = all.filter(
+      (p) => p.category === category && (!q || `${p.label} ${p.shortLabel} ${p.description}`.toLowerCase().includes(q)),
     );
     if (plugins.length) groups.push({ category, label: CATEGORY_LABEL[category], plugins });
   }
-  return { groups, comingSoon };
+  return groups;
 }

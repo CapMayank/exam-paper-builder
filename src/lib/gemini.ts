@@ -755,6 +755,57 @@ Return a JSON array strictly matching this TypeScript structure:
           config: { rows: [{ stroke: "STANDING" }, { stroke: "SLEEPING" }, { stroke: "ZIGZAG" }] },
           answer: "Pencil-control practice",
         },
+        KDG_HINDI_VARNAMALA: {
+          en: "Write each letter in the boxes:",
+          hi: "अक्षर देखकर खानों में लिखिए:",
+          config: { letters: ["क", "ख", "ग", "घ", "ङ"], boxesPerRow: 5, dotted: true },
+          answer: "Handwriting practice",
+        },
+        KDG_HINDI_MISSING: {
+          en: "Write the missing letters:",
+          hi: "छूटे हुए अक्षर लिखिए:",
+          config: { mode: "VARNA", rows: [{ text: "क ख ग घ ङ", blanks: [2] }, { text: "च छ ज झ ञ", blanks: [1, 3] }], hints: [] },
+          answer: "ग; छ, झ",
+        },
+        KDG_HINDI_FIRST_LETTER: {
+          en: "Circle the first letter of each picture's name:",
+          hi: "चित्र का पहला अक्षर गोला लगाइए:",
+          config: { answerStyle: "CIRCLE", rows: [{ clipartId: "mango", word: "आम", choices: ["आ", "क", "म"] }, { clipartId: "fish", word: "मछली", choices: ["ल", "म", "छ"] }] },
+          answer: "आ, म",
+        },
+        KDG_HINDI_LETTER_MATCH: {
+          en: "Match each picture to its first letter:",
+          hi: "चित्र को उसके पहले अक्षर से मिलाइए:",
+          config: { pairs: [{ id: "1", clipartId: "mango", label: "आम", matchLabel: "आ" }, { id: "2", clipartId: "kite", label: "पतंग", matchLabel: "प" }], shuffleRight: true, leftTitle: "चित्र", rightTitle: "अक्षर" },
+          answer: "आम - आ, पतंग - प",
+        },
+        KDG_EVS_SORT: {
+          en: "Put a tick (✓) on living things and a cross (✗) on non-living things:",
+          hi: "सजीव पर (✓) और निर्जीव पर (✗) लगाइए:",
+          config: { groupA: "Living", groupB: "Non-living", items: [{ clipartId: "cat", group: "A" }, { clipartId: "ball", group: "B" }, { clipartId: "tree", group: "A" }, { clipartId: "car", group: "B" }] },
+          answer: "Cat, tree living; ball, car non-living",
+        },
+        KDG_EVS_NAME: {
+          en: "Look at the picture and tick (✓) its name:",
+          hi: "चित्र देखकर सही नाम पर (✓) लगाइए:",
+          config: { answer: "TICK", rows: [{ clipartId: "elephant", name: "Elephant", choices: ["Elephant", "Dog"] }, { clipartId: "apple", name: "Apple", choices: ["Mango", "Apple"] }] },
+          answer: "Elephant, Apple",
+        },
+        KDG_EVS_ODD_ONE: {
+          en: "Cross (✗) the odd one out in each row:",
+          hi: "प्रत्येक पंक्ति में भिन्न चित्र पर (✗) लगाइए:",
+          config: {
+            mode: "ODD_ONE_OUT",
+            rows: [{ items: [{ id: "1", type: "CLIPART", clipartId: "apple", isTarget: false }, { id: "2", type: "CLIPART", clipartId: "mango", isTarget: false }, { id: "3", type: "CLIPART", clipartId: "car", isTarget: true }] }],
+          },
+          answer: "Car",
+        },
+        KDG_EVS_HOME: {
+          en: "Match each animal to where it lives:",
+          hi: "जानवर को उसके घर से मिलाइए:",
+          config: { pairs: [{ id: "1", clipartId: "fish", label: "Fish", matchLabel: "Water" }, { id: "2", clipartId: "dog", label: "Dog", matchLabel: "Kennel" }], shuffleRight: true, leftTitle: "Who?", rightTitle: "Lives in" },
+          answer: "Fish - Water, Dog - Kennel",
+        },
       };
       const sample = extra[String(type)];
       if (sample) {

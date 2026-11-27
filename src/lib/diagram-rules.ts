@@ -26,7 +26,9 @@ export function isSectionVisuallyEligible(sectionType: string, subject?: string)
     norm === "KDG_COLOUR" ||
     norm === "KDG_JOIN_DOTS" ||
     norm === "KDG_TICK_PICTURE" ||
-    norm === "KDG_PREWRITING"
+    norm === "KDG_PREWRITING" ||
+    norm === "KDG_HINDI_VARNAMALA" ||
+    norm === "KDG_HINDI_MISSING"
   ) {
     return false;
   }
@@ -38,7 +40,13 @@ export function isSectionVisuallyEligible(sectionType: string, subject?: string)
     norm === "WRITING_SKILL" ||
     norm === "KDG_PICTURE_MATCH" ||
     norm === "KDG_COUNT_ITEMS" ||
-    norm === "KDG_CIRCLE_TARGET"
+    norm === "KDG_CIRCLE_TARGET" ||
+    norm === "KDG_HINDI_FIRST_LETTER" ||
+    norm === "KDG_HINDI_LETTER_MATCH" ||
+    norm === "KDG_EVS_SORT" ||
+    norm === "KDG_EVS_NAME" ||
+    norm === "KDG_EVS_ODD_ONE" ||
+    norm === "KDG_EVS_HOME"
   ) {
     return true;
   }

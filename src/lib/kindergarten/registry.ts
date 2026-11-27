@@ -12,11 +12,17 @@ import { colourPlugin } from "./activities/colourPicture";
 import { joinDotsPlugin } from "./activities/joinDots";
 import { tickPicturePlugin } from "./activities/tickPicture";
 import { preWritingPlugin } from "./activities/preWriting";
+import { hindiVarnamalaPlugin } from "./activities/hindiVarnamala";
+import { hindiMissingPlugin } from "./activities/hindiMissing";
+import { hindiFirstLetterPlugin } from "./activities/hindiFirstLetter";
+import { evsSortPlugin } from "./activities/evsSort";
+import { evsNamePlugin } from "./activities/evsName";
+import { evsHomePlugin, evsOddOnePlugin, hindiLetterMatchPlugin } from "./activities/subjectVariants";
 import type { AnyActivityPlugin } from "./types";
 
 const REGISTRY = new Map<string, AnyActivityPlugin>();
 
-// Register all kindergarten activities (original 6 + 8 added later)
+// Register all kindergarten activities (in library order within each subject)
 [
   traceWritePlugin,
   numberGridPlugin,
@@ -32,6 +38,14 @@ const REGISTRY = new Map<string, AnyActivityPlugin>();
   comparePlugin,
   pictureSumPlugin,
   tickPicturePlugin,
+  hindiVarnamalaPlugin,
+  hindiMissingPlugin,
+  hindiFirstLetterPlugin,
+  hindiLetterMatchPlugin,
+  evsSortPlugin,
+  evsNamePlugin,
+  evsOddOnePlugin,
+  evsHomePlugin,
 ].forEach((plugin) => {
   REGISTRY.set(plugin.type, plugin);
 });

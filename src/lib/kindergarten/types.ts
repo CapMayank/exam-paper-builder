@@ -243,3 +243,60 @@ export interface PreWritingConfig {
   rows: PreWritingRow[];
   instruction: string;
 }
+
+// ---------------- 15. KDG_HINDI_VARNAMALA Config ----------------
+export interface HindiVarnamalaConfig {
+  letters: string[]; // e.g. ["क", "ख", "ग"]
+  boxesPerRow: number; // writing boxes after each letter (3–8)
+  dotted: boolean; // first box shows a dotted letter to trace
+  instruction: string;
+}
+
+// ---------------- 16. KDG_HINDI_MISSING Config ----------------
+export interface HindiMissingRow {
+  text: string; // "क ख ग घ" (a sequence) or "कमला" (a word)
+  blanks: number[]; // which boxes the child fills
+  clipartId?: string; // picture clue for a word
+}
+export interface HindiMissingConfig {
+  mode: "VARNA" | "MATRA";
+  rows: HindiMissingRow[];
+  hints: string[]; // letters or matras printed as a help box ("ा ि ी"), may be empty
+  instruction: string;
+}
+
+// ---------------- 17. KDG_HINDI_FIRST_LETTER Config ----------------
+export interface HindiFirstLetterRow {
+  clipartId: string;
+  word: string; // the picture's name, e.g. "आम"
+  choices: string[]; // letters to circle when answerStyle is CIRCLE
+}
+export interface HindiFirstLetterConfig {
+  answerStyle: "WRITE" | "CIRCLE";
+  rows: HindiFirstLetterRow[];
+  instruction: string;
+}
+
+// ---------------- 18. KDG_EVS_SORT Config ----------------
+export interface EvsSortItem {
+  clipartId: string;
+  group: "A" | "B";
+}
+export interface EvsSortConfig {
+  groupA: string; // e.g. "Living"
+  groupB: string; // e.g. "Non-living"
+  items: EvsSortItem[];
+  instruction: string;
+}
+
+// ---------------- 19. KDG_EVS_NAME Config ----------------
+export interface EvsNameRow {
+  clipartId: string;
+  name: string; // the right name, e.g. "Elephant"
+  choices: string[]; // names to tick when answer is TICK (the right one among them)
+}
+export interface EvsNameConfig {
+  answer: "WRITE" | "TICK";
+  rows: EvsNameRow[];
+  instruction: string;
+}

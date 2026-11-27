@@ -289,6 +289,53 @@ function formatFor(type: string, language: string): TypeFormat {
       return activityFormat(type, "pencil-control strokes to trace.", {
         rows: [{ stroke: "<STANDING | SLEEPING | SLANTING_RIGHT | SLANTING_LEFT | ZIGZAG | CURVES | WAVES | LOOPS | CIRCLES | STEPS>" }],
       });
+    case "KDG_HINDI_VARNAMALA":
+      return activityFormat(type, "Hindi letters, each with shirorekha boxes to trace and copy.", {
+        letters: ["<Hindi letter>", "<Hindi letter>"],
+        boxesPerRow: "<boxes per letter, 3-8>",
+        dotted: true,
+      });
+    case "KDG_HINDI_MISSING":
+      return activityFormat(type, "rows of Hindi letters in order, or words, with some boxes left blank. \"text\" is letters separated by spaces (\"क ख ग घ\") or one word; \"blanks\" are 0-based box numbers.", {
+        mode: "<VARNA | MATRA>",
+        rows: [{ text: "<letters with spaces, or a word>", blanks: ["<box number>"], clipartId: "<picture id, words only>" }],
+        hints: ["<letter or matra to choose from>"],
+      });
+    case "KDG_HINDI_FIRST_LETTER":
+      return activityFormat(type, "pictures; the child circles or writes the first Hindi letter of each picture's name.", {
+        answerStyle: "<CIRCLE | WRITE>",
+        rows: [{ clipartId: "<picture id>", word: "<Hindi name of the picture>", choices: ["<right first letter>", "<other letter>", "<other letter>"] }],
+      });
+    case "KDG_HINDI_LETTER_MATCH":
+      return activityFormat(type, "match each picture with its first Hindi letter.", {
+        pairs: [{ id: "1", clipartId: "<picture id>", label: "<Hindi name>", matchLabel: "<first letter>" }],
+        shuffleRight: true,
+        leftTitle: "<left heading, e.g. चित्र>",
+        rightTitle: "<right heading, e.g. अक्षर>",
+      });
+    case "KDG_EVS_SORT":
+      return activityFormat(type, "pictures the child ticks (group A) or crosses (group B), e.g. living / non-living.", {
+        groupA: "<group to tick>",
+        groupB: "<group to cross>",
+        items: [{ clipartId: "<picture id>", group: "<A | B>" }],
+      });
+    case "KDG_EVS_NAME":
+      return activityFormat(type, "pictures; the child ticks the right name among the choices or writes it.", {
+        answer: "<TICK | WRITE>",
+        rows: [{ clipartId: "<picture id>", name: "<right name>", choices: ["<right name>", "<other name>"] }],
+      });
+    case "KDG_EVS_ODD_ONE":
+      return activityFormat(type, "rows of pictures; the child crosses the one that does not belong. Exactly one item per row has isTarget true.", {
+        mode: "<ODD_ONE_OUT>",
+        rows: [{ items: [{ id: "1", type: "CLIPART", clipartId: "<picture id>", isTarget: false }, { id: "2", type: "CLIPART", clipartId: "<picture id>", isTarget: true }] }],
+      });
+    case "KDG_EVS_HOME":
+      return activityFormat(type, "match each animal or thing with where it lives or belongs.", {
+        pairs: [{ id: "1", clipartId: "<picture id>", label: "<animal or thing>", matchLabel: "<where it lives>" }],
+        shuffleRight: true,
+        leftTitle: "<left heading>",
+        rightTitle: "<right heading>",
+      });
     default:
       return openFormat(type);
   }

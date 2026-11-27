@@ -136,7 +136,14 @@ function PictureMatchEditor({ config, onChange, instructionText, onInstructionCh
             if ("customUrl" in item) {
               updatePair(pickerIndex, { customImageUrl: item.customUrl, label: item.name });
             } else {
-              updatePair(pickerIndex, { clipartId: item.id, customImageUrl: undefined, label: item.name, matchLabel: item.name[0]?.toUpperCase() || "A" });
+              // a name the teacher typed (a Hindi word, say) stays; the automatic English name follows the picture
+              const pair = config.pairs[pickerIndex];
+              const autoNamed = !pair?.label || pair.label === (pair.clipartId ? getClipartById(pair.clipartId)?.name : undefined);
+              updatePair(pickerIndex, {
+                clipartId: item.id,
+                customImageUrl: undefined,
+                ...(autoNamed ? { label: item.name, matchLabel: item.name[0]?.toUpperCase() || "A" } : {}),
+              });
             }
             setPickerIndex(null);
           }}

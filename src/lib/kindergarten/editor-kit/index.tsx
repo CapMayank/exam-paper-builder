@@ -132,8 +132,8 @@ export function ChoiceChips<T extends string | number>({
 }) {
   return (
     <div>
-      <span className={labelCls}>{label}</span>
-      <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-1.5">
+      {label && <span className={labelCls}>{label}</span>}
+      <div role="radiogroup" aria-label={label || undefined} className="flex flex-wrap gap-1.5">
         {options.map((o) => (
           <button
             key={String(o.value)}

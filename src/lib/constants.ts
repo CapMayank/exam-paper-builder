@@ -13,6 +13,14 @@ export const KINDERGARTEN_QUESTION_TYPES = [
   "KDG_JOIN_DOTS",
   "KDG_TICK_PICTURE",
   "KDG_PREWRITING",
+  "KDG_HINDI_VARNAMALA",
+  "KDG_HINDI_MISSING",
+  "KDG_HINDI_FIRST_LETTER",
+  "KDG_HINDI_LETTER_MATCH",
+  "KDG_EVS_SORT",
+  "KDG_EVS_NAME",
+  "KDG_EVS_ODD_ONE",
+  "KDG_EVS_HOME",
 ] as const;
 
 export const STANDARD_QUESTION_TYPES = [
@@ -69,6 +77,14 @@ export const QUESTION_TYPE_LABEL: Record<QuestionType, string> = {
   KDG_JOIN_DOTS: "Join the Dots (1, 2, 3 or A, B, C)",
   KDG_TICK_PICTURE: "Tick the Correct Picture",
   KDG_PREWRITING: "Pre-Writing Strokes (lines, curves, zig-zag)",
+  KDG_HINDI_VARNAMALA: "Varnamala – Trace & Write Hindi Letters",
+  KDG_HINDI_MISSING: "Missing Varna / Matra (Hindi)",
+  KDG_HINDI_FIRST_LETTER: "Picture → First Letter (Hindi)",
+  KDG_HINDI_LETTER_MATCH: "Match Hindi Letter to Picture",
+  KDG_EVS_SORT: "Sort into Two Groups (Living / Non-living…)",
+  KDG_EVS_NAME: "Name the Picture (EVS)",
+  KDG_EVS_ODD_ONE: "Odd One Out (EVS)",
+  KDG_EVS_HOME: "Where Does It Live? (match)",
 };
 
 import { optionTextOnly, splitOptionFigure } from "./optionFigure";

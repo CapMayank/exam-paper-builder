@@ -229,3 +229,25 @@ gets the new editors for free.
 - **Using one:** the Templates dialog lists this class + subject first, others folded below; "Add" appends the set as one
   undo step. The empty worksheet offers the matching built-in set in one click. "New Nursery–KG worksheet" has a
   "Start with" choice (blank or a matching template).
+
+## Phase 4 — Hindi and EVS activities (built 2026-11-27)
+
+Hindi (library group "Hindi"):
+- **Varnamala Writing** (`KDG_HINDI_VARNAMALA`): each letter, then boxes with a shirorekha guide line to copy it
+  (first box dotted to trace). Presets for स्वर, क–ङ, च–ञ, ट–ण, त–न, प–म, य–ज्ञ.
+- **Missing Varna/Matra** (`KDG_HINDI_MISSING`): rows of letters in order (क ख _ घ) or words split into letters with
+  their matras (क म _), with an optional help box; picture clue for words.
+- **First Letter** (`KDG_HINDI_FIRST_LETTER`): picture + its Hindi name; the child circles or writes the first letter.
+  The right letter is worked out from the name, matra removed (पेड़ → प).
+- **Letter–Picture Match** (`KDG_HINDI_LETTER_MATCH`): Picture Match with Hindi words and letters.
+
+EVS (library group "Our world"):
+- **Sort into Groups** (`KDG_EVS_SORT`): pictures to tick or cross – living / non-living, animals / toys, fruits / other.
+- **Name the Picture** (`KDG_EVS_NAME`): tick the right name among choices, or write it on a line.
+- **Odd One Out** (`KDG_EVS_ODD_ONE`): Circle Target rows set up for EVS, child crosses the odd one.
+- **Where It Lives** (`KDG_EVS_HOME`): Picture Match of animals to homes.
+
+The three "variant" activities reuse an existing editor and print with their own type, name and defaults
+(`activities/subjectVariants.tsx`). All eight are in `KINDERGARTEN_QUESTION_TYPES`, have labels, AI formats and
+sample data. Built-in Hindi and EVS templates now use them; the "coming soon" fallback is gone. Picture Match keeps a
+name the teacher typed when the picture changes.

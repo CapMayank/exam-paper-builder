@@ -1642,21 +1642,8 @@ export function getQuestionTypeTier(type: string): number {
       "MATCH_COLUMN",
       "ASSERTION_REASON",
       "VERY_SHORT",
-      "KDG_TRACE_WRITE",
-      "KDG_NUMBER_GRID",
-      "KDG_PICTURE_MATCH",
-      "KDG_COUNT_ITEMS",
-      "KDG_CIRCLE_TARGET",
-      "KDG_SEQUENCE_CHAIN",
-      "KDG_MISSING_LETTERS",
-      "KDG_PATTERN",
-      "KDG_PICTURE_SUM",
-      "KDG_COMPARE",
-      "KDG_COLOUR",
-      "KDG_JOIN_DOTS",
-      "KDG_TICK_PICTURE",
-      "KDG_PREWRITING",
-    ].includes(norm)
+    ].includes(norm) ||
+    norm.startsWith("KDG_")
   ) {
     return 1;
   }

@@ -52,7 +52,7 @@ export function MatchingCanvas({
                   )}
                 </div>
                 {pair.label && (
-                  <span className="text-xs font-semibold text-slate-600 truncate">
+                  <span className="max-w-[45%] shrink-0 text-xs font-semibold break-words text-slate-600">
                     {pair.label}
                   </span>
                 )}

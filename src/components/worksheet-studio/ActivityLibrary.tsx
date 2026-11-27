@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, Info, Plus, Search } from "lucide-react";
+import { ChevronDown, Plus, Search } from "lucide-react";
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { Spinner } from "@/components/ui";
 import { libraryGroups } from "@/lib/kindergarten/library";
@@ -32,7 +32,7 @@ export function ActivityLibrary({ subject, busy, onAdd }: { subject?: string; bu
   // the server has no saved choice, so it renders "off" and the browser picks up the saved one
   const showAll = useSyncExternalStore(subscribe, readShowAll, () => false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { groups, comingSoon } = useMemo(() => libraryGroups({ subject, showAll, query }), [subject, showAll, query]);
+  const groups = useMemo(() => libraryGroups({ subject, showAll, query }), [subject, showAll, query]);
 
   function toggleAll(v: boolean) {
     memoryShowAll = v;
@@ -69,11 +69,6 @@ export function ActivityLibrary({ subject, busy, onAdd }: { subject?: string; bu
           />
         </label>
 
-        {comingSoon && !query && (
-          <p className="flex gap-1.5 rounded-lg bg-amber-50 px-2.5 py-2 text-[11px] leading-snug text-amber-900">
-            <Info size={13} className="mt-px shrink-0" /> More {subject} activities are coming. These ones work well meanwhile.
-          </p>
-        )}
 
         {groups.length === 0 ? (
           <p className="px-1 py-4 text-center text-xs text-slate-500">No activity matches “{query}”.</p>

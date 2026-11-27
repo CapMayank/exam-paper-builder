@@ -21,22 +21,22 @@ const SETS: Record<string, Record<string, { name: string; types: string[] }>> = 
   Nursery: {
     English: { name: "Nursery English – first letters", types: ["KDG_PREWRITING", "KDG_TRACE_WRITE", "KDG_PICTURE_MATCH", "KDG_COLOUR"] },
     Mathematics: { name: "Nursery Maths – counting to 10", types: ["KDG_COUNT_ITEMS", "KDG_COMPARE", "KDG_JOIN_DOTS", "KDG_PATTERN"] },
-    Hindi: { name: "Nursery Hindi – स्वर", types: ["KDG_PREWRITING", "KDG_TRACE_WRITE", "KDG_COLOUR", "KDG_TICK_PICTURE"] },
-    "General Awareness (EVS)": { name: "Nursery EVS – things around us", types: ["KDG_COLOUR", "KDG_TICK_PICTURE", "KDG_CIRCLE_TARGET", "KDG_PICTURE_MATCH"] },
+    Hindi: { name: "Nursery Hindi – स्वर", types: ["KDG_PREWRITING", "KDG_HINDI_VARNAMALA", "KDG_HINDI_FIRST_LETTER", "KDG_COLOUR"] },
+    "General Awareness (EVS)": { name: "Nursery EVS – things around us", types: ["KDG_EVS_NAME", "KDG_EVS_SORT", "KDG_EVS_ODD_ONE", "KDG_COLOUR"] },
     "Rhymes & Activities": { name: "Nursery fun & strokes", types: ["KDG_PREWRITING", "KDG_JOIN_DOTS", "KDG_COLOUR", "KDG_COMPARE", "KDG_COUNT_ITEMS"] },
   },
   LKG: {
     English: { name: "LKG English – letters & sounds", types: ["KDG_TRACE_WRITE", "KDG_MISSING_LETTERS", "KDG_PICTURE_MATCH", "KDG_TICK_PICTURE"] },
     Mathematics: { name: "LKG Maths – numbers to 20", types: ["KDG_NUMBER_GRID", "KDG_COUNT_ITEMS", "KDG_PATTERN", "KDG_COMPARE"] },
-    Hindi: { name: "LKG Hindi – वर्णमाला", types: ["KDG_TRACE_WRITE", "KDG_SEQUENCE_CHAIN", "KDG_TICK_PICTURE", "KDG_COLOUR"] },
-    "General Awareness (EVS)": { name: "LKG EVS – animals & fruits", types: ["KDG_CIRCLE_TARGET", "KDG_PICTURE_MATCH", "KDG_TICK_PICTURE", "KDG_COLOUR"] },
+    Hindi: { name: "LKG Hindi – वर्णमाला", types: ["KDG_HINDI_VARNAMALA", "KDG_HINDI_MISSING", "KDG_HINDI_LETTER_MATCH", "KDG_HINDI_FIRST_LETTER"] },
+    "General Awareness (EVS)": { name: "LKG EVS – animals & fruits", types: ["KDG_EVS_SORT", "KDG_EVS_HOME", "KDG_EVS_ODD_ONE", "KDG_EVS_NAME"] },
     "Rhymes & Activities": { name: "LKG fun – patterns & dots", types: ["KDG_PATTERN", "KDG_JOIN_DOTS", "KDG_COLOUR", "KDG_TRACE_WRITE", "KDG_COUNT_ITEMS"] },
   },
   UKG: {
     English: { name: "UKG English – words", types: ["KDG_TRACE_WRITE", "KDG_MISSING_LETTERS", "KDG_SEQUENCE_CHAIN", "KDG_PICTURE_MATCH", "KDG_TICK_PICTURE"] },
     Mathematics: { name: "UKG Maths – numbers to 50 & sums", types: ["KDG_NUMBER_GRID", "KDG_PICTURE_SUM", "KDG_SEQUENCE_CHAIN", "KDG_COMPARE", "KDG_PATTERN"] },
-    Hindi: { name: "UKG Hindi – अक्षर और शब्द", types: ["KDG_TRACE_WRITE", "KDG_SEQUENCE_CHAIN", "KDG_MISSING_LETTERS", "KDG_TICK_PICTURE"] },
-    "General Awareness (EVS)": { name: "UKG EVS – our world", types: ["KDG_CIRCLE_TARGET", "KDG_PICTURE_MATCH", "KDG_TICK_PICTURE", "KDG_COUNT_ITEMS"] },
+    Hindi: { name: "UKG Hindi – अक्षर और शब्द", types: ["KDG_HINDI_MISSING", "KDG_HINDI_FIRST_LETTER", "KDG_HINDI_LETTER_MATCH", "KDG_TRACE_WRITE", "KDG_HINDI_VARNAMALA"] },
+    "General Awareness (EVS)": { name: "UKG EVS – our world", types: ["KDG_EVS_SORT", "KDG_EVS_HOME", "KDG_EVS_NAME", "KDG_EVS_ODD_ONE", "KDG_COUNT_ITEMS"] },
     "Rhymes & Activities": { name: "UKG fun – puzzles", types: ["KDG_JOIN_DOTS", "KDG_PATTERN", "KDG_CIRCLE_TARGET", "KDG_COLOUR"] },
   },
 };
