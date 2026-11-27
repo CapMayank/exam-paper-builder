@@ -231,7 +231,7 @@ export function QuestionForm({
   });
   const [matchPairs, setMatchPairs] = useState<MatchColumnPair[]>(() => {
     if (initial?.type === "MATCH_COLUMN") {
-      const parsed = parseMatchColumnPairs(initial.options || [], initial.text, (initial as any).explanation);
+      const parsed = parseMatchColumnPairs(initial.options || [], initial.text, (initial as { explanation?: string }).explanation);
       if (parsed.length > 0 && parsed.some((p) => p.left || p.right)) {
         return parsed;
       }
@@ -252,7 +252,7 @@ export function QuestionForm({
   // "Answer any N of these parts"; undefined = every part is answered
   const [attemptCountRaw, setAttemptCount] = useState<number | undefined>(initial?.attemptCount);
   const attemptCount = attemptCountRaw && attemptCountRaw > 0 && attemptCountRaw < subparts.length ? attemptCountRaw : undefined;
-  const [kdgConfig, setKdgConfig] = useState<any>(() => {
+  const [kdgConfig, setKdgConfig] = useState<unknown>(() => {
     if (isKindergartenType(resolvedInitialType)) {
       const raw = initial?.options?.[0] ? initial.options[0] : JSON.stringify(initial?.options || []);
       return parseKindergartenConfig(resolvedInitialType, raw, book?.subject);
@@ -365,12 +365,11 @@ export function QuestionForm({
     if (editor && editorsMounted.current.has(editor)) editor.insertFormula();
   }
 
-  function activate(field: typeof activeField) {
-    return (handle: MathRichEditorHandle) => {
-      editorsMounted.current.add(handle);
-      activeEditorRef.current = handle;
-      setActiveField(field);
-    };
+  /** An editor got focus: it becomes the one the maths toolbar types into. Runs only from the editor's event. */
+  function activateField(field: typeof activeField, handle: MathRichEditorHandle) {
+    editorsMounted.current.add(handle);
+    activeEditorRef.current = handle;
+    setActiveField(field);
   }
 
   async function attach(blob: Blob) {
@@ -990,7 +989,7 @@ export function QuestionForm({
               multiline
               value={text}
               onChange={setText}
-              onActivate={activate({ type: "text" })}
+              onActivate={(handle) => activateField({ type: "text" }, handle)}
               placeholder="Type the question here."
               autoFocus
             />
@@ -1046,7 +1045,7 @@ export function QuestionForm({
                     className="flex-1 text-xs"
                     value={pair.left}
                     placeholder={`Column A item ${LETTERS[idx] ?? idx + 1}`}
-                    onActivate={activate({ type: "match-left", index: idx })}
+                    onActivate={(handle) => activateField({ type: "match-left", index: idx }, handle)}
                     onChange={(v) => setMatchPairs((pairs) => pairs.map((p, j) => (j === idx ? { ...p, left: v } : p)))}
                   />
                 </div>
@@ -1058,7 +1057,7 @@ export function QuestionForm({
                     className="flex-1 text-xs"
                     value={pair.right}
                     placeholder={`Column B item ${ROMAN_LABELS[idx] ?? idx + 1}`}
-                    onActivate={activate({ type: "match-right", index: idx })}
+                    onActivate={(handle) => activateField({ type: "match-right", index: idx }, handle)}
                     onChange={(v) => setMatchPairs((pairs) => pairs.map((p, j) => (j === idx ? { ...p, right: v } : p)))}
                   />
                 </div>
@@ -1280,7 +1279,7 @@ export function QuestionForm({
                     className="min-h-[60px] text-xs"
                     value={sp.text}
                     placeholder={`Enter prompt for subpart ${sp.label || i + 1}...`}
-                    onActivate={activate({ type: "subpart-text", index: i })}
+                    onActivate={(handle) => activateField({ type: "subpart-text", index: i }, handle)}
                     onChange={(v) => setSubparts((subs) => subs.map((s, j) => (j === i ? { ...s, text: v } : s)))}
                   />
                 </div>
@@ -1294,7 +1293,7 @@ export function QuestionForm({
                         ? `Correct option for ${sp.label || i + 1}, e.g. (b)`
                         : `Model answer / marking rubric for ${sp.label || i + 1} (optional)`
                     }
-                    onActivate={activate({ type: "subpart-answer", index: i })}
+                    onActivate={(handle) => activateField({ type: "subpart-answer", index: i }, handle)}
                     onChange={(v) => setSubparts((subs) => subs.map((s, j) => (j === i ? { ...s, answer: v } : s)))}
                   />
                 </div>
@@ -1336,7 +1335,7 @@ export function QuestionForm({
                             className="flex-1 text-xs"
                             value={splitOptionFigure(opt).text}
                             placeholder={splitOptionFigure(opt).figure ? "Caption (optional)" : `Option (${String.fromCharCode(97 + optIdx)})`}
-                            onActivate={activate({ type: "text" })}
+                            onActivate={(handle) => activateField({ type: "text" }, handle)}
                             onChange={(v) =>
                               setSubparts((subs) =>
                                 subs.map((s, j) =>
@@ -1393,7 +1392,7 @@ export function QuestionForm({
                   className="flex-1"
                   value={splitOptionFigure(o).text}
                   placeholder={splitOptionFigure(o).figure ? `Caption under the picture (optional)` : `Option ${LETTERS[i]}`}
-                  onActivate={activate({ type: "option", index: i })}
+                  onActivate={(handle) => activateField({ type: "option", index: i }, handle)}
                   onChange={(v) => setOptions((opts) => opts.map((x, j) => (j === i ? joinOptionFigure(splitOptionFigure(x).figure, v) : x)))}
                 />
                 <button
@@ -1433,7 +1432,7 @@ export function QuestionForm({
             multiline
             value={answer}
             onChange={setAnswer}
-            onActivate={activate({ type: "answer" })}
+            onActivate={(handle) => activateField({ type: "answer" }, handle)}
             placeholder={
               type === "MATCH_COLUMN"
                 ? "(i) → (b), (ii) → (d), (iii) → (a), (iv) → (c)"
@@ -1627,7 +1626,7 @@ export function QuestionForm({
                   className="!min-h-14 text-sm leading-relaxed"
                   placeholder="e.g. प्रकाश संश्लेषण को परिभाषित कीजिए।"
                   value={secondaryText}
-                  onActivate={activate({ type: "secondary" })}
+                  onActivate={(handle) => activateField({ type: "secondary" }, handle)}
                   onChange={setSecondaryText}
                 />
               </div>

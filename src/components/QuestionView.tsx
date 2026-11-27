@@ -9,7 +9,6 @@ import {
   getMatchColumnInstruction,
   isKindergartenType,
   isMcqLikeType,
-  isSubpartQuestionType,
   normalizeMcqAnswer,
   parseMatchColumnPairs,
   type MarksStyle,
@@ -307,7 +306,7 @@ function SingleQuestionBody({
   const singleColumnOptions = q.type === "ASSERTION_REASON" || Boolean(isMathComplex);
 
   const normalizedMcq = isMcq ? normalizeMcqAnswer(q.answer, q.options) : null;
-  const matchPairs = q.type === "MATCH_COLUMN" ? parseMatchColumnPairs(q.options, q.text, (q as any).explanation) : [];
+  const matchPairs = q.type === "MATCH_COLUMN" ? parseMatchColumnPairs(q.options, q.text, (q as { explanation?: string }).explanation) : [];
   const baseStemText = q.type === "MATCH_COLUMN" && matchPairs.length > 0 ? withPairMarksNote(getMatchColumnInstruction(q.text), (q as { pairMarks?: number | null }).pairMarks) : q.text;
 
   const tableBorder = "1px solid #cbd5e1";
