@@ -1,5 +1,6 @@
 "use client";
 
+import { PreviewBox } from "./_shared";
 import React from "react";
 import { TraceWriteLines } from "../components/FourLineGuide";
 import type {
@@ -133,18 +134,14 @@ function TraceWriteEditor({
         </div>
       </div>
 
-      {/* Live Preview */}
-      <div className="mt-4 p-4 border border-slate-200 rounded-xl bg-white shadow-2xs">
-        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">
-          Print Preview
-        </span>
-        {(config.lines?.length ?? 0) > 1 && (
-          <p className="mb-2 text-[11px] text-slate-500">
-            This activity has {config.lines.length} lines of letters; the editor changes the first one.
-          </p>
-        )}
+      {(config.lines?.length ?? 0) > 1 && (
+        <p className="text-[11px] text-slate-500">
+          This activity has {config.lines.length} lines of letters; the editor changes the first one.
+        </p>
+      )}
+      <PreviewBox>
         <TraceWriteLines rulingType={config.rulingType} fontSizePt={config.fontSizePt} lines={Array.isArray(config.lines) ? config.lines : []} />
-      </div>
+      </PreviewBox>
     </div>
   );
 }

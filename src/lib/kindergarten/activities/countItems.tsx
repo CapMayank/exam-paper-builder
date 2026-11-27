@@ -1,5 +1,6 @@
 "use client";
 
+import { PreviewBox } from "./_shared";
 import React, { useState } from "react";
 import { ImagePlus } from "lucide-react";
 import { ClipartPickerModal } from "../components/ClipartPickerModal";
@@ -138,13 +139,9 @@ function CountItemsEditor({
         />
       )}
 
-      {/* Live Preview */}
-      <div className="mt-4 p-4 border border-slate-200 rounded-xl bg-white shadow-2xs">
-        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">
-          Print Preview
-        </span>
+      <PreviewBox>
         <CountItemsPrint config={config} instructionText={instructionText} />
-      </div>
+      </PreviewBox>
     </div>
   );
 }

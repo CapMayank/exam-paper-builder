@@ -72,7 +72,16 @@ export function EditorSection({ title, hint, children }: { title: string; hint?:
   );
 }
 
+/**
+ * Whether an activity editor shows its own "Print Preview". The worksheet builder turns it off,
+ * because the activity card above the editor already shows the paper live – two previews of the
+ * same thing confused teachers. The Question Bank form has no other preview, so it keeps this one.
+ */
+export const EditorPreviewContext = React.createContext(true);
+
 export function PreviewBox({ children }: { children: React.ReactNode }) {
+  const show = React.useContext(EditorPreviewContext);
+  if (!show) return null;
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs">
       <span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-400">Print Preview</span>

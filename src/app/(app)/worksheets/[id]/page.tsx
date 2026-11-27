@@ -8,6 +8,7 @@ import { EmptyState, ErrorBanner, Field, Modal, Spinner, useConfirm, useToast } 
 import { api } from "@/lib/client";
 import { DEFAULT_SCHOOL_NAME, EXAM_TYPES, EXAM_TYPE_LABEL, WORKSHEET_MODE, resolvePaperExamType, type ExamType } from "@/lib/constants";
 import { getAllKindergartenActivities, getKindergartenActivity, parseKindergartenConfig } from "@/lib/kindergarten/registry";
+import { EditorPreviewContext } from "@/lib/kindergarten/activities/_shared";
 import type { KindergartenActivityPlugin, KindergartenCategory } from "@/lib/kindergarten/types";
 import type { PaperData, PaperItem, Section } from "@/lib/types";
 
@@ -285,8 +286,13 @@ export default function WorksheetPage({ params }: PageProps<"/worksheets/[id]">)
                     </div>
                   </div>
 
-                  {/* What it will look like on paper */}
+                  {/* What it will look like on paper – the only preview; it follows the editor live */}
                   <div className="bg-slate-100/60 p-4">
+                    {isOpen && (
+                      <p className="mx-auto mb-2 flex max-w-[720px] items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                        <Printer size={12} /> On paper · changes below show here as you type
+                      </p>
+                    )}
                     <div className="mx-auto max-w-[720px] rounded-md bg-white p-3 shadow-2xs">
                       <Print config={draft.config} instructionText={draft.text} numberLabel={`${idx + 1}.`} marks={a.section.marksEach} />
                     </div>
@@ -294,12 +300,24 @@ export default function WorksheetPage({ params }: PageProps<"/worksheets/[id]">)
 
                   {isOpen && (
                     <div className="border-t border-slate-200 bg-white p-4">
-                      <Editor
-                        config={draft.config}
-                        onChange={(config: any) => editActivity(a, { config })}
-                        instructionText={draft.text}
-                        onInstructionChange={(text: string) => editActivity(a, { text })}
-                      />
+                      <h3 className="mb-3 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-500">
+                        <Pencil size={12} /> Edit this activity
+                      </h3>
+                      {/* the paper above is the preview; the editor's own copy would be a second one */}
+                      <EditorPreviewContext.Provider value={false}>
+                        <Editor
+                          config={draft.config}
+                          onChange={(config: any) => editActivity(a, { config })}
+                          instructionText={draft.text}
+                          onInstructionChange={(text: string) => editActivity(a, { text })}
+                        />
+                      </EditorPreviewContext.Provider>
+                      <div className="mt-4 flex items-center justify-end gap-3 border-t border-slate-100 pt-3">
+                        <span className="text-xs text-slate-500">Changes save on their own.</span>
+                        <button type="button" className="btn btn-primary btn-sm" onClick={() => setOpenId(null)}>
+                          <Check size={13} /> Done
+                        </button>
+                      </div>
                     </div>
                   )}
                 </article>
