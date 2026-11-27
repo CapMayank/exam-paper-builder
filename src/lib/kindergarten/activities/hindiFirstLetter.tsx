@@ -18,17 +18,18 @@ export const hindiFirstLetterDefaultConfig = (): HindiFirstLetterConfig => ({
 
 function FirstLetterRows({ config, showWords }: { config: HindiFirstLetterConfig; showWords?: boolean }) {
   return (
-    <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+    // two pictures a line, unless a row has so many letters to choose from that it needs the whole width
+    <div className={`grid gap-x-6 gap-y-3 ${config.rows.some((r) => r.choices.length > 4) ? "grid-cols-1" : "grid-cols-2"}`}>
       {config.rows.map((row, i) => (
-        <div key={i} className="flex items-center gap-3">
-          <span className="flex flex-col items-center">
+        <div key={i} className="flex min-w-0 items-center gap-3">
+          <span className="flex shrink-0 flex-col items-center">
             <Art id={row.clipartId} size={48} />
             {showWords && <span className="text-[11px] text-slate-500">{row.word}</span>}
           </span>
           {config.answerStyle === "WRITE" ? (
             <AnswerBox size={46} />
           ) : (
-            <span className="flex gap-2">
+            <span className="flex min-w-0 flex-wrap gap-2">
               {row.choices.map((c, k) => (
                 <span key={k} className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 text-xl font-bold text-slate-950">
                   {c}

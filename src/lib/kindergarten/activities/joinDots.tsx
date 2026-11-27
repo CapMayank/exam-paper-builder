@@ -190,5 +190,7 @@ export const joinDotsPlugin: KindergartenActivityPlugin<JoinDotsConfig> = {
   },
   renderEditor: JoinDotsEditor,
   renderPrint: JoinDotsPrint,
+  // the dot picture has a fixed size
+  halfWidth: () => true,
   getSummary: (c) => `${SHAPE_NAMES[c.shape]} · ${c.count} dots`,
 };

@@ -145,5 +145,6 @@ export const patternPlugin: KindergartenActivityPlugin<PatternConfig> = {
   },
   renderEditor: PatternEditor,
   renderPrint: PatternPrint,
+  halfWidth: (config) => config.rows.every((row) => expandPattern(row).length <= 6),
   getSummary: (c) => `${c.rows.length} pattern rows`,
 };

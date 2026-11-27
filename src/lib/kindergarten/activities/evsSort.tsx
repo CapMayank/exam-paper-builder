@@ -180,5 +180,7 @@ export const evsSortPlugin: KindergartenActivityPlugin<EvsSortConfig> = {
   validateConfig: (cfg) => (cfg && Array.isArray((cfg as EvsSortConfig).items) ? { valid: true } : { valid: false, error: "Invalid config" }),
   renderEditor: EvsSortEditor,
   renderPrint: EvsSortPrint,
+  // pictures sit in a 6-wide grid that just wraps
+  halfWidth: () => true,
   getSummary: (config) => `${config.groupA} / ${config.groupB} (${config.items.length} pictures)`,
 };

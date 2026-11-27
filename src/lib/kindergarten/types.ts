@@ -41,6 +41,11 @@ export interface KindergartenActivityPlugin<TConfig = unknown> {
   renderEditor: React.ComponentType<KindergartenEditorProps<TConfig>>;
   renderPrint: React.ComponentType<KindergartenPrintProps<TConfig>>;
   getSummary?: (config: TConfig, text: string) => string;
+  /**
+   * True when, with these settings, the activity prints well in half the page width (nothing shrinks or crowds),
+   * so it can share a row with the next half-width one. Left out: always full width.
+   */
+  halfWidth?: (config: TConfig) => boolean;
 }
 
 /**

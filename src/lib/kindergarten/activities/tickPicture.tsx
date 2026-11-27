@@ -134,5 +134,6 @@ export const tickPicturePlugin: KindergartenActivityPlugin<TickPictureConfig> = 
   },
   renderEditor: TickPictureEditor,
   renderPrint: TickPicturePrint,
+  halfWidth: (config) => config.rows.every((row) => row.options.length <= 3),
   getSummary: (c) => `${c.rows.length} tick questions`,
 };

@@ -181,14 +181,14 @@ function CircleTargetPrint({
             <span className="font-black text-xs text-slate-500 w-6 select-none">
               ({rIdx + 1})
             </span>
-            <div className="flex-1 flex items-center justify-around gap-2 px-2">
+            <div className="grid min-w-0 flex-1 grid-cols-[repeat(auto-fit,minmax(5.5rem,1fr))] justify-items-center gap-2 px-2">
               {row.items.map((item, iIdx) => {
                 const clipart = item.clipartId ? getClipartById(item.clipartId) : null;
 
                 return (
                   <div
                     key={iIdx}
-                    className="w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center p-2 border-2 border-slate-800 rounded-2xl bg-white text-slate-950 shadow-2xs"
+                    className="w-16 h-16 sm:w-20 sm:h-20 shrink-0 flex items-center justify-center p-2 border-2 border-slate-800 rounded-2xl bg-white text-slate-950 shadow-2xs"
                   >
                     {clipart ? clipart.renderSvg(48) : <span className="font-bold">{item.text || "★"}</span>}
                   </div>

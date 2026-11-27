@@ -167,5 +167,6 @@ export const hindiMissingPlugin: KindergartenActivityPlugin<HindiMissingConfig> 
   validateConfig: (cfg) => (cfg && Array.isArray((cfg as HindiMissingConfig).rows) ? { valid: true } : { valid: false, error: "Invalid config" }),
   renderEditor: HindiMissingEditor,
   renderPrint: HindiMissingPrint,
+  halfWidth: (config) => config.hints.length <= 6 && config.rows.every((row) => wordTokens(row.text).length <= 6),
   getSummary: (config) => config.rows.map((r) => r.text).join(" · "),
 };

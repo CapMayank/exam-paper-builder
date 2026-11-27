@@ -128,5 +128,6 @@ export const pictureSumPlugin: KindergartenActivityPlugin<PictureSumConfig> = {
   },
   renderEditor: PictureSumEditor,
   renderPrint: PictureSumPrint,
+  halfWidth: (config) => !config.showPictures || config.rows.every((row) => row.a + row.b <= 4),
   getSummary: (c) => `${c.op === "ADD" ? "Addition" : "Subtraction"} · ${c.rows.length} sums`,
 };

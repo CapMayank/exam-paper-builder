@@ -19,8 +19,19 @@ describe("pageFill", () => {
     expect(pageFill(PAGE * 3.2, 700).level).toBe("tiny");
   });
 
+  it("estimates the print size: full size up to two pages, then shrunk to fit them", () => {
+    expect(pageFill(PAGE * 1.5, 700).scale).toBe(1);
+    expect(pageFill(PAGE * 2.88, 700).scale).toBeCloseTo(2 / 3, 1);
+  });
+
+  it("says a worksheet cannot fit one sheet once print would need to go below its smallest size", () => {
+    const r = pageFill(PAGE * 6, 700);
+    expect(r.level).toBe("overflow");
+    expect(r.scale).toBe(0.4);
+  });
+
   it("returns nothing for an empty or unmeasured page", () => {
-    expect(pageFill(0, 700)).toEqual({ pages: 0, level: "fits" });
-    expect(pageFill(500, 0)).toEqual({ pages: 0, level: "fits" });
+    expect(pageFill(0, 700)).toEqual({ pages: 0, level: "fits", scale: 1 });
+    expect(pageFill(500, 0)).toEqual({ pages: 0, level: "fits", scale: 1 });
   });
 });

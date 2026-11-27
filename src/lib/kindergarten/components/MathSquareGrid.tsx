@@ -2,6 +2,9 @@ import React from "react";
 import { gridOrder, gridShape, type GridDirection } from "../gridPlacement";
 import type { NumberGridCell } from "../types";
 
+/** Largest box: room for a child to write a two-digit number. */
+const CELL_MAX_MM = 15;
+
 interface MathSquareGridProps {
   cells: NumberGridCell[];
   columns?: number;
@@ -15,10 +18,11 @@ export function MathSquareGrid({ cells = [], columns = 10, direction = "ROW", cl
   const slots = gridOrder(cells.length, columns, direction);
 
   return (
-    <div className={`my-3 overflow-x-auto ${className}`}>
+    <div className={`my-3 ${className}`}>
+      {/* boxes are square, so they are capped at a writing size: with few columns, full-width boxes would be huge */}
       <div
-        className="grid w-full max-w-full rounded-md border-2 border-slate-900 bg-white"
-        style={{ gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))` }}
+        className="mx-auto grid max-w-full rounded-md border-2 border-slate-900 bg-white"
+        style={{ gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))`, width: `min(100%, ${colCount * CELL_MAX_MM}mm)` }}
       >
         {slots.map((cellIndex, pos) => {
           const cell = cellIndex === null ? undefined : cells[cellIndex];

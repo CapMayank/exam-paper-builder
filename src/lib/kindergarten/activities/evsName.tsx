@@ -123,5 +123,7 @@ export const evsNamePlugin: KindergartenActivityPlugin<EvsNameConfig> = {
   validateConfig: (cfg) => (cfg && Array.isArray((cfg as EvsNameConfig).rows) ? { valid: true } : { valid: false, error: "Invalid config" }),
   renderEditor: EvsNameEditor,
   renderPrint: EvsNamePrint,
+  // a name line fits beside the picture; tick-the-name choices need the width
+  halfWidth: (config) => config.answer === "WRITE",
   getSummary: (config) => config.rows.map((r) => r.name).join(", "),
 };

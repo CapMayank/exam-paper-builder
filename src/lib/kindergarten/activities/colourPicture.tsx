@@ -108,5 +108,7 @@ export const colourPlugin: KindergartenActivityPlugin<ColourConfig> = {
   },
   renderEditor: ColourEditor,
   renderPrint: ColourPrint,
+  // pictures sit in a 4-wide grid that just wraps
+  halfWidth: () => true,
   getSummary: (c) => `${c.items.length} pictures to colour`,
 };

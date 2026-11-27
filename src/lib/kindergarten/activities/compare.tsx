@@ -146,5 +146,7 @@ export const comparePlugin: KindergartenActivityPlugin<CompareConfig> = {
   },
   renderEditor: CompareEditor,
   renderPrint: ComparePrint,
+  // two pairs side by side fit; counting modes stay small enough to see
+  halfWidth: (config) => config.rows.length <= 2 && (!["MORE", "FEWER"].includes(config.mode) || config.rows.every((r) => Math.max(r.left, r.right) <= 3)),
   getSummary: (c) => `${MODE_LABEL[c.mode]} · ${c.rows.length} pairs`,
 };

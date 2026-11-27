@@ -37,6 +37,8 @@ import { normalizeNumberingStyle,
 } from "@/lib/constants";
 import { decomposeForSlot } from "@/lib/subpartExtractor";
 import { WorkbookHeader } from "@/lib/kindergarten/components/WorkbookHeader";
+import { fitsHalfWidth } from "@/lib/kindergarten/pairing";
+import { getKindergartenActivity, parseKindergartenConfig } from "@/lib/kindergarten/registry";
 import {
   computeDisplayedPaperNumbering,
   mergeSameFormRows,
@@ -69,6 +71,8 @@ type Block = {
   continuationLabel?: string;
   /** Stretches to the bottom of its page (a Drawing paper's drawing area). */
   fillPage?: boolean;
+  /** A half-width activity still waiting for a partner: the next half-width activity joins its row. */
+  openHalf?: boolean;
 };
 
 type LineBox = { top: number; bottom: number; n: number };
@@ -873,30 +877,52 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
             render: () => <DrawingArea minMm={Math.max(spaceMm, 80)} outline={outline} lang={paperLang} />,
           });
         } else if (isPrePrimary || isKindergartenType(it.question.type)) {
-          // nursery–KG activities print whole, as designed
-          blocks.push({
-            key: it.id,
-            keepWithNext: false,
-            forceBreakBefore: breakBeforeQuestion,
-            groupId: it.id,
-            render: () => (
-              <div style={{ paddingBottom: questionBottomPadding }}>
-                <QuestionView
-                  q={it.question}
-                  orQuestion={it.orQuestion}
-                  number={currentN}
-                  numberLabel={numberLabel}
-                  marks={totalQuestionMarks}
-                  marksStyle={marksStyle}
-                  compact={isEffectiveCompact || subGridCols > 0}
-                  fit={fit}
-                  isA5={isA5}
-                  lang={paperLang}
-                  dense
-                />
-              </div>
-            ),
-          });
+          // nursery–KG activities print whole, as designed. Two half-width ones in a row share a line, left then
+          // right, so the numbers still read in order; nothing is reordered.
+          const plugin = getKindergartenActivity(it.question.type);
+          const half =
+            !it.orQuestion && !instructionLine && fitsHalfWidth(plugin, parseKindergartenConfig(it.question.type, it.question.options?.[0] ?? ""));
+          const renderActivity = () => (
+            <div style={{ paddingBottom: questionBottomPadding }}>
+              <QuestionView
+                q={it.question}
+                orQuestion={it.orQuestion}
+                number={currentN}
+                numberLabel={numberLabel}
+                marks={totalQuestionMarks}
+                marksStyle={marksStyle}
+                compact={isEffectiveCompact || subGridCols > 0}
+                fit={fit}
+                isA5={isA5}
+                lang={paperLang}
+                dense
+              />
+            </div>
+          );
+          const prev = blocks[blocks.length - 1];
+          if (half && prev?.openHalf && prev.render && !breakBeforeQuestion) {
+            const left = prev.render;
+            blocks[blocks.length - 1] = {
+              ...prev,
+              key: `${prev.key}+${it.id}`,
+              openHalf: false,
+              render: (ctx) => (
+                <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", columnGap: "5mm", alignItems: "start" }}>
+                  <div style={{ minWidth: 0 }}>{left(ctx)}</div>
+                  <div style={{ minWidth: 0 }}>{renderActivity()}</div>
+                </div>
+              ),
+            };
+          } else {
+            blocks.push({
+              key: it.id,
+              keepWithNext: false,
+              forceBreakBefore: breakBeforeQuestion,
+              groupId: it.id,
+              openHalf: half,
+              render: renderActivity,
+            });
+          }
         } else if (canDecompose) {
           pushBody(it.question, false, breakBeforeQuestion, true);
         } else {
