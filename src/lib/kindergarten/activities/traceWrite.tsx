@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { FourLineGuide } from "../components/FourLineGuide";
+import { TraceWriteLines } from "../components/FourLineGuide";
 import type {
   KindergartenActivityPlugin,
   KindergartenEditorProps,
@@ -34,16 +34,17 @@ function TraceWriteEditor({
   instructionText,
   onInstructionChange,
 }: KindergartenEditorProps<TraceWriteConfig>) {
-  const line = config.lines[0] || {
+  const line = config.lines?.[0] || {
     promptText: "A B C D",
     traceDotted: false,
     repeatCount: 2,
   };
 
   const updateLine = (patch: Partial<typeof line>) => {
+    // only the first line is edited here; keep any further lines an imported paper brought with it
     onChange({
       ...config,
-      lines: [{ ...line, ...patch }],
+      lines: [{ ...line, ...patch }, ...(config.lines ?? []).slice(1)],
     });
   };
 
@@ -74,6 +75,7 @@ function TraceWriteEditor({
           >
             <option value="FOUR_LINE">4-Line English (Red/Blue/Red)</option>
             <option value="TWO_LINE">2-Line Hindi Ruling</option>
+            <option value="SINGLE_LINE">Single Line</option>
             <option value="BOXES">Letter Write-in Boxes</option>
           </select>
         </div>
@@ -86,15 +88,15 @@ function TraceWriteEditor({
             onChange={(e) => onChange({ ...config, fontSizePt: Number(e.target.value) })}
             className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
           >
-            <option value={20}>20 pt (Standard)</option>
-            <option value={24}>24 pt (Medium Kindergarten)</option>
-            <option value={32}>32 pt (Large Nursery)</option>
+            <option value={20}>Small (UKG, ~6 mm lines)</option>
+            <option value={24}>Medium (LKG, ~7.5 mm lines)</option>
+            <option value={32}>Large (Nursery, ~10 mm lines)</option>
           </select>
         </div>
 
         {/* Repeat lines */}
         <div>
-          <label className="block text-xs font-semibold text-slate-600 mb-1">Writing Lines</label>
+          <label className="block text-xs font-semibold text-slate-600 mb-1" title="Rows in total, counting the row with the letters">Writing Lines</label>
           <input
             type="number"
             min={1}
@@ -136,13 +138,12 @@ function TraceWriteEditor({
         <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">
           Print Preview
         </span>
-        <FourLineGuide
-          rulingType={config.rulingType}
-          promptText={line.promptText}
-          traceDotted={line.traceDotted}
-          repeatCount={line.repeatCount}
-          fontSizePt={config.fontSizePt}
-        />
+        {(config.lines?.length ?? 0) > 1 && (
+          <p className="mb-2 text-[11px] text-slate-500">
+            This activity has {config.lines.length} lines of letters; the editor changes the first one.
+          </p>
+        )}
+        <TraceWriteLines rulingType={config.rulingType} fontSizePt={config.fontSizePt} lines={Array.isArray(config.lines) ? config.lines : []} />
       </div>
     </div>
   );
@@ -154,12 +155,6 @@ function TraceWritePrint({
   numberLabel,
   marks,
 }: KindergartenPrintProps<TraceWriteConfig>) {
-  const line = config.lines[0] || {
-    promptText: "A B C D",
-    traceDotted: false,
-    repeatCount: 2,
-  };
-
   return (
     <div className="my-2 border-2 border-slate-800 rounded-xl p-3 bg-white">
       <div className="flex justify-between items-start mb-2">
@@ -178,13 +173,7 @@ function TraceWritePrint({
         )}
       </div>
 
-      <FourLineGuide
-        rulingType={config.rulingType}
-        promptText={line.promptText}
-        traceDotted={line.traceDotted}
-        repeatCount={line.repeatCount}
-        fontSizePt={config.fontSizePt}
-      />
+      <TraceWriteLines rulingType={config.rulingType} fontSizePt={config.fontSizePt} lines={Array.isArray(config.lines) ? config.lines : []} />
     </div>
   );
 }
@@ -204,7 +193,9 @@ export const traceWritePlugin: KindergartenActivityPlugin<TraceWriteConfig> = {
   renderEditor: TraceWriteEditor,
   renderPrint: TraceWritePrint,
   getSummary: (config) => {
-    const text = config.lines[0]?.promptText || "Writing guide";
-    return `${config.rulingType === "TWO_LINE" ? "2-Line" : "4-Line"}: ${text}`;
+    const text = config.lines?.[0]?.promptText || "Writing guide";
+    const kind = { FOUR_LINE: "4-Line", TWO_LINE: "2-Line", SINGLE_LINE: "1-Line", BOXES: "Boxes" }[config.rulingType] ?? "4-Line";
+    const more = (config.lines?.length ?? 0) > 1 ? ` (+${config.lines.length - 1} more)` : "";
+    return `${kind}: ${text}${more}`;
   },
 };

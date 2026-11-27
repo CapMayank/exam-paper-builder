@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Figtree, Literata, Noto_Sans, Noto_Sans_Devanagari } from "next/font/google";
+import { Andika, Figtree, Literata, Noto_Sans, Noto_Sans_Devanagari } from "next/font/google";
 import "katex/dist/katex.min.css";
 import "./globals.css";
 
@@ -11,6 +11,9 @@ const heading = Literata({ variable: "--font-heading", subsets: ["latin"] });
 // Latin + Devanagari (Hindi/Marathi) are bundled; other scripts fall back to the system font.
 const noto = Noto_Sans({ variable: "--font-noto", subsets: ["latin"] });
 const deva = Noto_Sans_Devanagari({ variable: "--font-deva", subsets: ["devanagari"] });
+// Pre-primary handwriting sheets: Andika is drawn for beginning readers (single-storey a and g).
+// The 4-line ruling in FourLineGuide is fitted to its letter heights, so keep the two together.
+const kid = Andika({ variable: "--font-kid", subsets: ["latin"], weight: ["700"] });
 
 export const metadata: Metadata = {
   title: {
@@ -34,7 +37,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       data-scroll-behavior="smooth"
-      className={`${ui.variable} ${heading.variable} ${noto.variable} ${deva.variable} h-full antialiased`}
+      className={`${ui.variable} ${heading.variable} ${noto.variable} ${deva.variable} ${kid.variable} h-full antialiased`}
     >
       <body className="min-h-full">{children}</body>
     </html>

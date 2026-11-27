@@ -22,16 +22,17 @@ export function strokePath(stroke: PreWritingStroke): string {
   const parts: string[] = [];
   switch (stroke) {
     case "STANDING":
-      for (let i = 0; i < 24; i++) parts.push(`M${15 + i * 24} 6 L${15 + i * 24} 38`);
+      for (let i = 0; i < 24; i++) parts.push(`M${15 + i * 24} 6 L${15 + i * 24} 38`); // top to bottom
       break;
     case "SLEEPING":
-      for (let i = 0; i < 4; i++) parts.push(`M10 ${8 + i * 10} L590 ${8 + i * 10}`);
+      // three lines, far enough apart for a pencil to trace each one
+      for (let i = 0; i < 3; i++) parts.push(`M10 ${8 + i * 14} L590 ${8 + i * 14}`);
       break;
     case "SLANTING_RIGHT":
-      for (let i = 0; i < 24; i++) parts.push(`M${10 + i * 24} 38 L${24 + i * 24} 6`);
+      for (let i = 0; i < 24; i++) parts.push(`M${24 + i * 24} 6 L${10 + i * 24} 38`); // top to bottom
       break;
     case "SLANTING_LEFT":
-      for (let i = 0; i < 24; i++) parts.push(`M${24 + i * 24} 38 L${10 + i * 24} 6`);
+      for (let i = 0; i < 24; i++) parts.push(`M${10 + i * 24} 6 L${24 + i * 24} 38`); // top to bottom
       break;
     case "ZIGZAG": {
       let d = "M8 38";
@@ -52,22 +53,28 @@ export function strokePath(stroke: PreWritingStroke): string {
       break;
     }
     case "LOOPS": {
-      let d = "M10 30";
-      for (let i = 0; i < 12; i++) d += ` c 18 -34 38 -34 24 -4 c -8 16 -22 12 -2 -6 `;
+      // a row of joined loops like a run of cursive "l"s, left to right along the bottom
+      let d = "M10 36";
+      for (let i = 0; i < 18; i++) d += ` c 18 0 26 -28 16 -30 c -10 -2 -8 30 14 30`;
       parts.push(d);
       break;
     }
     case "CIRCLES":
-      for (let i = 0; i < 16; i++) parts.push(`M${34 + i * 36} 22 m -15 0 a 15 15 0 1 0 30 0 a 15 15 0 1 0 -30 0`);
+      for (let i = 0; i < 16; i++) parts.push(`M${34 + i * 36} 7 a 15 15 0 1 0 0 30 a 15 15 0 1 0 0 -30`); // anticlockwise from the top, like "o";
       break;
     case "STEPS": {
       let d = "M8 38";
-      for (let i = 0; i < 20; i++) d += ` l 14 0 l 0 ${i % 2 === 0 ? -16 : 16}`;
+      for (let i = 0; i < 41; i++) d += ` l 14 0 l 0 ${i % 2 === 0 ? -24 : 24}`;
       parts.push(d);
       break;
     }
   }
   return parts.join(" ");
+}
+
+/** Where each separate stroke begins (every "M x y" in the path). */
+export function strokeStarts(d: string): [number, number][] {
+  return Array.from(d.matchAll(/M\s*(-?[\d.]+)[\s,]+(-?[\d.]+)/g), (m) => [Number(m[1]), Number(m[2])] as [number, number]);
 }
 
 export const preWritingDefaultConfig = (): PreWritingConfig => ({
@@ -117,7 +124,10 @@ function PreWritingPrint({ config, instructionText, numberLabel, marks }: Kinder
         {config.rows.map((r, i) => (
           <svg key={i} viewBox="0 0 600 44" className="h-12 w-full rounded-md border border-slate-200" role="img" aria-label={STROKE_LABEL[r.stroke]}>
             <path d={strokePath(r.stroke)} fill="none" stroke="#475569" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" strokeDasharray="1 6" />
-            <circle cx={r.stroke === "SLEEPING" ? 10 : 12} cy={r.stroke === "SLEEPING" ? 8 : 38} r={3} fill="#0f172a" />
+            {/* a start dot on every stroke, exactly where the pencil begins */}
+            {strokeStarts(strokePath(r.stroke)).map(([x, y], k) => (
+              <circle key={k} cx={x} cy={y} r={3} fill="#0f172a" />
+            ))}
           </svg>
         ))}
       </div>
