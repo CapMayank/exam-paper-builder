@@ -899,3 +899,22 @@ input[type="range"] {
   background: #eef2ff;
   box-shadow: inset 0 0 0 2px #6366f1;
 }
+/* The worksheet editor rises from the bottom where it is a sheet (below xl), and fades in where it docks beside the page. */
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+}
+.anim-sheet {
+  animation: sheet-up 0.24s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@media (min-width: 80rem) {
+  .anim-sheet {
+    animation: fade-in 0.16s ease-out both;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .anim-sheet {
+    animation: none;
+  }
+}

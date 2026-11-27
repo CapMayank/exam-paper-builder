@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUp, Copy, MousePointerClick, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Copy, Trash2, X } from "lucide-react";
 import { EditorPreviewContext } from "@/lib/kindergarten/activities/_shared";
 import { NumberStepper } from "@/lib/kindergarten/editor-kit";
 import type { Draft } from "./useActivityDrafts";
@@ -29,20 +29,13 @@ export function ActivityInspector({
   onRemove: () => void;
   onClose: () => void;
 }) {
-  if (!activity || !draft) {
-    return (
-      <div className="hidden rounded-2xl border border-dashed border-slate-300 bg-white/60 p-6 text-center lg:block">
-        <MousePointerClick size={22} className="mx-auto mb-2 text-slate-400" />
-        <p className="text-sm font-semibold text-slate-700">Click an activity on the page to edit it</p>
-        <p className="mt-1 text-xs text-slate-500">Its settings show up here, and the page changes as you type.</p>
-      </div>
-    );
-  }
+  if (!activity || !draft) return null;
 
   const Editor = activity.plugin.renderEditor;
 
   return (
-    <div className="flex flex-col rounded-2xl border border-slate-200 bg-white shadow-xs lg:max-h-[calc(100vh-2rem)]">
+    <div className="flex max-h-[55vh] flex-col rounded-t-3xl border border-slate-200 bg-white shadow-[0_-8px_30px_rgba(15,23,42,0.15)] xl:max-h-[calc(100vh-7rem)] xl:rounded-2xl xl:shadow-sm">
+      <span className="mx-auto mt-2 h-1 w-10 rounded-full bg-slate-300 xl:hidden" aria-hidden />
       <div className="flex items-start gap-2 border-b border-slate-100 px-4 py-3">
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white">{index + 1}</span>
         <div className="min-w-0 flex-1">

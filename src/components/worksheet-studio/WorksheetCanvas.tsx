@@ -26,6 +26,7 @@ export function WorksheetCanvas({
   onMoveTo,
   draftFor,
   emptyState,
+  addButton,
 }: {
   activities: Activity[];
   selectedId: string | null;
@@ -33,6 +34,8 @@ export function WorksheetCanvas({
   onMoveTo: (a: Activity, index: number) => void;
   draftFor: (a: Activity) => Draft;
   emptyState: ReactNode;
+  /** Shown at the foot of the page, where the next activity would go. */
+  addButton?: ReactNode;
 }) {
   const totalMarks = activities.reduce((n, a) => n + a.section.marksEach, 0);
   const measureRef = useRef<HTMLDivElement>(null);
@@ -59,7 +62,7 @@ export function WorksheetCanvas({
 
   return (
     <div className="space-y-3">
-      <div className="mx-auto max-w-[720px] rounded-md bg-white px-5 py-6 shadow-sm ring-1 ring-slate-200">
+      <div className="mx-auto max-w-[760px] rounded-md bg-white px-4 py-6 shadow-md ring-1 ring-slate-200 sm:px-8 sm:py-8">
         <div className="space-y-1">
           {activities.map((a, idx) => {
             const draft = draftFor(a);
@@ -100,7 +103,7 @@ export function WorksheetCanvas({
                       onSelect(a.item.id);
                     }
                   }}
-                  className={`group relative cursor-pointer scroll-mt-4 rounded-lg px-1 transition focus-visible:outline-none ${
+                  className={`group relative cursor-pointer scroll-mt-20 rounded-lg px-1 transition focus-visible:outline-none ${
                     dragFrom === idx ? "opacity-40" : ""
                   } ${selected ? "bg-indigo-50/40 ring-2 ring-indigo-500" : "hover:ring-2 hover:ring-indigo-200 focus-visible:ring-2 focus-visible:ring-indigo-300"}`}
                 >
@@ -131,6 +134,7 @@ export function WorksheetCanvas({
             );
           })}
         </div>
+        {addButton && <div className="no-print mt-4">{addButton}</div>}
       </div>
 
       {/* the same page at print width, out of sight, only to measure it */}
@@ -144,7 +148,7 @@ export function WorksheetCanvas({
         </div>
       </div>
 
-      <div className="mx-auto max-w-[720px] space-y-2 px-1">
+      <div className="mx-auto max-w-[760px] space-y-2 px-1">
         <div className="flex items-center justify-between text-sm">
           <span className="text-slate-600">
             {activities.length} {activities.length === 1 ? "activity" : "activities"}

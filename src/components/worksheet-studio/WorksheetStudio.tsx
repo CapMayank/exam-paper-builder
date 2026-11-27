@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Check, LayoutTemplate, Pencil, Printer, Redo2, Sparkles, Undo2 } from "lucide-react";
+import { ArrowLeft, Check, LayoutTemplate, Pencil, Plus, Printer, Redo2, Sparkles, Undo2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { EmptyState, ErrorBanner, Spinner, useConfirm, useToast } from "@/components/ui";
@@ -25,7 +25,11 @@ function typingInField(target: EventTarget | null) {
   return target instanceof Element && !!target.closest("input, textarea, select, [contenteditable=true], [role=dialog]");
 }
 
-/** Nursery–KG worksheet builder: activity library · the printed page · the editor for the picked activity. */
+/**
+ * Nursery–KG worksheet builder. The page sits in the middle and gets the room; the activity library slides in
+ * when asked for, and the editor docks beside the page (a sheet at the bottom on smaller screens) only while an
+ * activity is picked.
+ */
 export function WorksheetStudio({ id }: { id: string }) {
   const confirm = useConfirm();
   const toast = useToast();
@@ -34,6 +38,7 @@ export function WorksheetStudio({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const [announcement, setAnnouncement] = useState("");
   const announce = (text: string) => setAnnouncement(text);
   const [moreOpen, setMoreOpen] = useState<Record<string, boolean>>({});
@@ -85,9 +90,9 @@ export function WorksheetStudio({ id }: { id: string }) {
 
   const select = (itemId: string) => {
     setSelectedId(itemId);
-    // on small screens the editor sits below the page: bring it into view
-    if (window.matchMedia("(max-width: 1023px)").matches) {
-      requestAnimationFrame(() => document.getElementById("ws-inspector")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    // below xl the editor is a sheet over the lower part of the screen: lift the activity above it
+    if (window.matchMedia("(max-width: 1279px)").matches) {
+      requestAnimationFrame(() => document.getElementById(activityDomId(itemId))?.scrollIntoView({ behavior: "smooth", block: "start" }));
     }
   };
 
@@ -170,9 +175,12 @@ export function WorksheetStudio({ id }: { id: string }) {
             <button type="button" className="btn" onClick={() => setDetailsOpen(true)}>
               <Pencil size={14} /> Details
             </button>
-            <Link href={`/papers/${id}/print`} target={paperOutputTab(id)} className="btn btn-primary">
+            <Link href={`/papers/${id}/print`} target={paperOutputTab(id)} className="btn">
               <Printer size={15} /> Print preview
             </Link>
+            <button type="button" className="btn btn-primary" onClick={() => setLibraryOpen(true)}>
+              {busy ? <Spinner size="sm" /> : <Plus size={15} />} Add activity
+            </button>
           </div>
         </div>
 
@@ -181,18 +189,25 @@ export function WorksheetStudio({ id }: { id: string }) {
           {announcement}
         </p>
 
-        <div className="grid items-start gap-4 lg:grid-cols-[12.5rem_minmax(0,1fr)_19rem] 2xl:grid-cols-[16rem_minmax(0,1fr)_24rem]">
-          <aside aria-label="Activity library" className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
-            <ActivityLibrary subject={subject} busy={busy} onAdd={(p: AnyActivityPlugin) => withBusy(() => ws.add(p))} />
-          </aside>
-
-          <section aria-label="Worksheet page" className="min-w-0">
+        <div className={`grid items-start gap-6 ${selected ? "xl:grid-cols-[minmax(0,1fr)_22rem] 2xl:grid-cols-[minmax(0,1fr)_26rem]" : ""}`}>
+          {/* below xl the editor sheet covers the lower screen: leave room to scroll the last activity above it */}
+          <section aria-label="Worksheet page" className={`min-w-0 ${selected ? "pb-[55vh] xl:pb-0" : ""}`}>
             <WorksheetCanvas
               activities={activities}
               selectedId={liveSelectedId}
               onSelect={select}
               onMoveTo={(a, index) => void ws.moveTo(a, index).then(() => announce(`${a.plugin.shortLabel} moved to position ${index + 1}`))}
               draftFor={ws.draftFor}
+              addButton={
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setLibraryOpen(true)}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 py-4 text-sm font-semibold text-slate-500 transition hover:border-indigo-400 hover:bg-indigo-50/50 hover:text-indigo-700 disabled:opacity-60"
+                >
+                  {busy ? <Spinner size="sm" /> : <Plus size={16} />} Add an activity
+                </button>
+              }
               emptyState={
                 <EmptyState
                   icon={Sparkles}
@@ -200,8 +215,11 @@ export function WorksheetStudio({ id }: { id: string }) {
                   description="Pick activities from the library, or start from a ready set."
                   action={
                     <div className="flex flex-wrap justify-center gap-2">
+                      <button type="button" className="btn btn-primary" disabled={busy} onClick={() => setLibraryOpen(true)}>
+                        <Plus size={15} /> Choose activities
+                      </button>
                       {starter && (
-                        <button type="button" className="btn btn-primary" disabled={busy} onClick={() => withBusy(async () => (await ws.addTemplate(starter)).firstId)}>
+                        <button type="button" className="btn" disabled={busy} onClick={() => withBusy(async () => (await ws.addTemplate(starter)).firstId)}>
                           {busy ? <Spinner size="sm" /> : <Sparkles size={15} />} Use “{starter.name}”
                         </button>
                       )}
@@ -215,28 +233,49 @@ export function WorksheetStudio({ id }: { id: string }) {
             />
           </section>
 
-          <aside id="ws-inspector" aria-label="Activity editor" className="scroll-mt-4 lg:sticky lg:top-4">
-            <ActivityInspector
-              activity={selected}
-              index={selectedIndex}
-              total={activities.length}
-              draft={selected ? ws.draftFor(selected) : null}
-              onEdit={(patch) => selected && ws.edit(selected, patch)}
-              onMarks={(n) => selected && void ws.setMarks(selected, n)}
-              onMove={(dir) => {
-                if (!selected) return;
-                const moved = selected;
-                void ws.nudge(moved, dir).then(() => {
-                  scrollToActivity(ws.resolve(moved.item.id));
-                  announce(`${moved.plugin.shortLabel} moved ${dir}`);
-                });
-              }}
-              onDuplicate={() => selected && withBusy(() => ws.duplicate(selected))}
-              onRemove={() => selected && void remove(selected)}
-              onClose={() => setSelectedId(null)}
-            />
-          </aside>
+          {selected && (
+            <aside
+              id="ws-inspector"
+              aria-label="Activity editor"
+              className="anim-sheet fixed inset-x-0 bottom-0 z-30 sm:inset-x-4 xl:sticky xl:inset-x-auto xl:top-20 xl:bottom-auto xl:z-auto"
+            >
+              <ActivityInspector
+                activity={selected}
+                index={selectedIndex}
+                total={activities.length}
+                draft={ws.draftFor(selected)}
+                onEdit={(patch) => ws.edit(selected, patch)}
+                onMarks={(n) => void ws.setMarks(selected, n)}
+                onMove={(dir) => {
+                  const moved = selected;
+                  void ws.nudge(moved, dir).then(() => {
+                    scrollToActivity(ws.resolve(moved.item.id));
+                    announce(`${moved.plugin.shortLabel} moved ${dir}`);
+                  });
+                }}
+                onDuplicate={() => withBusy(() => ws.duplicate(selected))}
+                onRemove={() => void remove(selected)}
+                onClose={() => setSelectedId(null)}
+              />
+            </aside>
+          )}
         </div>
+
+        {libraryOpen && (
+          <ActivityLibrary
+            subject={subject}
+            busy={busy}
+            onClose={() => setLibraryOpen(false)}
+            onAdd={(p: AnyActivityPlugin) =>
+              void withBusy(async () => {
+                const newId = await ws.add(p);
+                setLibraryOpen(false);
+                if (newId) announce(`${p.shortLabel} added`);
+                return newId;
+              })
+            }
+          />
+        )}
 
         {templatesOpen && (
           <TemplatesModal
