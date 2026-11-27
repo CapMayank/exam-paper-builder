@@ -261,7 +261,13 @@ export function WorksheetStudio({ id }: { id: string }) {
             <WorksheetCanvas
               activities={activities}
               selectedId={selectedId}
-              onSelect={setSelectedId}
+              onSelect={(itemId) => {
+                setSelectedId(itemId);
+                // on small screens the editor sits below the page: bring it into view
+                if (window.matchMedia("(max-width: 1023px)").matches) {
+                  requestAnimationFrame(() => document.getElementById("ws-inspector")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+                }
+              }}
               draftFor={drafts.draftFor}
               emptyState={
                 <EmptyState
@@ -280,7 +286,7 @@ export function WorksheetStudio({ id }: { id: string }) {
             />
           </section>
 
-          <aside aria-label="Activity editor" className="lg:sticky lg:top-4">
+          <aside id="ws-inspector" aria-label="Activity editor" className="scroll-mt-4 lg:sticky lg:top-4">
             <ActivityInspector
               activity={selected}
               index={selectedIndex}

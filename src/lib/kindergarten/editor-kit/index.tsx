@@ -76,6 +76,7 @@ export function InstructionField({ value, onChange, defaultValue }: { value: str
       </div>
       <input
         type="text"
+        aria-label="Instruction"
         value={value}
         placeholder={defaultValue}
         onChange={(e) => onChange(e.target.value)}
