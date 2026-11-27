@@ -1,20 +1,11 @@
 "use client";
 
+import { EditorShell, InstructionField, NumberStepper, PictureChip, RowList } from "../editor-kit";
+
 import React from "react";
+import { X } from "lucide-react";
 import type { KindergartenActivityPlugin, KindergartenEditorProps, KindergartenPrintProps, PatternConfig, PatternRow } from "../types";
-import {
-  ActivityFrame,
-  AddRowButton,
-  Art,
-  ClipartChip,
-  EditorSection,
-  InstructionField,
-  PreviewBox,
-  RemoveButton,
-  SHAPE_IDS,
-  ShapeGlyph,
-  Stepper,
-} from "./_shared";
+import { ActivityFrame, Art, PreviewBox, SHAPE_IDS, ShapeGlyph } from "./_shared";
 
 export const patternDefaultConfig = (): PatternConfig => ({
   instruction: "Look at the pattern and draw what comes next:",
@@ -57,56 +48,59 @@ function TokenPicker({ value, onChange }: { value: string; onChange: (v: string)
           </option>
         ))}
       </select>
-      <ClipartChip clipartId={isShape(value) ? undefined : value} onPick={onChange} size={24} label="Picture" />
+      <PictureChip clipartId={isShape(value) ? undefined : value} onPick={onChange} size={24} label="Picture" />
     </div>
   );
 }
 
 function PatternEditor({ config, onChange, instructionText, onInstructionChange }: KindergartenEditorProps<PatternConfig>) {
-  const setRow = (i: number, patch: Partial<PatternRow>) =>
-    onChange({ ...config, rows: config.rows.map((r, j) => (j === i ? { ...r, ...patch } : r)) });
-
   return (
     <div className="space-y-4">
-      <InstructionField value={instructionText} onChange={onInstructionChange} placeholder="e.g. Complete the pattern" />
-
-      <EditorSection title="Pattern rows" hint="Pick the repeating shapes or pictures, then how many times and how many to leave blank">
-        <div className="space-y-2">
-          {config.rows.map((row, i) => (
-            <div key={i} className="space-y-2 rounded-lg bg-slate-50 p-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-bold text-slate-500">Unit</span>
-                {row.unit.map((u, k) => (
-                  <div key={k} className="flex items-center gap-0.5 rounded-lg border border-slate-200 bg-white p-1">
-                    <Glyph id={u} size={22} />
-                    <TokenPicker value={u} onChange={(v) => setRow(i, { unit: row.unit.map((x, m) => (m === k ? v : x)) })} />
-                    {row.unit.length > 1 && (
-                      <RemoveButton label="Remove from unit" onClick={() => setRow(i, { unit: row.unit.filter((_, m) => m !== k) })} />
+      <EditorShell
+        memoryKey="KDG_PATTERN"
+        basic={
+          <>
+            <InstructionField value={instructionText} onChange={onInstructionChange} defaultValue={config.instruction} />
+            <RowList<PatternRow>
+              label="Pattern rows — pick the repeating shapes"
+              rows={config.rows}
+              onChange={(rows) => onChange({ ...config, rows })}
+              makeRow={() => ({ unit: ["circle", "star"], repeats: 3, blanksAtEnd: 2 })}
+              max={6}
+              addLabel="Add pattern row"
+              renderRow={(row, update) => (
+                <div className="space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {row.unit.map((u, k) => (
+                      <div key={k} className="flex items-center gap-0.5 rounded-lg border border-slate-200 bg-white p-1">
+                        <Glyph id={u} size={22} />
+                        <TokenPicker value={u} onChange={(v) => update({ ...row, unit: row.unit.map((x, m) => (m === k ? v : x)) })} />
+                        {row.unit.length > 1 && (
+                          <button
+                            type="button"
+                            aria-label="Remove from pattern"
+                            onClick={() => update({ ...row, unit: row.unit.filter((_, m) => m !== k) })}
+                            className="flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:bg-red-50 hover:text-red-600"
+                          >
+                            <X size={12} />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    {row.unit.length < 4 && (
+                      <button type="button" onClick={() => update({ ...row, unit: [...row.unit, "circle"] })} className="rounded-lg border border-dashed border-indigo-300 px-2 py-1 text-xs font-semibold text-indigo-700">
+                        + Shape
+                      </button>
                     )}
                   </div>
-                ))}
-                {row.unit.length < 4 && (
-                  <AddRowButton onClick={() => setRow(i, { unit: [...row.unit, "circle"] })}>Add</AddRowButton>
-                )}
-                <RemoveButton
-                  label="Remove row"
-                  onClick={() => onChange({ ...config, rows: config.rows.filter((_, j) => j !== i) })}
-                />
-              </div>
-              <div className="flex flex-wrap items-center gap-4">
-                <Stepper label="Repeats" value={row.repeats} min={2} max={6} onChange={(n) => setRow(i, { repeats: n })} />
-                <Stepper label="Blanks" value={row.blanksAtEnd} min={1} max={4} onChange={(n) => setRow(i, { blanksAtEnd: n })} />
-              </div>
-            </div>
-          ))}
-          {config.rows.length < 6 && (
-            <AddRowButton onClick={() => onChange({ ...config, rows: [...config.rows, { unit: ["circle", "star"], repeats: 3, blanksAtEnd: 2 }] })}>
-              Add pattern row
-            </AddRowButton>
-          )}
-        </div>
-      </EditorSection>
-
+                  <NumberStepper label="Repeats" value={row.repeats} min={2} max={6} onChange={(n) => update({ ...row, repeats: n })} />
+                  <NumberStepper label="Left blank at the end" value={row.blanksAtEnd} min={1} max={4} onChange={(n) => update({ ...row, blanksAtEnd: n })} />
+                </div>
+              )}
+            />
+          </>
+        }
+      />
       <PreviewBox>
         <PatternPrint config={config} instructionText={instructionText} />
       </PreviewBox>

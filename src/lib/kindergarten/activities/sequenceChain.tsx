@@ -1,5 +1,7 @@
 "use client";
 
+import { ChoiceChips, EditorShell, Field, InstructionField, TextListField } from "../editor-kit";
+
 import { PreviewBox } from "./_shared";
 import React from "react";
 import type {
@@ -26,111 +28,56 @@ export const sequenceChainDefaultConfig = (): SequenceChainConfig => {
   };
 };
 
-function SequenceChainEditor({
-  config,
-  onChange,
-  instructionText,
-  onInstructionChange,
-}: KindergartenEditorProps<SequenceChainConfig>) {
-  const toggleBlank = (idx: number) => {
-    const nextItems = [...config.items];
-    if (nextItems[idx]) {
-      nextItems[idx] = { ...nextItems[idx], isBlank: !nextItems[idx].isBlank };
-      onChange({ ...config, items: nextItems });
-    }
+function SequenceChainEditor({ config, onChange, instructionText, onInstructionChange }: KindergartenEditorProps<SequenceChainConfig>) {
+  const setValues = (values: string[]) => {
+    // keep each item's blank choice by position; new items alternate like before
+    const items: SequenceChainItem[] = values.map((value, idx) => ({ value, isBlank: config.items[idx]?.isBlank ?? idx % 2 === 1 }));
+    onChange({ ...config, items });
   };
-
-  const handleSequenceInput = (str: string) => {
-    const rawTokens = str.split(",").map((s) => s.trim()).filter(Boolean);
-    const nextItems: SequenceChainItem[] = rawTokens.map((val, idx) => ({
-      value: val,
-      isBlank: idx % 2 === 1, // alternate blank
-    }));
-    onChange({ ...config, items: nextItems });
-  };
-
-  const currentCsv = config.items.map((it) => it.value).join(", ");
+  const toggleBlank = (idx: number) =>
+    onChange({ ...config, items: config.items.map((it, i) => (i === idx ? { ...it, isBlank: !it.isBlank } : it)) });
 
   return (
     <div className="space-y-4">
-      {/* Instructions */}
-      <div>
-        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-          Activity Instruction / Prompt
-        </label>
-        <input
-          type="text"
-          value={instructionText}
-          onChange={(e) => onInstructionChange(e.target.value)}
-          placeholder="e.g. Fill in the missing letters in the caterpillar"
-          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
-        />
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="block text-xs font-semibold text-slate-600 mb-1">Chain Theme</label>
-          <select
+      <EditorShell
+        memoryKey="KDG_SEQUENCE_CHAIN"
+        basic={
+          <>
+            <InstructionField value={instructionText} onChange={onInstructionChange} defaultValue={config.instruction} />
+            <TextListField label="Items in order" values={config.items.map((i) => i.value)} onChange={setValues} placeholder="A B C D or 1 2 3 4" />
+            <Field label="Tap an item to make it a blank" hint={`${config.items.filter((i) => i.isBlank).length} blanks`}>
+              <div className="flex flex-wrap gap-1.5">
+                {config.items.map((item, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => toggleBlank(idx)}
+                    aria-pressed={item.isBlank}
+                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 text-sm font-bold ${
+                      item.isBlank ? "border-dashed border-amber-500 bg-amber-50 text-amber-600" : "border-slate-900 bg-white text-slate-950"
+                    }`}
+                  >
+                    {item.isBlank ? "_" : item.value}
+                  </button>
+                ))}
+              </div>
+            </Field>
+          </>
+        }
+        advanced={
+          <ChoiceChips<SequenceChainConfig["theme"]>
+            label="Theme"
             value={config.theme}
-            onChange={(e) =>
-              onChange({
-                ...config,
-                theme: e.target.value as SequenceChainConfig["theme"],
-              })
-            }
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
-          >
-            <option value="CATERPILLAR">Caterpillar (Cute smiling face & antennae)</option>
-            <option value="TRAIN">Train (Toy engine & carriages)</option>
-            <option value="BUBBLES">Floating Bubbles</option>
-            <option value="APPLES">Apples on a Branch</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-xs font-semibold text-slate-600 mb-1">
-            Sequence Items (comma-separated)
-          </label>
-          <input
-            type="text"
-            value={currentCsv}
-            onChange={(e) => handleSequenceInput(e.target.value)}
-            placeholder="e.g. A, B, C, D, E, F, G  or  1, 2, 3, 4, 5, 6"
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-semibold tracking-wider text-slate-900 bg-white"
+            onChange={(theme) => onChange({ ...config, theme })}
+            options={[
+              { value: "CATERPILLAR", label: "Caterpillar" },
+              { value: "TRAIN", label: "Train" },
+              { value: "BUBBLES", label: "Bubbles" },
+              { value: "APPLES", label: "Apples on a branch" },
+            ]}
           />
-        </div>
-      </div>
-
-      {/* Bubble click toggle */}
-      <div className="mt-4 p-4 border border-slate-200 rounded-xl bg-white shadow-2xs">
-        <div className="flex justify-between items-center mb-2">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-            Click any bubble to toggle Blank (student fills in) vs Pre-filled
-          </span>
-          <span className="text-xs text-indigo-600 font-semibold">
-            {config.items.filter((i) => i.isBlank).length} blanks
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2 overflow-x-auto p-2 bg-slate-50/50 rounded-xl border border-slate-200">
-          {config.items.map((item, idx) => (
-            <button
-              key={idx}
-              type="button"
-              onClick={() => toggleBlank(idx)}
-              className={`w-12 h-12 rounded-full border-2 flex items-center justify-center font-bold text-base transition-all shrink-0 ${
-                item.isBlank
-                  ? "bg-amber-50 border-dashed border-amber-500 text-amber-600"
-                  : "bg-white border-slate-900 text-slate-950 shadow-xs"
-              }`}
-              title="Click to toggle blank"
-            >
-              {item.isBlank ? `[${item.value}]` : item.value}
-            </button>
-          ))}
-        </div>
-      </div>
-
+        }
+      />
       <PreviewBox>
         <SequenceChainPrint config={config} instructionText={instructionText} />
       </PreviewBox>

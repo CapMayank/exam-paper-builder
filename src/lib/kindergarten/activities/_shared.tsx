@@ -1,8 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
-import { ImagePlus, Minus, Plus, X } from "lucide-react";
-import { ClipartPickerModal } from "../components/ClipartPickerModal";
+import React from "react";
 import { getClipartById } from "../clipartLibrary";
 
 /** Bordered activity block with the question number, instruction and marks – same look as the other activities. */
@@ -35,47 +33,9 @@ export function ActivityFrame({
   );
 }
 
-export function InstructionField({
-  value,
-  onChange,
-  placeholder,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-}) {
-  return (
-    <div>
-      <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-700">
-        Activity Instruction / Prompt
-      </label>
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30"
-      />
-    </div>
-  );
-}
-
-export function EditorSection({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-2xs">
-      <div className="mb-2 flex items-baseline justify-between gap-2">
-        <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{title}</span>
-        {hint && <span className="text-[11px] text-slate-400">{hint}</span>}
-      </div>
-      {children}
-    </div>
-  );
-}
-
 /**
- * Whether an activity editor shows its own "Print Preview". The worksheet builder turns it off,
- * because the activity card above the editor already shows the paper live – two previews of the
- * same thing confused teachers. The Question Bank form has no other preview, so it keeps this one.
+ * Whether an activity editor shows its own "Print Preview". The worksheet studio turns it off because
+ * its page already shows the paper live; the Question Bank form has no other preview, so it keeps this one.
  */
 export const EditorPreviewContext = React.createContext(true);
 
@@ -87,108 +47,6 @@ export function PreviewBox({ children }: { children: React.ReactNode }) {
       <span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-400">Print Preview</span>
       {children}
     </div>
-  );
-}
-
-export function Stepper({
-  label,
-  value,
-  min,
-  max,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  onChange: (n: number) => void;
-}) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className="text-xs font-semibold text-slate-600">{label}</span>
-      <button
-        type="button"
-        aria-label={`Fewer ${label}`}
-        disabled={value <= min}
-        onClick={() => onChange(value - 1)}
-        className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40"
-      >
-        <Minus size={13} />
-      </button>
-      <span className="w-6 text-center text-sm font-bold tabular-nums">{value}</span>
-      <button
-        type="button"
-        aria-label={`More ${label}`}
-        disabled={value >= max}
-        onClick={() => onChange(value + 1)}
-        className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40"
-      >
-        <Plus size={13} />
-      </button>
-    </div>
-  );
-}
-
-export function RemoveButton({ onClick, label = "Remove" }: { onClick: () => void; label?: string }) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-red-50 hover:text-red-600"
-    >
-      <X size={14} />
-    </button>
-  );
-}
-
-export function AddRowButton({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="inline-flex items-center gap-1 rounded-lg border border-dashed border-indigo-300 bg-indigo-50/50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50"
-    >
-      <Plus size={13} /> {children}
-    </button>
-  );
-}
-
-/** Small button that shows a clipart and opens the picker. */
-export function ClipartChip({
-  clipartId,
-  onPick,
-  size = 28,
-  label,
-}: {
-  clipartId?: string;
-  onPick: (id: string) => void;
-  size?: number;
-  label?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const art = clipartId ? getClipartById(clipartId) : undefined;
-  return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        title={art ? `${art.name} – click to change` : "Choose a picture"}
-        aria-label={label ?? "Choose picture"}
-        className="flex h-11 min-w-11 items-center justify-center gap-1 rounded-lg border border-slate-300 bg-white px-1.5 text-slate-900 hover:border-indigo-500"
-      >
-        {art ? art.renderSvg(size) : <ImagePlus size={16} className="text-slate-400" />}
-      </button>
-      <ClipartPickerModal
-        isOpen={open}
-        onClose={() => setOpen(false)}
-        onSelect={(item) => {
-          if ("id" in item) onPick(item.id);
-          setOpen(false);
-        }}
-      />
-    </>
   );
 }
 

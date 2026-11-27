@@ -1,8 +1,10 @@
 "use client";
 
+import { ChoiceChips, EditorShell, InstructionField, NumberStepper } from "../editor-kit";
+
 import React from "react";
 import type { JoinDotsConfig, JoinDotsShape, KindergartenActivityPlugin, KindergartenEditorProps, KindergartenPrintProps } from "../types";
-import { ActivityFrame, EditorSection, InstructionField, PreviewBox, Stepper } from "./_shared";
+import { ActivityFrame, PreviewBox } from "./_shared";
 
 /** Outline of each shape on a 200 x 150 canvas. */
 const OUTLINES: Record<JoinDotsShape, [number, number][]> = {
@@ -130,43 +132,32 @@ function DotsFigure({ config }: { config: JoinDotsConfig }) {
 function JoinDotsEditor({ config, onChange, instructionText, onInstructionChange }: KindergartenEditorProps<JoinDotsConfig>) {
   return (
     <div className="space-y-4">
-      <InstructionField value={instructionText} onChange={onInstructionChange} placeholder="e.g. Join the dots from 1 to 10" />
-
-      <EditorSection title="Shape">
-        <div className="flex flex-wrap gap-1.5">
-          {(Object.keys(SHAPE_NAMES) as JoinDotsShape[]).map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => onChange({ ...config, shape: s })}
-              className={`rounded-lg border px-3 py-1.5 text-sm font-semibold ${
-                config.shape === s ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-300 bg-white text-slate-700"
-              }`}
-            >
-              {SHAPE_NAMES[s]}
-            </button>
-          ))}
-        </div>
-      </EditorSection>
-
-      <div className="flex flex-wrap items-center gap-5">
-        <Stepper label="Dots" value={config.count} min={4} max={26} onChange={(n) => onChange({ ...config, count: n })} />
-        <div className="flex gap-1">
-          {(["NUMBERS", "LETTERS"] as const).map((l) => (
-            <button
-              key={l}
-              type="button"
-              onClick={() => onChange({ ...config, labels: l })}
-              className={`rounded-lg border px-3 py-1.5 text-sm font-semibold ${
-                config.labels === l ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-300 bg-white text-slate-700"
-              }`}
-            >
-              {l === "NUMBERS" ? "1, 2, 3…" : "A, B, C…"}
-            </button>
-          ))}
-        </div>
-      </div>
-
+      <EditorShell
+        memoryKey="KDG_JOIN_DOTS"
+        basic={
+          <>
+            <InstructionField value={instructionText} onChange={onInstructionChange} defaultValue={config.instruction} />
+            <ChoiceChips<JoinDotsShape>
+              label="Shape"
+              value={config.shape}
+              onChange={(shape) => onChange({ ...config, shape })}
+              options={(Object.keys(SHAPE_NAMES) as JoinDotsShape[]).map((s) => ({ value: s, label: SHAPE_NAMES[s] }))}
+            />
+            <NumberStepper label="Dots" value={config.count} min={4} max={26} onChange={(count) => onChange({ ...config, count })} />
+          </>
+        }
+        advanced={
+          <ChoiceChips<JoinDotsConfig["labels"]>
+            label="Dot labels"
+            value={config.labels}
+            onChange={(labels) => onChange({ ...config, labels })}
+            options={[
+              { value: "NUMBERS", label: "1, 2, 3…" },
+              { value: "LETTERS", label: "A, B, C…" },
+            ]}
+          />
+        }
+      />
       <PreviewBox>
         <JoinDotsPrint config={config} instructionText={instructionText} />
       </PreviewBox>

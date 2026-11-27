@@ -1,17 +1,11 @@
 "use client";
 
+import { EditorShell, InstructionField, PictureChip, RowList } from "../editor-kit";
+
 import React from "react";
+import { X } from "lucide-react";
 import type { KindergartenActivityPlugin, KindergartenEditorProps, KindergartenPrintProps, TickPictureConfig, TickPictureRow } from "../types";
-import {
-  ActivityFrame,
-  AddRowButton,
-  Art,
-  ClipartChip,
-  EditorSection,
-  InstructionField,
-  PreviewBox,
-  RemoveButton,
-} from "./_shared";
+import { ActivityFrame, Art, PreviewBox } from "./_shared";
 
 export const tickPictureDefaultConfig = (): TickPictureConfig => ({
   instruction: "Tick (✓) the correct picture:",
@@ -23,68 +17,73 @@ export const tickPictureDefaultConfig = (): TickPictureConfig => ({
 });
 
 function TickPictureEditor({ config, onChange, instructionText, onInstructionChange }: KindergartenEditorProps<TickPictureConfig>) {
-  const setRow = (i: number, patch: Partial<TickPictureRow>) =>
-    onChange({ ...config, rows: config.rows.map((r, j) => (j === i ? { ...r, ...patch } : r)) });
-
   return (
     <div className="space-y-4">
-      <InstructionField value={instructionText} onChange={onInstructionChange} placeholder="e.g. Tick the correct picture" />
-
-      <EditorSection title="Questions" hint="Mark the correct picture with the green tick (teacher's key – not printed)">
-        <div className="space-y-2">
-          {config.rows.map((r, i) => (
-            <div key={i} className="space-y-2 rounded-lg bg-slate-50 p-2">
-              <div className="flex items-center gap-2">
-                <input
-                  aria-label={`Question ${i + 1}`}
-                  value={r.question}
-                  onChange={(e) => setRow(i, { question: e.target.value })}
-                  placeholder="e.g. Which one starts with the letter b?"
-                  className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
-                />
-                <RemoveButton label="Remove question" onClick={() => onChange({ ...config, rows: config.rows.filter((_, j) => j !== i) })} />
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {r.options.map((o, k) => (
-                  <div key={k} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white p-1">
-                    <ClipartChip clipartId={o} onPick={(id) => setRow(i, { options: r.options.map((x, m) => (m === k ? id : x)) })} />
-                    <button
-                      type="button"
-                      title="Correct answer"
-                      aria-label={`Option ${k + 1} is correct`}
-                      aria-pressed={r.correctIndex === k}
-                      onClick={() => setRow(i, { correctIndex: k })}
-                      className={`flex h-7 w-7 items-center justify-center rounded-full text-sm font-black ${
-                        r.correctIndex === k ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-400"
-                      }`}
-                    >
-                      ✓
-                    </button>
-                    {r.options.length > 2 && (
-                      <RemoveButton
-                        label="Remove option"
-                        onClick={() =>
-                          setRow(i, {
-                            options: r.options.filter((_, m) => m !== k),
-                            correctIndex: r.correctIndex === k ? 0 : r.correctIndex > k ? r.correctIndex - 1 : r.correctIndex,
-                          })
-                        }
-                      />
+      <EditorShell
+        memoryKey="KDG_TICK_PICTURE"
+        basic={
+          <>
+            <InstructionField value={instructionText} onChange={onInstructionChange} defaultValue={config.instruction} />
+            <RowList<TickPictureRow>
+              label="Questions — green tick marks the answer (not printed)"
+              rows={config.rows}
+              onChange={(rows) => onChange({ ...config, rows })}
+              makeRow={() => ({ question: "", options: ["apple", "ball", "cat"], correctIndex: 0 })}
+              max={6}
+              addLabel="Add question"
+              renderRow={(r, update) => (
+                <div className="space-y-1.5">
+                  <input
+                    aria-label="Question"
+                    value={r.question}
+                    onChange={(e) => update({ ...r, question: e.target.value })}
+                    placeholder="e.g. Which one starts with b?"
+                    className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
+                  />
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {r.options.map((o, k) => (
+                      <div key={k} className="flex items-center gap-0.5 rounded-lg border border-slate-200 bg-white p-0.5">
+                        <PictureChip clipartId={o} size={24} onPick={(id) => update({ ...r, options: r.options.map((x, m) => (m === k ? id : x)) })} />
+                        <button
+                          type="button"
+                          title="Correct answer"
+                          aria-label={`Picture ${k + 1} is correct`}
+                          aria-pressed={r.correctIndex === k}
+                          onClick={() => update({ ...r, correctIndex: k })}
+                          className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-black ${r.correctIndex === k ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-400"}`}
+                        >
+                          ✓
+                        </button>
+                        {r.options.length > 2 && (
+                          <button
+                            type="button"
+                            aria-label={`Remove picture ${k + 1}`}
+                            onClick={() =>
+                              update({
+                                ...r,
+                                options: r.options.filter((_, m) => m !== k),
+                                correctIndex: r.correctIndex === k ? 0 : r.correctIndex > k ? r.correctIndex - 1 : r.correctIndex,
+                              })
+                            }
+                            className="flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:bg-red-50 hover:text-red-600"
+                          >
+                            <X size={12} />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    {r.options.length < 4 && (
+                      <button type="button" onClick={() => update({ ...r, options: [...r.options, "star"] })} className="rounded-lg border border-dashed border-indigo-300 px-2 py-1 text-xs font-semibold text-indigo-700">
+                        + Picture
+                      </button>
                     )}
                   </div>
-                ))}
-                {r.options.length < 4 && <AddRowButton onClick={() => setRow(i, { options: [...r.options, "star"] })}>Option</AddRowButton>}
-              </div>
-            </div>
-          ))}
-          {config.rows.length < 6 && (
-            <AddRowButton onClick={() => onChange({ ...config, rows: [...config.rows, { question: "", options: ["apple", "ball", "cat"], correctIndex: 0 }] })}>
-              Add question
-            </AddRowButton>
-          )}
-        </div>
-      </EditorSection>
-
+                </div>
+              )}
+            />
+          </>
+        }
+      />
       <PreviewBox>
         <TickPicturePrint config={config} instructionText={instructionText} />
       </PreviewBox>

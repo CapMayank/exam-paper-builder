@@ -1,17 +1,10 @@
 "use client";
 
+import { EditorShell, InstructionField, PictureChip, RowList } from "../editor-kit";
+
 import React from "react";
 import type { ColourConfig, ColourItem, KindergartenActivityPlugin, KindergartenEditorProps, KindergartenPrintProps } from "../types";
-import {
-  ActivityFrame,
-  AddRowButton,
-  Art,
-  ClipartChip,
-  EditorSection,
-  InstructionField,
-  PreviewBox,
-  RemoveButton,
-} from "./_shared";
+import { ActivityFrame, Art, PreviewBox } from "./_shared";
 
 const COLOURS = ["red", "blue", "yellow", "green", "orange", "pink", "purple", "brown", "black"] as const;
 const SWATCH: Record<string, string> = {
@@ -37,41 +30,44 @@ export const colourDefaultConfig = (): ColourConfig => ({
 });
 
 function ColourEditor({ config, onChange, instructionText, onInstructionChange }: KindergartenEditorProps<ColourConfig>) {
-  const setItem = (i: number, patch: Partial<ColourItem>) =>
-    onChange({ ...config, items: config.items.map((it, j) => (j === i ? { ...it, ...patch } : it)) });
-
   return (
     <div className="space-y-4">
-      <InstructionField value={instructionText} onChange={onInstructionChange} placeholder="e.g. Colour the apple red" />
-
-      <EditorSection title="Pictures to colour">
-        <div className="space-y-2">
-          {config.items.map((it, i) => (
-            <div key={i} className="flex flex-wrap items-center gap-3 rounded-lg bg-slate-50 p-2">
-              <ClipartChip clipartId={it.clipartId} onPick={(id) => setItem(i, { clipartId: id })} />
-              <div className="flex flex-wrap gap-1">
-                {COLOURS.map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    aria-label={c}
-                    title={c}
-                    onClick={() => setItem(i, { colour: c })}
-                    className={`h-7 w-7 rounded-full border-2 ${it.colour === c ? "border-slate-900 ring-2 ring-indigo-400" : "border-white"}`}
-                    style={{ backgroundColor: SWATCH[c] }}
-                  />
-                ))}
-              </div>
-              <span className="text-sm font-bold capitalize text-slate-700">{it.colour}</span>
-              <RemoveButton label="Remove picture" onClick={() => onChange({ ...config, items: config.items.filter((_, j) => j !== i) })} />
-            </div>
-          ))}
-          {config.items.length < 8 && (
-            <AddRowButton onClick={() => onChange({ ...config, items: [...config.items, { clipartId: "flower", colour: "pink" }] })}>Add picture</AddRowButton>
-          )}
-        </div>
-      </EditorSection>
-
+      <EditorShell
+        memoryKey="KDG_COLOUR"
+        basic={
+          <>
+            <InstructionField value={instructionText} onChange={onInstructionChange} defaultValue={config.instruction} />
+            <RowList<ColourItem>
+              label="Pictures to colour"
+              rows={config.items}
+              onChange={(items) => onChange({ ...config, items })}
+              makeRow={() => ({ clipartId: "flower", colour: "pink" })}
+              max={8}
+              addLabel="Add picture"
+              renderRow={(it, update) => (
+                <div className="flex flex-wrap items-center gap-2">
+                  <PictureChip clipartId={it.clipartId} onPick={(id) => update({ ...it, clipartId: id })} />
+                  <div className="flex flex-wrap gap-1">
+                    {COLOURS.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        aria-label={c}
+                        aria-pressed={it.colour === c}
+                        title={c}
+                        onClick={() => update({ ...it, colour: c })}
+                        className={`h-6 w-6 rounded-full border-2 ${it.colour === c ? "border-slate-900 ring-2 ring-indigo-400" : "border-white"}`}
+                        style={{ backgroundColor: SWATCH[c] }}
+                      />
+                    ))}
+                  </div>
+                  <span className="text-xs font-bold capitalize text-slate-700">{it.colour}</span>
+                </div>
+              )}
+            />
+          </>
+        }
+      />
       <PreviewBox>
         <ColourPrint config={config} instructionText={instructionText} />
       </PreviewBox>
