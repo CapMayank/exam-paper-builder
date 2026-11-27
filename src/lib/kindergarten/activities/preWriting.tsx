@@ -1,8 +1,10 @@
 "use client";
 
+import { EditorShell, InstructionField, RowList } from "../editor-kit";
+
 import React from "react";
 import type { KindergartenActivityPlugin, KindergartenEditorProps, KindergartenPrintProps, PreWritingConfig, PreWritingStroke } from "../types";
-import { ActivityFrame, AddRowButton, EditorSection, InstructionField, PreviewBox, RemoveButton } from "./_shared";
+import { ActivityFrame, PreviewBox } from "./_shared";
 
 export const STROKE_LABEL: Record<PreWritingStroke, string> = {
   STANDING: "Standing lines | | |",
@@ -85,31 +87,36 @@ export const preWritingDefaultConfig = (): PreWritingConfig => ({
 function PreWritingEditor({ config, onChange, instructionText, onInstructionChange }: KindergartenEditorProps<PreWritingConfig>) {
   return (
     <div className="space-y-4">
-      <InstructionField value={instructionText} onChange={onInstructionChange} placeholder="e.g. Trace the dotted lines" />
-
-      <EditorSection title="Stroke practice rows" hint="One dotted row per line">
-        <div className="space-y-2">
-          {config.rows.map((r, i) => (
-            <div key={i} className="flex items-center gap-2 rounded-lg bg-slate-50 p-2">
-              <select
-                aria-label={`Row ${i + 1} stroke`}
-                value={r.stroke}
-                onChange={(e) => onChange({ ...config, rows: config.rows.map((x, j) => (j === i ? { stroke: e.target.value as PreWritingStroke } : x)) })}
-                className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm"
-              >
-                {(Object.keys(STROKE_LABEL) as PreWritingStroke[]).map((s) => (
-                  <option key={s} value={s}>
-                    {STROKE_LABEL[s]}
-                  </option>
-                ))}
-              </select>
-              <RemoveButton label="Remove row" onClick={() => onChange({ ...config, rows: config.rows.filter((_, j) => j !== i) })} />
-            </div>
-          ))}
-          {config.rows.length < 8 && <AddRowButton onClick={() => onChange({ ...config, rows: [...config.rows, { stroke: "WAVES" }] })}>Add row</AddRowButton>}
-        </div>
-      </EditorSection>
-
+      <EditorShell
+        memoryKey="KDG_PREWRITING"
+        basic={
+          <>
+            <InstructionField value={instructionText} onChange={onInstructionChange} defaultValue={config.instruction} />
+            <RowList<{ stroke: PreWritingStroke }>
+              label="Stroke rows (one dotted row each)"
+              rows={config.rows}
+              onChange={(rows) => onChange({ ...config, rows })}
+              makeRow={() => ({ stroke: "WAVES" })}
+              max={8}
+              addLabel="Add row"
+              renderRow={(r, update) => (
+                <select
+                  aria-label="Stroke"
+                  value={r.stroke}
+                  onChange={(e) => update({ stroke: e.target.value as PreWritingStroke })}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm"
+                >
+                  {(Object.keys(STROKE_LABEL) as PreWritingStroke[]).map((s) => (
+                    <option key={s} value={s}>
+                      {STROKE_LABEL[s]}
+                    </option>
+                  ))}
+                </select>
+              )}
+            />
+          </>
+        }
+      />
       <PreviewBox>
         <PreWritingPrint config={config} instructionText={instructionText} />
       </PreviewBox>

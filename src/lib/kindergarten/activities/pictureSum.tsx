@@ -1,19 +1,10 @@
 "use client";
 
+import { ChoiceChips, EditorShell, InstructionField, NumberStepper, PictureChip, RowList, ToggleRow } from "../editor-kit";
+
 import React from "react";
 import type { KindergartenActivityPlugin, KindergartenEditorProps, KindergartenPrintProps, PictureSumConfig, PictureSumRow } from "../types";
-import {
-  ActivityFrame,
-  AddRowButton,
-  AnswerBox,
-  Art,
-  ClipartChip,
-  EditorSection,
-  InstructionField,
-  PreviewBox,
-  RemoveButton,
-  Stepper,
-} from "./_shared";
+import { ActivityFrame, AnswerBox, Art, PreviewBox } from "./_shared";
 
 export const pictureSumDefaultConfig = (): PictureSumConfig => ({
   op: "ADD",
@@ -44,54 +35,50 @@ function Group({ id, n, crossed = 0 }: { id: string; n: number; crossed?: number
 }
 
 function PictureSumEditor({ config, onChange, instructionText, onInstructionChange }: KindergartenEditorProps<PictureSumConfig>) {
-  const setRow = (i: number, patch: Partial<PictureSumRow>) =>
-    onChange({ ...config, rows: config.rows.map((r, j) => (j === i ? { ...r, ...patch } : r)) });
   const subtract = config.op === "SUBTRACT";
 
   return (
     <div className="space-y-4">
-      <InstructionField value={instructionText} onChange={onInstructionChange} placeholder="e.g. Add the pictures and write the answer" />
-
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex gap-1">
-          {(["ADD", "SUBTRACT"] as const).map((op) => (
-            <button
-              key={op}
-              type="button"
-              onClick={() => onChange({ ...config, op })}
-              className={`rounded-lg border px-3 py-1.5 text-sm font-bold ${
-                config.op === op ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-300 bg-white text-slate-700"
-              }`}
-            >
-              {op === "ADD" ? "+ Addition" : "− Subtraction"}
-            </button>
-          ))}
-        </div>
-        <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-          <input type="checkbox" checked={config.showPictures} onChange={(e) => onChange({ ...config, showPictures: e.target.checked })} />
-          Show pictures under the numbers
-        </label>
-      </div>
-
-      <EditorSection title="Sums">
-        <div className="space-y-2">
-          {config.rows.map((r, i) => (
-            <div key={i} className="flex flex-wrap items-center gap-3 rounded-lg bg-slate-50 p-2">
-              <ClipartChip clipartId={r.clipartId} onPick={(id) => setRow(i, { clipartId: id })} />
-              <Stepper label="First" value={r.a} min={subtract ? 1 : 0} max={10} onChange={(n) => setRow(i, { a: n, b: subtract ? Math.min(r.b, n) : r.b })} />
-              <Stepper label={subtract ? "Take away" : "Second"} value={r.b} min={0} max={subtract ? r.a : 10} onChange={(n) => setRow(i, { b: n })} />
-              <span className="ml-auto text-sm font-bold text-slate-500">
-                = {subtract ? r.a - r.b : r.a + r.b}
-              </span>
-              <RemoveButton label="Remove sum" onClick={() => onChange({ ...config, rows: config.rows.filter((_, j) => j !== i) })} />
-            </div>
-          ))}
-          {config.rows.length < 8 && (
-            <AddRowButton onClick={() => onChange({ ...config, rows: [...config.rows, { a: 2, b: 1, clipartId: "apple" }] })}>Add sum</AddRowButton>
-          )}
-        </div>
-      </EditorSection>
-
+      <EditorShell
+        memoryKey="KDG_PICTURE_SUM"
+        basic={
+          <>
+            <InstructionField value={instructionText} onChange={onInstructionChange} defaultValue={config.instruction} />
+            <ChoiceChips<PictureSumConfig["op"]>
+              label="Sum type"
+              value={config.op}
+              onChange={(op) =>
+                onChange({ ...config, op, rows: op === "SUBTRACT" ? config.rows.map((r) => ({ ...r, a: Math.max(1, r.a), b: Math.min(r.b, Math.max(1, r.a)) })) : config.rows })
+              }
+              options={[
+                { value: "ADD", label: "+ Addition" },
+                { value: "SUBTRACT", label: "− Subtraction" },
+              ]}
+            />
+            <RowList<PictureSumRow>
+              label="Sums"
+              rows={config.rows}
+              onChange={(rows) => onChange({ ...config, rows })}
+              makeRow={() => ({ a: 2, b: 1, clipartId: "apple" })}
+              max={8}
+              addLabel="Add sum"
+              renderRow={(r, update) => (
+                <div className="flex items-start gap-2">
+                  <PictureChip clipartId={r.clipartId} onPick={(id) => update({ ...r, clipartId: id })} />
+                  <div className="flex-1 space-y-1">
+                    <NumberStepper label="First" value={r.a} min={subtract ? 1 : 0} max={10} onChange={(n) => update({ ...r, a: n, b: subtract ? Math.min(r.b, n) : r.b })} />
+                    <NumberStepper label={subtract ? "Take away" : "Second"} value={r.b} min={0} max={subtract ? r.a : 10} onChange={(n) => update({ ...r, b: n })} />
+                    <p className="text-right text-xs font-bold text-slate-500">Answer: {subtract ? r.a - r.b : r.a + r.b}</p>
+                  </div>
+                </div>
+              )}
+            />
+          </>
+        }
+        advanced={
+          <ToggleRow label="Show pictures under the numbers" checked={config.showPictures} onChange={(showPictures) => onChange({ ...config, showPictures })} />
+        }
+      />
       <PreviewBox>
         <PictureSumPrint config={config} instructionText={instructionText} />
       </PreviewBox>

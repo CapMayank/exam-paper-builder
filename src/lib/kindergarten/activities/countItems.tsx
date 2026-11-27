@@ -1,5 +1,7 @@
 "use client";
 
+import { ChoiceChips, EditorShell, Field, InstructionField, NumberStepper, TextListField } from "../editor-kit";
+
 import { PreviewBox } from "./_shared";
 import React, { useState } from "react";
 import { ImagePlus } from "lucide-react";
@@ -24,117 +26,91 @@ export const countItemsDefaultConfig = (): CountItemsConfig => {
   };
 };
 
-function CountItemsEditor({
-  config,
-  onChange,
-  instructionText,
-  onInstructionChange,
-}: KindergartenEditorProps<CountItemsConfig>) {
+function CountItemsEditor({ config, onChange, instructionText, onInstructionChange }: KindergartenEditorProps<CountItemsConfig>) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const clipart = config.clipartId ? getClipartById(config.clipartId) : null;
 
   return (
     <div className="space-y-4">
-      {/* Instructions */}
-      <div>
-        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-          Activity Instruction / Prompt
-        </label>
-        <input
-          type="text"
-          value={instructionText}
-          onChange={(e) => onInstructionChange(e.target.value)}
-          placeholder="e.g. Count the balloons and write the number in the box"
-          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
-        />
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {/* Choose Object Button */}
-        <div>
-          <label className="block text-xs font-semibold text-slate-600 mb-1">Object Clipart</label>
-          <button
-            type="button"
-            onClick={() => setPickerOpen(true)}
-            className="w-full flex items-center justify-between p-2 border border-slate-300 rounded-lg bg-white hover:border-indigo-500 transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 flex items-center justify-center text-slate-900">
-                {config.customImageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={config.customImageUrl}
-                    alt=""
-                    className="max-h-full max-w-full object-contain"
-                  />
-                ) : clipart ? (
-                  clipart.renderSvg(28)
-                ) : (
-                  <ImagePlus size={16} />
-                )}
+      <EditorShell
+        memoryKey="KDG_COUNT_ITEMS"
+        basic={
+          <>
+            <InstructionField value={instructionText} onChange={onInstructionChange} defaultValue={config.instruction} />
+            <Field label="Picture to count">
+              <div className="flex items-center gap-3 rounded-lg border border-slate-300 bg-white p-2">
+                <span className="flex h-12 w-12 items-center justify-center rounded-md bg-slate-50 text-slate-900">
+                  {config.customImageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={config.customImageUrl} alt="" className="max-h-full max-w-full object-contain" />
+                  ) : clipart ? (
+                    clipart.renderSvg(40)
+                  ) : (
+                    <ImagePlus size={18} className="text-slate-400" />
+                  )}
+                </span>
+                <span className="flex-1 text-sm font-semibold capitalize text-slate-800">{clipart?.name || config.objectName || "No picture"}</span>
+                <button type="button" className="btn btn-sm" onClick={() => setPickerOpen(true)}>
+                  Change
+                </button>
               </div>
-              <span className="text-xs font-bold text-slate-800 capitalize">
-                {clipart?.name || config.objectName || "Select"}
-              </span>
-            </div>
-            <span className="text-xs text-indigo-600 font-semibold">Change</span>
-          </button>
-        </div>
+            </Field>
+            <NumberStepper label="How many" value={config.count} min={1} max={20} onChange={(count) => onChange({ ...config, count })} />
+          </>
+        }
+        advanced={
+          <>
+            <ChoiceChips<CountItemsConfig["layout"]>
+              label="Arrange pictures"
+              value={config.layout}
+              onChange={(layout) => onChange({ ...config, layout })}
+              options={[
+                { value: "GRID", label: "Grid" },
+                { value: "ROW", label: "In a row" },
+                { value: "SCATTERED", label: "Scattered" },
+              ]}
+            />
+            <ChoiceChips<CountItemsConfig["answerStyle"]>
+              label="Answer"
+              value={config.answerStyle}
+              onChange={(answerStyle) => onChange({ ...config, answerStyle })}
+              options={[
+                { value: "SQUARE_BOX", label: "Write in a box" },
+                { value: "CIRCLE", label: "Write in a circle" },
+                { value: "CHOICE_OPTIONS", label: "Circle the number" },
+              ]}
+            />
+            {config.answerStyle === "CHOICE_OPTIONS" && (
+              <TextListField
+                label="Numbers to choose from"
+                values={(config.choiceOptions ?? []).map(String)}
+                onChange={(v) => onChange({ ...config, choiceOptions: v.map(Number).filter((n) => Number.isFinite(n) && n >= 0) })}
+                placeholder="e.g. 3 5 8"
+              />
+            )}
+            <Field label="Name of the things">
+              <input
+                value={config.objectName}
+                onChange={(e) => onChange({ ...config, objectName: e.target.value })}
+                placeholder="e.g. balloons"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </Field>
+          </>
+        }
+      />
 
-        {/* Count */}
-        <div>
-          <label className="block text-xs font-semibold text-slate-600 mb-1">Number of Objects</label>
-          <input
-            type="number"
-            min={1}
-            max={20}
-            value={config.count}
-            onChange={(e) => onChange({ ...config, count: Math.max(1, Number(e.target.value)) })}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-bold text-slate-900 bg-white"
-          />
-        </div>
-
-        {/* Answer Style */}
-        <div>
-          <label className="block text-xs font-semibold text-slate-600 mb-1">Answer Style</label>
-          <select
-            value={config.answerStyle}
-            onChange={(e) =>
-              onChange({
-                ...config,
-                answerStyle: e.target.value as CountItemsConfig["answerStyle"],
-              })
-            }
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
-          >
-            <option value="SQUARE_BOX">Square Box [ Write Number ]</option>
-            <option value="CIRCLE">Circle [ Write Number ]</option>
-            <option value="CHOICE_OPTIONS">Multiple Choice (Circle correct)</option>
-          </select>
-        </div>
-      </div>
-
-      {/* Clipart Picker Modal */}
       {pickerOpen && (
         <ClipartPickerModal
           isOpen={true}
           onClose={() => setPickerOpen(false)}
           onSelect={(item) => {
             if ("customUrl" in item) {
-              onChange({
-                ...config,
-                customImageUrl: item.customUrl,
-                clipartId: "",
-                objectName: item.name,
-              });
+              onChange({ ...config, customImageUrl: item.customUrl, clipartId: "", objectName: item.name });
             } else {
-              onChange({
-                ...config,
-                clipartId: item.id,
-                customImageUrl: undefined,
-                objectName: item.name.toLowerCase(),
-              });
+              onChange({ ...config, clipartId: item.id, customImageUrl: undefined, objectName: item.name.toLowerCase() });
             }
+            setPickerOpen(false);
           }}
         />
       )}

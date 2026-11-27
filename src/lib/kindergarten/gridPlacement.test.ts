@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { gridOrder } from "./gridPlacement";
+import { blankPattern, gridOrder, numberCells } from "./gridPlacement";
 
 describe("gridOrder", () => {
   it("keeps row order for ROW", () => {
@@ -28,5 +28,26 @@ describe("gridOrder", () => {
 
   it("returns nothing for an empty grid", () => {
     expect(gridOrder(0, 5, "COLUMN")).toEqual([]);
+  });
+});
+
+describe("number grid blanks", () => {
+  it("builds cells for each blank pattern", () => {
+    expect(numberCells(1, 4, "ALTERNATE").map((c) => c.isBlank)).toEqual([false, true, false, true]);
+    expect(numberCells(1, 6, "EVERY_THIRD").map((c) => c.isBlank)).toEqual([false, false, true, false, false, true]);
+    expect(numberCells(1, 3, "ALL_BLANK").map((c) => c.isBlank)).toEqual([false, true, true]);
+    expect(numberCells(5, 7, "NONE").map((c) => c.value)).toEqual([5, 6, 7]);
+  });
+
+  it("recognises the pattern a grid was built with", () => {
+    for (const p of ["NONE", "ALTERNATE", "EVERY_THIRD", "ALL_BLANK"] as const) {
+      expect(blankPattern(numberCells(1, 20, p))).toBe(p);
+    }
+  });
+
+  it("calls hand-toggled blanks CUSTOM", () => {
+    const cells = numberCells(1, 10, "NONE");
+    cells[3] = { ...cells[3], isBlank: true };
+    expect(blankPattern(cells)).toBe("CUSTOM");
   });
 });

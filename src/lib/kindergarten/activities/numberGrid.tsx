@@ -1,7 +1,11 @@
 "use client";
 
+import { ChoiceChips, EditorShell, Field, InstructionField, NumberStepper } from "../editor-kit";
+
 import React from "react";
 import { MathSquareGrid } from "../components/MathSquareGrid";
+import { PreviewBox } from "./_shared";
+import { blankPattern, gridOrder, numberCells, type BlankPattern, type GridDirection } from "../gridPlacement";
 import type {
   KindergartenActivityPlugin,
   KindergartenEditorProps,
@@ -33,161 +37,120 @@ export const numberGridDefaultConfig = (): NumberGridConfig => {
   };
 };
 
-function NumberGridEditor({
-  config,
-  onChange,
-  instructionText,
-  onInstructionChange,
-}: KindergartenEditorProps<NumberGridConfig>) {
-  const updateRange = (start: number, end: number, cols: number, blankPattern: "NONE" | "ALTERNATE" | "EVERY_THIRD" | "ALL_BLANK") => {
-    const cells: NumberGridCell[] = [];
-    for (let n = start; n <= end; n++) {
-      let isBlank = false;
-      if (blankPattern === "ALTERNATE") isBlank = n % 2 === 0;
-      if (blankPattern === "EVERY_THIRD") isBlank = n % 3 === 0;
-      if (blankPattern === "ALL_BLANK") isBlank = n !== start; // only start pre-filled
-      cells.push({ value: n, isBlank });
+const BLANK_OPTIONS: { value: BlankPattern; label: string }[] = [
+  { value: "NONE", label: "None" },
+  { value: "ALTERNATE", label: "Every 2nd" },
+  { value: "EVERY_THIRD", label: "Every 3rd" },
+  { value: "ALL_BLANK", label: "All but first" },
+];
+
+const PRESETS: { label: string; start: number; end: number; columns: number; pattern: BlankPattern }[] = [
+  { label: "1–20, half missing", start: 1, end: 20, columns: 5, pattern: "ALTERNATE" },
+  { label: "1–50, half missing", start: 1, end: 50, columns: 5, pattern: "ALTERNATE" },
+  { label: "1–100, half missing", start: 1, end: 100, columns: 10, pattern: "ALTERNATE" },
+  { label: "Write 1–50", start: 1, end: 50, columns: 5, pattern: "ALL_BLANK" },
+];
+
+function NumberGridEditor({ config, onChange, instructionText, onInstructionChange }: KindergartenEditorProps<NumberGridConfig>) {
+  const pattern = blankPattern(config.cells);
+  const direction = config.fillDirection ?? "ROW";
+
+  /** New range or pattern; a hand-made pattern keeps the blanks it had for numbers still in range. */
+  const rebuild = (start: number, end: number, next: BlankPattern | "CUSTOM" = pattern) => {
+    const lo = Math.min(start, end);
+    const hi = Math.max(start, end);
+    let cells: NumberGridCell[];
+    if (next === "CUSTOM") {
+      const was = new Map(config.cells.map((c) => [Number(c.value), c.isBlank]));
+      cells = numberCells(lo, hi, "NONE").map((c) => ({ ...c, isBlank: was.get(c.value) ?? false }));
+    } else {
+      cells = numberCells(lo, hi, next);
     }
-    onChange({
-      ...config,
-      startNumber: start,
-      endNumber: end,
-      columns: cols,
-      cells,
-    });
+    onChange({ ...config, startNumber: lo, endNumber: hi, cells });
   };
 
-  const toggleCell = (index: number) => {
-    const nextCells = [...config.cells];
-    if (nextCells[index]) {
-      nextCells[index] = {
-        ...nextCells[index],
-        isBlank: !nextCells[index].isBlank,
-      };
-      onChange({ ...config, cells: nextCells });
-    }
-  };
+  const toggleCell = (index: number) =>
+    onChange({ ...config, cells: config.cells.map((c, i) => (i === index ? { ...c, isBlank: !c.isBlank } : c)) });
 
   return (
     <div className="space-y-4">
-      {/* Instructions */}
-      <div>
-        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-          Activity Instruction / Prompt
-        </label>
-        <input
-          type="text"
-          value={instructionText}
-          onChange={(e) => onInstructionChange(e.target.value)}
-          placeholder="e.g. Write numbers from 1 to 50 or Fill in missing numbers"
-          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
-        />
-      </div>
-
-      {/* Preset Grids */}
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => updateRange(1, 20, 5, "ALTERNATE")}
-          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-lg"
-        >
-          1 to 20 (5 cols, Alternate blanks)
-        </button>
-        <button
-          type="button"
-          onClick={() => updateRange(1, 50, 10, "ALTERNATE")}
-          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-lg"
-        >
-          1 to 50 (10 cols, Half missing)
-        </button>
-        <button
-          type="button"
-          onClick={() => updateRange(1, 100, 10, "ALTERNATE")}
-          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-lg"
-        >
-          1 to 100 (10 cols, Half missing)
-        </button>
-        <button
-          type="button"
-          onClick={() => updateRange(1, 50, 10, "ALL_BLANK")}
-          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-lg"
-        >
-          Write 1 to 50 (All blank)
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div>
-          <label className="block text-xs font-semibold text-slate-600 mb-1">Start Number</label>
-          <input
-            type="number"
-            value={config.startNumber}
-            onChange={(e) =>
-              updateRange(Number(e.target.value), config.endNumber, config.columns, "ALTERNATE")
-            }
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-semibold text-slate-600 mb-1">End Number</label>
-          <input
-            type="number"
-            value={config.endNumber}
-            onChange={(e) =>
-              updateRange(config.startNumber, Number(e.target.value), config.columns, "ALTERNATE")
-            }
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-semibold text-slate-600 mb-1">Grid Columns</label>
-          <select
-            value={config.columns}
-            onChange={(e) =>
-              updateRange(config.startNumber, config.endNumber, Number(e.target.value), "ALTERNATE")
-            }
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
-          >
-            <option value={5}>5 Columns</option>
-            <option value={10}>10 Columns</option>
-          </select>
-        </div>
-      </div>
-
-      {/* Interactive Grid Cell Toggle */}
-      <div className="mt-4 p-4 border border-slate-200 rounded-xl bg-white shadow-2xs">
-        <div className="flex justify-between items-center mb-2">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-            Click any cell to toggle it between Blank / Pre-filled
-          </span>
-          <span className="text-xs text-indigo-600 font-semibold">
-            {config.cells.filter((c) => c.isBlank).length} blanks to fill
-          </span>
-        </div>
-
-        <div
-          className="grid border-2 border-slate-900 rounded-md bg-white max-h-64 overflow-y-auto"
-          style={{
-            gridTemplateColumns: `repeat(${config.columns}, minmax(0, 1fr))`,
-          }}
-        >
-          {config.cells.map((cell, idx) => (
-            <button
-              key={idx}
-              type="button"
-              onClick={() => toggleCell(idx)}
-              className={`p-2 aspect-square text-center font-bold text-sm border-r border-b border-slate-200 transition-colors ${
-                cell.isBlank
-                  ? "bg-amber-50 text-amber-600 hover:bg-amber-100"
-                  : "bg-white text-slate-900 hover:bg-slate-100"
-              }`}
-              title="Click to toggle blank"
-            >
-              {cell.isBlank ? `[${cell.value}]` : cell.value}
-            </button>
-          ))}
-        </div>
-      </div>
+      <EditorShell
+        memoryKey="KDG_NUMBER_GRID"
+        basic={
+          <>
+            <InstructionField value={instructionText} onChange={onInstructionChange} defaultValue={config.instruction} />
+            <div className="flex flex-wrap gap-1.5">
+              {PRESETS.map((p) => (
+                <button
+                  key={p.label}
+                  type="button"
+                  onClick={() =>
+                    onChange({ ...config, startNumber: p.start, endNumber: p.end, columns: p.columns, fillDirection: "COLUMN", cells: numberCells(p.start, p.end, p.pattern) })
+                  }
+                  className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-800 hover:bg-slate-200"
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <NumberStepper label="From" value={config.startNumber} min={0} max={100} onChange={(n) => rebuild(n, config.endNumber)} />
+            <NumberStepper label="To" value={config.endNumber} min={1} max={100} onChange={(n) => rebuild(config.startNumber, n)} />
+            <ChoiceChips<BlankPattern | "CUSTOM">
+              label="Numbers left blank"
+              value={pattern}
+              onChange={(p) => rebuild(config.startNumber, config.endNumber, p)}
+              options={pattern === "CUSTOM" ? [...BLANK_OPTIONS, { value: "CUSTOM", label: "Picked by hand" }] : BLANK_OPTIONS}
+            />
+          </>
+        }
+        advanced={
+          <>
+            <ChoiceChips<GridDirection>
+              label="Count"
+              value={direction}
+              onChange={(fillDirection) => onChange({ ...config, fillDirection })}
+              options={[
+                { value: "COLUMN", label: "↓ Down each column" },
+                { value: "ROW", label: "→ Across each row" },
+              ]}
+            />
+            <ChoiceChips<number>
+              label="Columns"
+              value={config.columns}
+              onChange={(columns) => onChange({ ...config, columns })}
+              options={[
+                { value: 5, label: "5" },
+                { value: 10, label: "10" },
+              ]}
+            />
+            <Field label="Tap a box to blank it or fill it in" hint={`${config.cells.filter((c) => c.isBlank).length} blanks`}>
+              <div className="grid max-h-64 overflow-y-auto rounded-md border-2 border-slate-900 bg-white" style={{ gridTemplateColumns: `repeat(${config.columns}, minmax(0, 1fr))` }}>
+                {gridOrder(config.cells.length, config.columns, direction).map((idx, pos) => {
+                  const cell = idx === null ? undefined : config.cells[idx];
+                  if (!cell || idx === null) return <span key={pos} className="aspect-square border-r border-b border-slate-200 bg-slate-50" />;
+                  return (
+                    <button
+                      key={pos}
+                      type="button"
+                      onClick={() => toggleCell(idx)}
+                      aria-pressed={cell.isBlank}
+                      aria-label={`${cell.value}${cell.isBlank ? " (blank)" : ""}`}
+                      className={`aspect-square border-r border-b border-slate-200 text-center text-xs font-bold transition-colors ${
+                        cell.isBlank ? "bg-amber-50 text-amber-500 hover:bg-amber-100" : "bg-white text-slate-900 hover:bg-slate-100"
+                      }`}
+                    >
+                      {cell.isBlank ? "·" : cell.value}
+                    </button>
+                  );
+                })}
+              </div>
+            </Field>
+          </>
+        }
+      />
+      <PreviewBox>
+        <MathSquareGrid cells={config.cells} columns={config.columns} direction={direction} />
+      </PreviewBox>
     </div>
   );
 }

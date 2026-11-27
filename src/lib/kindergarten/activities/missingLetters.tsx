@@ -1,5 +1,7 @@
 "use client";
 
+import { EditorShell, InstructionField, PictureChip, RowList } from "../editor-kit";
+
 import React from "react";
 import type {
   KindergartenActivityPlugin,
@@ -8,16 +10,7 @@ import type {
   MissingLettersConfig,
   MissingLettersItem,
 } from "../types";
-import {
-  ActivityFrame,
-  AddRowButton,
-  Art,
-  ClipartChip,
-  EditorSection,
-  InstructionField,
-  PreviewBox,
-  RemoveButton,
-} from "./_shared";
+import { ActivityFrame, Art, PreviewBox } from "./_shared";
 
 export const missingLettersDefaultConfig = (): MissingLettersConfig => ({
   instruction: "Look at the picture and fill in the missing letter:",
@@ -29,76 +22,57 @@ export const missingLettersDefaultConfig = (): MissingLettersConfig => ({
   ],
 });
 
-function MissingLettersEditor({
-  config,
-  onChange,
-  instructionText,
-  onInstructionChange,
-}: KindergartenEditorProps<MissingLettersConfig>) {
-  const setItem = (i: number, patch: Partial<MissingLettersItem>) =>
-    onChange({ ...config, items: config.items.map((it, j) => (j === i ? { ...it, ...patch } : it)) });
-  const toggleBlank = (i: number, idx: number) => {
-    const cur = config.items[i].blanks;
-    setItem(i, { blanks: cur.includes(idx) ? cur.filter((x) => x !== idx) : [...cur, idx].sort((a, b) => a - b) });
-  };
+function MissingLettersEditor({ config, onChange, instructionText, onInstructionChange }: KindergartenEditorProps<MissingLettersConfig>) {
+  const toggleBlank = (it: MissingLettersItem, idx: number): MissingLettersItem => ({
+    ...it,
+    blanks: it.blanks.includes(idx) ? it.blanks.filter((x) => x !== idx) : [...it.blanks, idx].sort((a, b) => a - b),
+  });
 
   return (
     <div className="space-y-4">
-      <InstructionField
-        value={instructionText}
-        onChange={onInstructionChange}
-        placeholder="e.g. Fill in the missing letter"
+      <EditorShell
+        memoryKey="KDG_MISSING_LETTERS"
+        basic={
+          <>
+            <InstructionField value={instructionText} onChange={onInstructionChange} defaultValue={config.instruction} />
+            <RowList<MissingLettersItem>
+              label="Words — tap a letter to blank it"
+              rows={config.items}
+              onChange={(items) => onChange({ ...config, items })}
+              makeRow={() => ({ word: "", blanks: [], clipartId: undefined })}
+              max={8}
+              addLabel="Add word"
+              renderRow={(it, update) => (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <PictureChip clipartId={it.clipartId} onPick={(id) => update({ ...it, clipartId: id })} label="Picture clue" />
+                  <input
+                    aria-label="Word"
+                    value={it.word}
+                    maxLength={12}
+                    onChange={(e) => update({ ...it, word: e.target.value, blanks: it.blanks.filter((b) => b < e.target.value.length) })}
+                    className="w-24 rounded-lg border border-slate-300 px-2 py-1.5 text-sm font-bold tracking-widest"
+                    placeholder="word"
+                  />
+                  {it.word.split("").map((ch, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => update(toggleBlank(it, idx))}
+                      aria-pressed={it.blanks.includes(idx)}
+                      title="Make this letter a blank"
+                      className={`flex h-8 w-8 items-center justify-center rounded-md border-2 text-sm font-bold ${
+                        it.blanks.includes(idx) ? "border-dashed border-amber-500 bg-amber-50 text-amber-600" : "border-slate-800 bg-white text-slate-900"
+                      }`}
+                    >
+                      {it.blanks.includes(idx) ? "_" : ch}
+                    </button>
+                  ))}
+                </div>
+              )}
+            />
+          </>
+        }
       />
-
-      <EditorSection title="Words" hint="Click a letter to make it a blank">
-        <div className="space-y-2">
-          {config.items.map((it, i) => (
-            <div key={i} className="flex flex-wrap items-center gap-2 rounded-lg bg-slate-50 p-2">
-              <ClipartChip clipartId={it.clipartId} onPick={(id) => setItem(i, { clipartId: id })} />
-              <input
-                aria-label={`Word ${i + 1}`}
-                value={it.word}
-                maxLength={12}
-                onChange={(e) =>
-                  setItem(i, {
-                    word: e.target.value,
-                    blanks: it.blanks.filter((b) => b < e.target.value.length),
-                  })
-                }
-                className="w-28 rounded-lg border border-slate-300 px-2 py-1.5 text-sm font-bold tracking-widest"
-                placeholder="word"
-              />
-              <div className="flex flex-1 flex-wrap items-center gap-1">
-                {it.word.split("").map((ch, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => toggleBlank(i, idx)}
-                    title="Toggle blank"
-                    className={`flex h-9 w-9 items-center justify-center rounded-md border-2 text-base font-bold ${
-                      it.blanks.includes(idx)
-                        ? "border-dashed border-amber-500 bg-amber-50 text-amber-600"
-                        : "border-slate-800 bg-white text-slate-900"
-                    }`}
-                  >
-                    {it.blanks.includes(idx) ? "_" : ch}
-                  </button>
-                ))}
-              </div>
-              <RemoveButton
-                label="Remove word"
-                onClick={() => onChange({ ...config, items: config.items.filter((_, j) => j !== i) })}
-              />
-            </div>
-          ))}
-          {config.items.length < 8 && (
-            <AddRowButton onClick={() => onChange({ ...config, items: [...config.items, { word: "", blanks: [], clipartId: undefined }] })}>
-              Add word
-            </AddRowButton>
-          )}
-        </div>
-      </EditorSection>
-
       <PreviewBox>
         <MissingLettersPrint config={config} instructionText={instructionText} />
       </PreviewBox>

@@ -1,5 +1,7 @@
 "use client";
 
+import { ChoiceChips, EditorShell, InstructionField, NumberStepper, TextListField, ToggleRow, splitList } from "../editor-kit";
+
 import { PreviewBox } from "./_shared";
 import React from "react";
 import { TraceWriteLines } from "../components/FourLineGuide";
@@ -29,116 +31,59 @@ export const traceWriteDefaultConfig = (subject?: string): TraceWriteConfig => {
   };
 };
 
-function TraceWriteEditor({
-  config,
-  onChange,
-  instructionText,
-  onInstructionChange,
-}: KindergartenEditorProps<TraceWriteConfig>) {
-  const line = config.lines?.[0] || {
-    promptText: "A B C D",
-    traceDotted: false,
-    repeatCount: 2,
-  };
+function TraceWriteEditor({ config, onChange, instructionText, onInstructionChange }: KindergartenEditorProps<TraceWriteConfig>) {
+  const line = config.lines?.[0] || { promptText: "A B C D", traceDotted: false, repeatCount: 2 };
 
-  const updateLine = (patch: Partial<typeof line>) => {
-    // only the first line is edited here; keep any further lines an imported paper brought with it
-    onChange({
-      ...config,
-      lines: [{ ...line, ...patch }, ...(config.lines ?? []).slice(1)],
-    });
-  };
+  // only the first line is edited here; keep any further lines an imported paper brought with it
+  const updateLine = (patch: Partial<typeof line>) =>
+    onChange({ ...config, lines: [{ ...line, ...patch }, ...(config.lines ?? []).slice(1)] });
 
   return (
     <div className="space-y-4">
-      {/* Instructions */}
-      <div>
-        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-          Activity Instruction / Prompt
-        </label>
-        <input
-          type="text"
-          value={instructionText}
-          onChange={(e) => onInstructionChange(e.target.value)}
-          placeholder="e.g. Write letters A to Z in 4-line guide"
-          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
-        />
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {/* Ruling Type */}
-        <div>
-          <label className="block text-xs font-semibold text-slate-600 mb-1">Guide Ruling</label>
-          <select
-            value={config.rulingType}
-            onChange={(e) => onChange({ ...config, rulingType: e.target.value as RulingType })}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
-          >
-            <option value="FOUR_LINE">4-Line English (Red/Blue/Red)</option>
-            <option value="TWO_LINE">2-Line Hindi Ruling</option>
-            <option value="SINGLE_LINE">Single Line</option>
-            <option value="BOXES">Letter Write-in Boxes</option>
-          </select>
-        </div>
-
-        {/* Font Size */}
-        <div>
-          <label className="block text-xs font-semibold text-slate-600 mb-1">Letter Size</label>
-          <select
-            value={config.fontSizePt}
-            onChange={(e) => onChange({ ...config, fontSizePt: Number(e.target.value) })}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
-          >
-            <option value={20}>Small (UKG, ~6 mm lines)</option>
-            <option value={24}>Medium (LKG, ~7.5 mm lines)</option>
-            <option value={32}>Large (Nursery, ~10 mm lines)</option>
-          </select>
-        </div>
-
-        {/* Repeat lines */}
-        <div>
-          <label className="block text-xs font-semibold text-slate-600 mb-1" title="Rows in total, counting the row with the letters">Writing Lines</label>
-          <input
-            type="number"
-            min={1}
-            max={6}
-            value={line.repeatCount}
-            onChange={(e) => updateLine({ repeatCount: Math.max(1, Number(e.target.value)) })}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
-          />
-        </div>
-      </div>
-
-      {/* Letters / Words input */}
-      <div>
-        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-          Letters / Words to Copy or Trace
-        </label>
-        <input
-          type="text"
-          value={line.promptText}
-          onChange={(e) => updateLine({ promptText: e.target.value })}
-          placeholder="e.g. A  B  C  D  E  or  Apple  Ball  Cat"
-          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-semibold tracking-wider text-slate-900"
-        />
-        <div className="flex items-center gap-4 mt-2">
-          <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
-            <input
-              type="checkbox"
-              checked={line.traceDotted}
-              onChange={(e) => updateLine({ traceDotted: e.target.checked })}
-              className="rounded-sm border-slate-300 text-indigo-600 focus:ring-indigo-500"
+      <EditorShell
+        memoryKey="KDG_TRACE_WRITE"
+        basic={
+          <>
+            <InstructionField value={instructionText} onChange={onInstructionChange} defaultValue={config.instruction} />
+            <TextListField
+              label="Letters or words to copy"
+              values={splitList(line.promptText)}
+              onChange={(v) => updateLine({ promptText: v.join("  ") })}
+              placeholder="A B C or Apple Ball"
             />
-            <span>Dotted Tracing Style (Lighter letters for student to trace over)</span>
-          </label>
-        </div>
-      </div>
-
-      {(config.lines?.length ?? 0) > 1 && (
-        <p className="text-[11px] text-slate-500">
-          This activity has {config.lines.length} lines of letters; the editor changes the first one.
-        </p>
-      )}
+            <NumberStepper label="Writing rows" value={line.repeatCount} min={1} max={6} onChange={(n) => updateLine({ repeatCount: n })} />
+          </>
+        }
+        advanced={
+          <>
+            <ChoiceChips<RulingType>
+              label="Ruling"
+              value={config.rulingType}
+              onChange={(rulingType) => onChange({ ...config, rulingType })}
+              options={[
+                { value: "FOUR_LINE", label: "4-line English" },
+                { value: "TWO_LINE", label: "2-line Hindi" },
+                { value: "SINGLE_LINE", label: "Single line" },
+                { value: "BOXES", label: "Boxes" },
+              ]}
+            />
+            <ChoiceChips<number>
+              label="Letter size"
+              value={config.fontSizePt}
+              onChange={(fontSizePt) => onChange({ ...config, fontSizePt })}
+              options={[
+                { value: 20, label: "Small (UKG)" },
+                { value: 24, label: "Medium (LKG)" },
+                { value: 32, label: "Large (Nursery)" },
+              ]}
+            />
+            <ToggleRow label="Dotted letters to trace" hint="Lighter letters the child writes over" checked={line.traceDotted} onChange={(traceDotted) => updateLine({ traceDotted })} />
+            {(config.lines?.length ?? 0) > 1 && (
+              <p className="text-[11px] text-slate-500">This activity has {config.lines.length} lines of letters; the editor changes the first one.</p>
+            )}
+          </>
+        }
+      />
       <PreviewBox>
         <TraceWriteLines rulingType={config.rulingType} fontSizePt={config.fontSizePt} lines={Array.isArray(config.lines) ? config.lines : []} />
       </PreviewBox>

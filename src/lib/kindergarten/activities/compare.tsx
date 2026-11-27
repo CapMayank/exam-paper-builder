@@ -1,18 +1,10 @@
 "use client";
 
+import { ChoiceChips, EditorShell, InstructionField, NumberStepper, PictureChip, RowList } from "../editor-kit";
+
 import React from "react";
 import type { CompareConfig, CompareMode, CompareRow, KindergartenActivityPlugin, KindergartenEditorProps, KindergartenPrintProps } from "../types";
-import {
-  ActivityFrame,
-  AddRowButton,
-  Art,
-  ClipartChip,
-  EditorSection,
-  InstructionField,
-  PreviewBox,
-  RemoveButton,
-  Stepper,
-} from "./_shared";
+import { ActivityFrame, Art, PreviewBox } from "./_shared";
 
 export const MODE_LABEL: Record<CompareMode, string> = {
   BIGGER: "Circle the bigger one",
@@ -68,55 +60,51 @@ function Side({ mode, clipartId, value }: { mode: CompareMode; clipartId: string
 }
 
 function CompareEditor({ config, onChange, instructionText, onInstructionChange }: KindergartenEditorProps<CompareConfig>) {
-  const setRow = (i: number, patch: Partial<CompareRow>) =>
-    onChange({ ...config, rows: config.rows.map((r, j) => (j === i ? { ...r, ...patch } : r)) });
   const counting = isCount(config.mode);
 
   return (
     <div className="space-y-4">
-      <InstructionField value={instructionText} onChange={onInstructionChange} placeholder="e.g. Circle the bigger one" />
-
-      <div>
-        <label className="mb-1 block text-xs font-semibold text-slate-600">What should the child compare?</label>
-        <select
-          value={config.mode}
-          onChange={(e) => {
-            const mode = e.target.value as CompareMode;
-            onChange({
-              ...config,
-              mode,
-              instruction: MODE_LABEL[mode] + ":",
-              rows: config.rows.map((r) => ({ ...r, left: Math.min(r.left, isCount(mode) ? 10 : 5), right: Math.min(r.right, isCount(mode) ? 10 : 5) })),
-            });
-            onInstructionChange(MODE_LABEL[mode] + ":");
-          }}
-          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-        >
-          {Object.entries(MODE_LABEL).map(([k, v]) => (
-            <option key={k} value={k}>
-              {v}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <EditorSection title="Pairs" hint={counting ? "Number of pictures on each side" : "Size step 1 (smallest) to 5 (largest)"}>
-        <div className="space-y-2">
-          {config.rows.map((r, i) => (
-            <div key={i} className="flex flex-wrap items-center gap-3 rounded-lg bg-slate-50 p-2">
-              <ClipartChip clipartId={r.clipartId} onPick={(id) => setRow(i, { clipartId: id })} />
-              <Stepper label="Left" value={r.left} min={1} max={counting ? 10 : 5} onChange={(n) => setRow(i, { left: n })} />
-              <Stepper label="Right" value={r.right} min={1} max={counting ? 10 : 5} onChange={(n) => setRow(i, { right: n })} />
-              {r.left === r.right && <span className="text-[11px] font-semibold text-amber-700">Both equal – no right answer</span>}
-              <RemoveButton label="Remove pair" onClick={() => onChange({ ...config, rows: config.rows.filter((_, j) => j !== i) })} />
-            </div>
-          ))}
-          {config.rows.length < 6 && (
-            <AddRowButton onClick={() => onChange({ ...config, rows: [...config.rows, { clipartId: "ball", left: 2, right: 4 }] })}>Add pair</AddRowButton>
-          )}
-        </div>
-      </EditorSection>
-
+      <EditorShell
+        memoryKey="KDG_COMPARE"
+        basic={
+          <>
+            <InstructionField value={instructionText} onChange={onInstructionChange} defaultValue={config.instruction} />
+            <ChoiceChips<CompareMode>
+              label="What to compare"
+              value={config.mode}
+              onChange={(mode) => {
+                const cap = isCount(mode) ? 10 : 5;
+                onChange({
+                  ...config,
+                  mode,
+                  instruction: MODE_LABEL[mode] + ":",
+                  rows: config.rows.map((r) => ({ ...r, left: Math.min(r.left, cap), right: Math.min(r.right, cap) })),
+                });
+                onInstructionChange(MODE_LABEL[mode] + ":");
+              }}
+              options={(Object.keys(MODE_LABEL) as CompareMode[]).map((m) => ({ value: m, label: MODE_LABEL[m] }))}
+            />
+            <RowList<CompareRow>
+              label={counting ? "Pairs — pictures on each side" : "Pairs — size 1 (small) to 5 (big)"}
+              rows={config.rows}
+              onChange={(rows) => onChange({ ...config, rows })}
+              makeRow={() => ({ clipartId: "ball", left: 2, right: 4 })}
+              max={6}
+              addLabel="Add pair"
+              renderRow={(r, update) => (
+                <div className="flex items-start gap-2">
+                  <PictureChip clipartId={r.clipartId} onPick={(id) => update({ ...r, clipartId: id })} />
+                  <div className="flex-1 space-y-1">
+                    <NumberStepper label="Left" value={r.left} min={1} max={counting ? 10 : 5} onChange={(n) => update({ ...r, left: n })} />
+                    <NumberStepper label="Right" value={r.right} min={1} max={counting ? 10 : 5} onChange={(n) => update({ ...r, right: n })} />
+                    {r.left === r.right && <p className="text-[11px] font-semibold text-amber-700">Both equal – no right answer</p>}
+                  </div>
+                </div>
+              )}
+            />
+          </>
+        }
+      />
       <PreviewBox>
         <ComparePrint config={config} instructionText={instructionText} />
       </PreviewBox>
