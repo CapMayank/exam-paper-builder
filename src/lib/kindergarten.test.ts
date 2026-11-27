@@ -6,6 +6,7 @@ import {
   parseKindergartenConfig,
   serializeKindergartenConfig,
 } from "./kindergarten/registry";
+import type { CountItemsConfig, NumberGridConfig } from "./kindergarten/types";
 import { CLIPART_LIBRARY, getClipartById, searchClipart } from "./kindergarten/clipartLibrary";
 
 describe("Kindergarten Activity Plugin Registry", () => {
@@ -63,7 +64,7 @@ describe("Kindergarten Activity Plugin Registry", () => {
     };
 
     const serialized = serializeKindergartenConfig(sampleConfig);
-    const parsed = parseKindergartenConfig("KDG_COUNT_ITEMS", serialized);
+    const parsed = parseKindergartenConfig<CountItemsConfig>("KDG_COUNT_ITEMS", serialized);
 
     expect(parsed.clipartId).toBe("balloon");
     expect(parsed.count).toBe(7);
@@ -199,16 +200,16 @@ describe("Exam types and worksheet page fit", () => {
 describe("Number grid fill direction", () => {
   it("reads a saved grid without fillDirection as row-by-row", () => {
     const stored = JSON.stringify({ startNumber: 1, endNumber: 10, columns: 5, cells: [] });
-    expect(parseKindergartenConfig("KDG_NUMBER_GRID", stored).fillDirection).toBe("ROW");
+    expect(parseKindergartenConfig<NumberGridConfig>("KDG_NUMBER_GRID", stored).fillDirection).toBe("ROW");
   });
 
   it("gives new grids top-to-bottom counting", () => {
-    expect(parseKindergartenConfig("KDG_NUMBER_GRID", null).fillDirection).toBe("COLUMN");
+    expect(parseKindergartenConfig<NumberGridConfig>("KDG_NUMBER_GRID", null).fillDirection).toBe("COLUMN");
     expect(getKindergartenActivity("KDG_NUMBER_GRID")!.defaultConfig().fillDirection).toBe("COLUMN");
   });
 
   it("keeps a saved COLUMN direction", () => {
     const stored = JSON.stringify({ startNumber: 1, endNumber: 10, columns: 5, cells: [], fillDirection: "COLUMN" });
-    expect(parseKindergartenConfig("KDG_NUMBER_GRID", stored).fillDirection).toBe("COLUMN");
+    expect(parseKindergartenConfig<NumberGridConfig>("KDG_NUMBER_GRID", stored).fillDirection).toBe("COLUMN");
   });
 });

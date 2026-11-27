@@ -8,7 +8,7 @@ import { api } from "@/lib/client";
 import { EXAM_TYPE_LABEL, WORKSHEET_MODE, resolvePaperExamType } from "@/lib/constants";
 import { EditorMemoryContext } from "@/lib/kindergarten/editor-kit";
 import { getKindergartenActivity } from "@/lib/kindergarten/registry";
-import type { KindergartenActivityPlugin } from "@/lib/kindergarten/types";
+import type { AnyActivityPlugin } from "@/lib/kindergarten/types";
 import { paperOutputTab } from "@/lib/paperTabs";
 import type { PaperData } from "@/lib/types";
 import { ActivityInspector } from "./ActivityInspector";
@@ -110,7 +110,7 @@ export function WorksheetStudio({ id }: { id: string }) {
     [moreOpen],
   );
 
-  async function addActivity(plugin: KindergartenActivityPlugin) {
+  async function addActivity(plugin: AnyActivityPlugin) {
     const config = plugin.defaultConfig(subject);
     const next = await api<PaperData>(`/api/papers/${id}/activities`, {
       method: "POST",
@@ -120,7 +120,7 @@ export function WorksheetStudio({ id }: { id: string }) {
     return next;
   }
 
-  async function addOne(plugin: KindergartenActivityPlugin) {
+  async function addOne(plugin: AnyActivityPlugin) {
     setBusy(true);
     setError(null);
     try {

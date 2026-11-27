@@ -6,7 +6,7 @@ import { parseKindergartenConfig } from "@/lib/kindergarten/registry";
 import { createDraftStore } from "./draftStore";
 import type { Activity } from "./types";
 
-export type Draft = { text: string; config: any }; // eslint-disable-line @typescript-eslint/no-explicit-any
+export type Draft = { text: string; config: unknown };
 
 const SAVE_DELAY_MS = 700;
 
@@ -16,7 +16,7 @@ export function useActivityDrafts(paperId: string, subject: string | undefined, 
   const [error, setError] = useState<string | null>(null);
   const [labels] = useState(() => new Map<string, string>());
   // an empty instruction is saved as the activity's default one
-  const savedText = (itemId: string, d: Draft) => d.text.trim() || d.config?.instruction || labels.get(itemId) || "Activity";
+  const savedText = (itemId: string, d: Draft) => d.text.trim() || (d.config as { instruction?: string } | null)?.instruction || labels.get(itemId) || "Activity";
   const [store] = useState(() =>
     createDraftStore<Draft>({
       delayMs: SAVE_DELAY_MS,

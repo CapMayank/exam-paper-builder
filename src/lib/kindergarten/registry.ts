@@ -12,9 +12,9 @@ import { colourPlugin } from "./activities/colourPicture";
 import { joinDotsPlugin } from "./activities/joinDots";
 import { tickPicturePlugin } from "./activities/tickPicture";
 import { preWritingPlugin } from "./activities/preWriting";
-import type { KindergartenActivityPlugin } from "./types";
+import type { AnyActivityPlugin } from "./types";
 
-const REGISTRY = new Map<string, KindergartenActivityPlugin>();
+const REGISTRY = new Map<string, AnyActivityPlugin>();
 
 // Register all kindergarten activities (original 6 + 8 added later)
 [
@@ -36,16 +36,16 @@ const REGISTRY = new Map<string, KindergartenActivityPlugin>();
   REGISTRY.set(plugin.type, plugin);
 });
 
-export function registerKindergartenActivity(plugin: KindergartenActivityPlugin): void {
+export function registerKindergartenActivity(plugin: AnyActivityPlugin): void {
   REGISTRY.set(plugin.type, plugin);
 }
 
-export function getKindergartenActivity(type?: string | null): KindergartenActivityPlugin | undefined {
+export function getKindergartenActivity(type?: string | null): AnyActivityPlugin | undefined {
   if (!type) return undefined;
   return REGISTRY.get(type);
 }
 
-export function getAllKindergartenActivities(): KindergartenActivityPlugin[] {
+export function getAllKindergartenActivities(): AnyActivityPlugin[] {
   return Array.from(REGISTRY.values());
 }
 
@@ -60,7 +60,7 @@ export function getKindergartenTypeLabel(type?: string | null): string {
   return plugin ? plugin.label : type;
 }
 
-export function parseKindergartenConfig<T = any>(
+export function parseKindergartenConfig<T = unknown>(
   type: string,
   optionsJson?: string | null,
   subject?: string

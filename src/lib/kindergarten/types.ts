@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import type { QuestionDto } from "@/lib/types";
 
 export type KindergartenCategory = "english" | "math" | "hindi" | "evs" | "general";
 
@@ -28,7 +27,7 @@ export interface KindergartenPrintProps<TConfig = unknown> {
   numberLabel?: string;
 }
 
-export interface KindergartenActivityPlugin<TConfig = any> {
+export interface KindergartenActivityPlugin<TConfig = unknown> {
   type: string;
   label: string;
   shortLabel: string;
@@ -43,6 +42,14 @@ export interface KindergartenActivityPlugin<TConfig = any> {
   renderPrint: React.ComponentType<KindergartenPrintProps<TConfig>>;
   getSummary?: (config: TConfig, text: string) => string;
 }
+
+/**
+ * Any registered activity, whatever its config. The registry holds plugins with different config
+ * types side by side, and an editor's props are contravariant in their config, so no single
+ * concrete type (not even `unknown`) can hold them all; each plugin checks its own config.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type AnyActivityPlugin = KindergartenActivityPlugin<any>;
 
 // ---------------- 1. KDG_TRACE_WRITE Config ----------------
 export type RulingType = "FOUR_LINE" | "TWO_LINE" | "SINGLE_LINE" | "BOXES";

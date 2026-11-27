@@ -1,5 +1,5 @@
 import { getAllKindergartenActivities } from "./registry";
-import type { KindergartenActivityPlugin, KindergartenCategory } from "./types";
+import type { AnyActivityPlugin, KindergartenCategory } from "./types";
 
 export const CATEGORY_LABEL: Record<KindergartenCategory, string> = {
   english: "English & letters",
@@ -16,7 +16,7 @@ const STAND_IN: Partial<Record<KindergartenCategory, KindergartenCategory[]>> = 
   hindi: ["english"],
 };
 
-export type LibraryGroup = { category: KindergartenCategory; label: string; plugins: KindergartenActivityPlugin[] };
+export type LibraryGroup = { category: KindergartenCategory; label: string; plugins: AnyActivityPlugin[] };
 
 export function subjectCategory(subject?: string | null): KindergartenCategory {
   const s = (subject ?? "").toLowerCase();

@@ -4,7 +4,7 @@ import { ChevronDown, Info, Plus, Search } from "lucide-react";
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { Spinner } from "@/components/ui";
 import { libraryGroups } from "@/lib/kindergarten/library";
-import type { KindergartenActivityPlugin } from "@/lib/kindergarten/types";
+import type { AnyActivityPlugin } from "@/lib/kindergarten/types";
 
 const SHOW_ALL_KEY = "epb:ws-library-all";
 
@@ -27,7 +27,7 @@ function readShowAll(): boolean {
   }
 }
 
-export function ActivityLibrary({ subject, busy, onAdd }: { subject?: string; busy: boolean; onAdd: (p: KindergartenActivityPlugin) => void }) {
+export function ActivityLibrary({ subject, busy, onAdd }: { subject?: string; busy: boolean; onAdd: (p: AnyActivityPlugin) => void }) {
   const [query, setQuery] = useState("");
   // the server has no saved choice, so it renders "off" and the browser picks up the saved one
   const showAll = useSyncExternalStore(subscribe, readShowAll, () => false);

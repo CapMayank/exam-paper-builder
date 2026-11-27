@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import { ImagePlus, Search, Sparkles, Upload, X } from "lucide-react";
-import { CLIPART_LIBRARY, searchClipart } from "../clipartLibrary";
+import { Search, Sparkles, Upload, X } from "lucide-react";
+import { searchClipart } from "../clipartLibrary";
 import type { ClipartItem } from "../types";
 import { imageUrl, uploadImage } from "@/lib/client";
 
