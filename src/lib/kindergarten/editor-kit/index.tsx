@@ -162,6 +162,7 @@ export function ToggleRow({ label, checked, onChange, hint }: { label: string; c
       <button
         type="button"
         role="switch"
+        aria-label={label}
         aria-checked={checked}
         onClick={() => onChange(!checked)}
         className={`relative h-5 w-9 shrink-0 rounded-full transition ${checked ? "bg-indigo-600" : "bg-slate-300"}`}
