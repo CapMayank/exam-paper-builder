@@ -1,26 +1,21 @@
 "use client";
 
-import { ArrowLeft, Check, Pencil, Printer, Redo2, Sparkles, Undo2 } from "lucide-react";
+import { ArrowLeft, Check, LayoutTemplate, Pencil, Printer, Redo2, Sparkles, Undo2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { EmptyState, ErrorBanner, Spinner, useConfirm, useToast } from "@/components/ui";
 import { EXAM_TYPE_LABEL, resolvePaperExamType } from "@/lib/constants";
 import { EditorMemoryContext } from "@/lib/kindergarten/editor-kit";
-import { getKindergartenActivity } from "@/lib/kindergarten/registry";
 import type { AnyActivityPlugin } from "@/lib/kindergarten/types";
 import { paperOutputTab } from "@/lib/paperTabs";
 import { ActivityInspector } from "./ActivityInspector";
 import { ActivityLibrary } from "./ActivityLibrary";
 import { DetailsModal } from "./DetailsModal";
+import { TemplatesModal } from "./TemplatesModal";
+import { BUILT_IN_TEMPLATES } from "@/lib/worksheetTemplates";
 import { useWorksheet } from "./useWorksheet";
 import { WorksheetCanvas, activityDomId } from "./WorksheetCanvas";
 import type { Activity } from "./types";
-
-const QUICK_STARTS: Record<string, { label: string; types: string[] }> = {
-  Nursery: { label: "Nursery starter (5 activities)", types: ["KDG_PREWRITING", "KDG_JOIN_DOTS", "KDG_COLOUR", "KDG_COUNT_ITEMS", "KDG_COMPARE"] },
-  LKG: { label: "LKG starter (5 activities)", types: ["KDG_TRACE_WRITE", "KDG_MISSING_LETTERS", "KDG_COUNT_ITEMS", "KDG_PATTERN", "KDG_TICK_PICTURE"] },
-  UKG: { label: "UKG starter (6 activities)", types: ["KDG_TRACE_WRITE", "KDG_MISSING_LETTERS", "KDG_NUMBER_GRID", "KDG_PICTURE_SUM", "KDG_TICK_PICTURE", "KDG_JOIN_DOTS"] },
-};
 
 function scrollToActivity(itemId: string) {
   requestAnimationFrame(() => document.getElementById(activityDomId(itemId))?.scrollIntoView({ behavior: "smooth", block: "center" }));
@@ -38,6 +33,7 @@ export function WorksheetStudio({ id }: { id: string }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState<Record<string, boolean>>({});
 
   const { paper, activities } = ws;
@@ -115,7 +111,7 @@ export function WorksheetStudio({ id }: { id: string }) {
   }
 
   const className = paper.blueprint.book.className;
-  const quick = QUICK_STARTS[className];
+  const starter = BUILT_IN_TEMPLATES.find((t) => t.className === className && t.subject === subject);
 
   return (
     <EditorMemoryContext.Provider value={memory}>
@@ -166,6 +162,9 @@ export function WorksheetStudio({ id }: { id: string }) {
                 <Redo2 size={15} />
               </button>
             </div>
+            <button type="button" className="btn" onClick={() => setTemplatesOpen(true)}>
+              <LayoutTemplate size={14} /> Templates
+            </button>
             <button type="button" className="btn" onClick={() => setDetailsOpen(true)}>
               <Pencil size={14} /> Details
             </button>
@@ -193,20 +192,18 @@ export function WorksheetStudio({ id }: { id: string }) {
                 <EmptyState
                   icon={Sparkles}
                   title="Add your first activity"
-                  description="Pick one from the library – or start with a ready set for this class."
+                  description="Pick activities from the library, or start from a ready set."
                   action={
-                    quick ? (
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        disabled={busy}
-                        onClick={() =>
-                          withBusy(() => ws.addMany(quick.types.map((t) => getKindergartenActivity(t)).filter((p): p is AnyActivityPlugin => !!p)))
-                        }
-                      >
-                        {busy ? <Spinner size="sm" /> : <Sparkles size={15} />} {quick.label}
+                    <div className="flex flex-wrap justify-center gap-2">
+                      {starter && (
+                        <button type="button" className="btn btn-primary" disabled={busy} onClick={() => withBusy(() => ws.addTemplate(starter))}>
+                          {busy ? <Spinner size="sm" /> : <Sparkles size={15} />} Use “{starter.name}”
+                        </button>
+                      )}
+                      <button type="button" className="btn" onClick={() => setTemplatesOpen(true)}>
+                        <LayoutTemplate size={15} /> More templates
                       </button>
-                    ) : undefined
+                    </div>
                   }
                 />
               }
@@ -231,6 +228,17 @@ export function WorksheetStudio({ id }: { id: string }) {
             />
           </aside>
         </div>
+
+        {templatesOpen && (
+          <TemplatesModal
+            className={className}
+            subject={subject ?? ""}
+            worksheetTitle={paper.title}
+            snapshot={ws.snapshotAll}
+            onUse={async (t) => withBusy(() => ws.addTemplate(t))}
+            onClose={() => setTemplatesOpen(false)}
+          />
+        )}
 
         {detailsOpen && (
           <DetailsModal

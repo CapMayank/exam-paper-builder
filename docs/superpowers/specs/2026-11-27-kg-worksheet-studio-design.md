@@ -216,3 +216,16 @@ gets the new editors for free.
   it says how many pages the activities need at full size and whether print fits, shrinks a little (≤ 2.5 pages) or
   shrinks a lot. No percentage: the print page also widens the layout as it shrinks, so its exact scale can't be
   predicted from height alone (a 2.9-page worksheet printed at 48%).
+
+## Phase 3 — templates (built 2026-11-27)
+
+- **Built-in templates** (`src/lib/worksheetTemplates.ts`): one per class × subject (15), 4–5 activities each. They name
+  activity types only; each activity's default for the worksheet's subject fills them (Hindi gets Hindi letters).
+  They replace the old per-class "starter" sets.
+- **Saved templates:** "Templates" in the studio header → "Save this worksheet as a template" stores its activities with
+  their words, pictures and marks. Stored as `PresetOverride` rows of kind `WORKSHEET_TEMPLATE` (no schema change),
+  visible to every teacher; removable by the teacher who saved it or an administrator. API: `GET/POST
+  /api/worksheet-templates`, `DELETE /api/worksheet-templates/[id]`; audited.
+- **Using one:** the Templates dialog lists this class + subject first, others folded below; "Add" appends the set as one
+  undo step. The empty worksheet offers the matching built-in set in one click. "New Nursery–KG worksheet" has a
+  "Start with" choice (blank or a matching template).

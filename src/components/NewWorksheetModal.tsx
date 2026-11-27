@@ -1,9 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ErrorBanner, Field, Modal, Spinner } from "@/components/ui";
 import { api } from "@/lib/client";
+import { templateSnapshots } from "@/components/worksheet-studio/templates";
+import { BUILT_IN_TEMPLATES, rankTemplates, type WorksheetTemplate } from "@/lib/worksheetTemplates";
 import { DEFAULT_ACADEMIC_SESSION, DEFAULT_SCHOOL_NAME, EXAM_TYPES, EXAM_TYPE_LABEL, KG_CLASSES, KG_SUBJECTS, type ExamType } from "@/lib/constants";
 
 const SCHOOL_KEY = "epb:schoolName";
@@ -29,6 +31,21 @@ export function NewWorksheetModal({ session, onClose }: { session?: string; onCl
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [templates, setTemplates] = useState<WorksheetTemplate[]>(BUILT_IN_TEMPLATES);
+  const [templateId, setTemplateId] = useState<string>("");
+
+  // saved templates join the built-in ones once they have loaded
+  useEffect(() => {
+    let live = true;
+    api<WorksheetTemplate[]>("/api/worksheet-templates")
+      .then((list) => live && setTemplates(list))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, []);
+  const startOptions = useMemo(() => rankTemplates(templates, className, subject).matching, [templates, className, subject]);
+  const chosen = startOptions.find((t) => t.id === templateId);
 
   const autoTitle = `${className} ${subject} ${EXAM_TYPE_LABEL[examType]} Worksheet`;
 
@@ -53,6 +70,11 @@ export function NewWorksheetModal({ session, onClose }: { session?: string; onCl
       try {
         localStorage.setItem(SCHOOL_KEY, schoolName);
       } catch {}
+      if (chosen) {
+        for (const snap of templateSnapshots(chosen, subject)) {
+          await api(`/api/papers/${res.id}/activities`, { method: "POST", json: snap });
+        }
+      }
       // the page behind stays alive; a button left busy would still be greyed out when you come back
       setBusy(false);
       router.push(`/worksheets/${res.id}`);
@@ -65,7 +87,7 @@ export function NewWorksheetModal({ session, onClose }: { session?: string; onCl
   return (
     <Modal
       title="New Nursery–KG worksheet"
-      subtitle="Pick the class and subject, then add activities one by one. No blueprint or book needed."
+      subtitle="Pick the class and subject, and start blank or from a template. No blueprint or book needed."
       onClose={onClose}
       footer={
         <>
@@ -135,6 +157,18 @@ export function NewWorksheetModal({ session, onClose }: { session?: string; onCl
             ))}
           </div>
         </div>
+
+        <Field label="Start with" helper={chosen ? `${chosen.activities.length} activities – you can change or remove any of them.` : "An empty worksheet; add activities one by one."}>
+          <select className="input" aria-label="Start with" value={chosen ? chosen.id : ""} onChange={(e) => setTemplateId(e.target.value)}>
+            <option value="">Blank worksheet</option>
+            {startOptions.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+                {t.builtIn ? "" : ` (saved by ${t.createdByName ?? "a teacher"})`}
+              </option>
+            ))}
+          </select>
+        </Field>
 
         <Field label="Worksheet title" helper="Leave empty to use the suggested name.">
           <input className="input" placeholder={autoTitle} value={title} onChange={(e) => setTitle(e.target.value)} />

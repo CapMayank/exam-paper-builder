@@ -10,7 +10,8 @@ import { createHistory } from "./history";
 import type { Activity } from "./types";
 import { useActivityDrafts, type Draft } from "./useActivityDrafts";
 
-type Snapshot = { type: string; text: string; options: string[]; marks: number };
+import { templateSnapshots, type ActivitySnapshot as Snapshot } from "./templates";
+import type { WorksheetTemplate } from "@/lib/worksheetTemplates";
 
 function activitiesOf(paper: PaperData | null): Activity[] {
   if (!paper) return [];
@@ -37,12 +38,11 @@ export function useWorksheet(id: string) {
   const replaying = useRef(false);
   const [history] = useState(() => createHistory());
 
+  // The ref is the latest worksheet right now (a burst of adds reads it between renders); state follows it.
   const setPaper = (next: PaperData | null | ((p: PaperData | null) => PaperData | null)) => {
-    setPaperState((prev) => {
-      const value = typeof next === "function" ? next(prev) : next;
-      paperRef.current = value;
-      return value;
-    });
+    const value = typeof next === "function" ? next(paperRef.current) : next;
+    paperRef.current = value;
+    setPaperState(value);
   };
 
   const subject = paper?.blueprint.book.subject;
@@ -214,10 +214,32 @@ export function useWorksheet(id: string) {
     }
   }
 
-  /** Adds several activities in one go (class starter set); undone one by one. */
-  async function addMany(plugins: AnyActivityPlugin[]) {
-    for (const p of plugins) await add(p);
+  /** Adds a template's activities at the end, as one step: undo takes them all away again. */
+  async function addTemplate(template: WorksheetTemplate): Promise<string | undefined> {
+    return run(async () => {
+      const snaps = templateSnapshots(template, subject);
+      const ids: string[] = [];
+      for (const snap of snaps) {
+        const newId = await insert(snap);
+        if (newId) ids.push(newId);
+      }
+      if (!ids.length) return undefined;
+      const start = indexOf(ids[0]);
+      record({
+        label: `Add “${template.name}”`,
+        undo: async () => {
+          for (const x of [...ids].reverse()) await deleteItem(x);
+        },
+        redo: async () => {
+          for (let i = 0; i < ids.length; i++) await restore(ids[i], snaps[i], start + i);
+        },
+      });
+      return ids[0];
+    });
   }
+
+  /** The worksheet as it is now (with unsaved edits), for saving as a template. */
+  const snapshotAll = (): Snapshot[] => current().map(snapshot);
 
   return {
     paper,
@@ -232,7 +254,8 @@ export function useWorksheet(id: string) {
     draftFor: drafts.draftFor,
     resolve,
     add,
-    addMany,
+    addTemplate,
+    snapshotAll,
     duplicate,
     moveTo,
     remove,
