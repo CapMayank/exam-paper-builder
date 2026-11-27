@@ -97,4 +97,16 @@ describe("createDraftStore", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(calls).toEqual([["a", true]]);
   });
+
+  it("drops a draft and its waiting save when the activity is deleted", async () => {
+    const saved: string[] = [];
+    const store = createDraftStore<D>({ delayMs: 700, save: async (id) => void saved.push(id) });
+    store.edit("a", { text: "x", config: { mode: "M" } }, { text: "y" });
+    store.discard("a");
+    await vi.advanceTimersByTimeAsync(700);
+    store.flushAll();
+    expect(saved).toEqual([]);
+    expect(store.get("a")).toBeUndefined();
+    expect(store.pending()).toBe(0);
+  });
 });

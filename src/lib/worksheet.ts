@@ -97,9 +97,14 @@ export type ActivityInput = {
   insertAt?: number;
 };
 
-/** Puts one section at `toIndex` and renumbers every section of the worksheet 0, 1, 2… */
-async function placeSection(sections: { id: string; position: number }[], sectionId: string, toIndex: number) {
-  const ordered = [...sections].sort((a, b) => a.position - b.position).map((s) => s.id);
+/**
+ * Puts one section at `toIndex` and renumbers every section of the worksheet 0, 1, 2…
+ * Reads the sections fresh (not from the paper loaded at the start of the request), so a change
+ * that landed in between is not undone by renumbering from an old list.
+ */
+async function placeSection(blueprintId: string, sectionId: string, toIndex: number) {
+  const sections = await prisma.blueprintSection.findMany({ where: { blueprintId }, select: { id: true, position: true } });
+  const ordered = sections.sort((a, b) => a.position - b.position).map((s) => s.id);
   const next = moveToIndex(ordered, sectionId, toIndex);
   await prisma.$transaction(next.map((id, position) => prisma.blueprintSection.update({ where: { id }, data: { position } })));
 }
@@ -111,7 +116,9 @@ export async function addWorksheetActivity(paperId: string, user: SessionUser, i
   const chapter = await prisma.chapter.findFirst({ where: { bookId: bp.bookId }, orderBy: { number: "asc" } });
   if (!chapter) throw new HttpError(500, "Worksheet book has no chapter");
 
-  const lastPosition = bp.sections.reduce((m, s) => Math.max(m, s.position), -1);
+  // the current last position, read fresh so two adds close together don't share one
+  const last = await prisma.blueprintSection.findFirst({ where: { blueprintId: bp.id }, orderBy: { position: "desc" }, select: { position: true } });
+  const lastPosition = last?.position ?? -1;
   const question = await prisma.question.create({
     data: {
       bookId: bp.bookId,
@@ -137,7 +144,7 @@ export async function addWorksheetActivity(paperId: string, user: SessionUser, i
   await prisma.paperQuestion.create({
     data: { paperId, sectionId: section.id, questionId: question.id, position: 0 },
   });
-  if (input.insertAt !== undefined) await placeSection([...bp.sections, section], section.id, input.insertAt);
+  if (input.insertAt !== undefined) await placeSection(bp.id, section.id, input.insertAt);
   await prisma.paper.update({ where: { id: paperId }, data: { updatedAt: new Date() } });
   return loadPaperView(paperId);
 }
@@ -177,7 +184,7 @@ export async function updateWorksheetActivity(
       ]);
     }
   }
-  if (patch.moveTo !== undefined) await placeSection(paper.blueprint.sections, item.sectionId, patch.moveTo);
+  if (patch.moveTo !== undefined) await placeSection(paper.blueprint.id, item.sectionId, patch.moveTo);
   await prisma.paper.update({ where: { id: paperId }, data: { updatedAt: new Date() } });
   return loadPaperView(paperId);
 }

@@ -34,6 +34,8 @@ export function WorksheetStudio({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [announcement, setAnnouncement] = useState("");
+  const announce = (text: string) => setAnnouncement(text);
   const [moreOpen, setMoreOpen] = useState<Record<string, boolean>>({});
 
   const { paper, activities } = ws;
@@ -175,6 +177,9 @@ export function WorksheetStudio({ id }: { id: string }) {
         </div>
 
         <ErrorBanner message={ws.error} onDismiss={ws.clearError} />
+        <p className="sr-only" aria-live="polite">
+          {announcement}
+        </p>
 
         <div className="grid items-start gap-4 lg:grid-cols-[12.5rem_minmax(0,1fr)_19rem] 2xl:grid-cols-[16rem_minmax(0,1fr)_24rem]">
           <aside aria-label="Activity library" className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
@@ -186,7 +191,7 @@ export function WorksheetStudio({ id }: { id: string }) {
               activities={activities}
               selectedId={liveSelectedId}
               onSelect={select}
-              onMoveTo={(a, index) => void ws.moveTo(a, index)}
+              onMoveTo={(a, index) => void ws.moveTo(a, index).then(() => announce(`${a.plugin.shortLabel} moved to position ${index + 1}`))}
               draftFor={ws.draftFor}
               emptyState={
                 <EmptyState
@@ -196,7 +201,7 @@ export function WorksheetStudio({ id }: { id: string }) {
                   action={
                     <div className="flex flex-wrap justify-center gap-2">
                       {starter && (
-                        <button type="button" className="btn btn-primary" disabled={busy} onClick={() => withBusy(() => ws.addTemplate(starter))}>
+                        <button type="button" className="btn btn-primary" disabled={busy} onClick={() => withBusy(async () => (await ws.addTemplate(starter)).firstId)}>
                           {busy ? <Spinner size="sm" /> : <Sparkles size={15} />} Use “{starter.name}”
                         </button>
                       )}
@@ -220,7 +225,11 @@ export function WorksheetStudio({ id }: { id: string }) {
               onMarks={(n) => selected && void ws.setMarks(selected, n)}
               onMove={(dir) => {
                 if (!selected) return;
-                void ws.moveTo(selected, selectedIndex + (dir === "up" ? -1 : 1)).then(() => scrollToActivity(selected.item.id));
+                const moved = selected;
+                void ws.nudge(moved, dir).then(() => {
+                  scrollToActivity(ws.resolve(moved.item.id));
+                  announce(`${moved.plugin.shortLabel} moved ${dir}`);
+                });
               }}
               onDuplicate={() => selected && withBusy(() => ws.duplicate(selected))}
               onRemove={() => selected && void remove(selected)}
@@ -235,7 +244,15 @@ export function WorksheetStudio({ id }: { id: string }) {
             subject={subject ?? ""}
             worksheetTitle={paper.title}
             snapshot={ws.snapshotAll}
-            onUse={async (t) => withBusy(() => ws.addTemplate(t))}
+            onUse={async (t) => {
+              let complete = false;
+              await withBusy(async () => {
+                const r = await ws.addTemplate(t);
+                complete = r.complete;
+                return r.firstId;
+              });
+              return complete;
+            }}
             onClose={() => setTemplatesOpen(false)}
           />
         )}

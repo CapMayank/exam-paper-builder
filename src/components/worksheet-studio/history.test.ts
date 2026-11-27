@@ -71,4 +71,24 @@ describe("createHistory", () => {
     expect(await h.undo()).toBe(false);
     expect(await h.redo()).toBe(false);
   });
+
+  it("keeps a step made while an undo is still running", async () => {
+    const h = createHistory();
+    let release: () => void = () => {};
+    h.push({ label: "slow", undo: () => new Promise<void>((r) => (release = r)), redo: async () => {} });
+    const undoing = h.undo();
+    h.push({ label: "typed meanwhile", undo: async () => {}, redo: async () => {} });
+    release();
+    await undoing;
+    expect(h.undoLabel()).toBe("typed meanwhile");
+    expect(h.redoLabel()).toBe("slow");
+  });
+
+  it("keeps a step whose undo failed, so it can be tried again", async () => {
+    const h = createHistory();
+    h.push({ label: "x", undo: async () => { throw new Error("offline"); }, redo: async () => {} });
+    await expect(h.undo()).rejects.toThrow("offline");
+    expect(h.undoLabel()).toBe("x");
+    expect(h.redoLabel()).toBeNull();
+  });
 });

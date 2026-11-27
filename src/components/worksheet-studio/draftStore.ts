@@ -32,6 +32,7 @@ export function createDraftStore<D extends object>(opts: {
     const previous = chains.get(id) ?? Promise.resolve();
     const next = previous.then(async () => {
       try {
+        if (drafts.get(id) === undefined) return; // deleted while waiting its turn
         await opts.save(id, draft, urgent);
         if (drafts.get(id) === draft) {
           drafts.delete(id);
@@ -60,6 +61,13 @@ export function createDraftStore<D extends object>(opts: {
       );
       notify();
       return next;
+    },
+    /** Forget an activity's draft and any save still waiting (the activity was deleted). */
+    discard(id: string) {
+      clearTimeout(timers.get(id));
+      timers.delete(id);
+      drafts.delete(id);
+      notify();
     },
     /** Hear about drafts that were saved and forgotten; returns a function that stops listening. */
     subscribeSaved(listener: (id: string, draft: D) => void) {

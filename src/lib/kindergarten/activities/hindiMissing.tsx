@@ -76,9 +76,13 @@ function HindiMissingEditor({ config, onChange, instructionText, onInstructionCh
               label="What is missing"
               value={config.mode}
               onChange={(mode) => {
-                const next = structuredClone(mode === "VARNA" ? VARNA_DEFAULT : MATRA_DEFAULT);
+                const target = mode === "VARNA" ? VARNA_DEFAULT : MATRA_DEFAULT;
+                const fromDefault = config.mode === "VARNA" ? VARNA_DEFAULT : MATRA_DEFAULT;
+                // starting rows are swapped for the other kind's; rows the teacher wrote are kept
+                const untouched = JSON.stringify(config.rows) === JSON.stringify(fromDefault.rows);
+                const next = untouched ? structuredClone(target) : { ...config, mode, instruction: target.instruction };
                 onChange(next);
-                onInstructionChange(next.instruction);
+                if (!instructionText.trim() || instructionText === fromDefault.instruction) onInstructionChange(target.instruction);
               }}
               options={[
                 { value: "VARNA", label: "Letters in order (वर्ण)" },

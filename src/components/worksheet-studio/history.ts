@@ -32,11 +32,16 @@ export function createHistory(opts: { coalesceMs?: number; limit?: number } = {}
       const step = past[past.length - 1];
       if (!step || busy) return false;
       busy = true;
+      // take it off first, so a change made while this runs lands on top and stays
+      const at = past.length - 1;
+      past = past.slice(0, -1);
       try {
         await step.undo();
-        past = past.slice(0, -1);
         future = [...future, step];
         return true;
+      } catch (e) {
+        past = [...past.slice(0, at), step, ...past.slice(at)];
+        throw e;
       } finally {
         busy = false;
       }
@@ -45,11 +50,14 @@ export function createHistory(opts: { coalesceMs?: number; limit?: number } = {}
       const step = future[future.length - 1];
       if (!step || busy) return false;
       busy = true;
+      future = future.slice(0, -1);
       try {
         await step.redo();
-        future = future.slice(0, -1);
         past = [...past, { ...step, at: 0 }]; // never join a redone step with new typing
         return true;
+      } catch (e) {
+        future = [...future, step];
+        throw e;
       } finally {
         busy = false;
       }

@@ -251,3 +251,16 @@ The three "variant" activities reuse an existing editor and print with their own
 (`activities/subjectVariants.tsx`). All eight are in `KINDERGARTEN_QUESTION_TYPES`, have labels, AI formats and
 sample data. Built-in Hindi and EVS templates now use them; the "coming soon" fallback is gone. Picture Match keeps a
 name the teacher typed when the picture changes.
+
+## Hardening after the phase 2–4 review (2026-11-27)
+
+- Every server change from the studio (add, copy, move, remove, marks, templates, undo, redo) runs through one queue,
+  in order, and works out positions when its turn comes; quick clicks can't attach the wrong id or land out of order.
+- Undo steps can be retried after a failure: deleting what is already gone is fine, restoring what is already there is
+  skipped; a partly added template is still one undoable step and the teacher is told what is missing.
+- Deleting an activity drops its unsaved edits; a save that finds the activity gone stops quietly.
+- An empty instruction is stored as the default one when copying, removing (for undo) or saving a template.
+- The server re-reads section positions before renumbering or appending.
+- Starting a new worksheet from a template opens it even if an activity fails, with a message.
+- Moves are announced to screen readers; Hindi letters and boxes are grouped by hand, so conjuncts (क्ष, ज्ञ, त्र)
+  stay whole in every browser.

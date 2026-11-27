@@ -6,12 +6,11 @@ import { WORKSHEET_MODE } from "@/lib/constants";
 import { getKindergartenActivity } from "@/lib/kindergarten/registry";
 import type { AnyActivityPlugin } from "@/lib/kindergarten/types";
 import type { PaperData } from "@/lib/types";
-import { createHistory } from "./history";
+import type { WorksheetTemplate } from "@/lib/worksheetTemplates";
+import { createHistory, type HistoryStep } from "./history";
+import { templateSnapshots, type ActivitySnapshot as Snapshot } from "./templates";
 import type { Activity } from "./types";
 import { useActivityDrafts, type Draft } from "./useActivityDrafts";
-
-import { templateSnapshots, type ActivitySnapshot as Snapshot } from "./templates";
-import type { WorksheetTemplate } from "@/lib/worksheetTemplates";
 
 function activitiesOf(paper: PaperData | null): Activity[] {
   if (!paper) return [];
@@ -24,21 +23,30 @@ function activitiesOf(paper: PaperData | null): Activity[] {
     });
 }
 
+const isGone = (e: unknown) => (e as { status?: number })?.status === 404;
+
 /**
  * Everything the studio does to a worksheet, each change recorded so it can be undone:
- * add, duplicate, move, remove, marks and edits. A removed activity comes back with a new id,
- * so steps remember the id they were made with and look up what it is now.
+ * add, duplicate, move, remove, marks and edits.
+ *
+ * - Changes that talk to the server run one after another (a queue), so quick clicks, undo while an
+ *   add is on its way, or a second drag never work from stale data or land out of order.
+ * - A removed activity comes back with a new id, so steps remember the id they were made with and
+ *   look up what it is now.
+ * - Undo steps can be tried again after a failure: deleting something already gone is fine, and
+ *   bringing back something already there is skipped.
  */
 export function useWorksheet(id: string) {
   const [paper, setPaperState] = useState<PaperData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(0);
   const [, bump] = useReducer((n: number) => n + 1, 0);
   const paperRef = useRef<PaperData | null>(null);
   const idMap = useRef(new Map<string, string>());
-  const replaying = useRef(false);
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
   const [history] = useState(() => createHistory());
 
-  // The ref is the latest worksheet right now (a burst of adds reads it between renders); state follows it.
+  // The ref is the latest worksheet right now (queued changes read it between renders); state follows it.
   const setPaper = (next: PaperData | null | ((p: PaperData | null) => PaperData | null)) => {
     const value = typeof next === "function" ? next(paperRef.current) : next;
     paperRef.current = value;
@@ -81,39 +89,60 @@ export function useWorksheet(id: string) {
   const current = () => activitiesOf(paperRef.current);
   const find = (itemId: string) => current().find((a) => a.item.id === resolve(itemId));
   const indexOf = (itemId: string) => current().findIndex((a) => a.item.id === resolve(itemId));
-  const record = (step: Parameters<typeof history.push>[0]) => {
-    if (replaying.current) return;
+  const record = (step: HistoryStep) => {
     history.push(step);
     bump();
   };
   const snapshot = (a: Activity): Snapshot => {
     const d = drafts.draftFor(a);
-    return { type: a.item.question.type, text: d.text, options: [JSON.stringify(d.config)], marks: a.section.marksEach };
+    const config = d.config as { instruction?: string } | null;
+    // an empty instruction means "the default one" (the server needs some text)
+    const text = d.text.trim() || config?.instruction || a.plugin.label;
+    return { type: a.item.question.type, text, options: [JSON.stringify(d.config)], marks: a.section.marksEach };
   };
 
-  async function run<T>(fn: () => Promise<T>): Promise<T | undefined> {
-    setError(null);
-    try {
-      return await fn();
-    } catch (e) {
-      setError((e as Error).message);
-      return undefined;
-    }
+  /** Runs a server change after the ones before it; errors show in the banner. Resolves to undefined on failure. */
+  function serial<T>(fn: () => Promise<T>): Promise<T | undefined> {
+    setPending((n) => n + 1);
+    const next = queue.current.then(async () => {
+      setError(null);
+      try {
+        return await fn();
+      } catch (e) {
+        setError((e as Error).message);
+        return undefined;
+      } finally {
+        setPending((n) => n - 1);
+        bump();
+      }
+    });
+    queue.current = next;
+    return next;
   }
 
   /** Adds an activity and returns its new item id. */
-  async function insert(snap: Snapshot, insertAt?: number): Promise<string | undefined> {
+  async function insert(snap: Snapshot, insertAt?: number): Promise<string> {
     const before = new Set((paperRef.current?.items ?? []).map((i) => i.id));
     const next = await api<PaperData>(`/api/papers/${id}/activities`, {
       method: "POST",
       json: { type: snap.type, text: snap.text, options: snap.options, marks: snap.marks, ...(insertAt !== undefined ? { insertAt } : {}) },
     });
     setPaper(next);
-    return next.items.find((i) => !before.has(i.id))?.id;
+    const newId = next.items.find((i) => !before.has(i.id))?.id;
+    if (!newId) throw new Error("The activity was added but could not be found – reload the page.");
+    return newId;
   }
 
+  /** Deletes an activity; one that is already gone counts as done. Its unsaved edits go with it. */
   async function deleteItem(itemId: string) {
-    setPaper(await api<PaperData>(`/api/papers/${id}/activities/${resolve(itemId)}`, { method: "DELETE" }));
+    const realId = resolve(itemId);
+    drafts.discard(realId);
+    try {
+      setPaper(await api<PaperData>(`/api/papers/${id}/activities/${realId}`, { method: "DELETE" }));
+    } catch (e) {
+      if (!isGone(e)) throw e;
+      setPaper((p) => (p ? { ...p, items: p.items.filter((i) => i.id !== realId) } : p));
+    }
   }
 
   async function placeAt(itemId: string, index: number) {
@@ -130,68 +159,81 @@ export function useWorksheet(id: string) {
     await api(`/api/papers/${id}/activities/${realId}`, { method: "PUT", json: { marks } });
   }
 
-  /** Re-adds a removed or undone activity where it was, and points its old id at the new one. */
+  /** Brings back a removed or undone activity where it was (skipped if it is already there). */
   async function restore(oldId: string, snap: Snapshot, index: number) {
+    if (find(oldId)) return;
     const newId = await insert(snap, index);
-    if (newId) idMap.current.set(resolve(oldId), newId);
+    idMap.current.set(resolve(oldId), newId);
   }
 
   // ---- the actions the studio calls
 
-  async function add(plugin: AnyActivityPlugin): Promise<string | undefined> {
-    return run(async () => {
+  function add(plugin: AnyActivityPlugin): Promise<string | undefined> {
+    return serial(async () => {
       const config = plugin.defaultConfig(subject) as { instruction?: string };
       const snap: Snapshot = { type: plugin.type, text: config.instruction || plugin.label, options: [JSON.stringify(config)], marks: 2 };
       const newId = await insert(snap);
-      if (!newId) return undefined;
       const index = indexOf(newId);
       record({ label: `Add ${plugin.shortLabel}`, undo: () => deleteItem(newId), redo: () => restore(newId, snap, index) });
       return newId;
     });
   }
 
-  async function duplicate(a: Activity): Promise<string | undefined> {
-    return run(async () => {
-      const snap = snapshot(a);
+  function duplicate(a: Activity): Promise<string | undefined> {
+    const snap = snapshot(a); // what it looks like now, edits included
+    return serial(async () => {
       const index = indexOf(a.item.id) + 1;
       const newId = await insert(snap, index);
-      if (!newId) return undefined;
       record({ label: `Duplicate ${a.plugin.shortLabel}`, undo: () => deleteItem(newId), redo: () => restore(newId, snap, index) });
       return newId;
     });
   }
 
-  async function moveTo(a: Activity, index: number) {
-    const from = indexOf(a.item.id);
-    const to = Math.max(0, Math.min(current().length - 1, index));
-    if (from < 0 || from === to) return;
-    await run(async () => {
-      await placeAt(a.item.id, to);
-      const itemId = a.item.id;
+  function moveTo(a: Activity, index: number): Promise<void> {
+    const itemId = a.item.id;
+    return serial(async () => {
+      // worked out when its turn comes, from the order as it is then
+      const from = indexOf(itemId);
+      const to = Math.max(0, Math.min(current().length - 1, index));
+      if (from < 0 || from === to) return;
+      await placeAt(itemId, to);
       record({ label: `Move ${a.plugin.shortLabel}`, undo: () => placeAt(itemId, from), redo: () => placeAt(itemId, to) });
-    });
+    }).then(() => undefined);
   }
 
-  async function remove(a: Activity) {
-    await run(async () => {
-      const snap = snapshot(a);
-      const index = indexOf(a.item.id);
-      const itemId = a.item.id;
+  /** Moves one place up or down from where it is when its turn comes. */
+  function nudge(a: Activity, dir: "up" | "down"): Promise<void> {
+    const itemId = a.item.id;
+    return serial(async () => {
+      const from = indexOf(itemId);
+      const to = from + (dir === "up" ? -1 : 1);
+      if (from < 0 || to < 0 || to >= current().length) return;
+      await placeAt(itemId, to);
+      record({ label: `Move ${a.plugin.shortLabel}`, undo: () => placeAt(itemId, from), redo: () => placeAt(itemId, to) });
+    }).then(() => undefined);
+  }
+
+  function remove(a: Activity): Promise<void> {
+    const snap = snapshot(a);
+    const itemId = a.item.id;
+    return serial(async () => {
+      const index = indexOf(itemId);
       await deleteItem(itemId);
       record({ label: `Remove ${a.plugin.shortLabel}`, undo: () => restore(itemId, snap, index), redo: () => deleteItem(itemId) });
-    });
+    }).then(() => undefined);
   }
 
-  async function setMarks(a: Activity, marks: number) {
-    if (marks < 1 || marks > 20) return;
+  function setMarks(a: Activity, marks: number): Promise<void> {
+    if (marks < 1 || marks > 20) return Promise.resolve();
     const before = a.section.marksEach;
     const itemId = a.item.id;
-    await run(async () => {
+    return serial(async () => {
       await marksTo(itemId, marks);
       record({ label: "Change marks", coalesceKey: `marks:${resolve(itemId)}`, undo: () => marksTo(itemId, before), redo: () => marksTo(itemId, marks) });
-    });
+    }).then(() => undefined);
   }
 
+  /** Edits are local (saved a moment later), so they are recorded straight away. */
   function edit(a: Activity, patch: Partial<Draft>) {
     const before = drafts.draftFor(a);
     drafts.edit(a, patch);
@@ -204,42 +246,46 @@ export function useWorksheet(id: string) {
     record({ label: `Edit ${a.plugin.shortLabel}`, coalesceKey: `edit:${resolve(itemId)}`, undo: () => apply(before), redo: () => apply(after) });
   }
 
-  async function step(kind: "undo" | "redo") {
-    replaying.current = true;
-    try {
-      await run(() => (kind === "undo" ? history.undo() : history.redo()));
-    } finally {
-      replaying.current = false;
-      bump();
-    }
-  }
-
-  /** Adds a template's activities at the end, as one step: undo takes them all away again. */
-  async function addTemplate(template: WorksheetTemplate): Promise<string | undefined> {
-    return run(async () => {
+  /**
+   * Adds a template's activities at the end, as one step: undo takes them all away again.
+   * Reports whether every activity went in; what did go in stays, as one undoable step.
+   */
+  function addTemplate(template: WorksheetTemplate): Promise<{ firstId?: string; complete: boolean }> {
+    return serial(async () => {
       const snaps = templateSnapshots(template, subject);
-      const ids: string[] = [];
+      const added: { id: string; snap: Snapshot; index: number }[] = [];
+      let failure: Error | null = null;
       for (const snap of snaps) {
-        const newId = await insert(snap);
-        if (newId) ids.push(newId);
+        try {
+          const newId = await insert(snap);
+          added.push({ id: newId, snap, index: indexOf(newId) });
+        } catch (e) {
+          failure = e as Error;
+          break;
+        }
       }
-      if (!ids.length) return undefined;
-      const start = indexOf(ids[0]);
-      record({
-        label: `Add “${template.name}”`,
-        undo: async () => {
-          for (const x of [...ids].reverse()) await deleteItem(x);
-        },
-        redo: async () => {
-          for (let i = 0; i < ids.length; i++) await restore(ids[i], snaps[i], start + i);
-        },
-      });
-      return ids[0];
-    });
+      if (added.length) {
+        record({
+          label: `Add “${template.name}”`,
+          undo: async () => {
+            for (const x of [...added].reverse()) await deleteItem(x.id);
+          },
+          redo: async () => {
+            for (const x of added) await restore(x.id, x.snap, x.index);
+          },
+        });
+      }
+      if (failure) setError(`Only ${added.length} of ${snaps.length} activities were added: ${failure.message}`);
+      return { firstId: added[0]?.id, complete: !failure };
+    }).then((r) => r ?? { complete: false });
   }
 
   /** The worksheet as it is now (with unsaved edits), for saving as a template. */
   const snapshotAll = (): Snapshot[] => current().map(snapshot);
+
+  function step(kind: "undo" | "redo") {
+    return serial(() => (kind === "undo" ? history.undo() : history.redo()));
+  }
 
   return {
     paper,
@@ -250,17 +296,18 @@ export function useWorksheet(id: string) {
       setError(null);
       drafts.clearError();
     },
-    saving: drafts.saving,
+    saving: drafts.saving || pending > 0,
     draftFor: drafts.draftFor,
     resolve,
     add,
-    addTemplate,
-    snapshotAll,
     duplicate,
     moveTo,
+    nudge,
     remove,
     setMarks,
     edit,
+    addTemplate,
+    snapshotAll,
     undo: () => step("undo"),
     redo: () => step("redo"),
     undoLabel: history.undoLabel(),

@@ -66,10 +66,10 @@ function SortGrid({ config, showKey }: { config: EvsSortConfig; showKey?: boolea
         <span>✓ = {config.groupA}</span>
         <span>✗ = {config.groupB}</span>
       </div>
-      <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
+      <div className="grid grid-cols-6 gap-2">
         {config.items.map((it, i) => (
           <div key={i} className="flex flex-col items-center gap-1 rounded-lg border border-slate-300 p-1.5">
-            <Art id={it.clipartId} size={44} />
+            <Art id={it.clipartId} size={40} />
             <span className="flex h-7 w-7 items-center justify-center rounded border-2 border-slate-800 text-sm font-black text-emerald-700">
               {showKey ? (it.group === "A" ? "✓" : "✗") : ""}
             </span>
@@ -81,7 +81,12 @@ function SortGrid({ config, showKey }: { config: EvsSortConfig; showKey?: boolea
 }
 
 function EvsSortEditor({ config, onChange, instructionText, onInstructionChange }: KindergartenEditorProps<EvsSortConfig>) {
-  const setGroups = (groupA: string, groupB: string) => onChange({ ...config, groupA, groupB, instruction: instructionFor(groupA, groupB) });
+  const setGroups = (groupA: string, groupB: string) => {
+    const instruction = instructionFor(groupA, groupB);
+    onChange({ ...config, groupA, groupB, instruction });
+    // the printed instruction follows the new names unless the teacher wrote their own
+    if (!instructionText.trim() || instructionText === instructionFor(config.groupA, config.groupB)) onInstructionChange(instruction);
+  };
   return (
     <div className="space-y-4">
       <EditorShell

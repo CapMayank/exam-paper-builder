@@ -29,6 +29,7 @@ export function useActivityDrafts(paperId: string, subject: string | undefined, 
             json: { text: savedText(itemId, d), options: [JSON.stringify(d.config)] },
           });
         } catch (e) {
+          if ((e as { status?: number }).status === 404) return; // the activity was deleted: nothing left to save
           setError((e as Error).message);
           throw e; // the store keeps the draft
         }
@@ -59,5 +60,5 @@ export function useActivityDrafts(paperId: string, subject: string | undefined, 
     store.edit(a.item.id, draftFor(a), patch);
   }
 
-  return { draftFor, edit, saving: store.pending() > 0, error, clearError: () => setError(null) };
+  return { draftFor, edit, discard: (itemId: string) => store.discard(itemId), saving: store.pending() > 0, error, clearError: () => setError(null) };
 }

@@ -23,7 +23,8 @@ export function TemplatesModal({
   subject: string;
   worksheetTitle: string;
   snapshot: () => ActivitySnapshot[];
-  onUse: (t: WorksheetTemplate) => Promise<void>;
+  /** Adds the template; true when every activity went in. */
+  onUse: (t: WorksheetTemplate) => Promise<boolean>;
   onClose: () => void;
 }) {
   const confirm = useConfirm();
@@ -56,8 +57,9 @@ export function TemplatesModal({
   async function use(t: WorksheetTemplate) {
     setBusyId(t.id);
     try {
-      await onUse(t);
-      onClose();
+      // stay open when something went wrong, so the teacher sees it (what did go in can be undone)
+      if (await onUse(t)) onClose();
+      else setError("Not every activity of this template could be added – the message on the page says why. What was added can be undone.");
     } finally {
       setBusyId(null);
     }
@@ -162,12 +164,16 @@ export function TemplatesModal({
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. LKG English – week 3"
             />
-            <button type="submit" className="btn" disabled={saving || count === 0 || !name.trim()}>
+            <button type="submit" className="btn" disabled={saving || count === 0 || count > 20 || !name.trim()}>
               {saving ? <Spinner size="sm" /> : <BookmarkPlus size={14} />} Save
             </button>
           </div>
           <p className="text-[11px] text-slate-500">
-            {count === 0 ? "Add some activities first." : `Saves its ${count} activities with their words and pictures. Every teacher of the school will see it.`}
+            {count === 0
+              ? "Add some activities first."
+              : count > 20
+                ? "A template can hold at most 20 activities – remove some first."
+                : `Saves its ${count} activities with their words and pictures. Every teacher of the school will see it.`}
           </p>
         </form>
       </div>

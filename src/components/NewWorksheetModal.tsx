@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { ErrorBanner, Field, Modal, Spinner } from "@/components/ui";
+import { ErrorBanner, Field, Modal, Spinner, useToast } from "@/components/ui";
 import { api } from "@/lib/client";
 import { templateSnapshots } from "@/components/worksheet-studio/templates";
 import { BUILT_IN_TEMPLATES, rankTemplates, type WorksheetTemplate } from "@/lib/worksheetTemplates";
@@ -16,6 +16,7 @@ const SCHOOL_KEY = "epb:schoolName";
  */
 export function NewWorksheetModal({ session, onClose }: { session?: string; onClose: () => void }) {
   const router = useRouter();
+  const toast = useToast();
   const [className, setClassName] = useState<(typeof KG_CLASSES)[number]>("Nursery");
   const [subject, setSubject] = useState<string>(KG_SUBJECTS[0]);
   const [title, setTitle] = useState("");
@@ -71,8 +72,16 @@ export function NewWorksheetModal({ session, onClose }: { session?: string; onCl
         localStorage.setItem(SCHOOL_KEY, schoolName);
       } catch {}
       if (chosen) {
-        for (const snap of templateSnapshots(chosen, subject)) {
-          await api(`/api/papers/${res.id}/activities`, { method: "POST", json: snap });
+        // the worksheet exists now: if an activity fails, open it anyway and say what is missing
+        const snaps = templateSnapshots(chosen, subject);
+        let added = 0;
+        try {
+          for (const snap of snaps) {
+            await api(`/api/papers/${res.id}/activities`, { method: "POST", json: snap });
+            added++;
+          }
+        } catch {
+          toast.error(`The worksheet was created, but only ${added} of ${snaps.length} template activities went in. Add the rest from the library.`);
         }
       }
       // the page behind stays alive; a button left busy would still be greyed out when you come back
