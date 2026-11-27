@@ -26,6 +26,7 @@ export const numberGridDefaultConfig = (): NumberGridConfig => {
     startNumber,
     endNumber,
     columns,
+    fillDirection: "COLUMN",
     step: 1,
     cells,
     instruction: "Fill in the missing numbers in the grid (1 to 50):",
@@ -215,7 +216,7 @@ function NumberGridPrint({
         )}
       </div>
 
-      <MathSquareGrid cells={config.cells} columns={config.columns} />
+      <MathSquareGrid cells={config.cells} columns={config.columns} direction={config.fillDirection ?? "ROW"} />
     </div>
   );
 }
@@ -228,6 +229,7 @@ export const numberGridPlugin: KindergartenActivityPlugin<NumberGridConfig> = {
   description: "Math square boxes for numbers 1 to 100 with blank cells for students to fill in.",
   iconName: "Grid",
   defaultConfig: numberGridDefaultConfig,
+  legacyDefaults: { fillDirection: "ROW" },
   validateConfig: (cfg) => {
     if (!cfg || typeof cfg !== "object") return { valid: false, error: "Invalid config" };
     return { valid: true };

@@ -1,0 +1,32 @@
+import { describe, expect, it } from "vitest";
+import { gridOrder } from "./gridPlacement";
+
+describe("gridOrder", () => {
+  it("keeps row order for ROW", () => {
+    expect(gridOrder(6, 3, "ROW")).toEqual([0, 1, 2, 3, 4, 5]);
+  });
+
+  it("fills down each column for COLUMN", () => {
+    expect(gridOrder(6, 3, "COLUMN")).toEqual([0, 2, 4, 1, 3, 5]);
+  });
+
+  it("puts 1–10 in the first column of a 1–50, 5-column grid", () => {
+    const order = gridOrder(50, 5, "COLUMN");
+    expect(order.slice(0, 5)).toEqual([0, 10, 20, 30, 40]);
+    expect(order[45]).toBe(9);
+  });
+
+  it("pads the bottom of the last column when the count doesn't fill it", () => {
+    const order = gridOrder(23, 5, "COLUMN");
+    expect(order).toHaveLength(25);
+    expect([4, 9, 14, 19, 24].map((p) => order[p])).toEqual([20, 21, 22, null, null]);
+  });
+
+  it("does not pad in ROW mode", () => {
+    expect(gridOrder(23, 5, "ROW")).toHaveLength(23);
+  });
+
+  it("returns nothing for an empty grid", () => {
+    expect(gridOrder(0, 5, "COLUMN")).toEqual([]);
+  });
+});

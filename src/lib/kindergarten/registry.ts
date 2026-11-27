@@ -67,6 +67,7 @@ export function parseKindergartenConfig<T = any>(
 ): T {
   const plugin = REGISTRY.get(type);
   const fallback = plugin ? plugin.defaultConfig(subject) : ({} as T);
+  const legacy = (plugin?.legacyDefaults ?? {}) as Partial<T>;
 
   if (!optionsJson || !optionsJson.trim() || optionsJson === "[]") {
     return fallback;
@@ -81,9 +82,9 @@ export function parseKindergartenConfig<T = any>(
       }
       // If optionsJson is an array with 1 JSON stringified config object, unwrap it
       if (Array.isArray(parsed) && parsed.length === 1 && typeof parsed[0] === "string" && parsed[0].startsWith("{")) {
-        return { ...fallback, ...JSON.parse(parsed[0]) };
+        return { ...fallback, ...legacy, ...JSON.parse(parsed[0]) };
       }
-      return { ...fallback, ...parsed };
+      return { ...fallback, ...legacy, ...parsed };
     }
   } catch {
     // fallback

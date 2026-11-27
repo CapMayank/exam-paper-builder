@@ -1,44 +1,39 @@
 import React from "react";
+import { gridOrder, type GridDirection } from "../gridPlacement";
 import type { NumberGridCell } from "../types";
 
 interface MathSquareGridProps {
   cells: NumberGridCell[];
   columns?: number;
+  /** COLUMN counts down each column; ROW (the default, for older grids) counts across. */
+  direction?: GridDirection;
   className?: string;
 }
 
-export function MathSquareGrid({
-  cells = [],
-  columns = 10,
-  className = "",
-}: MathSquareGridProps) {
+export function MathSquareGrid({ cells = [], columns = 10, direction = "ROW", className = "" }: MathSquareGridProps) {
   const colCount = Math.max(2, Math.min(10, columns));
+  const slots = gridOrder(cells.length, colCount, direction);
+  const rowCount = Math.ceil(slots.length / colCount);
 
   return (
     <div className={`my-3 overflow-x-auto ${className}`}>
       <div
-        className="grid border-2 border-slate-900 rounded-md bg-white w-full max-w-full"
-        style={{
-          gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))`,
-        }}
+        className="grid w-full max-w-full rounded-md border-2 border-slate-900 bg-white"
+        style={{ gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))` }}
       >
-        {cells.map((cell, idx) => {
-          const isRightEdge = (idx + 1) % colCount === 0;
-          const isBottomEdge = idx >= cells.length - colCount;
-
+        {slots.map((cellIndex, pos) => {
+          const cell = cellIndex === null ? undefined : cells[cellIndex];
+          const isRightEdge = (pos + 1) % colCount === 0;
+          const isBottomEdge = Math.floor(pos / colCount) === rowCount - 1;
           return (
             <div
-              key={idx}
-              className={`flex items-center justify-center p-1 sm:p-2 aspect-square text-center font-bold text-base sm:text-lg transition-colors ${
+              key={pos}
+              className={`flex aspect-square items-center justify-center p-1 text-center text-base font-bold sm:p-2 sm:text-lg ${
                 !isRightEdge ? "border-r border-slate-900" : ""
-              } ${!isBottomEdge ? "border-b border-slate-900" : ""} ${
-                cell.isBlank ? "bg-slate-50/50" : "bg-white text-slate-950 font-black"
-              }`}
+              } ${!isBottomEdge ? "border-b border-slate-900" : ""} ${!cell || cell.isBlank ? "bg-slate-50/50" : "bg-white font-black text-slate-950"}`}
             >
-              {cell.isBlank ? (
-                <span className="text-slate-300 text-xs font-mono select-none">
-                  &nbsp;
-                </span>
+              {!cell || cell.isBlank ? (
+                <span className="select-none font-mono text-xs text-slate-300">&nbsp;</span>
               ) : (
                 <span className="leading-none">{cell.value}</span>
               )}

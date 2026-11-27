@@ -195,3 +195,20 @@ describe("Exam types and worksheet page fit", () => {
     expect(nextFitLevel(last, 5, 2, last)).toBeNull(); // nothing tighter left
   });
 });
+
+describe("Number grid fill direction", () => {
+  it("reads a saved grid without fillDirection as row-by-row", () => {
+    const stored = JSON.stringify({ startNumber: 1, endNumber: 10, columns: 5, cells: [] });
+    expect(parseKindergartenConfig("KDG_NUMBER_GRID", stored).fillDirection).toBe("ROW");
+  });
+
+  it("gives new grids top-to-bottom counting", () => {
+    expect(parseKindergartenConfig("KDG_NUMBER_GRID", null).fillDirection).toBe("COLUMN");
+    expect(getKindergartenActivity("KDG_NUMBER_GRID")!.defaultConfig().fillDirection).toBe("COLUMN");
+  });
+
+  it("keeps a saved COLUMN direction", () => {
+    const stored = JSON.stringify({ startNumber: 1, endNumber: 10, columns: 5, cells: [], fillDirection: "COLUMN" });
+    expect(parseKindergartenConfig("KDG_NUMBER_GRID", stored).fillDirection).toBe("COLUMN");
+  });
+});

@@ -36,6 +36,8 @@ export interface KindergartenActivityPlugin<TConfig = any> {
   description: string;
   iconName: string; // Lucide icon identifier
   defaultConfig: (subject?: string) => TConfig;
+  /** Values for settings added later, used for saved configs that predate them (instead of defaultConfig's). */
+  legacyDefaults?: Partial<TConfig>;
   validateConfig: (config: unknown) => { valid: boolean; error?: string };
   renderEditor: React.ComponentType<KindergartenEditorProps<TConfig>>;
   renderPrint: React.ComponentType<KindergartenPrintProps<TConfig>>;
@@ -68,6 +70,8 @@ export interface NumberGridConfig {
   startNumber: number;
   endNumber: number;
   columns: number; // typically 5 or 10 columns
+  /** COLUMN counts down each column (1–10 in the first one); ROW counts across. Saved grids without it are ROW. */
+  fillDirection?: "COLUMN" | "ROW";
   step: number;
   cells: NumberGridCell[];
   instruction: string;
