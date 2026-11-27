@@ -111,7 +111,9 @@ function PatternEditor({ config, onChange, instructionText, onInstructionChange 
 function PatternPrint({ config, instructionText, numberLabel, marks }: KindergartenPrintProps<PatternConfig>) {
   return (
     <ActivityFrame numberLabel={numberLabel} marks={marks} instruction={instructionText || config.instruction}>
-      <div className="space-y-3 py-1">
+      {/* with the full width, rows of up to 6 shapes sit two to a line */}
+      <div className="@container">
+        <div className={`grid gap-x-8 gap-y-3 py-1 ${config.rows.every((row) => expandPattern(row).length <= 6) ? "@xl:grid-cols-2" : ""}`}>
         {config.rows.map((row, i) => (
           <div key={i} className="flex flex-wrap items-center gap-2">
             {expandPattern(row).map((id, k) =>
@@ -125,6 +127,7 @@ function PatternPrint({ config, instructionText, numberLabel, marks }: Kindergar
             )}
           </div>
         ))}
+        </div>
       </div>
     </ActivityFrame>
   );

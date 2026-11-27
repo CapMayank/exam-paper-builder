@@ -94,7 +94,9 @@ function TickPictureEditor({ config, onChange, instructionText, onInstructionCha
 function TickPicturePrint({ config, instructionText, numberLabel, marks }: KindergartenPrintProps<TickPictureConfig>) {
   return (
     <ActivityFrame numberLabel={numberLabel} marks={marks} instruction={instructionText || config.instruction}>
-      <div className="space-y-3 py-1">
+      {/* with the full width, questions of up to 3 pictures sit two to a line instead of leaving the right half empty */}
+      <div className="@container">
+        <div className={`grid gap-x-6 gap-y-3 py-1 ${config.rows.every((r) => r.options.length <= 3) ? "@xl:grid-cols-2" : ""}`}>
         {config.rows.map((r, i) => (
           <div key={i}>
             {r.question && (
@@ -114,6 +116,7 @@ function TickPicturePrint({ config, instructionText, numberLabel, marks }: Kinde
             </div>
           </div>
         ))}
+        </div>
       </div>
     </ActivityFrame>
   );

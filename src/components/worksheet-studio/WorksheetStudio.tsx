@@ -198,6 +198,7 @@ export function WorksheetStudio({ id }: { id: string }) {
               onSelect={select}
               onMoveTo={(a, index) => void ws.moveTo(a, index).then(() => announce(`${a.plugin.shortLabel} moved to position ${index + 1}`))}
               draftFor={ws.draftFor}
+              onArrange={(order) => void ws.arrange(order, "Arrange to fit").then(() => announce("Activities arranged so small ones share rows"))}
               addButton={
                 <button
                   type="button"

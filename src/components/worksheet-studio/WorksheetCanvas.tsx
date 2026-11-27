@@ -1,8 +1,8 @@
 "use client";
 
-import { GripVertical } from "lucide-react";
+import { GripVertical, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { fitsHalfWidth, pairHalfWidth } from "@/lib/kindergarten/pairing";
+import { arrangeToFit, fitsHalfWidth, pairHalfWidth } from "@/lib/kindergarten/pairing";
 import { pageFill, type FillLevel } from "./pageFill";
 import type { Draft } from "./useActivityDrafts";
 import type { Activity } from "./types";
@@ -29,6 +29,7 @@ export function WorksheetCanvas({
   draftFor,
   emptyState,
   addButton,
+  onArrange,
 }: {
   activities: Activity[];
   selectedId: string | null;
@@ -38,6 +39,8 @@ export function WorksheetCanvas({
   emptyState: ReactNode;
   /** Shown at the foot of the page, where the next activity would go. */
   addButton?: ReactNode;
+  /** Applies a new order of the activities (Arrange to fit). */
+  onArrange?: (order: Activity[]) => void;
 }) {
   const totalMarks = activities.reduce((n, a) => n + a.section.marksEach, 0);
   const measureRef = useRef<HTMLDivElement>(null);
@@ -65,9 +68,11 @@ export function WorksheetCanvas({
 
   // the same rows print makes: two half-width activities in a row share one, left then right
   const indexOf = new Map(activities.map((a, i) => [a.item.id, i]));
-  const rows = pairHalfWidth(activities, (a) =>
-    fitsHalfWidth(a.plugin, draftFor(a).config),
-  );
+  const isHalf = (a: Activity) => fitsHalfWidth(a.plugin, draftFor(a).config);
+  const rows = pairHalfWidth(activities, isHalf);
+  // small activities kept apart by a big one could share rows if moved up beside each other
+  const arranged = arrangeToFit(activities, isHalf);
+  const rowsSaved = rows.length - pairHalfWidth(arranged, isHalf).length;
   const rowClass = (row: Activity[]) =>
     row.length === 2 ? "grid grid-cols-2 items-start gap-x-[5mm]" : "";
 
@@ -232,6 +237,17 @@ export function WorksheetCanvas({
           level={fill.level}
           scale={fill.scale}
         />
+        {onArrange && rowsSaved > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2">
+            <p className="text-xs text-indigo-900">
+              {rowsSaved === 1 ? "Two small activities are" : `${rowsSaved * 2} small activities are`} kept apart by bigger
+              ones. Moving them side by side saves room, so print stays bigger.
+            </p>
+            <button type="button" className="btn btn-sm btn-primary" onClick={() => onArrange(arranged)}>
+              <Sparkles size={13} /> Arrange to fit
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

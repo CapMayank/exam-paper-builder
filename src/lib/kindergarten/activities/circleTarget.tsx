@@ -154,8 +154,10 @@ function CircleTargetPrint({
   numberLabel,
   marks,
 }: KindergartenPrintProps<CircleTargetConfig>) {
+  // with the full width, rows of up to 4 pictures sit two to a line (slightly smaller boxes) instead of one row each
+  const twoUp = config.rows.length > 1 && config.rows.every((r) => r.items.length <= 4);
   return (
-    <div className="my-2 border-2 border-slate-800 rounded-xl p-3 bg-white">
+    <div className="@container my-2 border-2 border-slate-800 rounded-xl p-3 bg-white">
       <div className="flex justify-between items-start mb-2">
         <div className="flex items-start gap-2">
           {numberLabel && (
@@ -172,7 +174,7 @@ function CircleTargetPrint({
         )}
       </div>
 
-      <div className="space-y-3 my-1">
+      <div className={`grid gap-3 my-1 ${twoUp ? "@xl:grid-cols-2" : ""}`}>
         {config.rows.map((row, rIdx) => (
           <div
             key={rIdx}
@@ -181,16 +183,16 @@ function CircleTargetPrint({
             <span className="font-black text-xs text-slate-500 w-6 select-none">
               ({rIdx + 1})
             </span>
-            <div className="grid min-w-0 flex-1 grid-cols-[repeat(auto-fit,minmax(5.5rem,1fr))] justify-items-center gap-2 px-2">
+            <div className={`grid min-w-0 flex-1 justify-items-center gap-2 px-2 ${twoUp ? "grid-flow-col auto-cols-fr" : "grid-cols-[repeat(auto-fit,minmax(5.5rem,1fr))]"}`}>
               {row.items.map((item, iIdx) => {
                 const clipart = item.clipartId ? getClipartById(item.clipartId) : null;
 
                 return (
                   <div
                     key={iIdx}
-                    className="w-16 h-16 sm:w-20 sm:h-20 shrink-0 flex items-center justify-center p-2 border-2 border-slate-800 rounded-2xl bg-white text-slate-950 shadow-2xs"
+                    className={`${twoUp ? "aspect-square w-full max-w-14 p-1 [&_svg]:max-h-full [&_svg]:max-w-full" : "w-16 h-16 sm:w-20 sm:h-20 p-2"} shrink-0 flex items-center justify-center border-2 border-slate-800 rounded-2xl bg-white text-slate-950 shadow-2xs`}
                   >
-                    {clipart ? clipart.renderSvg(48) : <span className="font-bold">{item.text || "★"}</span>}
+                    {clipart ? clipart.renderSvg(twoUp ? 40 : 48) : <span className="font-bold">{item.text || "★"}</span>}
                   </div>
                 );
               })}

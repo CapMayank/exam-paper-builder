@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pairHalfWidth } from "./pairing";
+import { arrangeToFit, pairHalfWidth } from "./pairing";
 
 const half = (s: string) => s.startsWith("h");
 
@@ -22,5 +22,23 @@ describe("pairHalfWidth", () => {
 
   it("returns nothing for no activities", () => {
     expect(pairHalfWidth([], half)).toEqual([]);
+  });
+});
+
+describe("arrangeToFit", () => {
+  it("pulls the next small activity up beside a small one that has no partner", () => {
+    expect(arrangeToFit(["h1", "F1", "h2", "F2"], half)).toEqual(["h1", "h2", "F1", "F2"]);
+  });
+
+  it("leaves a worksheet that already pairs well as it is", () => {
+    expect(arrangeToFit(["h1", "h2", "F1", "h3", "h4"], half)).toEqual(["h1", "h2", "F1", "h3", "h4"]);
+  });
+
+  it("keeps full-width activities in their order and moves only what it must", () => {
+    expect(arrangeToFit(["F1", "h1", "F2", "F3", "h2", "h3"], half)).toEqual(["F1", "h1", "h2", "F2", "F3", "h3"]);
+  });
+
+  it("leaves a single small activity where it is", () => {
+    expect(arrangeToFit(["F1", "h1", "F2"], half)).toEqual(["F1", "h1", "F2"]);
   });
 });

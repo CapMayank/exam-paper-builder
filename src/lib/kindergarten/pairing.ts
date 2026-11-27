@@ -29,3 +29,25 @@ export function pairHalfWidth<T>(items: readonly T[], isHalf: (item: T) => boole
   }
   return rows;
 }
+
+/**
+ * An order in which more small activities can share rows: walking down the worksheet, a half-width activity
+ * with no half-width neighbour is joined by the next half-width one further down, which moves up beside it.
+ * Everything else keeps its order, so the worksheet still reads the way the teacher built it.
+ */
+export function arrangeToFit<T>(items: readonly T[], isHalf: (item: T) => boolean): T[] {
+  const rest = [...items];
+  const out: T[] = [];
+  while (rest.length) {
+    const a = rest.shift()!;
+    out.push(a);
+    if (!isHalf(a)) continue;
+    if (rest.length && isHalf(rest[0])) {
+      out.push(rest.shift()!); // already has its partner
+      continue;
+    }
+    const k = rest.findIndex(isHalf);
+    if (k > 0) out.push(rest.splice(k, 1)[0]);
+  }
+  return out;
+}

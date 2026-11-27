@@ -201,6 +201,25 @@ export function useWorksheet(id: string) {
     }).then(() => undefined);
   }
 
+  /** Puts the activities in this order, front to back; ones removed since are skipped. */
+  async function reorder(ids: string[]) {
+    const live = ids.filter((itemId) => indexOf(itemId) >= 0);
+    for (let k = 0; k < live.length; k++) {
+      if (indexOf(live[k]) !== k) await placeAt(live[k], k);
+    }
+  }
+
+  /** Changes the whole order at once (Arrange to fit); one undo puts it back. */
+  function arrange(order: Activity[], label: string): Promise<void> {
+    const target = order.map((a) => a.item.id);
+    return serial(async () => {
+      const before = current().map((a) => a.item.id);
+      if (before.join() === target.map(resolve).join()) return;
+      await reorder(target);
+      record({ label, undo: () => reorder(before), redo: () => reorder(target) });
+    }).then(() => undefined);
+  }
+
   /** Moves one place up or down from where it is when its turn comes. */
   function nudge(a: Activity, dir: "up" | "down"): Promise<void> {
     const itemId = a.item.id;
@@ -303,6 +322,7 @@ export function useWorksheet(id: string) {
     duplicate,
     moveTo,
     nudge,
+    arrange,
     remove,
     setMarks,
     edit,
