@@ -1,66 +1,50 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useState } from "react";
 import { api } from "@/lib/client";
 import { parseKindergartenConfig } from "@/lib/kindergarten/registry";
+import { createDraftStore } from "./draftStore";
 import type { Activity } from "./types";
 
 export type Draft = { text: string; config: any }; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 const SAVE_DELAY_MS = 700;
 
-/**
- * Local copies of the activities being edited, saved to the server a moment after the last change.
- * Each activity has its own timer, so switching to another activity never drops a pending save.
- */
+/** The studio's view of the draft store: what each activity looks like now, and saving it to the server. */
 export function useActivityDrafts(paperId: string, subject?: string) {
-  const [drafts, setDrafts] = useState<Record<string, Draft>>({});
-  const [pending, setPending] = useState(0);
+  const [, rerender] = useReducer((n: number) => n + 1, 0);
   const [error, setError] = useState<string | null>(null);
-  const timers = useRef<Record<string, { timer: ReturnType<typeof setTimeout>; run: () => void }>>({});
-
-  const draftFor = useCallback(
-    (a: Activity): Draft =>
-      drafts[a.item.id] ?? {
-        text: a.item.question.text,
-        config: parseKindergartenConfig(a.item.question.type, a.item.question.options?.[0], subject),
+  const [labels] = useState(() => new Map<string, string>());
+  const [store] = useState(() =>
+    createDraftStore<Draft>({
+      delayMs: SAVE_DELAY_MS,
+      onChange: rerender,
+      save: async (itemId, d) => {
+        try {
+          await api(`/api/papers/${paperId}/activities/${itemId}`, {
+            method: "PUT",
+            json: { text: d.text.trim() || d.config?.instruction || labels.get(itemId) || "Activity", options: [JSON.stringify(d.config)] },
+          });
+        } catch (e) {
+          setError((e as Error).message);
+        }
       },
-    [drafts, subject],
+    }),
   );
 
-  function edit(a: Activity, patch: Partial<Draft>) {
-    const next = { ...draftFor(a), ...patch };
-    setDrafts((d) => ({ ...d, [a.item.id]: next }));
-    const itemId = a.item.id;
-    const existing = timers.current[itemId];
-    if (existing) clearTimeout(existing.timer);
-    else setPending((n) => n + 1);
-    const run = async () => {
-      delete timers.current[itemId];
-      try {
-        await api(`/api/papers/${paperId}/activities/${itemId}`, {
-          method: "PUT",
-          json: { text: next.text.trim() || next.config?.instruction || a.plugin.label, options: [JSON.stringify(next.config)] },
-        });
-      } catch (e) {
-        setError((e as Error).message);
-      } finally {
-        setPending((n) => Math.max(0, n - 1));
-      }
+  // leaving the page sends whatever is still waiting
+  useEffect(() => () => store.flushAll(), [store]);
+
+  const draftFor = (a: Activity): Draft =>
+    store.get(a.item.id) ?? {
+      text: a.item.question.text,
+      config: parseKindergartenConfig(a.item.question.type, a.item.question.options?.[0], subject),
     };
-    timers.current[itemId] = { timer: setTimeout(run, SAVE_DELAY_MS), run };
+
+  function edit(a: Activity, patch: Partial<Draft>) {
+    labels.set(a.item.id, a.plugin.label);
+    store.edit(a.item.id, draftFor(a), patch);
   }
 
-  // leaving the page sends whatever is still waiting
-  useEffect(() => {
-    const all = timers.current;
-    return () => {
-      for (const { timer, run } of Object.values(all)) {
-        clearTimeout(timer);
-        void run();
-      }
-    };
-  }, []);
-
-  return { draftFor, edit, saving: pending > 0, error, clearError: () => setError(null) };
+  return { draftFor, edit, saving: store.pending() > 0, error, clearError: () => setError(null) };
 }
