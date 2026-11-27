@@ -8,6 +8,7 @@ const patchSchema = z.object({
   answer: z.string().max(5000).optional(),
   marks: z.number().int().min(1).max(50).optional(),
   move: z.enum(["up", "down"]).optional(),
+  moveTo: z.number().int().min(0).max(200).optional(),
 });
 
 export const PUT = route(async (req, { id, itemId }, user) => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUp, MousePointerClick, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Copy, MousePointerClick, Trash2, X } from "lucide-react";
 import { EditorPreviewContext } from "@/lib/kindergarten/activities/_shared";
 import { NumberStepper } from "@/lib/kindergarten/editor-kit";
 import type { Draft } from "./useActivityDrafts";
@@ -14,6 +14,7 @@ export function ActivityInspector({
   onEdit,
   onMarks,
   onMove,
+  onDuplicate,
   onRemove,
   onClose,
 }: {
@@ -24,6 +25,7 @@ export function ActivityInspector({
   onEdit: (patch: Partial<Draft>) => void;
   onMarks: (n: number) => void;
   onMove: (dir: "up" | "down") => void;
+  onDuplicate: () => void;
   onRemove: () => void;
   onClose: () => void;
 }) {
@@ -72,6 +74,9 @@ export function ActivityInspector({
           </button>
           <button type="button" className="btn btn-sm" disabled={index === total - 1} onClick={() => onMove("down")}>
             <ArrowDown size={13} /> Down
+          </button>
+          <button type="button" className="btn btn-sm" onClick={onDuplicate} title="Add a copy right below">
+            <Copy size={13} /> Copy
           </button>
           <button type="button" className="btn btn-sm ml-auto text-red-600" onClick={onRemove}>
             <Trash2 size={13} /> Remove

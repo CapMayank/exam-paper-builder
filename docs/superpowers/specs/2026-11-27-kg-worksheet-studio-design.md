@@ -200,3 +200,19 @@ gets the new editors for free.
 - Exact pane widths, icons, and copy.
 - Exact basic/advanced split per activity where the table above turns out awkward in use.
 - Whether `_shared.tsx` print helpers move or stay.
+
+## Phase 2 — power editing (built 2026-11-27)
+
+- **Drag to reorder:** each activity on the page has a grip handle (on hover, always on the selected one); a blue line
+  shows where it lands. The Up/Down buttons stay for keyboard users. Server: `PUT …/activities/[itemId]` takes
+  `moveTo` (0-based index); sections are renumbered 0…n-1 (`placeSection`, `moveToIndex` in `src/lib/worksheetOrder.ts`).
+- **Copy (duplicate):** inspector button; the copy goes right below the original and is selected.
+  Server: `POST …/activities` takes optional `insertAt`.
+- **Undo / redo:** header buttons name the step ("Undo: Remove Compare"); Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y outside text
+  boxes (which keep their own undo). Covers add, starter set, copy, move, remove, marks and edits. Typing in one activity
+  within 1.5 s is one step. A removed activity comes back at its old place with a new id; later steps follow the id.
+  History lives for the page visit (not saved).
+- **Page-space meter:** below the page. A hidden copy of the page is laid out at the print width (182 mm) and measured;
+  it says how many pages the activities need at full size and whether print fits, shrinks a little (≤ 2.5 pages) or
+  shrinks a lot. No percentage: the print page also widens the layout as it shrinks, so its exact scale can't be
+  predicted from height alone (a 2.9-page worksheet printed at 48%).

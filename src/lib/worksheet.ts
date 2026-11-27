@@ -3,6 +3,7 @@ import { HttpError, type SessionUser } from "./api";
 import { defaultExamDurationMin, WORKSHEET_MODE, type ExamType } from "./constants";
 import { assertCanModifyPaper, loadPaperView } from "./papers";
 import { prisma } from "./prisma";
+import { moveToIndex } from "./worksheetOrder";
 
 const WORKSHEET_CHAPTER_TITLE = "Worksheet activities";
 
@@ -92,7 +93,16 @@ export type ActivityInput = {
   options: string[];
   answer: string;
   marks: number;
+  /** Where to put it (0 = first); the end when left out. */
+  insertAt?: number;
 };
+
+/** Puts one section at `toIndex` and renumbers every section of the worksheet 0, 1, 2… */
+async function placeSection(sections: { id: string; position: number }[], sectionId: string, toIndex: number) {
+  const ordered = [...sections].sort((a, b) => a.position - b.position).map((s) => s.id);
+  const next = moveToIndex(ordered, sectionId, toIndex);
+  await prisma.$transaction(next.map((id, position) => prisma.blueprintSection.update({ where: { id }, data: { position } })));
+}
 
 /** One activity = one question + a one-slot section of its own, appended to the end. */
 export async function addWorksheetActivity(paperId: string, user: SessionUser, input: ActivityInput) {
@@ -127,6 +137,7 @@ export async function addWorksheetActivity(paperId: string, user: SessionUser, i
   await prisma.paperQuestion.create({
     data: { paperId, sectionId: section.id, questionId: question.id, position: 0 },
   });
+  if (input.insertAt !== undefined) await placeSection([...bp.sections, section], section.id, input.insertAt);
   await prisma.paper.update({ where: { id: paperId }, data: { updatedAt: new Date() } });
   return loadPaperView(paperId);
 }
@@ -135,7 +146,7 @@ export async function updateWorksheetActivity(
   paperId: string,
   itemId: string,
   user: SessionUser,
-  patch: { text?: string; options?: string[]; answer?: string; marks?: number; move?: "up" | "down" },
+  patch: { text?: string; options?: string[]; answer?: string; marks?: number; move?: "up" | "down"; moveTo?: number },
 ) {
   const paper = await loadEditableWorksheet(paperId, user);
   const item = paper.items.find((i) => i.id === itemId);
@@ -166,6 +177,7 @@ export async function updateWorksheetActivity(
       ]);
     }
   }
+  if (patch.moveTo !== undefined) await placeSection(paper.blueprint.sections, item.sectionId, patch.moveTo);
   await prisma.paper.update({ where: { id: paperId }, data: { updatedAt: new Date() } });
   return loadPaperView(paperId);
 }

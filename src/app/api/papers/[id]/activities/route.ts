@@ -9,6 +9,7 @@ const addSchema = z.object({
   options: z.array(z.string().max(20000)).max(4).default([]),
   answer: z.string().max(5000).default(""),
   marks: z.number().int().min(1).max(50).default(2),
+  insertAt: z.number().int().min(0).max(200).optional(),
 });
 
 /** Adds one activity (question + its own one-slot section) to a worksheet. */

@@ -1,6 +1,8 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { GripVertical } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { pageFill, type FillLevel } from "./pageFill";
 import type { Draft } from "./useActivityDrafts";
 import type { Activity } from "./types";
 
@@ -8,23 +10,52 @@ export function activityDomId(itemId: string) {
   return `ws-activity-${itemId}`;
 }
 
-/** The worksheet as it will print, one activity after another; click an activity to edit it. */
+/** Where a dragged activity lands: before item `slot` (slot = count means at the end). */
+function landingIndex(from: number, slot: number) {
+  return slot > from ? slot - 1 : slot;
+}
+
+/**
+ * The worksheet as it will print, one activity after another. Click an activity to edit it,
+ * drag it by its handle to move it. Below the page, a meter shows how full the 2 A4 pages are.
+ */
 export function WorksheetCanvas({
   activities,
   selectedId,
   onSelect,
+  onMoveTo,
   draftFor,
   emptyState,
 }: {
   activities: Activity[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  onMoveTo: (a: Activity, index: number) => void;
   draftFor: (a: Activity) => Draft;
   emptyState: ReactNode;
 }) {
   const totalMarks = activities.reduce((n, a) => n + a.section.marksEach, 0);
+  const measureRef = useRef<HTMLDivElement>(null);
+  const [fill, setFill] = useState<{ pages: number; level: FillLevel }>({ pages: 0, level: "fits" });
+  const [dragFrom, setDragFrom] = useState<number | null>(null);
+  const [slot, setSlot] = useState<number | null>(null);
+
+  // A hidden copy of the page is laid out at the real print width (182 mm), so it wraps like
+  // paper does; its height says how full the 2 pages are. Re-measured whenever it changes size.
+  useEffect(() => {
+    const el = measureRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setFill(pageFill(el.scrollHeight, el.clientWidth)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [activities.length]);
 
   if (activities.length === 0) return <>{emptyState}</>;
+
+  const endDrag = () => {
+    setDragFrom(null);
+    setSlot(null);
+  };
 
   return (
     <div className="space-y-3">
@@ -34,47 +65,128 @@ export function WorksheetCanvas({
             const draft = draftFor(a);
             const Print = a.plugin.renderPrint;
             const selected = a.item.id === selectedId;
+            const showLineBefore = dragFrom !== null && slot === idx && landingIndex(dragFrom, idx) !== dragFrom;
+            const showLineAfter = dragFrom !== null && idx === activities.length - 1 && slot === activities.length && landingIndex(dragFrom, slot) !== dragFrom;
             return (
               <div
                 key={a.item.id}
-                id={activityDomId(a.item.id)}
-                role="button"
-                tabIndex={0}
-                aria-pressed={selected}
-                aria-label={`Activity ${idx + 1}: ${a.plugin.shortLabel}`}
-                onClick={() => onSelect(a.item.id)}
-                onKeyDown={(e) => {
-                  if (e.target !== e.currentTarget) return;
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    onSelect(a.item.id);
-                  }
+                onDragOver={(e) => {
+                  if (dragFrom === null) return;
+                  e.preventDefault();
+                  const r = e.currentTarget.getBoundingClientRect();
+                  setSlot(e.clientY < r.top + r.height / 2 ? idx : idx + 1);
                 }}
-                className={`relative cursor-pointer scroll-mt-4 rounded-lg px-1 transition focus-visible:outline-none ${
-                  selected ? "bg-indigo-50/40 ring-2 ring-indigo-500" : "hover:ring-2 hover:ring-indigo-200 focus-visible:ring-2 focus-visible:ring-indigo-300"
-                }`}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (dragFrom !== null && slot !== null) {
+                    const to = landingIndex(dragFrom, slot);
+                    if (to !== dragFrom) onMoveTo(activities[dragFrom], to);
+                  }
+                  endDrag();
+                }}
               >
-                {selected && (
-                  <span className="absolute -top-2.5 left-3 z-10 rounded-full bg-indigo-600 px-2 py-0.5 text-[10px] font-bold text-white">Editing</span>
-                )}
-                <Print config={draft.config} instructionText={draft.text} numberLabel={`${idx + 1}.`} marks={a.section.marksEach} />
+                {showLineBefore && <div className="mb-1 h-1 rounded-full bg-indigo-500" aria-hidden />}
+                <div
+                  id={activityDomId(a.item.id)}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={selected}
+                  aria-label={`Activity ${idx + 1}: ${a.plugin.shortLabel}`}
+                  onClick={() => onSelect(a.item.id)}
+                  onKeyDown={(e) => {
+                    if (e.target !== e.currentTarget) return;
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onSelect(a.item.id);
+                    }
+                  }}
+                  className={`group relative cursor-pointer scroll-mt-4 rounded-lg px-1 transition focus-visible:outline-none ${
+                    dragFrom === idx ? "opacity-40" : ""
+                  } ${selected ? "bg-indigo-50/40 ring-2 ring-indigo-500" : "hover:ring-2 hover:ring-indigo-200 focus-visible:ring-2 focus-visible:ring-indigo-300"}`}
+                >
+                  <span
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.effectAllowed = "move";
+                      e.dataTransfer.setData("text/plain", a.item.id);
+                      setDragFrom(idx);
+                    }}
+                    onDragEnd={endDrag}
+                    onClick={(e) => e.stopPropagation()}
+                    title="Drag to move"
+                    aria-hidden
+                    className={`absolute top-2 -left-6 flex h-7 w-5 cursor-grab items-center justify-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700 active:cursor-grabbing ${
+                      selected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                    }`}
+                  >
+                    <GripVertical size={16} />
+                  </span>
+                  {selected && (
+                    <span className="absolute -top-2.5 left-3 z-10 rounded-full bg-indigo-600 px-2 py-0.5 text-[10px] font-bold text-white">Editing</span>
+                  )}
+                  <Print config={draft.config} instructionText={draft.text} numberLabel={`${idx + 1}.`} marks={a.section.marksEach} />
+                </div>
+                {showLineAfter && <div className="mt-1 h-1 rounded-full bg-indigo-500" aria-hidden />}
               </div>
             );
           })}
         </div>
       </div>
 
-      <div className="mx-auto flex max-w-[720px] items-center justify-between px-1 text-sm">
-        <span className="text-slate-600">
-          {activities.length} {activities.length === 1 ? "activity" : "activities"}
-        </span>
-        <span className="font-bold text-slate-900">Total: {totalMarks} marks</span>
+      {/* the same page at print width, out of sight, only to measure it */}
+      <div aria-hidden className="pointer-events-none fixed top-0 -left-[10000px] invisible" style={{ width: "182mm" }}>
+        <div ref={measureRef} className="space-y-1">
+          {activities.map((a, idx) => {
+            const Print = a.plugin.renderPrint;
+            const draft = draftFor(a);
+            return <Print key={a.item.id} config={draft.config} instructionText={draft.text} numberLabel={`${idx + 1}.`} marks={a.section.marksEach} />;
+          })}
+        </div>
       </div>
 
-      {activities.length > 7 && (
-        <p className="mx-auto max-w-[720px] rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs font-medium text-amber-900">
-          With {activities.length} activities the worksheet is scaled down a lot to fit 2 pages. For bigger, easier-to-read print, keep it to about 5–7 activities.
-        </p>
+      <div className="mx-auto max-w-[720px] space-y-2 px-1">
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-slate-600">
+            {activities.length} {activities.length === 1 ? "activity" : "activities"}
+          </span>
+          <span className="font-bold text-slate-900">Total: {totalMarks} marks</span>
+        </div>
+        <PageFillMeter pages={fill.pages} level={fill.level} />
+      </div>
+    </div>
+  );
+}
+
+function PageFillMeter({ pages, level }: { pages: number; level: FillLevel }) {
+  if (pages <= 0) return null;
+  const tight = level === "tiny";
+  const pct = Math.min(100, (pages / 2) * 100);
+  const message =
+    level === "fits"
+      ? `About ${pages.toFixed(1)} of 2 pages (front & back) – prints at full size`
+      : level === "shrinks"
+        ? `Needs about ${pages.toFixed(1)} pages – print shrinks it a little to fit 2`
+        : `Needs about ${pages.toFixed(1)} pages – print shrinks it a lot to fit 2`;
+  return (
+    <div className={`rounded-xl border px-3 py-2 ${tight ? "border-amber-300 bg-amber-50" : "border-slate-200 bg-white"}`}>
+      <div className="mb-1.5 flex items-baseline justify-between gap-2 text-xs">
+        <span className="font-semibold text-slate-700">Page space</span>
+        <span className={level === "fits" ? "text-slate-500" : "font-semibold text-amber-800"}>{message}</span>
+      </div>
+      <div
+        className="relative h-2 overflow-hidden rounded-full bg-slate-100"
+        role="meter"
+        aria-label="Page space used"
+        aria-valuemin={0}
+        aria-valuemax={2}
+        aria-valuenow={Math.min(pages, 2)}
+        aria-valuetext={message}
+      >
+        <div className={`h-full rounded-full ${tight ? "bg-amber-500" : level === "shrinks" ? "bg-amber-400" : "bg-emerald-500"}`} style={{ width: `${pct}%` }} />
+        <span className="absolute inset-y-0 left-1/2 w-px bg-slate-300" aria-hidden />
+      </div>
+      {tight && (
+        <p className="mt-1.5 text-[11px] text-amber-900">Letters and boxes get small for little hands. Removing an activity or two keeps print big – Print preview shows the exact size.</p>
       )}
     </div>
   );
