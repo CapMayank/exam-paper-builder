@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Andika, Figtree, Literata, Noto_Sans, Noto_Sans_Devanagari } from "next/font/google";
+import { Edu_NSW_ACT_Foundation, Figtree, Literata, Noto_Sans, Noto_Sans_Devanagari } from "next/font/google";
 import "katex/dist/katex.min.css";
 import "./globals.css";
 
@@ -11,9 +11,9 @@ const heading = Literata({ variable: "--font-heading", subsets: ["latin"] });
 // Latin + Devanagari (Hindi/Marathi) are bundled; other scripts fall back to the system font.
 const noto = Noto_Sans({ variable: "--font-noto", subsets: ["latin"] });
 const deva = Noto_Sans_Devanagari({ variable: "--font-deva", subsets: ["devanagari"] });
-// Pre-primary handwriting sheets: Andika is drawn for beginning readers (single-storey a and g).
-// The 4-line ruling in FourLineGuide is fitted to its letter heights, so keep the two together.
-const kid = Andika({ variable: "--font-kid", subsets: ["latin"], weight: ["700"] });
+// Pre-primary handwriting sheets: a school print-handwriting font whose capitals are twice its
+// small letters, so it fills the evenly spaced 4-line ruling in FourLineGuide. Keep the two together.
+const kid = Edu_NSW_ACT_Foundation({ variable: "--font-kid", subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: {

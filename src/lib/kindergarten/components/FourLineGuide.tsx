@@ -5,16 +5,17 @@ import type { RulingType, TraceWriteLineItem } from "../types";
  * Handwriting rulings for pre-primary sheets, drawn as SVG so the printed letters sit exactly on the lines.
  *
  * Every row is its own <svg> with a fixed viewBox width; it scales with the page, so lines and letters
- * scale together and the fit never drifts. The line heights come from the font's own letter heights:
+ * scale together and the fit never drifts. Rows look like a printed copy page:
  *
- *   4-line (Andika, bold)       2-line Hindi (Noto Sans Devanagari)
- *   ── red   top   (capitals)   ── top    (shirorekha hangs here)
- *   - - blue mid   (x-height)       letters
- *   ── blue  base  (baseline)   ── bottom (baseline)
- *   ── red   bottom (g p y tails)
+ *   4-line (Edu NSW ACT Foundation)       2-line Hindi (Noto Sans Devanagari)
+ *   ── red   top     capitals start here  ── red  top   (shirorekha hangs here)
+ *   ── blue  2nd     (evenly spaced)          letters
+ *   ── blue  base    letters sit here     ── blue base
+ *   ── red   bottom  g p y tails
  *
- * The model row shows the letters (dotted when they are for tracing); the rows after it are empty
- * copies of the same ruling; each row is closed at both ends with a small gap so it reads as its own line.
+ * Each row carries its own blank space above and below, so rows stand apart with a clear gap
+ * (two bands). The model row shows the letters (pale grey when they
+ * are for tracing); the rows after it are empty copies of the same ruling.
  */
 
 const VIEW_W = 640;
@@ -22,15 +23,19 @@ const VIEW_W = 640;
 const pxPerPt = (4 / 3) * 0.85;
 const SIDE_PAD = 0.32; // em, left margin before the first letter
 
-// Letter heights in em, measured in Chromium (Andika 700 / Noto Sans Devanagari 600).
-const LATIN = { cap: 0.74, x: 0.5, desc: 0.24, avgUpper: 0.7, avgLower: 0.56, space: 0.27 };
+// Letter heights and widths in em, measured in Chromium (Edu NSW ACT Foundation 600 / Noto Sans Devanagari 600).
+// cap = ascender = 0.78 and x-height 0.42, so with a band of cap/2 small letters fill the middle band.
+const LATIN_SLANT_DEG = 6; // measured lean of Edu NSW ACT Foundation
+const LATIN = { cap: 0.78, x: 0.42, desc: 0.36, avgUpper: 0.6, avgLower: 0.43, space: 0.28 };
 const DEVA = { head: 0.72, above: 0.34, below: 0.26, avg: 0.62 }; // above/below: just room for matras
 
-const KID_FONT = "var(--font-kid), Andika, 'Comic Sans MS', 'Century Gothic', sans-serif";
+const KID_FONT = "var(--font-kid), 'Edu NSW ACT Foundation', 'Comic Sans MS', 'Century Gothic', sans-serif";
 const DEVA_FONT = "var(--font-deva), 'Noto Sans Devanagari', 'Mangal', sans-serif";
 
-const RED = "#e11d48";
-const BLUE = "#2563eb";
+// colours of a printed 4-line copy page
+const RED_TOP = "#e2533f";
+const RED_BOTTOM = "#c8161d";
+const BLUE = "#1fa3e0";
 const INK = "#0f172a";
 
 const isDevanagari = (s: string) => /[ऀ-ॿ]/.test(s);
@@ -41,9 +46,9 @@ function textWidthEm(text: string, tracking: number): number {
   for (const ch of text) {
     if (/\s/.test(ch)) w += LATIN.space;
     else if (/[ऀ-ॿ]/.test(ch)) w += /[ा-्ँ-ः]/.test(ch) ? 0.15 : DEVA.avg;
-    else if (/[A-Z0-9]/.test(ch)) w += /[MW]/.test(ch) ? 0.92 : /[IJ1]/.test(ch) ? 0.4 : LATIN.avgUpper;
-    else if (/[mw]/.test(ch)) w += 0.84;
-    else if (/[ijlft]/.test(ch)) w += 0.34;
+    else if (/[A-Z0-9]/.test(ch)) w += /[MW]/.test(ch) ? 0.97 : /[IJ1]/.test(ch) ? 0.37 : LATIN.avgUpper;
+    else if (/[mw]/.test(ch)) w += 0.67;
+    else if (/[ijlft]/.test(ch)) w += 0.29;
     else w += LATIN.avgLower;
     w += tracking;
   }
@@ -91,8 +96,11 @@ function Letters({ text, x, y, size, dotted, deva, anchor = "start", tracking = 
 }) {
   return (
     <text
-      x={x}
-      y={y}
+      x={0}
+      y={0}
+      // the school print font leans 6° right; skewing back about the baseline stands it upright,
+      // the way children here are taught to print
+      transform={deva ? `translate(${x} ${y})` : `translate(${x} ${y}) skewX(${LATIN_SLANT_DEG})`}
       textAnchor={anchor}
       fontSize={size}
       fontWeight={deva ? 600 : 700}
@@ -100,7 +108,7 @@ function Letters({ text, x, y, size, dotted, deva, anchor = "start", tracking = 
       style={{ fontFamily: deva ? DEVA_FONT : KID_FONT, whiteSpace: "pre" }}
       // Tracing letters print pale grey for the child to go over. A dotted outline was tried, but at
       // notebook size (~7.5 mm rows) the dots blur into noise, in Latin and Devanagari alike.
-      fill={dotted ? "#bcc5d2" : INK}
+      fill={dotted ? "#aab5c5" : INK}
     >
       {text}
     </text>
@@ -125,15 +133,15 @@ function RuledRow({ rulingType, size: F, text, dotted = false, deva, label }: Ro
   const span = VIEW_W - X0 - 1;
 
   if (rulingType === "TWO_LINE") {
-    const top = DEVA.above * F;
-    base = top + DEVA.head * F;
-    height = base + DEVA.below * F;
+    // one band of blank above and below each row: a two-band gap between rows, room for matras
+    const band = DEVA.head * F;
+    const top = band;
+    base = top + band;
+    height = base + band;
     lines = (
       <>
-        <line x1={X0} x2={X0 + span} y1={top} y2={top} stroke={INK} strokeWidth={1.3} />
-        <line x1={X0} x2={X0 + span} y1={base} y2={base} stroke={INK} strokeWidth={1.3} />
-        <line x1={X0} x2={X0} y1={top} y2={base} stroke={INK} strokeWidth={1.3} />
-        <line x1={X0 + span} x2={X0 + span} y1={top} y2={base} stroke={INK} strokeWidth={1.3} />
+        <line x1={X0} x2={X0 + span} y1={top} y2={top} stroke={RED_TOP} strokeWidth={1.2} />
+        <line x1={X0} x2={X0 + span} y1={base} y2={base} stroke={BLUE} strokeWidth={1.2} />
       </>
     );
   } else if (rulingType === "SINGLE_LINE") {
@@ -142,20 +150,19 @@ function RuledRow({ rulingType, size: F, text, dotted = false, deva, label }: Ro
     height = base + (deva ? DEVA.below : LATIN.desc + 0.06) * F;
     lines = <line x1={X0} x2={X0 + span} y1={base} y2={base} stroke={INK} strokeWidth={1.3} />;
   } else {
-    const top = 1;
-    base = top + LATIN.cap * F;
-    const mid = base - LATIN.x * F;
-    const bottom = base + LATIN.desc * F;
-    height = bottom + 1;
+    // Four evenly spaced lines; capitals fill the top two bands, so a band is half the cap height.
+    // One band of blank above and below each row leaves a two-band gap between rows.
+    const h = (LATIN.cap * F) / 2;
+    const top = h;
+    base = top + 2 * h;
+    const bottom = base + h;
+    height = bottom + h;
     lines = (
       <>
-        <line x1={X0} x2={X0 + span} y1={top} y2={top} stroke={RED} strokeWidth={1.1} />
-        <line x1={X0} x2={X0 + span} y1={mid} y2={mid} stroke={BLUE} strokeWidth={0.7} strokeDasharray="4 3" />
-        <line x1={X0} x2={X0 + span} y1={base} y2={base} stroke={BLUE} strokeWidth={1.3} />
-        <line x1={X0} x2={X0 + span} y1={bottom} y2={bottom} stroke={RED} strokeWidth={1.1} />
-        {/* closed ends make each row a box of its own */}
-        <line x1={X0} x2={X0} y1={top} y2={bottom} stroke={RED} strokeWidth={1.1} />
-        <line x1={X0 + span} x2={X0 + span} y1={top} y2={bottom} stroke={RED} strokeWidth={1.1} />
+        <line x1={X0} x2={X0 + span} y1={top} y2={top} stroke={RED_TOP} strokeWidth={1.2} />
+        <line x1={X0} x2={X0 + span} y1={top + h} y2={top + h} stroke={BLUE} strokeWidth={1.2} />
+        <line x1={X0} x2={X0 + span} y1={base} y2={base} stroke={BLUE} strokeWidth={1.2} />
+        <line x1={X0} x2={X0 + span} y1={bottom} y2={bottom} stroke={RED_BOTTOM} strokeWidth={1.2} />
       </>
     );
   }
@@ -265,7 +272,7 @@ export function FourLineGuide({
   const kind = rulingType === "TWO_LINE" ? "2-line" : rulingType === "SINGLE_LINE" ? "single line" : "4-line";
 
   return (
-    <div className={`${rulingType === "TWO_LINE" ? "space-y-0.5" : "space-y-2"} ${className}`}>
+    <div className={`${rulingType === "SINGLE_LINE" ? "space-y-2" : ""} ${className}`}>
       {modelRows.map((t, i) => (
         <RuledRow
           key={`m${i}`}
