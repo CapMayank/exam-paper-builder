@@ -122,6 +122,17 @@ export const GET = route(async (req) => {
     addAnd(where, { bookId: { in: ids } });
   }
 
+  // Explicit question list (e.g. fetching full QuestionDtos for top similarity matches).
+  const idsParam = sp.get("ids");
+  if (idsParam !== null) {
+    const ids = idsParam
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, 10);
+    addAnd(where, { id: { in: ids } });
+  }
+
   const marksParam = sp.get("marks");
   const targetMarks = marksParam && !isNaN(Number(marksParam)) ? Number(marksParam) : null;
   const orderBy = [{ createdAt: "desc" }, { id: "desc" }] satisfies Prisma.QuestionOrderByWithRelationInput[];
