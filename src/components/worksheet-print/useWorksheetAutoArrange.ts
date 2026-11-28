@@ -1,80 +1,82 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { api } from "@/lib/client";
-import { arrangeForPrint, printZoomFor, type WorksheetMeasure } from "@/lib/kindergarten/worksheetPack";
+import type { WorksheetMeasure } from "@/lib/kindergarten/worksheetPack";
 import type { PaperData } from "@/lib/types";
+import { createArrangePlan } from "./arrangePlan";
 
 /**
  * Print preview of a Nursery–KG worksheet: once the page has been measured at full size, put the activities
  * in the order that fills the pages best, save it (so the answer key and exports number them the same), and
- * offer Undo. Runs once per visit, plus one correction if print ends up smaller than expected; never for a
- * finalised worksheet, one with auto-arrange off, or a user who can't edit it (the server refuses the save).
+ * offer Undo. Runs once per visit, plus one correction if print ends up smaller than planned (see
+ * createArrangePlan); never for a finalised worksheet, one with auto-arrange off, or a user who can't edit it
+ * (the server refuses the save).
  */
 export function useWorksheetAutoArrange(paper: PaperData | null, setPaper: (p: PaperData) => void) {
   const [activityHeights, setActivityHeights] = useState<Record<string, number> | undefined>(undefined);
   const [previous, setPrevious] = useState<string[] | null>(null);
-  const tried = useRef(false);
+  const plan = useRef(createArrangePlan());
   const undoing = useRef(false);
-  // what the first arrangement was based on, for the one correction once print settles on a size
-  const plan = useRef<{ measure: WorksheetMeasure; zoom: number; order: string[]; corrected: boolean } | null>(null);
+  // the callbacks below stay the same across saves, so a save doesn't make print measure everything again
+  // (updated before print's own measuring effects run, which call onMeasured)
+  const paperRef = useRef(paper);
+  const setPaperRef = useRef(setPaper);
+  useLayoutEffect(() => {
+    paperRef.current = paper;
+    setPaperRef.current = setPaper;
+  });
 
-  const save = useCallback(
-    (order: string[], before: string[]) => {
-      if (!paper) return;
-      api<PaperData>(`/api/papers/${paper.id}/activities`, { method: "PUT", json: { order } })
-        .then((p) => {
-          setPaper(p);
-          setPrevious((prev) => prev ?? before);
-          if (plan.current) plan.current.order = order;
-        })
-        .catch(() => undefined); // can't edit, finalised meanwhile, or the list changed: print as saved
-    },
-    [paper, setPaper],
-  );
+  const save = useCallback((order: string[], before: string[]) => {
+    const p = paperRef.current;
+    if (!p) return;
+    plan.current.saved(order);
+    api<PaperData>(`/api/papers/${p.id}/activities`, { method: "PUT", json: { order } })
+      .then((next) => {
+        setPaperRef.current(next);
+        setPrevious((prev) => prev ?? before);
+      })
+      .catch(() => plan.current.stop()); // can't edit, finalised meanwhile, or the list changed: print as saved
+  }, []);
 
   const onMeasured = useCallback(
     (m: WorksheetMeasure) => {
       // the first full-size measurement is kept: later ones are of the arranged page and would only drift
       setActivityHeights((h) => h ?? m.heights);
-      if (tried.current || !paper) return;
-      tried.current = true;
-      if (paper.autoArrange === false || paper.status === "FINAL") return;
-      const zoom = printZoomFor(m);
-      plan.current = { measure: m, zoom, order: m.order, corrected: false };
-      const next = arrangeForPrint(m, zoom);
+      const p = paperRef.current;
+      if (!p || p.autoArrange === false || p.status === "FINAL") return;
+      const next = plan.current.measured(m);
       if (next) save(next, m.order);
     },
-    [paper, save],
+    [save],
   );
 
-  /** Print settled on this size: if it had to go smaller than planned, arrange once more for that size. */
+  /** Print settled on this size (worksheets): arrange once more if it had to go smaller than planned. */
   const onFitScale = useCallback(
     (scale: number | undefined) => {
-      const p = plan.current;
-      if (!p || p.corrected || scale === undefined || scale >= p.zoom - 0.001) return;
-      p.corrected = true;
-      const next = arrangeForPrint({ ...p.measure, order: p.order }, scale);
-      if (next) save(next, p.measure.order);
+      if (scale === undefined) return;
+      const check = plan.current.fitScale(scale);
+      if (check?.order) save(check.order, check.order);
     },
     [save],
   );
 
   const undo = useCallback(async () => {
-    if (!paper || !previous || undoing.current) return;
+    const p = paperRef.current;
+    if (!p || !previous || undoing.current) return;
     undoing.current = true;
+    plan.current.stop();
     try {
-      setPaper(await api<PaperData>(`/api/papers/${paper.id}/activities`, { method: "PUT", json: { order: previous } }));
+      setPaperRef.current(await api<PaperData>(`/api/papers/${p.id}/activities`, { method: "PUT", json: { order: previous } }));
       setPrevious(null);
-      if (plan.current) plan.current.corrected = true; // no more arranging this visit
       // keep the teacher's order next time too
-      setPaper(await api<PaperData>(`/api/papers/${paper.id}`, { method: "PATCH", json: { autoArrange: false } }));
+      setPaperRef.current(await api<PaperData>(`/api/papers/${p.id}`, { method: "PATCH", json: { autoArrange: false } }));
     } catch {
       // the order is back; if turning auto-arrange off failed, the next print preview arranges again
     } finally {
       undoing.current = false;
     }
-  }, [paper, previous, setPaper]);
+  }, [previous]);
 
   return { activityHeights, onMeasured, onFitScale, arranged: previous !== null, undo };
 }

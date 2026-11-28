@@ -190,15 +190,22 @@ function* neighbours(order: PackItem[]): Generator<PackItem[]> {
   }
 }
 
+/**
+ * How many orders one packing may try. A count, not a clock, so the same worksheet always packs the same way;
+ * enough for a normal worksheet to finish, and it keeps a very long one from holding up the print preview.
+ */
+export const PACK_BUDGET = 6000;
+
 /** One packing pass: the better of the given order and a page-filling guess, improved one step at a time. */
-function packOnce(items: PackItem[], pages: PackPages): PackItem[] {
+function packOnce(items: PackItem[], pages: PackPages, budget: { left: number }): PackItem[] {
   const startIndex = new Map(items.map((it, k) => [it.id, k]));
   const greedy = greedyFill(items, pages);
   let best = better(score(greedy, pages, startIndex), score(items, pages, startIndex)) ? greedy : [...items];
   let bestScore = score(best, pages, startIndex);
-  for (let pass = 0; pass < 200; pass++) {
+  for (let pass = 0; pass < 200 && budget.left > 0; pass++) {
     let improved = false;
     for (const next of neighbours(best)) {
+      if (--budget.left < 0) break;
       const s = score(next, pages, startIndex);
       if (better(s, bestScore)) {
         best = next;
@@ -218,10 +225,11 @@ function packOnce(items: PackItem[], pages: PackPages): PackItem[] {
  * the same answer, and packing its own answer again changes nothing.
  */
 export function packWorksheet(items: PackItem[], pages: PackPages): string[] {
-  let order = packOnce(items, pages);
+  const budget = { left: PACK_BUDGET };
+  let order = packOnce(items, pages, budget);
   // repeat until packing the result finds nothing better, so a second run is a no-op
-  for (let k = 0; k < 5; k++) {
-    const again = packOnce(order, pages);
+  for (let k = 0; k < 5 && budget.left > 0; k++) {
+    const again = packOnce(order, pages, budget);
     if (again.every((it, i) => it.id === order[i].id)) break;
     order = again;
   }

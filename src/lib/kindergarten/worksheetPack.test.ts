@@ -197,3 +197,22 @@ describe("re-packing for the size print settled on", () => {
     expect(blankArea(items(out), at72)).toBeLessThan(blankArea(items(ids), at72));
   });
 });
+
+describe("packing time is bounded", () => {
+  it("finishes a very large worksheet quickly, the same way every time", () => {
+    const rand = seededRandom(99);
+    const order = Array.from({ length: 60 }, (_, i) => `a${i}`);
+    const m = {
+      order,
+      heights: Object.fromEntries(order.map((id) => [id, 60 + Math.floor(rand() * 400)])),
+      half: Object.fromEntries(order.map((id) => [id, rand() < 0.6])),
+      headerPx: 150,
+      pageHeightPx: 1000,
+      gapPx: 8,
+    };
+    const t = performance.now();
+    const once = arrangeForPrint(m);
+    expect(performance.now() - t).toBeLessThan(1500);
+    expect(arrangeForPrint(m)).toEqual(once);
+  });
+});
