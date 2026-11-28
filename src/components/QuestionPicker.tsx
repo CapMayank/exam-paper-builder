@@ -246,11 +246,12 @@ export function QuestionPicker({
   }, [bank, whyCannotUse, mainChapterId, chapterGaps]);
 
   /** Resolves true when the question was placed; false when it was refused (the error is shown in the banner). */
-  async function add(questionId: string, orQuestionId?: string | null): Promise<boolean> {
+  async function add(questionId: string, orQuestionId?: string | null, questionType?: string): Promise<boolean> {
     if (addingQuestionId) return false;
     setAddingQuestionId(questionId);
     setError(null);
     const targetQ = bank.find((q) => q.id === questionId);
+    const resolvedType = questionType ?? targetQ?.type;
     // Optimistically remove question from bank view for standard slot addition
     if (!isAlternate && !isReplacing) {
       setBank((b) => b.filter((q) => q.id !== questionId));
@@ -277,7 +278,7 @@ export function QuestionPicker({
             sectionId: section.id,
             questionId,
             orQuestionId,
-            ...(spanningMatchPick && pairMarksPick === 0.5 ? { pairMarks: 0.5 } : {}),
+            ...(spanningMatchPick && pairMarksPick === 0.5 && resolvedType === "MATCH_COLUMN" ? { pairMarks: 0.5 } : {}),
           },
         });
         onPaper(updated);
@@ -465,7 +466,7 @@ export function QuestionPicker({
         createdOrId = createdOr.id;
       }
 
-      await add(created.id, createdOrId);
+      await add(created.id, createdOrId, created.type);
     } catch (e) {
       setAiError((e as Error).message || "Failed to save question to paper.");
     } finally {
@@ -749,7 +750,7 @@ export function QuestionPicker({
                           <button
                             className="btn btn-sm btn-primary shadow-2xs"
                             disabled={addingQuestionId !== null || batchBusy}
-                            onClick={() => add(q.id)}
+                            onClick={() => add(q.id, undefined, q.type)}
                           >
                             {addingQuestionId === q.id ? (
                               <Spinner size="sm" />
@@ -890,7 +891,7 @@ export function QuestionPicker({
                   useExistingBlockedReason={whyCannotUse}
                   onUseExisting={async (q) => {
                     // Closes automatically via add() on replace/OR or when the last slot fills; otherwise discard the typed draft.
-                    const placedOk = await add(q.id);
+                    const placedOk = await add(q.id, undefined, q.type);
                     if (placedOk) {
                       setInitialForEdit(undefined);
                       setFormKey((k) => k + 1);
@@ -911,7 +912,7 @@ export function QuestionPicker({
                     // The question is already in the bank. Clear the form only once it is on the paper; if the paper
                     // refused it, keep the text on screen so the teacher can fix the marks/chapter instead of retyping.
                     // Reopen it as an edit of the saved question so the next try updates it instead of saving a duplicate.
-                    const placedOk = await add(q.id);
+                    const placedOk = await add(q.id, undefined, q.type);
                     setInitialForEdit(placedOk ? undefined : q);
                     setFormKey((k) => k + 1);
                   }}
