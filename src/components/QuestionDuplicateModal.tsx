@@ -3,35 +3,10 @@
 import { AlertCircle, AlertTriangle, CheckCircle2, Copy, Sparkles, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { api } from "@/lib/client";
+import { similarity } from "@/lib/questionSimilarity";
 import type { QuestionDto } from "@/lib/types";
 import { useConfirm, useToast, Spinner, Modal } from "./ui";
 import { MathText } from "./MathText";
-
-function normalizeForComparison(str: string): string {
-  return str
-    .toLowerCase()
-    .replace(/\\[a-zA-Z]+/g, "") // strip latex macros
-    .replace(/[^a-z0-9\s]/g, " ") // strip punctuation
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function computeSimilarity(a: string, b: string): number {
-  const normA = normalizeForComparison(a);
-  const normB = normalizeForComparison(b);
-  if (!normA || !normB) return 0;
-  if (normA === normB) return 1.0;
-
-  const wordsA = new Set(normA.split(" ").filter((w) => w.length > 2));
-  const wordsB = new Set(normB.split(" ").filter((w) => w.length > 2));
-  if (wordsA.size === 0 || wordsB.size === 0) return 0;
-
-  let common = 0;
-  for (const w of wordsA) {
-    if (wordsB.has(w)) common++;
-  }
-  return (2.0 * common) / (wordsA.size + wordsB.size);
-}
 
 interface QuestionDuplicateModalProps {
   isOpen: boolean;
@@ -68,7 +43,7 @@ export function QuestionDuplicateModal({
         // Same type makes them high candidate for duplicates
         if (q1.type !== q2.type) continue;
 
-        const sim = computeSimilarity(q1.text, q2.text);
+        const sim = similarity(q1.text, q2.text);
         if (sim >= 0.75) {
           pairs.push({
             q1,
