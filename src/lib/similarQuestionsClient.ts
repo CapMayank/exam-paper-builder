@@ -22,7 +22,6 @@ type BookCacheEntry = {
 const MAX_QUESTION_DETAIL_IDS = 10;
 
 const bookTextsCache = new Map<string, BookCacheEntry>();
-const questionDetailCache = new Map<string, QuestionDto>();
 const inFlightBookLoads = new Map<string, Promise<PreparedText[]>>();
 
 /** Returns already-cached prepared texts for a book, or `null` if not yet loaded. */
@@ -87,16 +86,19 @@ export async function loadBookTexts(
 
 /**
  * Upserts a newly created or edited question into its book's cached text list
- * and evicts its cached DTO so subsequent detail lookups reflect the saved version.
+ * and evicts its cached DTO from `detailCache` so subsequent lookups reflect the saved version.
  */
-export function rememberSavedQuestion(q: {
-  id: string;
-  bookId: string;
-  type: string;
-  chapterId: string;
-  text: string;
-}): void {
-  questionDetailCache.delete(q.id);
+export function rememberSavedQuestion(
+  q: {
+    id: string;
+    bookId: string;
+    type: string;
+    chapterId: string;
+    text: string;
+  },
+  detailCache?: Map<string, QuestionDto>,
+): void {
+  detailCache?.delete(q.id);
 
   const entry = bookTextsCache.get(q.bookId);
   if (!entry) return;
@@ -121,24 +123,27 @@ export function rememberSavedQuestion(q: {
 
 /**
  * Returns full `QuestionDto` objects for `ids` in the requested order,
- * serving cached entries and fetching only missing ids from `/api/questions`.
+ * serving cached entries from `detailCache` and fetching only missing ids from `/api/questions`.
  */
-export async function loadQuestionDetails(ids: string[]): Promise<QuestionDto[]> {
+export async function loadQuestionDetails(
+  ids: string[],
+  detailCache: Map<string, QuestionDto> = new Map(),
+): Promise<QuestionDto[]> {
   const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
   if (uniqueIds.length === 0) return [];
 
-  const missingIds = uniqueIds.filter((id) => !questionDetailCache.has(id));
+  const missingIds = uniqueIds.filter((id) => !detailCache.has(id));
   for (let i = 0; i < missingIds.length; i += MAX_QUESTION_DETAIL_IDS) {
     const chunk = missingIds.slice(i, i + MAX_QUESTION_DETAIL_IDS);
     const query = chunk.map((id) => encodeURIComponent(id)).join(",");
     const fetched = await api<QuestionDto[]>(`/api/questions?ids=${query}`);
     for (const dto of fetched) {
-      questionDetailCache.set(dto.id, dto);
+      detailCache.set(dto.id, dto);
     }
   }
 
   return uniqueIds
-    .map((id) => questionDetailCache.get(id))
+    .map((id) => detailCache.get(id))
     .filter((q): q is QuestionDto => q !== undefined);
 }
 
@@ -168,9 +173,8 @@ export function usageTag(
   return null;
 }
 
-/** Clears both book-text and DTO detail caches (for unit tests). */
+/** Clears book-text caches (for unit tests). */
 export function __resetSimilarCacheForTests(): void {
   bookTextsCache.clear();
-  questionDetailCache.clear();
   inFlightBookLoads.clear();
 }

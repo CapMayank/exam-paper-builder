@@ -311,4 +311,40 @@ describe("GET /api/questions ids=", () => {
     expect(items.length).toBeLessThanOrEqual(10);
     expect(items).toHaveLength(10);
   });
+
+  it("ids= returns questions from books outside SCHOOL_PROFILE even without epb_view other=1", async () => {
+    const nonProfileBook = await prisma.book.create({
+      data: {
+        title: `Ids NonProfile ${stamp}`,
+        subject: "Economics",
+        className: "Class 12",
+        academicSession: "2026–27",
+      },
+    });
+    try {
+      const nonProfileChapter = await prisma.chapter.create({
+        data: { bookId: nonProfileBook.id, number: 1, title: "Microeconomics" },
+      });
+      const nonProfileQ = await prisma.question.create({
+        data: {
+          bookId: nonProfileBook.id,
+          chapterId: nonProfileChapter.id,
+          type: "SHORT",
+          text: "Define opportunity cost with an example.",
+          answer: "Opportunity cost is the value of the next best alternative foregone.",
+          createdById: userId,
+        },
+      });
+
+      const res = await callQuestions(`/api/questions?ids=${nonProfileQ.id}`);
+      expect(res.status).toBe(200);
+      const items = (await res.json()) as QuestionDto[];
+      expect(items).toHaveLength(1);
+      expect(items[0]?.id).toBe(nonProfileQ.id);
+    } finally {
+      await prisma.question.deleteMany({ where: { bookId: nonProfileBook.id } });
+      await prisma.chapter.deleteMany({ where: { bookId: nonProfileBook.id } });
+      await prisma.book.deleteMany({ where: { id: nonProfileBook.id } });
+    }
+  });
 });

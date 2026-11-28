@@ -332,13 +332,16 @@ export function QuestionForm({
   const [keptType, setKeptType] = useState<string | null>(null);
   const confirm = useConfirm();
   const confirmedSimilarTextRef = useRef<string | null>(null);
+  const [detailCache] = useState(() => new Map<string, QuestionDto>());
   const excludeId = initial?.id?.trim() || undefined;
-  const similarityEnabled = !customSaveHandler && !isKindergartenType(type);
+  const similarityEnabled =
+    !customSaveHandler && !isKindergartenType(type) && type !== "MATCH_COLUMN";
   const similar = useSimilarQuestions({
     bookId,
     text,
     excludeId,
     enabled: similarityEnabled,
+    detailCache,
   });
   const activeEditorRef = useRef<MathRichEditorHandle | null>(null);
   const editorsMounted = useRef<Set<MathRichEditorHandle>>(new Set());
@@ -541,7 +544,7 @@ export function QuestionForm({
         if (!topDto) {
           setBusy(true);
           try {
-            const loaded = await loadQuestionDetails([exactHit.item.id]);
+            const loaded = await loadQuestionDetails([exactHit.item.id], detailCache);
             topDto = loaded[0];
           } catch {
             // Fall back to the cached text/chapter metadata if detail lookup fails.
@@ -583,7 +586,7 @@ export function QuestionForm({
         const saved = isExisting
           ? await api<QuestionDto>(`/api/questions/${initial!.id}`, { method: "PUT", json: payload })
           : await api<QuestionDto>("/api/questions", { method: "POST", json: payload });
-        rememberSavedQuestion(saved);
+        rememberSavedQuestion(saved, detailCache);
         onSaved?.(saved);
       }
     } catch (err) {

@@ -33,14 +33,17 @@ export function useSimilarQuestions(args: {
   text: string;
   excludeId?: string;
   enabled?: boolean;
+  detailCache?: Map<string, QuestionDto>;
 }): { matches: SimilarMatch[]; best: number } {
-  const { bookId, text, excludeId, enabled } = args;
+  const { bookId, text, excludeId, enabled, detailCache } = args;
   const trimmedBookId = bookId.trim();
   const isEnabled = enabled !== false && trimmedBookId.length > 0;
   const hasEnoughTokens = questionTokens(text).size >= SIMILAR_MIN_TOKENS;
   const canMatch = isEnabled && hasEnoughTokens;
 
   const loadedBookIdRef = useRef<string | null>(null);
+  const [ownDetailCache] = useState(() => new Map<string, QuestionDto>());
+  const activeDetailCache = detailCache ?? ownDetailCache;
   const [result, setResult] = useState<MatchResultState>({
     bookId: "",
     excludeId: undefined,
@@ -103,7 +106,10 @@ export function useSimilarQuestions(args: {
             return;
           }
 
-          const dtos = await loadQuestionDetails(hits.map((h) => h.item.id));
+          const dtos = await loadQuestionDetails(
+            hits.map((h) => h.item.id),
+            activeDetailCache,
+          );
           if (cancelled) return;
 
           const byId = new Map(dtos.map((q) => [q.id, q]));
@@ -126,7 +132,7 @@ export function useSimilarQuestions(args: {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [canMatch, trimmedBookId, text, excludeId]);
+  }, [canMatch, trimmedBookId, text, excludeId, activeDetailCache]);
 
   if (!canMatch || result.bookId !== trimmedBookId || result.excludeId !== excludeId) {
     return { matches: [], best: 0 };

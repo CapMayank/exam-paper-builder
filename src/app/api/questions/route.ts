@@ -59,12 +59,13 @@ export const GET = route(async (req) => {
   const difficulty = sp.get("difficulty");
   const q = sp.get("q")?.trim();
   const excludePaperId = sp.get("excludePaperId");
+  const idsParam = sp.get("ids");
 
   const scope = scopeFromRequest(req);
   if (bookId) {
     where.bookId = bookId;
-  } else if (!scope.showOther) {
-    // outside an explicit book, only offer questions from books of the active subjects
+  } else if (!scope.showOther && idsParam === null) {
+    // outside an explicit book or id lookup, only offer questions from books of the active subjects
     const books = await prisma.book.findMany({ select: { id: true, className: true, subject: true } });
     const ids = keepActive(books, (b) => b, scope).map((b) => b.id);
     where.bookId = { in: ids };
@@ -123,7 +124,6 @@ export const GET = route(async (req) => {
   }
 
   // Explicit question list (e.g. fetching full QuestionDtos for top similarity matches).
-  const idsParam = sp.get("ids");
   if (idsParam !== null) {
     const ids = idsParam
       .split(",")
