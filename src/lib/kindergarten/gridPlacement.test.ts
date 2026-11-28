@@ -73,3 +73,29 @@ describe("gridShape", () => {
     expect(gridShape(40, 1, "ROW").columns).toBe(2);
   });
 });
+
+describe("descending number grids", () => {
+  it("lists the numbers high to low", () => {
+    expect(numberCells(1, 5, "NONE", true).map((c) => c.value)).toEqual([5, 4, 3, 2, 1]);
+  });
+
+  it("leaves only the highest printed for all-blank", () => {
+    expect(numberCells(1, 4, "ALL_BLANK", true)).toEqual([
+      { value: 4, isBlank: false },
+      { value: 3, isBlank: true },
+      { value: 2, isBlank: true },
+      { value: 1, isBlank: true },
+    ]);
+  });
+
+  it("detects each pattern from a descending grid", () => {
+    for (const p of ["ALL_BLANK", "ALTERNATE", "EVERY_THIRD", "NONE"] as const) {
+      expect(blankPattern(numberCells(1, 20, p, true))).toBe(p);
+    }
+  });
+
+  it("is unchanged when not descending", () => {
+    expect(numberCells(1, 3, "ALL_BLANK")).toEqual(numberCells(1, 3, "ALL_BLANK", false));
+    expect(numberCells(1, 3, "NONE").map((c) => c.value)).toEqual([1, 2, 3]);
+  });
+});

@@ -13,13 +13,45 @@ export const MODE_LABEL: Record<CompareMode, string> = {
   SHORTER: "Circle the shorter one",
   MORE: "Circle the group that has more",
   FEWER: "Circle the group that has fewer",
+  TALLEST_SHORTEST: "Write T for tallest, S for shortest",
 };
+
+/** Instruction printed by default; the T/S mode needs a longer one than its chip label. */
+export const modeInstruction = (m: CompareMode) =>
+  m === "TALLEST_SHORTEST" ? "Write (T) for the tallest and (S) for the shortest:" : MODE_LABEL[m] + ":";
+
+const TS_DEFAULT_SIZES = [2, 5, 3];
+
+/** Heights of the pictures in a T/S row; old rows only have left/right. */
+export const rowSizes = (row: CompareRow): number[] => (row.sizes && row.sizes.length > 0 ? row.sizes : [row.left, row.right]);
+
+/** Index of the tallest and shortest picture, or -1 where two pictures tie for it. */
+export function tallestShortest(sizes: number[]): { tallest: number; shortest: number } {
+  const max = Math.max(...sizes);
+  const min = Math.min(...sizes);
+  const at = (v: number) => (sizes.filter((x) => x === v).length === 1 ? sizes.indexOf(v) : -1);
+  return { tallest: at(max), shortest: at(min) };
+}
+
+export function validateCompare(c: CompareConfig): { valid: boolean; error?: string } {
+  if (!c || !Array.isArray(c.rows) || c.rows.length === 0) return { valid: false, error: "Add at least one pair" };
+  if (c.mode === "TALLEST_SHORTEST") {
+    for (const r of c.rows) {
+      const sizes = rowSizes(r);
+      const { tallest, shortest } = tallestShortest(sizes);
+      if (sizes.length < 2 || tallest < 0 || shortest < 0 || tallest === shortest) {
+        return { valid: false, error: "Each group needs one clearly tallest and one clearly shortest picture" };
+      }
+    }
+  }
+  return { valid: true };
+}
 
 const isCount = (m: CompareMode) => m === "MORE" || m === "FEWER";
 
 export const compareDefaultConfig = (): CompareConfig => ({
   mode: "BIGGER",
-  instruction: MODE_LABEL.BIGGER + ":",
+  instruction: modeInstruction("BIGGER"),
   rows: [
     { clipartId: "apple", left: 2, right: 4 },
     { clipartId: "elephant", left: 5, right: 2 },
@@ -59,8 +91,29 @@ function Side({ mode, clipartId, value }: { mode: CompareMode; clipartId: string
   );
 }
 
+/** One T/S group: pictures bottom-aligned at their heights, a small box under each. */
+function HeightGroup({ row, showKey }: { row: CompareRow; showKey?: boolean }) {
+  const sizes = rowSizes(row);
+  const { tallest, shortest } = tallestShortest(sizes);
+  return (
+    <div className="flex items-end gap-2 rounded-lg border-2 border-slate-300 px-3 py-2">
+      {sizes.map((v, i) => (
+        <div key={i} className="flex flex-col items-center gap-1">
+          <span className="flex items-end" style={{ height: 96 }}>
+            <Art id={row.clipartId} size={24 + v * 14} />
+          </span>
+          <span className="flex h-7 w-7 items-center justify-center rounded-sm border-2 border-slate-800 bg-white text-base font-black text-emerald-700">
+            {showKey ? (i === tallest ? "T" : i === shortest ? "S" : "") : ""}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function CompareEditor({ config, onChange, instructionText, onInstructionChange }: KindergartenEditorProps<CompareConfig>) {
   const counting = isCount(config.mode);
+  const heights = config.mode === "TALLEST_SHORTEST";
 
   return (
     <div className="space-y-4">
@@ -77,21 +130,58 @@ function CompareEditor({ config, onChange, instructionText, onInstructionChange 
                 onChange({
                   ...config,
                   mode,
-                  instruction: MODE_LABEL[mode] + ":",
-                  rows: config.rows.map((r) => ({ ...r, left: Math.min(r.left, cap), right: Math.min(r.right, cap) })),
+                  instruction: modeInstruction(mode),
+                  rows: config.rows.map((r) => ({
+                    ...r,
+                    left: Math.min(r.left, cap),
+                    right: Math.min(r.right, cap),
+                    ...(mode === "TALLEST_SHORTEST" && !r.sizes?.length ? { sizes: [...TS_DEFAULT_SIZES] } : {}),
+                  })),
                 });
-                onInstructionChange(MODE_LABEL[mode] + ":");
+                onInstructionChange(modeInstruction(mode));
               }}
               options={(Object.keys(MODE_LABEL) as CompareMode[]).map((m) => ({ value: m, label: MODE_LABEL[m] }))}
             />
             <RowList<CompareRow>
-              label={counting ? "Pairs — pictures on each side" : "Pairs — size 1 (small) to 5 (big)"}
+              label={heights ? "Groups — height 1 (short) to 5 (tall) for each picture" : counting ? "Pairs — pictures on each side" : "Pairs — size 1 (small) to 5 (big)"}
               rows={config.rows}
               onChange={(rows) => onChange({ ...config, rows })}
-              makeRow={() => ({ clipartId: "ball", left: 2, right: 4 })}
+              makeRow={() => (heights ? { clipartId: "ball", left: 2, right: 5, sizes: [...TS_DEFAULT_SIZES] } : { clipartId: "ball", left: 2, right: 4 })}
               max={6}
-              addLabel="Add pair"
-              renderRow={(r, update) => (
+              addLabel={heights ? "Add group" : "Add pair"}
+              renderRow={(r, update) =>
+                heights ? (
+                  <div className="flex items-start gap-2">
+                    <PictureChip clipartId={r.clipartId} onPick={(id) => update({ ...r, clipartId: id })} />
+                    <div className="flex-1 space-y-1">
+                      {rowSizes(r).map((v, i, arr) => (
+                        <NumberStepper
+                          key={i}
+                          label={`Picture ${i + 1}`}
+                          value={v}
+                          min={1}
+                          max={5}
+                          onChange={(n) => update({ ...r, sizes: arr.map((x, j) => (j === i ? n : x)) })}
+                        />
+                      ))}
+                      <div className="flex gap-2">
+                        {rowSizes(r).length < 5 && (
+                          <button type="button" className="btn btn-sm" onClick={() => update({ ...r, sizes: [...rowSizes(r), 3] })}>
+                            Add picture
+                          </button>
+                        )}
+                        {rowSizes(r).length > 3 && (
+                          <button type="button" className="btn btn-sm" onClick={() => update({ ...r, sizes: rowSizes(r).slice(0, -1) })}>
+                            Remove picture
+                          </button>
+                        )}
+                      </div>
+                      {!validateCompare({ ...config, rows: [r] }).valid && (
+                        <p className="text-[11px] font-semibold text-amber-700">Two pictures tie for tallest or shortest</p>
+                      )}
+                    </div>
+                  </div>
+                ) : (
                 <div className="flex items-start gap-2">
                   <PictureChip clipartId={r.clipartId} onPick={(id) => update({ ...r, clipartId: id })} />
                   <div className="flex-1 space-y-1">
@@ -100,19 +190,31 @@ function CompareEditor({ config, onChange, instructionText, onInstructionChange 
                     {r.left === r.right && <p className="text-[11px] font-semibold text-amber-700">Both equal – no right answer</p>}
                   </div>
                 </div>
-              )}
+                )
+              }
             />
           </>
         }
       />
       <PreviewBox>
-        <ComparePrint config={config} instructionText={instructionText} />
+        <ComparePrint config={config} instructionText={instructionText} showKey />
       </PreviewBox>
     </div>
   );
 }
 
-function ComparePrint({ config, instructionText, numberLabel, marks }: KindergartenPrintProps<CompareConfig>) {
+function ComparePrint({ config, instructionText, numberLabel, marks, showKey }: KindergartenPrintProps<CompareConfig> & { showKey?: boolean }) {
+  if (config.mode === "TALLEST_SHORTEST") {
+    return (
+      <ActivityFrame numberLabel={numberLabel} marks={marks} instruction={instructionText || config.instruction}>
+        <div className="flex flex-wrap items-end gap-3 py-1">
+          {config.rows.map((r, i) => (
+            <HeightGroup key={i} row={r} showKey={showKey} />
+          ))}
+        </div>
+      </ActivityFrame>
+    );
+  }
   return (
     <ActivityFrame numberLabel={numberLabel} marks={marks} instruction={instructionText || config.instruction}>
       <div className="grid grid-cols-3 gap-3 py-1">
@@ -140,13 +242,11 @@ export const comparePlugin: KindergartenActivityPlugin<CompareConfig> = {
   iconName: "Scale",
   defaultConfig: compareDefaultConfig,
   validateConfig: (cfg) => {
-    const c = cfg as CompareConfig;
-    if (!c || !Array.isArray(c.rows) || c.rows.length === 0) return { valid: false, error: "Add at least one pair" };
-    return { valid: true };
+    return validateCompare(cfg as CompareConfig);
   },
   renderEditor: CompareEditor,
   renderPrint: ComparePrint,
   // two pairs side by side fit; counting modes stay small enough to see
-  halfWidth: (config) => config.rows.length <= 2 && (!["MORE", "FEWER"].includes(config.mode) || config.rows.every((r) => Math.max(r.left, r.right) <= 3)),
-  getSummary: (c) => `${MODE_LABEL[c.mode]} · ${c.rows.length} pairs`,
+  halfWidth: (config) => config.mode !== "TALLEST_SHORTEST" && config.rows.length <= 2 && (!["MORE", "FEWER"].includes(config.mode) || config.rows.every((r) => Math.max(r.left, r.right) <= 3)),
+  getSummary: (c) => `${MODE_LABEL[c.mode]} · ${c.rows.length} ${c.mode === "TALLEST_SHORTEST" ? "groups" : "pairs"}`,
 };

@@ -84,6 +84,8 @@ export interface NumberGridConfig {
   columns: number; // typically 5 or 10 columns
   /** COLUMN counts down each column (1–10 in the first one); ROW counts across. Saved grids without it are ROW. */
   fillDirection?: "COLUMN" | "ROW";
+  /** Counts from high to low (100 → 1). Saved grids without it count up. */
+  descending?: boolean;
   step: number;
   cells: NumberGridCell[];
   instruction: string;
@@ -116,6 +118,8 @@ export interface CountItemsConfig {
   choiceOptions?: number[]; // if CHOICE_OPTIONS e.g. [3, 5, 8]
   objectName: string; // e.g. "balloons", "apples"
   instruction: string;
+  /** Extra rows printed after the main picture, each with its own count and answer box (SQUARE_BOX only). */
+  groups?: { clipartId: string; count: number }[];
 }
 
 // ---------------- 5. KDG_CIRCLE_TARGET Config ----------------
@@ -159,6 +163,7 @@ export interface MissingLettersItem {
 }
 export interface MissingLettersConfig {
   items: MissingLettersItem[];
+  hints?: string[]; // letters printed in a "Use these letters" box above the words (a, e, i, o, u)
   instruction: string;
 }
 
@@ -187,11 +192,13 @@ export interface PictureSumConfig {
 }
 
 // ---------------- 10. KDG_COMPARE Config ----------------
-export type CompareMode = "BIGGER" | "SMALLER" | "TALLER" | "SHORTER" | "MORE" | "FEWER";
+export type CompareMode = "BIGGER" | "SMALLER" | "TALLER" | "SHORTER" | "MORE" | "FEWER" | "TALLEST_SHORTEST";
 export interface CompareRow {
   clipartId: string;
   left: number; // size step (1-5) for size modes, or number of pictures (1-10) for MORE / FEWER
   right: number;
+  /** TALLEST_SHORTEST only: 3-5 height steps (1-5), one per picture; falls back to [left, right]. */
+  sizes?: number[];
 }
 export interface CompareConfig {
   mode: CompareMode;
@@ -262,10 +269,12 @@ export interface HindiMissingRow {
   text: string; // "क ख ग घ" (a sequence) or "कमला" (a word)
   blanks: number[]; // which boxes the child fills
   clipartId?: string; // picture clue for a word
+  answer?: string; // ADD_MATRA: the correct word ("सितार"); text is it without the matra ("सतार")
 }
 export interface HindiMissingConfig {
-  mode: "VARNA" | "MATRA";
+  mode: "VARNA" | "MATRA" | "ADD_MATRA"; // ADD_MATRA prints words without the matra for the child to write in
   rows: HindiMissingRow[];
+  matra?: string; // ADD_MATRA: the sign being added, e.g. "ि"
   hints: string[]; // letters or matras printed as a help box ("ा ि ी"), may be empty
   instruction: string;
 }
@@ -301,7 +310,7 @@ export interface EvsNameRow {
   choices: string[]; // names to tick when answer is TICK (the right one among them)
 }
 export interface EvsNameConfig {
-  answer: "WRITE" | "TICK";
+  answer: "WRITE" | "TICK" | "CIRCLE"; // CIRCLE: choices print in one line, the child encircles the right one
   rows: EvsNameRow[];
   instruction: string;
 }

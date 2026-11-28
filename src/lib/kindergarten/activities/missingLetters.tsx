@@ -1,6 +1,6 @@
 "use client";
 
-import { EditorShell, InstructionField, PictureChip, RowList } from "../editor-kit";
+import { EditorShell, InstructionField, PictureChip, RowList, TextListField } from "../editor-kit";
 
 import React from "react";
 import type {
@@ -14,6 +14,7 @@ import { ActivityFrame, Art, PreviewBox } from "./_shared";
 
 export const missingLettersDefaultConfig = (): MissingLettersConfig => ({
   instruction: "Look at the picture and fill in the missing letter:",
+  hints: [],
   items: [
     { word: "cat", blanks: [1], clipartId: "cat" },
     { word: "dog", blanks: [2], clipartId: "dog" },
@@ -35,6 +36,22 @@ function MissingLettersEditor({ config, onChange, instructionText, onInstruction
         basic={
           <>
             <InstructionField value={instructionText} onChange={onInstructionChange} defaultValue={config.instruction} />
+            <div className="space-y-1.5">
+              <TextListField
+                label="Use these letters (optional box above the words)"
+                values={config.hints ?? []}
+                onChange={(hints) => onChange({ ...config, hints })}
+                placeholder="a e i o u"
+                hint="Leave empty for no box."
+              />
+              <button
+                type="button"
+                onClick={() => onChange({ ...config, hints: ["a", "e", "i", "o", "u"] })}
+                className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-800 hover:bg-slate-200"
+              >
+                Vowels
+              </button>
+            </div>
             <RowList<MissingLettersItem>
               label="Words — tap a letter to blank it"
               rows={config.items}
@@ -83,10 +100,20 @@ function MissingLettersEditor({ config, onChange, instructionText, onInstruction
 function MissingLettersPrint({ config, instructionText, numberLabel, marks }: KindergartenPrintProps<MissingLettersConfig>) {
   return (
     <ActivityFrame numberLabel={numberLabel} marks={marks} instruction={instructionText || config.instruction}>
+      {!!config.hints?.length && (
+        <div className="mb-2 flex flex-wrap items-center gap-3 rounded-lg border border-dashed border-slate-400 px-3 py-1.5">
+          <span className="text-xs font-bold text-slate-600">Use these letters:</span>
+          {config.hints.map((h, i) => (
+            <span key={i} className="text-lg font-black text-slate-900">
+              {h}
+            </span>
+          ))}
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-x-4 gap-y-3 py-1">
         {config.items.map((it, i) => (
           <div key={i} className="flex items-center gap-3">
-            <Art id={it.clipartId} size={46} />
+            {it.clipartId && <Art id={it.clipartId} size={46} />}
             <div className="flex items-center gap-1.5">
               {it.word.split("").map((ch, idx) =>
                 it.blanks.includes(idx) ? (

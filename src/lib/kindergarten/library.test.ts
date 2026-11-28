@@ -27,7 +27,17 @@ describe("libraryGroups", () => {
   it("shows Hindi activities first for a Hindi worksheet", () => {
     const r = libraryGroups({ subject: "Hindi", showAll: false, query: "" });
     expect(r.map((g) => g.category)).toEqual(["hindi", "general"]);
-    expect(r[0].plugins.map((p) => p.type)).toEqual(["KDG_HINDI_VARNAMALA", "KDG_HINDI_MISSING", "KDG_HINDI_FIRST_LETTER", "KDG_HINDI_LETTER_MATCH"]);
+    expect(r[0].plugins.map((p) => p.type)).toEqual(["KDG_HINDI_VARNAMALA",
+      "KDG_HINDI_MISSING",
+      "KDG_HINDI_FIRST_LETTER",
+      "KDG_HINDI_LETTER_MATCH",
+      "KDG_HINDI_BARAKHADI",
+      "KDG_HINDI_TEXT_MATCH",
+      "KDG_HINDI_JOIN_LETTERS",
+      "KDG_HINDI_SENTENCE_BLANK",
+      "KDG_HINDI_UNJUMBLE",
+      "KDG_HINDI_ANSWER_LINES",
+    ]);
   });
 
   it("shows EVS activities first for an EVS worksheet", () => {

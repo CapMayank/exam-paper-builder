@@ -45,6 +45,8 @@ function FirstLetterRows({ config, showWords }: { config: HindiFirstLetterConfig
 
 function HindiFirstLetterEditor({ config, onChange, instructionText, onInstructionChange }: KindergartenEditorProps<HindiFirstLetterConfig>) {
   /** Keeps the right letter among the choices when the word changes. */
+  // wording follows the script of the words, so the English variant reads right
+  const latin = /[A-Za-z]/.test(config.rows[0]?.word ?? "");
   const withWord = (row: HindiFirstLetterRow, word: string): HindiFirstLetterRow => {
     const right = firstLetter(word);
     const others = row.choices.filter((c) => c !== firstLetter(row.word)).slice(0, 2);
@@ -70,7 +72,7 @@ function HindiFirstLetterEditor({ config, onChange, instructionText, onInstructi
               label="Pictures and their names"
               rows={config.rows}
               onChange={(rows) => onChange({ ...config, rows })}
-              makeRow={() => ({ clipartId: "sun", word: "सूरज", choices: ["स", "र", "ज"] })}
+              makeRow={() => (latin ? { clipartId: "sun", word: "Sun", choices: ["S", "N", "U"] } : { clipartId: "sun", word: "सूरज", choices: ["स", "र", "ज"] })}
               max={8}
               addLabel="Add picture"
               renderRow={(row, update) => (
@@ -81,13 +83,13 @@ function HindiFirstLetterEditor({ config, onChange, instructionText, onInstructi
                       aria-label="Picture's name"
                       value={row.word}
                       onChange={(e) => update(withWord(row, e.target.value))}
-                      placeholder="आम"
+                      placeholder={latin ? "Apple" : "आम"}
                       className="min-w-0 flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-base font-semibold"
                     />
                     <span className="text-xs text-slate-500">→ {firstLetter(row.word) || "?"}</span>
                   </div>
                   {config.answerStyle === "CIRCLE" && (
-                    <TextListField label="Letters to circle from" values={row.choices} onChange={(choices) => update({ ...row, choices })} placeholder="आ क म" hint="" />
+                    <TextListField label="Letters to circle from" values={row.choices} onChange={(choices) => update({ ...row, choices })} placeholder={latin ? "A B C" : "आ क म"} hint="" />
                   )}
                 </div>
               )}

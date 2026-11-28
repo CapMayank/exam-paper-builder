@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { ChoiceChips, EditorShell, InstructionField, PictureChip, RowList, TextListField } from "../editor-kit";
 import type { EvsNameConfig, EvsNameRow, KindergartenActivityPlugin, KindergartenEditorProps, KindergartenPrintProps } from "../types";
 import { ActivityFrame, Art, PreviewBox } from "./_shared";
@@ -15,9 +16,33 @@ export const evsNameDefaultConfig = (): EvsNameConfig => ({
   instruction: "Look at the picture and tick (✓) its name:",
 });
 
-const INSTRUCTION = { TICK: "Look at the picture and tick (✓) its name:", WRITE: "Look at the picture and write its name:" } as const;
+const INSTRUCTION = {
+  TICK: "Look at the picture and tick (✓) its name:",
+  WRITE: "Look at the picture and write its name:",
+  CIRCLE: "Look at the picture and encircle its right name:",
+} as const;
 
 function NameRows({ config, showKey }: { config: EvsNameConfig; showKey?: boolean }) {
+  if (config.answer === "CIRCLE") {
+    return (
+      <div className="grid grid-cols-4 gap-x-4 gap-y-4">
+        {config.rows.map((row, i) => (
+          <div key={i} className="flex flex-col items-center gap-1.5">
+            <Art id={row.clipartId} size={56} />
+            <span className="flex flex-wrap items-center justify-center gap-x-1 text-base font-bold text-slate-950">
+              {row.choices.map((c, k) => (
+                <React.Fragment key={k}>
+                  {k > 0 && <span className="text-slate-500">/</span>}
+                  {/* the ring is padding-neutral so the line looks the same with the key off */}
+                  <span className={`rounded-full px-2 py-0.5 ${showKey && c === row.name ? "text-emerald-700 ring-2 ring-emerald-700" : ""}`}>{c}</span>
+                </React.Fragment>
+              ))}
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  }
   return (
     <div className="grid grid-cols-2 gap-x-6 gap-y-3">
       {config.rows.map((row, i) => (
@@ -62,6 +87,7 @@ function EvsNameEditor({ config, onChange, instructionText, onInstructionChange 
               }}
               options={[
                 { value: "TICK", label: "Ticks the right name" },
+                { value: "CIRCLE", label: "Circles the right word" },
                 { value: "WRITE", label: "Writes the name" },
               ]}
             />
@@ -83,7 +109,7 @@ function EvsNameEditor({ config, onChange, instructionText, onInstructionChange 
                       className="min-w-0 flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-sm font-semibold"
                     />
                   </div>
-                  {config.answer === "TICK" && (
+                  {config.answer !== "WRITE" && (
                     <TextListField
                       label="Names to choose from (include the right one)"
                       values={row.choices}
@@ -117,7 +143,7 @@ export const evsNamePlugin: KindergartenActivityPlugin<EvsNameConfig> = {
   label: "Name the picture",
   shortLabel: "Name the Picture",
   category: "evs",
-  description: "Pictures of animals, fruits and things; the child ticks the right name or writes it.",
+  description: "Pictures of animals, fruits and things; the child ticks or circles the right name, or writes it.",
   iconName: "Tag",
   defaultConfig: evsNameDefaultConfig,
   validateConfig: (cfg) => (cfg && Array.isArray((cfg as EvsNameConfig).rows) ? { valid: true } : { valid: false, error: "Invalid config" }),

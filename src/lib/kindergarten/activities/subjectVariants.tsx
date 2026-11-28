@@ -5,8 +5,9 @@
  * library and starting content: matching letters to pictures and animals to homes (Picture Match), and the
  * EVS odd one out (Circle Target).
  */
-import type { CircleTargetConfig, KindergartenActivityPlugin, PictureMatchConfig } from "../types";
+import type { CircleTargetConfig, HindiFirstLetterConfig, KindergartenActivityPlugin, PictureMatchConfig } from "../types";
 import { circleTargetPlugin } from "./circleTarget";
+import { hindiFirstLetterPlugin } from "./hindiFirstLetter";
 import { pictureMatchPlugin } from "./pictureMatch";
 
 const pair = (id: string, clipartId: string, label: string, matchLabel: string) => ({ id, clipartId, label, matchLabel });
@@ -69,4 +70,27 @@ export const evsOddOnePlugin: KindergartenActivityPlugin<CircleTargetConfig> = {
   category: "evs",
   description: "Rows of pictures – fruits, animals, toys; the child crosses the one that does not belong.",
   defaultConfig: evsOddOneDefaultConfig,
+};
+
+export const englishFirstLetterDefaultConfig = (): HindiFirstLetterConfig => ({
+  answerStyle: "WRITE",
+  rows: [
+    { clipartId: "apple", word: "Apple", choices: ["A"] },
+    { clipartId: "ball", word: "Ball", choices: ["B"] },
+    { clipartId: "cat", word: "Cat", choices: ["C"] },
+    { clipartId: "duck", word: "Duck", choices: ["D"] },
+    { clipartId: "fish", word: "Fish", choices: ["F"] },
+    { clipartId: "kite", word: "Kite", choices: ["K"] },
+  ],
+  instruction: "Look at the pictures and write the first letter:",
+});
+
+export const englishFirstLetterPlugin: KindergartenActivityPlugin<HindiFirstLetterConfig> = {
+  ...hindiFirstLetterPlugin,
+  type: "KDG_FIRST_LETTER",
+  label: "Picture → first letter",
+  shortLabel: "First Letter",
+  category: "english",
+  description: "A picture (apple, ball…); the child writes or circles the first letter of its name.",
+  defaultConfig: englishFirstLetterDefaultConfig,
 };

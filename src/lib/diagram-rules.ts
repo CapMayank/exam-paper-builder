@@ -42,6 +42,8 @@ export function isSectionVisuallyEligible(sectionType: string, subject?: string)
     norm === "KDG_COUNT_ITEMS" ||
     norm === "KDG_CIRCLE_TARGET" ||
     norm === "KDG_HINDI_FIRST_LETTER" ||
+    norm === "KDG_FIRST_LETTER" ||
+    norm === "KDG_WORD_SEARCH" ||
     norm === "KDG_HINDI_LETTER_MATCH" ||
     norm === "KDG_EVS_SORT" ||
     norm === "KDG_EVS_NAME" ||

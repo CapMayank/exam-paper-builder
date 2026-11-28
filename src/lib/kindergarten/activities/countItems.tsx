@@ -1,6 +1,6 @@
 "use client";
 
-import { ChoiceChips, EditorShell, Field, InstructionField, NumberStepper, TextListField } from "../editor-kit";
+import { ChoiceChips, EditorShell, Field, InstructionField, NumberStepper, PictureChip, RowList, TextListField } from "../editor-kit";
 
 import { PreviewBox } from "./_shared";
 import React, { useState } from "react";
@@ -22,9 +22,13 @@ export const countItemsDefaultConfig = (): CountItemsConfig => {
     answerStyle: "SQUARE_BOX",
     choiceOptions: [3, 5, 7],
     objectName: "balloons",
+    groups: [],
     instruction: "Count the objects and write the correct number in the box:",
   };
 };
+
+type CountGroup = { clipartId: string; count: number };
+const hasGroups = (c: CountItemsConfig) => !!c.groups && c.groups.length > 0;
 
 function CountItemsEditor({ config, onChange, instructionText, onInstructionChange }: KindergartenEditorProps<CountItemsConfig>) {
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -56,6 +60,27 @@ function CountItemsEditor({ config, onChange, instructionText, onInstructionChan
               </div>
             </Field>
             <NumberStepper label="How many" value={config.count} min={1} max={20} onChange={(count) => onChange({ ...config, count })} />
+            <RowList<CountGroup>
+              label="More groups"
+              rows={config.groups ?? []}
+              onChange={(groups) =>
+                // several groups only have one kind of answer box, so drop the choice style
+                onChange({ ...config, groups, answerStyle: groups.length > 0 && config.answerStyle === "CHOICE_OPTIONS" ? "SQUARE_BOX" : config.answerStyle })
+              }
+              makeRow={() => ({ clipartId: "apple", count: 3 })}
+              min={0}
+              max={6}
+              addLabel="Add group"
+              renderRow={(g, update) => (
+                <div className="flex items-center gap-2">
+                  <PictureChip clipartId={g.clipartId} onPick={(id) => update({ ...g, clipartId: id })} />
+                  <div className="flex-1">
+                    <NumberStepper label="How many" value={g.count} min={1} max={20} onChange={(n) => update({ ...g, count: n })} />
+                  </div>
+                </div>
+              )}
+            />
+            <p className="text-[11px] text-slate-500">The first group is the main picture above. Each group gets its own answer box.</p>
           </>
         }
         advanced={
@@ -77,7 +102,7 @@ function CountItemsEditor({ config, onChange, instructionText, onInstructionChan
               options={[
                 { value: "SQUARE_BOX", label: "Write in a box" },
                 { value: "CIRCLE", label: "Write in a circle" },
-                { value: "CHOICE_OPTIONS", label: "Circle the number" },
+                ...(hasGroups(config) ? [] : [{ value: "CHOICE_OPTIONS" as const, label: "Circle the number" }]),
               ]}
             />
             {config.answerStyle === "CHOICE_OPTIONS" && (
@@ -117,8 +142,47 @@ function CountItemsEditor({ config, onChange, instructionText, onInstructionChan
       )}
 
       <PreviewBox>
-        <CountItemsPrint config={config} instructionText={instructionText} />
+        <CountItemsPrint config={config} instructionText={instructionText} showKey />
       </PreviewBox>
+    </div>
+  );
+}
+
+/** Several groups: one row each, pictures then the answer box. */
+function GroupRows({ config, showKey }: { config: CountItemsConfig; showKey?: boolean }) {
+  const main: CountGroup = { clipartId: config.clipartId, count: config.count };
+  const rows = [main, ...(config.groups ?? [])];
+  return (
+    <div className="space-y-2">
+      {rows.map((g, i) => {
+        const art = g.clipartId ? getClipartById(g.clipartId) : null;
+        const custom = i === 0 ? config.customImageUrl : undefined;
+        return (
+          <div key={i} className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50/40 px-3 py-1.5">
+            <div className={`flex flex-1 items-center gap-1.5 ${config.layout === "ROW" ? "flex-nowrap overflow-hidden" : "flex-wrap"}`}>
+              {Array.from({ length: Math.min(20, Math.max(1, g.count)) }, (_, k) => (
+                <span key={k} className="flex h-9 w-9 items-center justify-center text-slate-900">
+                  {custom ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={custom} alt="" className="max-h-full max-w-full object-contain" />
+                  ) : art ? (
+                    art.renderSvg(32)
+                  ) : (
+                    <span className="text-xs">★</span>
+                  )}
+                </span>
+              ))}
+            </div>
+            <div
+              className={`flex h-12 w-12 shrink-0 items-center justify-center border-2 border-slate-900 bg-white text-xl font-black text-emerald-700 ${
+                config.answerStyle === "CIRCLE" ? "rounded-full" : "rounded-lg"
+              }`}
+            >
+              {showKey ? g.count : ""}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -128,7 +192,8 @@ function CountItemsPrint({
   instructionText,
   numberLabel,
   marks,
-}: KindergartenPrintProps<CountItemsConfig>) {
+  showKey,
+}: KindergartenPrintProps<CountItemsConfig> & { showKey?: boolean }) {
   const clipart = config.clipartId ? getClipartById(config.clipartId) : null;
   const items = Array.from({ length: Math.min(24, Math.max(1, config.count)) });
 
@@ -150,6 +215,9 @@ function CountItemsPrint({
         )}
       </div>
 
+      {hasGroups(config) ? (
+        <GroupRows config={config} showKey={showKey} />
+      ) : (
       <div className="flex items-center justify-between gap-6 py-2 px-3 border border-slate-200 rounded-xl bg-slate-50/40">
         {/* Clipart Objects Cluster */}
         <div className="flex-1 flex flex-wrap gap-3 items-center justify-start p-2">
@@ -201,6 +269,7 @@ function CountItemsPrint({
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }
@@ -215,11 +284,14 @@ export const countItemsPlugin: KindergartenActivityPlugin<CountItemsConfig> = {
   defaultConfig: countItemsDefaultConfig,
   validateConfig: (cfg) => {
     if (!cfg || typeof cfg !== "object") return { valid: false, error: "Invalid config" };
+    const groups = (cfg as CountItemsConfig).groups;
+    if (groups !== undefined && !Array.isArray(groups)) return { valid: false, error: "Invalid groups" };
     return { valid: true };
   },
   renderEditor: CountItemsEditor,
   renderPrint: CountItemsPrint,
   getSummary: (config) => {
+    if (hasGroups(config)) return `Count pictures · ${config.groups!.length + 1} groups`;
     return `Count ${config.count} ${config.objectName || "items"}`;
   },
 };

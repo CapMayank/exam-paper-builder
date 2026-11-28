@@ -44,10 +44,12 @@ function isBlankFor(pattern: BlankPattern, n: number, start: number): boolean {
 }
 
 /** The cells of a number grid from `start` to `end`, with the blanks the pattern asks for. */
-export function numberCells(start: number, end: number, pattern: BlankPattern): { value: number; isBlank: boolean }[] {
+export function numberCells(start: number, end: number, pattern: BlankPattern, descending = false): { value: number; isBlank: boolean }[] {
   const out: { value: number; isBlank: boolean }[] = [];
-  for (let n = start; n <= end; n++) out.push({ value: n, isBlank: isBlankFor(pattern, n, start) });
-  return out;
+  // descending lists high to low, and the one number left printed is then the highest
+  const first = descending ? end : start;
+  for (let n = start; n <= end; n++) out.push({ value: n, isBlank: isBlankFor(pattern, n, first) });
+  return descending ? out.reverse() : out;
 }
 
 /** Which pattern a grid's blanks follow, or CUSTOM when the teacher toggled cells by hand. */

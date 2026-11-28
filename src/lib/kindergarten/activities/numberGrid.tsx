@@ -31,6 +31,7 @@ export const numberGridDefaultConfig = (): NumberGridConfig => {
     endNumber,
     columns,
     fillDirection: "COLUMN",
+    descending: false,
     step: 1,
     cells,
     instruction: "Fill in the missing numbers in the grid (1 to 50):",
@@ -44,11 +45,12 @@ const BLANK_OPTIONS: { value: BlankPattern; label: string }[] = [
   { value: "ALL_BLANK", label: "All but first" },
 ];
 
-const PRESETS: { label: string; start: number; end: number; columns: number; pattern: BlankPattern }[] = [
+const PRESETS: { label: string; start: number; end: number; columns: number; pattern: BlankPattern; descending?: boolean }[] = [
   { label: "1–20, half missing", start: 1, end: 20, columns: 5, pattern: "ALTERNATE" },
   { label: "1–50, half missing", start: 1, end: 50, columns: 5, pattern: "ALTERNATE" },
   { label: "1–100, half missing", start: 1, end: 100, columns: 10, pattern: "ALTERNATE" },
   { label: "Write 1–50", start: 1, end: 50, columns: 5, pattern: "ALL_BLANK" },
+  { label: "Write 100 → 1", start: 1, end: 100, columns: 10, pattern: "ALL_BLANK", descending: true },
 ];
 
 function NumberGridEditor({ config, onChange, instructionText, onInstructionChange }: KindergartenEditorProps<NumberGridConfig>) {
@@ -58,17 +60,17 @@ function NumberGridEditor({ config, onChange, instructionText, onInstructionChan
   const columnOptions = [5, 10].includes(config.columns) ? [5, 10] : [config.columns, 5, 10].sort((a, b) => a - b);
 
   /** New range or pattern; a hand-made pattern keeps the blanks it had for numbers still in range. */
-  const rebuild = (start: number, end: number, next: BlankPattern | "CUSTOM" = pattern) => {
+  const rebuild = (start: number, end: number, next: BlankPattern | "CUSTOM" = pattern, desc: boolean = !!config.descending) => {
     const lo = Math.min(start, end);
     const hi = Math.max(start, end);
     let cells: NumberGridCell[];
     if (next === "CUSTOM") {
       const was = new Map(config.cells.map((c) => [Number(c.value), c.isBlank]));
-      cells = numberCells(lo, hi, "NONE").map((c) => ({ ...c, isBlank: was.get(c.value) ?? false }));
+      cells = numberCells(lo, hi, "NONE", desc).map((c) => ({ ...c, isBlank: was.get(c.value) ?? false }));
     } else {
-      cells = numberCells(lo, hi, next);
+      cells = numberCells(lo, hi, next, desc);
     }
-    onChange({ ...config, startNumber: lo, endNumber: hi, cells });
+    onChange({ ...config, startNumber: lo, endNumber: hi, descending: desc, cells });
   };
 
   const toggleCell = (index: number) =>
@@ -87,7 +89,7 @@ function NumberGridEditor({ config, onChange, instructionText, onInstructionChan
                   key={p.label}
                   type="button"
                   onClick={() =>
-                    onChange({ ...config, startNumber: p.start, endNumber: p.end, columns: p.columns, fillDirection: "COLUMN", cells: numberCells(p.start, p.end, p.pattern) })
+                    onChange({ ...config, startNumber: p.start, endNumber: p.end, columns: p.columns, fillDirection: p.descending ? "ROW" : "COLUMN", descending: !!p.descending, cells: numberCells(p.start, p.end, p.pattern, p.descending) })
                   }
                   className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-800 hover:bg-slate-200"
                 >
@@ -107,6 +109,10 @@ function NumberGridEditor({ config, onChange, instructionText, onInstructionChan
         }
         advanced={
           <>
+            <label className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+              <input type="checkbox" checked={!!config.descending} onChange={(e) => rebuild(config.startNumber, config.endNumber, pattern, e.target.checked)} />
+              Count backwards (100 → 1)
+            </label>
             <ChoiceChips<GridDirection>
               label="Count"
               value={direction}

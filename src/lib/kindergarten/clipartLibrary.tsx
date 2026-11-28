@@ -386,6 +386,87 @@ export const CLIPART_LIBRARY: ClipartItem[] = [
       </svg>
     ),
   },
+  {
+    id: "cow",
+    name: "Cow",
+    category: "animals",
+    tags: ["cow", "c", "milk", "farm", "animal"],
+    svgViewBox: "0 0 120 100",
+    renderSvg: (size = 64, className = "") => (
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 120 100"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className={className}
+      >
+        {/* Body */}
+        <path d="M30 34 L88 34 C100 34 104 44 102 56 L100 66 L30 66 C22 62 20 44 30 34 Z" />
+        {/* Head (left) */}
+        <path d="M30 34 C20 30 10 36 8 48 L8 58 C8 64 14 66 22 66 C28 66 30 60 30 54" />
+        {/* Horns, ear, eye, nose */}
+        <path d="M18 34 C16 26 14 24 12 24 M28 32 C30 24 32 22 34 22" />
+        <path d="M30 40 C36 40 38 46 32 48" />
+        <circle cx="16" cy="44" r="1.5" fill="currentColor" />
+        <path d="M10 58 L20 58" />
+        {/* Spots */}
+        <path d="M50 42 C58 40 62 48 56 52 C50 54 46 46 50 42 Z" />
+        <path d="M76 48 C84 46 88 54 82 58 C76 60 72 52 76 48 Z" />
+        {/* Legs */}
+        <path d="M38 66 L38 90 M52 66 L52 90 M80 66 L80 90 M94 66 L94 90" />
+        {/* Udder */}
+        <path d="M62 66 C62 76 72 76 72 66" />
+        {/* Tail */}
+        <path d="M102 42 C110 46 110 60 108 72" />
+      </svg>
+    ),
+  },
+  {
+    id: "monkey",
+    name: "Monkey",
+    category: "animals",
+    tags: ["monkey", "m", "jungle", "animal"],
+    svgViewBox: "0 0 100 110",
+    renderSvg: (size = 64, className = "") => (
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 100 110"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className={className}
+      >
+        {/* Big round ears */}
+        <circle cx="16" cy="34" r="12" />
+        <circle cx="84" cy="34" r="12" />
+        <circle cx="16" cy="34" r="5" strokeWidth="2" />
+        <circle cx="84" cy="34" r="5" strokeWidth="2" />
+        {/* Head */}
+        <circle cx="50" cy="34" r="26" />
+        {/* Face patch */}
+        <path d="M34 30 C34 22 46 26 50 32 C54 26 66 22 66 30 C70 44 62 54 50 54 C38 54 30 44 34 30 Z" />
+        <circle cx="42" cy="34" r="2" fill="currentColor" />
+        <circle cx="58" cy="34" r="2" fill="currentColor" />
+        <path d="M44 46 Q50 51 56 46" strokeWidth="2.5" />
+        {/* Body */}
+        <path d="M34 62 C28 74 30 92 40 96 L60 96 C70 92 72 74 66 62" />
+        <ellipse cx="50" cy="80" rx="9" ry="10" strokeWidth="2.5" />
+        {/* Arms and feet */}
+        <path d="M34 66 C24 72 22 82 26 90 M66 66 C76 72 78 82 74 90" />
+        <ellipse cx="38" cy="100" rx="9" ry="5" />
+        <ellipse cx="62" cy="100" rx="9" ry="5" />
+        {/* Curled tail */}
+        <path d="M68 90 C88 92 94 76 86 70 C80 66 76 74 82 76" />
+      </svg>
+    ),
+  },
 
   // ================= FRUITS & VEG =================
   {
@@ -626,6 +707,92 @@ export const CLIPART_LIBRARY: ClipartItem[] = [
     ),
   },
   {
+    id: "coin",
+    name: "Coin",
+    category: "shapes",
+    tags: ["coin", "money", "rupee", "circle", "round"],
+    svgViewBox: "0 0 100 100",
+    renderSvg: (size = 64, className = "") => (
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 100 100"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className={className}
+      >
+        <circle cx="50" cy="50" r="40" />
+        <circle cx="50" cy="50" r="31" strokeWidth="2.5" />
+        {/* Rupee sign */}
+        <path d="M38 33 L62 33 M38 43 L62 43 M38 33 C58 33 58 52 38 52 L60 70" strokeWidth="4" />
+      </svg>
+    ),
+  },
+  {
+    id: "chessboard",
+    name: "Chessboard",
+    category: "shapes",
+    tags: ["chess", "board", "square", "game"],
+    svgViewBox: "0 0 100 100",
+    renderSvg: (size = 64, className = "") => (
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 100 100"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className={className}
+      >
+        <rect x="10" y="10" width="80" height="80" />
+        {/* 4x4 grid */}
+        <path d="M30 10 V90 M50 10 V90 M70 10 V90 M10 30 H90 M10 50 H90 M10 70 H90" strokeWidth="2" />
+        {/* Dark squares drawn solid (checker pattern) */}
+        <g fill="currentColor" stroke="none">
+          <rect x="30" y="10" width="20" height="20" />
+          <rect x="70" y="10" width="20" height="20" />
+          <rect x="10" y="30" width="20" height="20" />
+          <rect x="50" y="30" width="20" height="20" />
+          <rect x="30" y="50" width="20" height="20" />
+          <rect x="70" y="50" width="20" height="20" />
+          <rect x="10" y="70" width="20" height="20" />
+          <rect x="50" y="70" width="20" height="20" />
+        </g>
+      </svg>
+    ),
+  },
+  {
+    id: "envelope",
+    name: "Envelope",
+    category: "shapes",
+    tags: ["envelope", "letter", "post", "rectangle", "e"],
+    svgViewBox: "0 0 100 80",
+    renderSvg: (size = 64, className = "") => (
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 100 80"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className={className}
+      >
+        <rect x="8" y="14" width="84" height="54" rx="3" />
+        {/* Flap */}
+        <path d="M8 16 L50 46 L92 16" />
+        {/* Fold lines */}
+        <path d="M8 66 L36 38 M92 66 L64 38" strokeWidth="2.5" />
+      </svg>
+    ),
+  },
+  {
     id: "umbrella",
     name: "Umbrella",
     category: "objects",
@@ -774,6 +941,37 @@ export const CLIPART_LIBRARY: ClipartItem[] = [
         <path d="M78 30 C90 32 92 56 76 60" />
         {/* Saucer */}
         <path d="M12 80 Q50 88 88 80" />
+      </svg>
+    ),
+  },
+  {
+    id: "fan",
+    name: "Fan",
+    category: "objects",
+    tags: ["fan", "f", "air", "wind", "cool"],
+    svgViewBox: "0 0 100 110",
+    renderSvg: (size = 64, className = "") => (
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 100 110"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className={className}
+      >
+        {/* Round guard */}
+        <circle cx="50" cy="42" r="34" />
+        {/* Blades */}
+        <path d="M50 42 C40 28 52 14 58 22 C60 30 54 38 50 42 Z" />
+        <path d="M50 42 C64 36 76 48 68 54 C60 54 54 48 50 42 Z" />
+        <path d="M50 42 C44 56 28 54 30 46 C34 40 42 40 50 42 Z" />
+        <circle cx="50" cy="42" r="4" />
+        {/* Neck and stand */}
+        <path d="M50 76 L50 94" />
+        <path d="M26 102 C26 92 74 92 74 102 Z" />
       </svg>
     ),
   },

@@ -245,3 +245,47 @@ describe("Hindi and EVS activities", () => {
     }
   });
 });
+
+describe("Activities from the 2025-26 Nursery–KG II annual papers", () => {
+  const NEW = {
+    KDG_TEXT_MATCH: "english",
+    KDG_MARK_LETTERS: "english",
+    KDG_JOIN_LETTERS: "english",
+    KDG_ARRANGE_ORDER: "english",
+    KDG_SENTENCE_BLANK: "english",
+    KDG_ANSWER_LINES: "english",
+    KDG_WORD_SEARCH: "english",
+    KDG_NUMBER_NEIGHBOURS: "math",
+    KDG_NUMBER_COMPARE_SIGN: "math",
+    KDG_VERTICAL_SUM: "math",
+    KDG_NUMBER_ORDER: "math",
+    KDG_NUMBER_NAME_MATCH: "math",
+    KDG_NUMBER_NAMES: "math",
+    KDG_DRAW_FOR_NUMBER: "math",
+    KDG_SHAPE_SENTENCE: "math",
+    KDG_HINDI_BARAKHADI: "hindi",
+    KDG_HINDI_TEXT_MATCH: "hindi",
+    KDG_HINDI_JOIN_LETTERS: "hindi",
+    KDG_HINDI_SENTENCE_BLANK: "hindi",
+    KDG_HINDI_UNJUMBLE: "hindi",
+    KDG_HINDI_ANSWER_LINES: "hindi",
+  } as const;
+
+  it("registers each in its subject with a valid default that survives saving and loading", () => {
+    for (const [type, category] of Object.entries(NEW)) {
+      const p = getKindergartenActivity(type);
+      expect(p, type).toBeDefined();
+      expect(p!.category, type).toBe(category);
+      expect(isKindergartenType(type)).toBe(true);
+      const cfg = p!.defaultConfig();
+      expect(p!.validateConfig(cfg).valid, type).toBe(true);
+      expect(parseKindergartenConfig(type, serializeKindergartenConfig(cfg))).toEqual(cfg);
+    }
+  });
+
+  it("rejects a config with no rows", () => {
+    for (const type of Object.keys(NEW)) {
+      expect(getKindergartenActivity(type)!.validateConfig({}).valid, type).toBe(false);
+    }
+  });
+});

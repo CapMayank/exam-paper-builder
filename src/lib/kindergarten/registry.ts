@@ -17,7 +17,19 @@ import { hindiMissingPlugin } from "./activities/hindiMissing";
 import { hindiFirstLetterPlugin } from "./activities/hindiFirstLetter";
 import { evsSortPlugin } from "./activities/evsSort";
 import { evsNamePlugin } from "./activities/evsName";
-import { evsHomePlugin, evsOddOnePlugin, hindiLetterMatchPlugin } from "./activities/subjectVariants";
+import { englishFirstLetterPlugin, evsHomePlugin, evsOddOnePlugin, hindiLetterMatchPlugin } from "./activities/subjectVariants";
+import { hindiTextMatchPlugin, numberNameMatchPlugin, textMatchPlugin } from "./activities/textMatch";
+import { answerLinesPlugin, hindiAnswerLinesPlugin, numberNamesPlugin } from "./activities/answerLines";
+import { hindiJoinLettersPlugin, joinLettersPlugin } from "./activities/joinLetters";
+import { hindiSentenceBlankPlugin, sentenceBlankPlugin, shapeSentencePlugin } from "./activities/sentenceBlank";
+import { arrangeOrderPlugin, hindiUnjumblePlugin, numberOrderPlugin } from "./activities/arrangeOrder";
+import { numberNeighboursPlugin } from "./activities/numberNeighbours";
+import { numberCompareSignPlugin } from "./activities/numberCompareSign";
+import { verticalSumPlugin } from "./activities/verticalSum";
+import { drawForNumberPlugin } from "./activities/drawForNumber";
+import { hindiBarakhadiPlugin } from "./activities/hindiBarakhadi";
+import { markLettersPlugin } from "./activities/markLetters";
+import { wordSearchPlugin } from "./activities/wordSearch";
 import type { AnyActivityPlugin } from "./types";
 
 const REGISTRY = new Map<string, AnyActivityPlugin>();
@@ -33,6 +45,7 @@ const REGISTRY = new Map<string, AnyActivityPlugin>();
   preWritingPlugin,
   joinDotsPlugin,
   missingLettersPlugin,
+  englishFirstLetterPlugin,
   colourPlugin,
   patternPlugin,
   comparePlugin,
@@ -46,6 +59,31 @@ const REGISTRY = new Map<string, AnyActivityPlugin>();
   evsNamePlugin,
   evsOddOnePlugin,
   evsHomePlugin,
+  // From the 2025-26 Nursery–KG II annual papers
+  // English
+  textMatchPlugin,
+  markLettersPlugin,
+  joinLettersPlugin,
+  arrangeOrderPlugin,
+  sentenceBlankPlugin,
+  answerLinesPlugin,
+  wordSearchPlugin,
+  // Maths
+  numberNeighboursPlugin,
+  numberCompareSignPlugin,
+  verticalSumPlugin,
+  numberOrderPlugin,
+  numberNameMatchPlugin,
+  numberNamesPlugin,
+  drawForNumberPlugin,
+  shapeSentencePlugin,
+  // Hindi
+  hindiBarakhadiPlugin,
+  hindiTextMatchPlugin,
+  hindiJoinLettersPlugin,
+  hindiSentenceBlankPlugin,
+  hindiUnjumblePlugin,
+  hindiAnswerLinesPlugin,
 ].forEach((plugin) => {
   REGISTRY.set(plugin.type, plugin);
 });

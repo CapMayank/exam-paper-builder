@@ -1,6 +1,6 @@
 "use client";
 
-import { ChoiceChips, EditorShell, InstructionField, PictureChip, RowList, TextListField } from "../editor-kit";
+import { ChoiceChips, EditorShell, Field, InstructionField, PictureChip, RowList, TextListField } from "../editor-kit";
 import { wordTokens } from "../hindi";
 import type { HindiMissingConfig, HindiMissingRow, KindergartenActivityPlugin, KindergartenEditorProps, KindergartenPrintProps } from "../types";
 import { ActivityFrame, Art, PreviewBox } from "./_shared";
@@ -27,9 +27,63 @@ const MATRA_DEFAULT: HindiMissingConfig = {
   instruction: "चित्र देखकर छूटा हुआ अक्षर या मात्रा भरिए (Fill in the missing letter or matra):",
 };
 
+const ADD_MATRA_DEFAULT: HindiMissingConfig = {
+  mode: "ADD_MATRA",
+  matra: "ि",
+  rows: [
+    { text: "लख", answer: "लिख", blanks: [] },
+    { text: "सतार", answer: "सितार", blanks: [] },
+    { text: "मठाई", answer: "मिठाई", blanks: [] },
+    { text: "गन", answer: "गिन", blanks: [] },
+    { text: "कताब", answer: "किताब", blanks: [] },
+  ],
+  hints: [],
+  instruction: "इ की मात्रा ( ि ) लगाइए:",
+};
+
+const DEFAULTS = { VARNA: VARNA_DEFAULT, MATRA: MATRA_DEFAULT, ADD_MATRA: ADD_MATRA_DEFAULT } as const;
+
 export const hindiMissingDefaultConfig = (): HindiMissingConfig => structuredClone(VARNA_DEFAULT);
 
-function MissingRows({ config }: { config: HindiMissingConfig }) {
+/** Matras and signs a word can carry (not the halant or nukta, which are part of a joined letter). */
+const MATRA_SIGNS = /[ािीुूृेैोौॅॉंँः]/gu;
+const MATRA_NAMES: Record<string, string> = {
+  "ा": "आ की मात्रा", "ि": "इ की मात्रा", "ी": "ई की मात्रा", "ु": "उ की मात्रा", "ू": "ऊ की मात्रा", "ृ": "ऋ की मात्रा",
+  "े": "ए की मात्रा", "ै": "ऐ की मात्रा", "ो": "ओ की मात्रा", "ौ": "औ की मात्रा", "ं": "अनुस्वार", "ँ": "चंद्रबिंदु", "ः": "विसर्ग",
+};
+
+/** The matras and signs found in a word, in order, without repeats. */
+export function matrasIn(word: string): string[] {
+  return [...new Set(word.match(MATRA_SIGNS) ?? [])];
+}
+
+/** The word as printed for the child: every copy of the chosen matra taken out ("सितार" − ि → "सतार"). */
+export function stripMatra(word: string, matra: string): string {
+  return matra ? word.split(matra).join("") : word;
+}
+
+/** "इ की मात्रा ( ि ) लगाइए:" or "विसर्ग ( ः ) लगाइए:". */
+export function addMatraInstruction(matra: string): string {
+  const name = MATRA_NAMES[matra];
+  return name ? `${name} ( ${matra} ) लगाइए:` : ADD_MATRA_DEFAULT.instruction;
+}
+
+/** Words printed without their matra; the child writes the matra in. The key shows the full word. */
+function AddMatraWords({ config, showKey }: { config: HindiMissingConfig; showKey?: boolean }) {
+  return (
+    <div className="flex flex-wrap items-start gap-x-10 gap-y-4 py-1">
+      {config.rows.map((row, i) => (
+        <div key={i} className="flex flex-col items-center">
+          <span className="text-3xl font-black tracking-wide text-slate-950">{row.text}</span>
+          {showKey && <span className="text-base font-bold text-emerald-700">{row.answer ?? row.text}</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MissingRows({ config, showKey }: { config: HindiMissingConfig; showKey?: boolean }) {
+  if (config.mode === "ADD_MATRA") return <AddMatraWords config={config} showKey={showKey} />;
   return (
     <div className="space-y-3">
       {config.hints.length > 0 && (
@@ -76,8 +130,8 @@ function HindiMissingEditor({ config, onChange, instructionText, onInstructionCh
               label="What is missing"
               value={config.mode}
               onChange={(mode) => {
-                const target = mode === "VARNA" ? VARNA_DEFAULT : MATRA_DEFAULT;
-                const fromDefault = config.mode === "VARNA" ? VARNA_DEFAULT : MATRA_DEFAULT;
+                const target = DEFAULTS[mode];
+                const fromDefault = DEFAULTS[config.mode];
                 // starting rows are swapped for the other kind's; rows the teacher wrote are kept
                 const untouched = JSON.stringify(config.rows) === JSON.stringify(fromDefault.rows);
                 const next = untouched ? structuredClone(target) : { ...config, mode, instruction: target.instruction };
@@ -87,16 +141,58 @@ function HindiMissingEditor({ config, onChange, instructionText, onInstructionCh
               options={[
                 { value: "VARNA", label: "Letters in order (वर्ण)" },
                 { value: "MATRA", label: "Letter or matra in a word" },
+                { value: "ADD_MATRA", label: "Add the matra to the word" },
               ]}
             />
+            {config.mode === "ADD_MATRA" && (
+              <Field label="Matra to take out of the words" hint="Tap the matra the child must add">
+                <div className="flex flex-wrap gap-1.5">
+                  {[...new Set([...(config.matra ? [config.matra] : []), ...config.rows.flatMap((r) => matrasIn(r.answer ?? ""))])].map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      aria-pressed={config.matra === m}
+                      onClick={() => {
+                        onChange({
+                          ...config,
+                          matra: m,
+                          rows: config.rows.map((r) => ({ ...r, text: stripMatra(r.answer ?? r.text, m) })),
+                          instruction: addMatraInstruction(m),
+                        });
+                        onInstructionChange(addMatraInstruction(m));
+                      }}
+                      className={`flex h-9 min-w-9 items-center justify-center rounded-md border-2 px-2 text-lg font-bold ${
+                        config.matra === m ? "border-indigo-600 bg-indigo-50 text-indigo-700" : "border-slate-800 bg-white text-slate-900"
+                      }`}
+                    >
+                      ◌{m}
+                    </button>
+                  ))}
+                </div>
+              </Field>
+            )}
             <RowList<HindiMissingRow>
-              label="Rows — tap a box to blank it"
+              label={config.mode === "ADD_MATRA" ? "Words — type the correct spelling" : "Rows — tap a box to blank it"}
               rows={config.rows}
               onChange={(rows) => onChange({ ...config, rows })}
-              makeRow={() => (config.mode === "VARNA" ? { text: "त थ द ध न", blanks: [2] } : { text: "घर", blanks: [0], clipartId: "house" })}
+              makeRow={() =>
+                config.mode === "VARNA" ? { text: "त थ द ध न", blanks: [2] } : config.mode === "ADD_MATRA" ? { text: "", answer: "", blanks: [] } : { text: "घर", blanks: [0], clipartId: "house" }
+              }
               max={6}
               addLabel="Add row"
-              renderRow={(row, update) => (
+              renderRow={(row, update) =>
+                config.mode === "ADD_MATRA" ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      aria-label="Correct word"
+                      value={row.answer ?? ""}
+                      onChange={(e) => update({ ...row, answer: e.target.value, text: stripMatra(e.target.value, config.matra ?? ""), blanks: [] })}
+                      placeholder="सितार"
+                      className="min-w-0 flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-base font-semibold"
+                    />
+                    <span className="text-xs text-slate-500">prints: {row.text || "—"}</span>
+                  </div>
+                ) : (
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-1.5">
                     {config.mode === "MATRA" && <PictureChip clipartId={row.clipartId} onPick={(id) => update({ ...row, clipartId: id })} label="Picture clue" />}
@@ -127,7 +223,8 @@ function HindiMissingEditor({ config, onChange, instructionText, onInstructionCh
                     ))}
                   </div>
                 </div>
-              )}
+                )
+              }
             />
           </>
         }
@@ -142,7 +239,7 @@ function HindiMissingEditor({ config, onChange, instructionText, onInstructionCh
         }
       />
       <PreviewBox>
-        <MissingRows config={config} />
+        <MissingRows config={config} showKey />
       </PreviewBox>
     </div>
   );
@@ -161,12 +258,12 @@ export const hindiMissingPlugin: KindergartenActivityPlugin<HindiMissingConfig> 
   label: "Missing varna / matra",
   shortLabel: "Missing Varna/Matra",
   category: "hindi",
-  description: "Fill the missing letter in a sequence (क _ ग घ) or the missing letter or matra in a word.",
+  description: "Fill the missing letter in a sequence (क _ ग घ) or the missing letter or matra in a word, or add a matra to words printed without it.",
   iconName: "Type",
   defaultConfig: hindiMissingDefaultConfig,
   validateConfig: (cfg) => (cfg && Array.isArray((cfg as HindiMissingConfig).rows) ? { valid: true } : { valid: false, error: "Invalid config" }),
   renderEditor: HindiMissingEditor,
   renderPrint: HindiMissingPrint,
-  halfWidth: (config) => config.hints.length <= 6 && config.rows.every((row) => wordTokens(row.text).length <= 6),
+  halfWidth: (config) => config.mode !== "ADD_MATRA" && config.hints.length <= 6 && config.rows.every((row) => wordTokens(row.text).length <= 6),
   getSummary: (config) => config.rows.map((r) => r.text).join(" · "),
 };
