@@ -4,6 +4,7 @@ import type { MarksStyle, NumberingStyle, PrintDensity, UserRole, PaperLanguage 
 import type { PaperInternalChoiceAudit } from "./internalChoiceRules";
 
 export type { QuestionDto, PaperImplication, PaperInternalChoiceAudit };
+export type QuestionText = { id: string; type: string; chapterId: string; text: string };
 export type { MarksStyle, NumberingStyle, PrintDensity, UserRole, PaperLanguage };
 
 export type ClassSubjectDto = {
