@@ -85,8 +85,8 @@ import { suggestQuestionType } from "@/lib/typeInference";
 import { findFreshnessConflicts, isExhaustedUsage, type CurrentPaperContext } from "./QuestionUsageHistory";
 import { SimilarQuestionsPanel } from "./SimilarQuestionsPanel";
 import { useSimilarQuestions } from "./useSimilarQuestions";
-import { SIMILAR_CONFIRM } from "@/lib/questionSimilarity";
-import { rememberSavedQuestion } from "@/lib/similarQuestionsClient";
+import { findSimilar, SIMILAR_CONFIRM } from "@/lib/questionSimilarity";
+import { getCachedBookTexts, loadQuestionDetails, rememberSavedQuestion } from "@/lib/similarQuestionsClient";
 
 /** Pre-primary worksheets are written on: they keep blank answer space under each question. */
 const PRE_PRIMARY_SPACE: Record<string, number> = {
@@ -332,11 +332,13 @@ export function QuestionForm({
   const [keptType, setKeptType] = useState<string | null>(null);
   const confirm = useConfirm();
   const confirmedSimilarTextRef = useRef<string | null>(null);
+  const excludeId = initial?.id?.trim() || undefined;
+  const similarityEnabled = !customSaveHandler && !isKindergartenType(type);
   const similar = useSimilarQuestions({
     bookId,
     text,
-    excludeId: initial?.id?.trim() || undefined,
-    enabled: !customSaveHandler,
+    excludeId,
+    enabled: similarityEnabled,
   });
   const activeEditorRef = useRef<MathRichEditorHandle | null>(null);
   const editorsMounted = useRef<Set<MathRichEditorHandle>>(new Set());
@@ -525,31 +527,51 @@ export function QuestionForm({
     const problem = customSaveHandler && unchanged ? null : validationError();
     if (problem) return setError(problem);
 
-    if (
-      !initial?.id &&
-      !customSaveHandler &&
-      similar.best >= SIMILAR_CONFIRM &&
-      similar.matches.length > 0 &&
-      confirmedSimilarTextRef.current !== text
-    ) {
-      const top = similar.matches[0].question;
-      const chapterPrefix = top.chapter?.number !== undefined ? `Ch ${top.chapter.number}: ` : "";
-      const normalizedSnippet = top.text.replace(/\s+/g, " ").trim();
-      const snippet =
-        normalizedSnippet.length > 80 ? `${normalizedSnippet.slice(0, 80)}…` : normalizedSnippet;
-      const usedPaper =
-        (paperContext && top.usages?.find((u) => isExhaustedUsage(u, paperContext) && u.paperTitle?.trim())) ??
-        (paperContext && findFreshnessConflicts(top.usages, paperContext).find((u) => u.paperTitle?.trim())) ??
-        top.usages?.find((u) => u.paperTitle?.trim());
-      const usedClause = usedPaper?.paperTitle?.trim() ? `, used in ${usedPaper.paperTitle.trim()}` : "";
-      const proceed = await confirm({
-        title: "This question is already in the bank",
-        message: `It looks the same as ${chapterPrefix}\u201C${snippet}\u201D${usedClause}. Save a new copy anyway?`,
-        confirmLabel: "Save anyway",
-        cancelLabel: "Cancel",
-      });
-      if (!proceed) return;
-      confirmedSimilarTextRef.current = text;
+    if (!excludeId && similarityEnabled && confirmedSimilarTextRef.current !== text) {
+      const trimmedBookId = bookId.trim();
+      const candidates = trimmedBookId ? (getCachedBookTexts(trimmedBookId) ?? []) : [];
+      const exactHit = findSimilar(text, candidates, {
+        limit: 1,
+        minScore: SIMILAR_CONFIRM,
+        excludeIds: excludeId ? [excludeId] : undefined,
+      })[0];
+
+      if (exactHit) {
+        let topDto = similar.matches.find((m) => m.question.id === exactHit.item.id)?.question;
+        if (!topDto) {
+          setBusy(true);
+          try {
+            const loaded = await loadQuestionDetails([exactHit.item.id]);
+            topDto = loaded[0];
+          } catch {
+            // Fall back to the cached text/chapter metadata if detail lookup fails.
+          } finally {
+            setBusy(false);
+          }
+        }
+
+        const chapterNumber =
+          topDto?.chapter?.number ?? chapters.find((c) => c.id === exactHit.item.chapterId)?.number;
+        const chapterPrefix = chapterNumber !== undefined ? `Ch ${chapterNumber}: ` : "";
+        const sourceText = topDto?.text ?? exactHit.item.text;
+        const normalizedSnippet = sourceText.replace(/\s+/g, " ").trim();
+        const snippet =
+          normalizedSnippet.length > 80 ? `${normalizedSnippet.slice(0, 80)}…` : normalizedSnippet;
+        const usedPaper =
+          topDto &&
+          ((paperContext && topDto.usages?.find((u) => isExhaustedUsage(u, paperContext) && u.paperTitle?.trim())) ??
+            (paperContext && findFreshnessConflicts(topDto.usages, paperContext).find((u) => u.paperTitle?.trim())) ??
+            topDto.usages?.find((u) => u.paperTitle?.trim()));
+        const usedClause = usedPaper?.paperTitle?.trim() ? `, used in ${usedPaper.paperTitle.trim()}` : "";
+        const proceed = await confirm({
+          title: "This question is already in the bank",
+          message: `It looks the same as ${chapterPrefix}\u201C${snippet}\u201D${usedClause}. Save a new copy anyway?`,
+          confirmLabel: "Save anyway",
+          cancelLabel: "Cancel",
+        });
+        if (!proceed) return;
+        confirmedSimilarTextRef.current = text;
+      }
     }
 
     setBusy(true);
