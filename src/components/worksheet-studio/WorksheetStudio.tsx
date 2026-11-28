@@ -175,6 +175,15 @@ export function WorksheetStudio({ id }: { id: string }) {
             <button type="button" className="btn" onClick={() => setDetailsOpen(true)}>
               <Pencil size={14} /> Details
             </button>
+            <label className="btn cursor-pointer" title="Moves activities to fill the page when you print. Numbers follow the new order.">
+              <input
+                type="checkbox"
+                className="accent-indigo-600"
+                checked={ws.paper?.autoArrange !== false}
+                onChange={(e) => void ws.setAutoArrange(e.target.checked)}
+              />
+              Arrange automatically when printing
+            </label>
             <Link href={`/papers/${id}/print`} target={paperOutputTab(id)} className="btn">
               <Printer size={15} /> Print preview
             </Link>
@@ -198,7 +207,7 @@ export function WorksheetStudio({ id }: { id: string }) {
               onSelect={select}
               onMoveTo={(a, index) => void ws.moveTo(a, index).then(() => announce(`${a.plugin.shortLabel} moved to position ${index + 1}`))}
               draftFor={ws.draftFor}
-              onArrange={(order) => void ws.arrange(order, "Arrange to fit").then(() => announce("Activities arranged so small ones share rows"))}
+              onArrange={(order) => void ws.arrange(order, "Arrange to fit").then(() => announce("Activities arranged to fill the page"))}
               addButton={
                 <button
                   type="button"

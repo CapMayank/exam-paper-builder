@@ -302,6 +302,15 @@ export function useWorksheet(id: string) {
   /** The worksheet as it is now (with unsaved edits), for saving as a template. */
   const snapshotAll = (): Snapshot[] => current().map(snapshot);
 
+  /** Whether print preview arranges the activities to fit the page (saved on the worksheet). */
+  async function setAutoArrange(on: boolean) {
+    try {
+      setPaper(await api<PaperData>(`/api/papers/${id}`, { method: "PATCH", json: { autoArrange: on } }));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
   function step(kind: "undo" | "redo") {
     return serial(() => (kind === "undo" ? history.undo() : history.redo()));
   }
@@ -323,6 +332,7 @@ export function useWorksheet(id: string) {
     moveTo,
     nudge,
     arrange,
+    setAutoArrange,
     remove,
     setMarks,
     edit,

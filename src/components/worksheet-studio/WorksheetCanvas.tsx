@@ -1,8 +1,9 @@
 "use client";
 
 import { GripVertical, Sparkles } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { arrangeToFit, fitsHalfWidth, pairHalfWidth } from "@/lib/kindergarten/pairing";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { fitsHalfWidth } from "@/lib/kindergarten/pairing";
+import { PACK_SAFETY, packWorksheet, rowsFor, type PackItem } from "@/lib/kindergarten/worksheetPack";
 import { pageFill, type FillLevel } from "./pageFill";
 import type { Draft } from "./useActivityDrafts";
 import type { Activity } from "./types";
@@ -10,6 +11,11 @@ import type { Activity } from "./types";
 export function activityDomId(itemId: string) {
   return `ws-activity-${itemId}`;
 }
+
+const PX_PER_MM = 96 / 25.4;
+/** A4 content height, and roughly the worksheet header above the first activity on page 1 (school, name lines). */
+const PAGE_MM = 267;
+const HEADER_MM = 40;
 
 /** Where a dragged activity lands: before item `slot` (slot = count means at the end). */
 function landingIndex(from: number, slot: number) {
@@ -49,6 +55,7 @@ export function WorksheetCanvas({
     level: FillLevel;
     scale: number;
   }>({ pages: 0, level: "fits", scale: 1 });
+  const [heights, setHeights] = useState<Record<string, number>>({});
   const [dragFrom, setDragFrom] = useState<number | null>(null);
   const [slot, setSlot] = useState<number | null>(null);
 
@@ -57,39 +64,46 @@ export function WorksheetCanvas({
   useEffect(() => {
     const el = measureRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() =>
-      setFill(pageFill(el.scrollHeight, el.clientWidth)),
-    );
+    const ro = new ResizeObserver(() => {
+      setFill(pageFill(el.scrollHeight, el.clientWidth));
+      // each activity's height at print width, for the two-column split and Arrange to fit
+      const next: Record<string, number> = {};
+      el.querySelectorAll<HTMLElement>("[data-ws-item]").forEach((n) => (next[n.dataset.wsItem!] = n.getBoundingClientRect().height));
+      setHeights((h) => (JSON.stringify(h) === JSON.stringify(next) ? h : next));
+    });
     ro.observe(el);
+    el.querySelectorAll("[data-ws-item]").forEach((n) => ro.observe(n));
     return () => ro.disconnect();
   }, [activities.length]);
 
+  // the rows print makes: runs of small activities as two columns that end about level
+  const items: PackItem[] = activities.map((a) => ({ id: a.item.id, half: fitsHalfWidth(a.plugin, draftFor(a).config), height: heights[a.item.id] ?? 1 }));
+  const itemsKey = JSON.stringify(items);
+  const { rows, packed } = useMemo(() => {
+    const list: PackItem[] = JSON.parse(itemsKey);
+    const measured = list.length > 1 && list.every((i) => i.height > 1);
+    const page = PAGE_MM * PX_PER_MM;
+    const order = measured
+      ? packWorksheet(list, { page1: (page - HEADER_MM * PX_PER_MM) * PACK_SAFETY, page2: page * PACK_SAFETY, gap: 0 })
+      : list.map((i) => i.id);
+    return { rows: rowsFor(list, 0), packed: order };
+  }, [itemsKey]);
+
   if (activities.length === 0) return <>{emptyState}</>;
 
-  // the same rows print makes: two half-width activities in a row share one, left then right
   const indexOf = new Map(activities.map((a, i) => [a.item.id, i]));
-  const isHalf = (a: Activity) => fitsHalfWidth(a.plugin, draftFor(a).config);
-  const rows = pairHalfWidth(activities, isHalf);
-  // small activities kept apart by a big one could share rows if moved up beside each other
-  const arranged = arrangeToFit(activities, isHalf);
-  const rowsSaved = rows.length - pairHalfWidth(arranged, isHalf).length;
-  const rowClass = (row: Activity[]) =>
-    row.length === 2 ? "grid grid-cols-2 items-start gap-x-[5mm]" : "";
+  const byId = new Map(activities.map((a) => [a.item.id, a]));
+  const arranged = packed.map((id) => byId.get(id)!);
+  const canArrange = packed.some((id, i) => id !== activities[i].item.id);
+  const rowKey = (r: (typeof rows)[number]) => (r.kind === "full" ? r.ids[0] : r.left[0]);
 
   const endDrag = () => {
     setDragFrom(null);
     setSlot(null);
   };
 
-  return (
-    <div className="space-y-3">
-      <div className="mx-auto max-w-[760px] rounded-md bg-white px-4 py-6 shadow-md ring-1 ring-slate-200 sm:px-8 sm:py-8">
-        <div className="space-y-1">
-          {rows.map((row) => (
-            <div key={row[0].item.id} className={rowClass(row)}>
-              {row.map((a) => {
+  const renderCard = (a: Activity) => {
                 const idx = indexOf.get(a.item.id)!;
-                const paired = row.length === 2;
                 const draft = draftFor(a);
                 const Print = a.plugin.renderPrint;
                 const selected = a.item.id === selectedId;
@@ -109,10 +123,8 @@ export function WorksheetCanvas({
                       if (dragFrom === null) return;
                       e.preventDefault();
                       const r = e.currentTarget.getBoundingClientRect();
-                      // side by side, left half of the box means "before" this one; stacked, the top half does
-                      const before = paired
-                        ? e.clientX < r.left + r.width / 2
-                        : e.clientY < r.top + r.height / 2;
+                      // the top half of the box means "before" this one
+                      const before = e.clientY < r.top + r.height / 2;
                       setSlot(before ? idx : idx + 1);
                     }}
                     onDrop={(e) => {
@@ -187,9 +199,22 @@ export function WorksheetCanvas({
                     )}
                   </div>
                 );
-              })}
-            </div>
-          ))}
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="mx-auto max-w-[760px] rounded-md bg-white px-4 py-6 shadow-md ring-1 ring-slate-200 sm:px-8 sm:py-8">
+        <div className="space-y-1">
+          {rows.map((row) =>
+            row.kind === "full" ? (
+              <div key={rowKey(row)}>{renderCard(byId.get(row.ids[0])!)}</div>
+            ) : (
+              <div key={rowKey(row)} className="grid grid-cols-2 items-start gap-x-[5mm]">
+                <div className="min-w-0 space-y-1">{row.left.map((id) => renderCard(byId.get(id)!))}</div>
+                <div className="min-w-0 space-y-1">{row.right.map((id) => renderCard(byId.get(id)!))}</div>
+              </div>
+            ),
+          )}
         </div>
         {addButton && <div className="no-print mt-4">{addButton}</div>}
       </div>
@@ -201,24 +226,26 @@ export function WorksheetCanvas({
         style={{ width: "182mm" }}
       >
         <div ref={measureRef} className="space-y-1">
-          {rows.map((row) => (
-            <div key={row[0].item.id} className={rowClass(row)}>
-              {row.map((a) => {
-                const Print = a.plugin.renderPrint;
-                const draft = draftFor(a);
-                return (
-                  <div key={a.item.id} className="min-w-0">
-                    <Print
-                      config={draft.config}
-                      instructionText={draft.text}
-                      numberLabel={`${indexOf.get(a.item.id)! + 1}.`}
-                      marks={a.section.marksEach}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          ))}
+          {rows.map((row) => {
+            const measure = (id: string) => {
+              const a = byId.get(id)!;
+              const Print = a.plugin.renderPrint;
+              const draft = draftFor(a);
+              return (
+                <div key={id} className="min-w-0" data-ws-item={id}>
+                  <Print config={draft.config} instructionText={draft.text} numberLabel={`${indexOf.get(id)! + 1}.`} marks={a.section.marksEach} />
+                </div>
+              );
+            };
+            return row.kind === "full" ? (
+              <div key={rowKey(row)}>{measure(row.ids[0])}</div>
+            ) : (
+              <div key={rowKey(row)} className="grid grid-cols-2 items-start gap-x-[5mm]">
+                <div className="min-w-0 space-y-1">{row.left.map(measure)}</div>
+                <div className="min-w-0 space-y-1">{row.right.map(measure)}</div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -237,11 +264,11 @@ export function WorksheetCanvas({
           level={fill.level}
           scale={fill.scale}
         />
-        {onArrange && rowsSaved > 0 && (
+        {onArrange && canArrange && (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2">
             <p className="text-xs text-indigo-900">
-              {rowsSaved === 1 ? "Two small activities are" : `${rowsSaved * 2} small activities are`} kept apart by bigger
-              ones. Moving them side by side saves room, so print stays bigger.
+              Some space is left empty. Print preview moves activities to fill the page; you can do it now to see how it
+              will look. Numbers follow the new order.
             </p>
             <button type="button" className="btn btn-sm btn-primary" onClick={() => onArrange(arranged)}>
               <Sparkles size={13} /> Arrange to fit
