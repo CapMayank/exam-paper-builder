@@ -69,7 +69,16 @@ export function useSimilarQuestions(args: {
 
   // Debounce matching on text and hydrate full QuestionDtos for top hits.
   useEffect(() => {
-    if (!canMatch) return;
+    if (!canMatch) {
+      const resetTimer = setTimeout(() => {
+        setResult((prev) =>
+          prev.matches.length === 0 && prev.bookId === "" && prev.excludeId === undefined
+            ? prev
+            : { bookId: "", excludeId: undefined, matches: [] },
+        );
+      }, 0);
+      return () => clearTimeout(resetTimer);
+    }
 
     let cancelled = false;
     const timer = setTimeout(() => {
