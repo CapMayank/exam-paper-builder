@@ -80,8 +80,13 @@ import { TableModal } from "./TableModal";
 import { BookFigureModal } from "./BookFigureModal";
 import { OptionFigureButton } from "./OptionFigureButton";
 import { joinOptionFigure, splitOptionFigure } from "@/lib/optionFigure";
-import { ErrorBanner, Field } from "./ui";
+import { ErrorBanner, Field, useConfirm } from "./ui";
 import { suggestQuestionType } from "@/lib/typeInference";
+import { findFreshnessConflicts, isExhaustedUsage, type CurrentPaperContext } from "./QuestionUsageHistory";
+import { SimilarQuestionsPanel } from "./SimilarQuestionsPanel";
+import { useSimilarQuestions } from "./useSimilarQuestions";
+import { SIMILAR_CONFIRM } from "@/lib/questionSimilarity";
+import { rememberSavedQuestion } from "@/lib/similarQuestionsClient";
 
 /** Pre-primary worksheets are written on: they keep blank answer space under each question. */
 const PRE_PRIMARY_SPACE: Record<string, number> = {
@@ -167,6 +172,9 @@ export function QuestionForm({
   submitLabel = "Save question",
   showPaperEditModes,
   customSaveHandler,
+  paperContext,
+  onUseExisting,
+  useExistingBlockedReason,
   onSaved,
   onCancel,
 }: {
@@ -193,6 +201,12 @@ export function QuestionForm({
   showPaperEditModes?: boolean;
   /** `info.unchanged`: the question is exactly as the form opened it (an edit whose question was not touched). */
   customSaveHandler?: (payload: unknown, mode: "UPDATE_MASTER" | "FORK_COPY", info?: { unchanged: boolean }) => Promise<void>;
+  /** Active paper context for flagging similar bank questions already used this session. */
+  paperContext?: CurrentPaperContext;
+  /** Paper workbench callback to place an existing similar question instead of saving a new one. */
+  onUseExisting?: (q: QuestionDto) => Promise<unknown> | void;
+  /** Returns why a similar bank question cannot be placed in the current slot, or null when usable. */
+  useExistingBlockedReason?: (q: QuestionDto) => string | null;
   onSaved?: (q: QuestionDto) => void;
   onCancel: () => void;
 }) {
@@ -316,6 +330,14 @@ export function QuestionForm({
   const [error, setError] = useState<string | null>(null);
   // "SHORT>UNSEEN_PASSAGE": the teacher chose to keep their type over the one the form found
   const [keptType, setKeptType] = useState<string | null>(null);
+  const confirm = useConfirm();
+  const confirmedSimilarTextRef = useRef<string | null>(null);
+  const similar = useSimilarQuestions({
+    bookId,
+    text,
+    excludeId: initial?.id?.trim() || undefined,
+    enabled: !customSaveHandler,
+  });
   const activeEditorRef = useRef<MathRichEditorHandle | null>(null);
   const editorsMounted = useRef<Set<MathRichEditorHandle>>(new Set());
   const [activeField, setActiveField] = useState<
@@ -503,6 +525,33 @@ export function QuestionForm({
     const problem = customSaveHandler && unchanged ? null : validationError();
     if (problem) return setError(problem);
 
+    if (
+      !initial?.id &&
+      !customSaveHandler &&
+      similar.best >= SIMILAR_CONFIRM &&
+      similar.matches.length > 0 &&
+      confirmedSimilarTextRef.current !== text
+    ) {
+      const top = similar.matches[0].question;
+      const chapterPrefix = top.chapter?.number !== undefined ? `Ch ${top.chapter.number}: ` : "";
+      const normalizedSnippet = top.text.replace(/\s+/g, " ").trim();
+      const snippet =
+        normalizedSnippet.length > 80 ? `${normalizedSnippet.slice(0, 80)}…` : normalizedSnippet;
+      const usedPaper =
+        (paperContext && top.usages?.find((u) => isExhaustedUsage(u, paperContext) && u.paperTitle?.trim())) ??
+        (paperContext && findFreshnessConflicts(top.usages, paperContext).find((u) => u.paperTitle?.trim())) ??
+        top.usages?.find((u) => u.paperTitle?.trim());
+      const usedClause = usedPaper?.paperTitle?.trim() ? `, used in ${usedPaper.paperTitle.trim()}` : "";
+      const proceed = await confirm({
+        title: "This question is already in the bank",
+        message: `It looks the same as ${chapterPrefix}\u201C${snippet}\u201D${usedClause}. Save a new copy anyway?`,
+        confirmLabel: "Save anyway",
+        cancelLabel: "Cancel",
+      });
+      if (!proceed) return;
+      confirmedSimilarTextRef.current = text;
+    }
+
     setBusy(true);
     try {
       if (customSaveHandler) {
@@ -512,6 +561,7 @@ export function QuestionForm({
         const saved = isExisting
           ? await api<QuestionDto>(`/api/questions/${initial!.id}`, { method: "PUT", json: payload })
           : await api<QuestionDto>("/api/questions", { method: "POST", json: payload });
+        rememberSavedQuestion(saved);
         onSaved?.(saved);
       }
     } catch (err) {
@@ -994,6 +1044,14 @@ export function QuestionForm({
               autoFocus
             />
           </div>
+
+          <SimilarQuestionsPanel
+            matches={similar.matches}
+            best={similar.best}
+            paperContext={paperContext}
+            onUseExisting={onUseExisting}
+            blockedReason={useExistingBlockedReason}
+          />
 
       {/* Match the Column Pair Editor */}
       {type === "MATCH_COLUMN" && (
