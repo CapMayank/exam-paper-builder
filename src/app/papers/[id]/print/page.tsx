@@ -20,6 +20,7 @@ import {
 import { BackToPaperLink } from "@/components/BackToPaperLink";
 import { use, useCallback, useEffect, useState } from "react";
 import { PaperSheets, type SheetsInfo } from "@/components/PaperSheets";
+import { useWorksheetAutoArrange } from "@/components/worksheet-print/useWorksheetAutoArrange";
 import { PrintedPrompt } from "@/components/exams/PrintedPrompt";
 import { Modal } from "@/components/ui";
 import { api } from "@/lib/client";
@@ -119,6 +120,8 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
     },
     [paper],
   );
+
+  const arrange = useWorksheetAutoArrange(paper, setPaper);
 
   if (error) return <p className="p-8 text-red-700">{error}</p>;
   if (!paper) {
@@ -395,6 +398,16 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
           </div>
         </div>
 
+        {/* Worksheet: arranged to fit when the preview opened */}
+        {isWorksheet && arrange.arranged && (
+          <div className="mx-auto mt-2 flex max-w-7xl items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900 print:hidden">
+            <span>Arranged to fit the page — activity numbers updated</span>
+            <button type="button" className="btn btn-sm" onClick={() => void arrange.undo()}>
+              Undo
+            </button>
+          </div>
+        )}
+
         {/* Worksheet 2-page fit status */}
         {isWorksheet && info?.fit?.overLimit && (
           <div className="mx-auto mt-2 max-w-7xl rounded-md border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-800">
@@ -462,6 +475,8 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
           twoUpCutMode={twoUpCutMode}
           autoFit={autoFitPages}
           onInfo={onInfo}
+          activityHeights={isWorksheet ? arrange.activityHeights : undefined}
+          onMeasured={isWorksheet ? arrange.onMeasured : undefined}
         />
       </div>
 

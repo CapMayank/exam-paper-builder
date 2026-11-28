@@ -204,3 +204,25 @@ export function packWorksheet(items: PackItem[], pages: PackPages): string[] {
   }
   return order.map((it) => it.id);
 }
+
+/** What the print preview measured for a worksheet at full size (px). `order` is the printed order. */
+export type WorksheetMeasure = {
+  order: string[];
+  heights: Record<string, number>;
+  half: Record<string, boolean>;
+  /** Height of the worksheet header (school name, student details) above the first activity on page 1. */
+  headerPx: number;
+  pageHeightPx: number;
+};
+
+/** Packing leaves this share of each page free, so small measuring differences never spill onto a third page. */
+export const PACK_SAFETY = 0.97;
+
+/** The order the print preview should save, or null when nothing would change (or it can't tell). */
+export function arrangeForPrint(m: WorksheetMeasure): string[] | null {
+  if (m.order.length < 2 || m.order.some((id) => typeof m.heights[id] !== "number")) return null;
+  const items: PackItem[] = m.order.map((id) => ({ id, half: Boolean(m.half[id]), height: m.heights[id] }));
+  const pages: PackPages = { page1: (m.pageHeightPx - m.headerPx) * PACK_SAFETY, page2: m.pageHeightPx * PACK_SAFETY, gap: 0 };
+  const next = packWorksheet(items, pages);
+  return next.every((id, i) => id === m.order[i]) ? null : next;
+}

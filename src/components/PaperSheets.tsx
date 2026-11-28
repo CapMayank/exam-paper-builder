@@ -38,7 +38,7 @@ import { normalizeNumberingStyle,
 import { decomposeForSlot } from "@/lib/subpartExtractor";
 import { WorkbookHeader } from "@/lib/kindergarten/components/WorkbookHeader";
 import { fitsHalfWidth } from "@/lib/kindergarten/pairing";
-import { splitColumns } from "@/lib/kindergarten/worksheetPack";
+import { splitColumns, type WorksheetMeasure } from "@/lib/kindergarten/worksheetPack";
 import { getKindergartenActivity, parseKindergartenConfig } from "@/lib/kindergarten/registry";
 import {
   computeDisplayedPaperNumbering,
@@ -87,7 +87,7 @@ type Block = {
 function halfRunRender(run: { ids: string[]; renders: (() => ReactNode)[] }, heights?: Record<string, number>) {
   return function HalfRunColumns() {
     const n = run.ids.length;
-    if (n === 1) return run.renders[0]();
+    // a lone one keeps to the left half too, so it is measured (and packed) at the width it prints alongside others
     const hs = run.ids.map((id) => heights?.[id]);
     const k = hs.every((h): h is number => typeof h === "number") ? splitColumns(hs, 0) : Math.ceil(n / 2);
     const column = (from: number, to: number) => <div style={{ minWidth: 0 }}>{run.renders.slice(from, to).map((r, i) => <div key={run.ids[from + i]}>{r()}</div>)}</div>;
@@ -915,7 +915,8 @@ function buildBlocks(
           const half =
             !it.orQuestion && !instructionLine && fitsHalfWidth(plugin, parseKindergartenConfig(it.question.type, it.question.options?.[0] ?? ""));
           const renderActivity = () => (
-            <div style={{ paddingBottom: questionBottomPadding }}>
+            // tagged so the print preview can measure each activity on its own (worksheet packing)
+            <div style={{ paddingBottom: questionBottomPadding }} data-ws-item={it.id} data-ws-half={half ? "1" : "0"}>
               <QuestionView
                 q={it.question}
                 orQuestion={it.orQuestion}
@@ -1202,6 +1203,7 @@ export function PaperSheets({
   maxPages = BOOKLET_MAX_PAGES,
   onInfo,
   activityHeights,
+  onMeasured,
 }: {
   paper: PaperData;
   view?: "reading" | "sheets";
@@ -1218,6 +1220,8 @@ export function PaperSheets({
   onInfo?: (i: SheetsInfo) => void;
   /** Worksheets: each activity's measured height by item id, so runs of small ones split into level columns. */
   activityHeights?: Record<string, number>;
+  /** Worksheets: called with every activity's full-size height each time the page is measured at full size. */
+  onMeasured?: (m: WorksheetMeasure) => void;
 }) {
   const isA5 = paper.layout === "BOOKLET_A4";
   const isBooklet = isBookletLayout(paper.layout);
@@ -1266,6 +1270,17 @@ export function PaperSheets({
       const els = Array.from(root.children) as HTMLElement[];
       const heights = els.map((c) => c.getBoundingClientRect().height);
       const pageH = probe.getBoundingClientRect().height;
+      if (isWorksheet && fitLevel === 0 && onMeasured) {
+        const tagged = Array.from(root.querySelectorAll<HTMLElement>("[data-ws-item]"));
+        const firstBlock = els.findIndex((el) => el.querySelector("[data-ws-item]"));
+        onMeasured({
+          order: tagged.map((el) => el.dataset.wsItem!),
+          heights: Object.fromEntries(tagged.map((el) => [el.dataset.wsItem!, el.getBoundingClientRect().height])),
+          half: Object.fromEntries(tagged.map((el) => [el.dataset.wsItem!, el.dataset.wsHalf === "1"])),
+          headerPx: firstBlock > 0 ? heights.slice(0, firstBlock).reduce((a, b) => a + b, 0) : 0,
+          pageHeightPx: pageH - 6,
+        });
+      }
       const paged = paginateSlices(
         heights,
         blocks.map((b) => b.keepWithNext),
@@ -1302,7 +1317,7 @@ export function PaperSheets({
     return () => {
       cancelled = true;
     };
-  }, [blocks, fitActive, fitLevel, fitCurrent, fitInputKey, fitMaxPages, fitLevels, fitTwoUp, isWorksheet]);
+  }, [blocks, fitActive, fitLevel, fitCurrent, fitInputKey, fitMaxPages, fitLevels, fitTwoUp, isWorksheet, onMeasured]);
 
   const pageCount = pages?.length ?? 0;
   const isEligibleTwoUp = isA5 && pageCount > 0 && pageCount <= 2;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { seededRandom } from "./seeded";
-import { packWorksheet, pageCount, rowHeight, rowsFor, splitColumns, type LayoutRow, type PackItem, type PackPages } from "./worksheetPack";
+import { arrangeForPrint, packWorksheet, pageCount, rowHeight, rowsFor, splitColumns, type LayoutRow, type PackItem, type PackPages } from "./worksheetPack";
 
 const full = (id: string, height: number): PackItem => ({ id, half: false, height });
 const half = (id: string, height: number): PackItem => ({ id, half: true, height });
@@ -107,5 +107,33 @@ describe("packWorksheet", () => {
     expect(performance.now() - t).toBeLessThan(500);
     expect(new Set(out).size).toBe(items.length);
     expect(Number.isFinite(pageCount(inOrder(items, out), A4))).toBe(true);
+  });
+});
+
+describe("arrangeForPrint", () => {
+  const measured = (order: string[], heights: Record<string, number>, half: Record<string, boolean> = {}) => ({
+    order,
+    heights,
+    half,
+    headerPx: 100,
+    pageHeightPx: 600,
+  });
+
+  it("returns the new order when packing fills page 1 better", () => {
+    // page 1 holds (600 − 100) × 0.97 = 485: A (300) + C (180) fit, B (400) goes to page 2
+    expect(arrangeForPrint(measured(["A", "B", "C"], { A: 300, B: 400, C: 180 }))).toEqual(["A", "C", "B"]);
+  });
+
+  it("returns null when the order is already the packed one", () => {
+    expect(arrangeForPrint(measured(["A", "C", "B"], { A: 300, B: 400, C: 180 }))).toBeNull();
+  });
+
+  it("returns null for an empty or one-activity worksheet", () => {
+    expect(arrangeForPrint(measured([], {}))).toBeNull();
+    expect(arrangeForPrint(measured(["A"], { A: 300 }))).toBeNull();
+  });
+
+  it("returns null when a height is missing", () => {
+    expect(arrangeForPrint(measured(["A", "B"], { A: 300 }))).toBeNull();
   });
 });
