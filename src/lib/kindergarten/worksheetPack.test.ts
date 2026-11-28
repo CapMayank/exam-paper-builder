@@ -137,3 +137,17 @@ describe("arrangeForPrint", () => {
     expect(arrangeForPrint(measured(["A", "B"], { A: 300 }))).toBeNull();
   });
 });
+
+describe("arrangeForPrint when the worksheet has to shrink", () => {
+  it("arranges for the size it will print at, so it fits 2 pages as large as possible", () => {
+    const heights = { A: 100, B: 284, C: 443, D: 438, E: 198 };
+    const out = arrangeForPrint({ order: ["A", "B", "C", "D", "E"], heights, half: {}, headerPx: 100, pageHeightPx: 600 })!;
+    const fitsAt = (z: number) =>
+      pageCount(
+        out.map((id) => ({ id, half: false, height: heights[id as keyof typeof heights] })),
+        { page1: (500 * 0.97) / z, page2: (600 * 0.97) / z, gap: 0 },
+      ) <= 2;
+    // 68% is the largest print size at which any order of these fits one sheet
+    expect(fitsAt(0.68)).toBe(true);
+  });
+});

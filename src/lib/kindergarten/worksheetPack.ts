@@ -6,6 +6,8 @@
  * alone: every run of consecutive half-width activities becomes one columns row.
  */
 
+import { WORKSHEET_FIT_LEVELS, WORKSHEET_MAX_PAGES } from "../printFit";
+
 export type PackItem = { id: string; half: boolean; height: number };
 
 export type LayoutRow = { kind: "full"; ids: [string] } | { kind: "columns"; left: string[]; right: string[] };
@@ -218,11 +220,31 @@ export type WorksheetMeasure = {
 /** Packing leaves this share of each page free, so small measuring differences never spill onto a third page. */
 export const PACK_SAFETY = 0.97;
 
-/** The order the print preview should save, or null when nothing would change (or it can't tell). */
+/**
+ * The order the print preview should save, or null when nothing would change (or it can't tell).
+ * A worksheet too long for 2 pages at full size is printed smaller, which moves every page break, so it is
+ * arranged for the largest print size at which it fits 2 pages (the sizes print steps through).
+ */
 export function arrangeForPrint(m: WorksheetMeasure): string[] | null {
   if (m.order.length < 2 || m.order.some((id) => typeof m.heights[id] !== "number")) return null;
   const items: PackItem[] = m.order.map((id) => ({ id, half: Boolean(m.half[id]), height: m.heights[id] }));
-  const pages: PackPages = { page1: (m.pageHeightPx - m.headerPx) * PACK_SAFETY, page2: m.pageHeightPx * PACK_SAFETY, gap: 0 };
-  const next = packWorksheet(items, pages);
+  const pagesAt = (zoom: number): PackPages => ({
+    page1: ((m.pageHeightPx - m.headerPx) * PACK_SAFETY) / zoom,
+    page2: (m.pageHeightPx * PACK_SAFETY) / zoom,
+    gap: 0,
+  });
+  const zooms = WORKSHEET_FIT_LEVELS.map((f) => f.zoom);
+  let next = m.order;
+  for (const zoom of zooms) {
+    const pages = pagesAt(zoom);
+    const order = packWorksheet(items, pages);
+    next = order;
+    if (pageCount(inOrderOf(items, order), pages) <= WORKSHEET_MAX_PAGES) break;
+  }
   return next.every((id, i) => id === m.order[i]) ? null : next;
 }
+
+const inOrderOf = (items: PackItem[], ids: string[]) => {
+  const byId = new Map(items.map((i) => [i.id, i]));
+  return ids.map((id) => byId.get(id)!);
+};
