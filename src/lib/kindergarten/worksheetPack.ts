@@ -166,7 +166,31 @@ function greedyFill(items: PackItem[], pages: PackPages): PackItem[] {
   return out;
 }
 
-/** One packing pass: the better of the given order and a page-filling guess, improved by swapping pairs. */
+/**
+ * Every order one step away: two activities swapped, or a run of 1–3 neighbouring ones taken out and put in
+ * somewhere else (a pair of small activities has to move together, or it is split for a step).
+ */
+function* neighbours(order: PackItem[]): Generator<PackItem[]> {
+  for (let i = 0; i < order.length; i++) {
+    for (let j = i + 1; j < order.length; j++) {
+      const swapped = [...order];
+      [swapped[i], swapped[j]] = [swapped[j], swapped[i]];
+      yield swapped;
+    }
+  }
+  for (let len = 1; len <= 3; len++) {
+    for (let i = 0; i + len <= order.length; i++) {
+      const run = order.slice(i, i + len);
+      const rest = [...order.slice(0, i), ...order.slice(i + len)];
+      for (let j = 0; j <= rest.length; j++) {
+        if (j === i) continue; // back where it was
+        yield [...rest.slice(0, j), ...run, ...rest.slice(j)];
+      }
+    }
+  }
+}
+
+/** One packing pass: the better of the given order and a page-filling guess, improved one step at a time. */
 function packOnce(items: PackItem[], pages: PackPages): PackItem[] {
   const startIndex = new Map(items.map((it, k) => [it.id, k]));
   const greedy = greedyFill(items, pages);
@@ -174,16 +198,13 @@ function packOnce(items: PackItem[], pages: PackPages): PackItem[] {
   let bestScore = score(best, pages, startIndex);
   for (let pass = 0; pass < 200; pass++) {
     let improved = false;
-    for (let i = 0; i < best.length && !improved; i++) {
-      for (let j = i + 1; j < best.length && !improved; j++) {
-        const next = [...best];
-        [next[i], next[j]] = [next[j], next[i]];
-        const s = score(next, pages, startIndex);
-        if (better(s, bestScore)) {
-          best = next;
-          bestScore = s;
-          improved = true;
-        }
+    for (const next of neighbours(best)) {
+      const s = score(next, pages, startIndex);
+      if (better(s, bestScore)) {
+        best = next;
+        bestScore = s;
+        improved = true;
+        break;
       }
     }
     if (!improved) break;
@@ -232,24 +253,34 @@ export function packPagesAt(m: WorksheetMeasure, zoom: number): PackPages {
 }
 
 /**
- * The order the print preview should save, or null when nothing would change (or it can't tell).
- * A worksheet too long for 2 pages at full size is printed smaller, which moves every page break, so it is
- * arranged for the largest print size at which it fits 2 pages (the sizes print steps through).
+ * The largest print size (one of the sizes print steps through) at which the worksheet can be arranged on
+ * 2 pages — the size the arrangement is made for. A worksheet too long for 2 pages at full size prints
+ * smaller, which moves every page break.
  */
-export function arrangeForPrint(m: WorksheetMeasure): string[] | null {
-  if (m.order.length < 2 || m.order.some((id) => typeof m.heights[id] !== "number")) return null;
-  const items: PackItem[] = m.order.map((id) => ({ id, half: Boolean(m.half[id]), height: m.heights[id] }));
-  const pagesAt = (zoom: number) => packPagesAt(m, zoom);
+export function printZoomFor(m: WorksheetMeasure): number {
+  const items = itemsOf(m);
   const zooms = WORKSHEET_FIT_LEVELS.map((f) => f.zoom);
-  let next = m.order;
+  // even perfectly packed, the activities need about this much page (small ones count half)
+  const need = items.reduce((sum, it) => sum + (it.half ? it.height / 2 : it.height) + (m.gapPx ?? 0), 0);
   for (const zoom of zooms) {
-    const pages = pagesAt(zoom);
-    const order = packWorksheet(items, pages);
-    next = order;
-    if (pageCount(inOrderOf(items, order), pages) <= WORKSHEET_MAX_PAGES) break;
+    const pages = packPagesAt(m, zoom);
+    if (need > pages.page1 + pages.page2) continue;
+    if (pageCount(inOrderOf(items, packWorksheet(items, pages)), pages) <= WORKSHEET_MAX_PAGES) return zoom;
   }
+  return zooms[zooms.length - 1];
+}
+
+/**
+ * The order the print preview should save, or null when nothing would change (or it can't tell). Arranged
+ * for `zoom` when given (the size print actually settled on), otherwise for printZoomFor(m).
+ */
+export function arrangeForPrint(m: WorksheetMeasure, zoom?: number): string[] | null {
+  if (m.order.length < 2 || m.order.some((id) => typeof m.heights[id] !== "number")) return null;
+  const next = packWorksheet(itemsOf(m), packPagesAt(m, zoom ?? printZoomFor(m)));
   return next.every((id, i) => id === m.order[i]) ? null : next;
 }
+
+const itemsOf = (m: WorksheetMeasure): PackItem[] => m.order.map((id) => ({ id, half: Boolean(m.half[id]), height: m.heights[id] ?? 0 }));
 
 const inOrderOf = (items: PackItem[], ids: string[]) => {
   const byId = new Map(items.map((i) => [i.id, i]));

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { seededRandom } from "./seeded";
-import { arrangeForPrint, packPagesAt, packWorksheet, pageCount, rowHeight, rowsFor, splitColumns, type LayoutRow, type PackItem, type PackPages } from "./worksheetPack";
+import { arrangeForPrint, blankArea, packPagesAt, packWorksheet, pageCount, printZoomFor, rowHeight, rowsFor, splitColumns, type LayoutRow, type PackItem, type PackPages } from "./worksheetPack";
 
 const full = (id: string, height: number): PackItem => ({ id, half: false, height });
 const half = (id: string, height: number): PackItem => ({ id, half: true, height });
@@ -170,5 +170,30 @@ describe("packPagesAt", () => {
   it("shrinks the header with everything else when printing smaller", () => {
     // at 50% the page holds twice as much full-size content, and the header is still 100 of it
     expect(packPagesAt(m, 0.5)).toEqual({ page1: (600 * 0.97) / 0.5 - 100, page2: (600 * 0.97) / 0.5, gap: 8 });
+  });
+});
+
+describe("re-packing for the size print settled on", () => {
+  // measured on the 12-activity test worksheet: fits 2 pages at 76% on paper, but print needed 72%
+  const ids = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"];
+  const m = {
+    order: ids,
+    heights: { a: 421, b: 275, c: 265, d: 289, e: 230, f: 158, g: 153, h: 248, i: 245, j: 202, k: 195, l: 189 } as Record<string, number>,
+    half: { b: true, c: true, e: true, f: true, g: true, h: true } as Record<string, boolean>,
+    headerPx: 221,
+    pageHeightPx: 1003,
+    gapPx: 8,
+  };
+  const items = (order: string[]) => order.map((id) => ({ id, half: !!m.half[id], height: m.heights[id] }));
+
+  it("says which print size it arranged for", () => {
+    expect(printZoomFor(m)).toBe(0.76);
+  });
+
+  it("fills page 1 better when told the real print size", () => {
+    const at72 = packPagesAt(m, 0.72);
+    const out = arrangeForPrint(m, 0.72) ?? ids;
+    expect(pageCount(items(out), at72)).toBe(2);
+    expect(blankArea(items(out), at72)).toBeLessThan(blankArea(items(ids), at72));
   });
 });

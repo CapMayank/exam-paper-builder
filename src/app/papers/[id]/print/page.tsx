@@ -122,6 +122,9 @@ export default function PrintPage({ params }: PageProps<"/papers/[id]/print">) {
   );
 
   const arrange = useWorksheetAutoArrange(paper, setPaper);
+  const { onFitScale } = arrange;
+  // once print has settled on a size, the arrangement is checked against it (worksheets only)
+  useEffect(() => onFitScale(info?.fit?.scale), [info, onFitScale]);
 
   if (error) return <p className="p-8 text-red-700">{error}</p>;
   if (!paper) {
