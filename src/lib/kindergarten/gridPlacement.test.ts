@@ -1,13 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { blankPattern, gridOrder, gridShape, numberCells } from "./gridPlacement";
+import { blankPattern, decadeLead, gridOrder, gridShape, numberCells } from "./gridPlacement";
 
 describe("gridOrder", () => {
   it("keeps row order for ROW", () => {
     expect(gridOrder(6, 3, "ROW")).toEqual([0, 1, 2, 3, 4, 5]);
   });
 
-  it("fills down each column for COLUMN", () => {
-    expect(gridOrder(6, 3, "COLUMN")).toEqual([0, 2, 4, 1, 3, 5]);
+  it("fills down each column, ten to a column, for COLUMN", () => {
+    const order = gridOrder(20, 3, "COLUMN");
+    expect(order.slice(0, 4)).toEqual([0, 10, 1, 11]);
+    expect(order.slice(18)).toEqual([9, 19]);
   });
 
   it("puts 1–10 in the first column of a 1–50, 5-column grid", () => {
@@ -18,8 +20,11 @@ describe("gridOrder", () => {
 
   it("pads the bottom of the last column when the count doesn't fill it", () => {
     const order = gridOrder(23, 5, "COLUMN");
-    expect(order).toHaveLength(25);
-    expect([4, 9, 14, 19, 24].map((p) => order[p])).toEqual([20, 21, 22, null, null]);
+    // 3 columns of ten: 1–10, 11–20, 21–23
+    expect(order).toHaveLength(30);
+    expect(order.slice(0, 3)).toEqual([0, 10, 20]);
+    expect(order.slice(3, 6)).toEqual([1, 11, 21]);
+    expect([order[8], order[29]]).toEqual([22, null]);
   });
 
   it("does not pad in ROW mode", () => {
@@ -53,14 +58,33 @@ describe("number grid blanks", () => {
 });
 
 describe("gridShape", () => {
-  it("never leaves a whole column empty when counting down", () => {
-    expect(gridShape(6, 5, "COLUMN")).toEqual({ rows: 2, columns: 3 });
-    expect(gridOrder(6, 5, "COLUMN")).toEqual([0, 2, 4, 1, 3, 5]);
+  it("puts ten numbers in each column when counting down, whatever columns were asked for", () => {
+    expect(gridShape(20, 5, "COLUMN")).toEqual({ rows: 10, columns: 2 });
+    expect(gridShape(50, 10, "COLUMN")).toEqual({ rows: 10, columns: 5 });
+    expect(gridShape(100, 5, "COLUMN")).toEqual({ rows: 10, columns: 10 });
+    expect(gridShape(23, 5, "COLUMN")).toEqual({ rows: 10, columns: 3 });
   });
 
-  it("keeps the asked-for columns when they all get numbers", () => {
-    expect(gridShape(50, 5, "COLUMN")).toEqual({ rows: 10, columns: 5 });
-    expect(gridShape(23, 5, "COLUMN")).toEqual({ rows: 5, columns: 5 });
+  it("uses one short column when all the numbers fit in one ten", () => {
+    expect(gridShape(6, 5, "COLUMN")).toEqual({ rows: 6, columns: 1 });
+    expect(gridOrder(6, 5, "COLUMN")).toEqual([0, 1, 2, 3, 4, 5]);
+  });
+
+  it("lines columns up with the tens when the grid starts mid-ten", () => {
+    // 5–25: first column is 1–10 with 1–4 empty, then 11–20, then 21–25
+    const lead = decadeLead(numberCells(5, 25, "NONE"));
+    expect(lead).toBe(4);
+    expect(gridShape(21, 10, "COLUMN", lead)).toEqual({ rows: 10, columns: 3 });
+    const order = gridOrder(21, 10, "COLUMN", lead);
+    expect(order.slice(0, 3)).toEqual([null, 6, 16]); // row 1: (1), 11, 21
+    expect(order.slice(12, 15)).toEqual([0, 10, 20]); // row 5: 5, 15, 25
+  });
+
+  it("lines descending grids up with the tens too", () => {
+    expect(decadeLead(numberCells(1, 100, "NONE", true))).toBe(0);
+    expect(decadeLead(numberCells(1, 95, "NONE", true))).toBe(5); // 100–96 empty above 95
+    expect(decadeLead(numberCells(0, 20, "NONE"))).toBe(0); // 0–9, 10–19, 20
+    expect(decadeLead([{ value: "a" }])).toBe(0);
   });
 
   it("keeps the old across-rows layout exactly, so saved papers print the same", () => {

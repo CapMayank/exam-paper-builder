@@ -300,6 +300,7 @@ export function RowList<T>({
   min = 1,
   renderRow,
   addLabel,
+  startAt = 1,
 }: {
   label: string;
   rows: T[];
@@ -309,6 +310,8 @@ export function RowList<T>({
   min?: number;
   renderRow: (row: T, update: (r: T) => void, index: number) => React.ReactNode;
   addLabel: string;
+  /** Number shown on the first row, when an item above the list already counts as 1. */
+  startAt?: number;
 }) {
   const set = (i: number, r: T) => onChange(rows.map((x, j) => (j === i ? r : x)));
   const swap = (i: number, j: number) => {
@@ -328,7 +331,7 @@ export function RowList<T>({
       <div className="space-y-1.5">
         {rows.map((row, i) => (
           <div key={i} className="flex items-start gap-1.5 rounded-lg border border-slate-200 bg-slate-50/60 p-1.5">
-            <span className="mt-1.5 w-5 shrink-0 text-center text-[11px] font-bold text-slate-400">{i + 1}</span>
+            <span className="mt-1.5 w-5 shrink-0 text-center text-[11px] font-bold text-slate-400">{i + startAt}</span>
             <div className="min-w-0 flex-1">{renderRow(row, (r) => set(i, r), i)}</div>
             <div className="flex shrink-0 flex-col">
               <button type="button" aria-label="Move up" disabled={i === 0} onClick={() => swap(i, i - 1)} className={iconBtn}>

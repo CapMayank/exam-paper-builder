@@ -25,9 +25,12 @@ function Glyph({ id, size }: { id: string; size: number }) {
 /** Expands a row into its drawn sequence; `null` marks a blank the child completes. */
 export function expandPattern(row: PatternRow): (string | null)[] {
   const unit = row.unit.length ? row.unit : ["circle"];
-  const total = unit.length * Math.max(1, row.repeats);
+  // at most two patterns' worth of blanks
+  const blanks = Math.min(Math.max(0, row.blanksAtEnd), unit.length * 2);
+  // a child can only spot the pattern if it is shown whole twice before the blanks, so add repeats if needed
+  const repeats = Math.max(1, row.repeats, 2 + Math.ceil(blanks / unit.length));
+  const total = unit.length * repeats;
   const seq: (string | null)[] = Array.from({ length: total }, (_, i) => unit[i % unit.length]);
-  const blanks = Math.min(Math.max(0, row.blanksAtEnd), total - 1);
   for (let i = 0; i < blanks; i++) seq[total - 1 - i] = null;
   return seq;
 }

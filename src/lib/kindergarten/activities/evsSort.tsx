@@ -52,7 +52,18 @@ const PRESETS: { label: string; config: Omit<EvsSortConfig, "instruction"> }[] =
   },
 ];
 
-const instructionFor = (a: string, b: string) => `Put a tick (✓) on ${a.toLowerCase()} things and a cross (✗) on ${b.toLowerCase()} things:`;
+const ADJECTIVES = new Set(["big", "small", "hot", "cold", "wet", "dry", "tall", "short", "heavy", "light", "soft", "hard", "old", "new"]);
+
+/** "is ..." phrase for a group name: Fruit -> "a fruit", Not a fruit -> "not a fruit", Living -> "living", Animal things -> "an animal thing". */
+function isPhrase(name: string): string {
+  const n = name.trim().toLowerCase().replace(/\s+things$/, " thing");
+  if (/^(not|a|an|the)\s/.test(n)) return n;
+  if (/^(non-|un)|(?<!th)ing$/.test(n) || ADJECTIVES.has(n)) return n;
+  return `${/^[aeiou]/.test(n) ? "an" : "a"} ${n}`;
+}
+
+export const instructionFor = (a: string, b: string) =>
+  `Put a tick (✓) on each picture that is ${isPhrase(a)} and a cross (✗) on each picture that is ${isPhrase(b)}:`;
 
 export const evsSortDefaultConfig = (): EvsSortConfig => ({
   ...structuredClone(PRESETS[0].config),
@@ -66,7 +77,7 @@ function SortGrid({ config, showKey }: { config: EvsSortConfig; showKey?: boolea
         <span>✓ = {config.groupA}</span>
         <span>✗ = {config.groupB}</span>
       </div>
-      <div className="grid grid-cols-6 gap-2">
+      <div className="grid grid-cols-4 gap-2">
         {config.items.map((it, i) => (
           <div key={i} className="flex flex-col items-center gap-1 rounded-lg border border-slate-300 p-1.5">
             <Art id={it.clipartId} size={40} />
@@ -180,7 +191,7 @@ export const evsSortPlugin: KindergartenActivityPlugin<EvsSortConfig> = {
   validateConfig: (cfg) => (cfg && Array.isArray((cfg as EvsSortConfig).items) ? { valid: true } : { valid: false, error: "Invalid config" }),
   renderEditor: EvsSortEditor,
   renderPrint: EvsSortPrint,
-  // pictures sit in a 6-wide grid that just wraps
+  // pictures sit in a 4-wide grid (about 60mm), so it fits half a page and just wraps
   halfWidth: () => true,
   getSummary: (config) => `${config.groupA} / ${config.groupB} (${config.items.length} pictures)`,
 };

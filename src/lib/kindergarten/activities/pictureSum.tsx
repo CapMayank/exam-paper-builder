@@ -5,11 +5,17 @@ import { ChoiceChips, EditorShell, InstructionField, NumberStepper, PictureChip,
 import React from "react";
 import type { KindergartenActivityPlugin, KindergartenEditorProps, KindergartenPrintProps, PictureSumConfig, PictureSumRow } from "../types";
 import { ActivityFrame, AnswerBox, Art, PreviewBox } from "./_shared";
+import { followMode } from "../autoInstruction";
+
+export const PICTURE_SUM_INSTRUCTIONS: Record<PictureSumConfig["op"], string> = {
+  ADD: "Count the pictures and add. Write the answer in the box:",
+  SUBTRACT: "Count the pictures left after crossing out. Write the answer in the box:",
+};
 
 export const pictureSumDefaultConfig = (): PictureSumConfig => ({
   op: "ADD",
   showPictures: true,
-  instruction: "Count the pictures and add. Write the answer in the box:",
+  instruction: PICTURE_SUM_INSTRUCTIONS.ADD,
   rows: [
     { a: 2, b: 1, clipartId: "apple" },
     { a: 3, b: 2, clipartId: "ball" },
@@ -47,9 +53,11 @@ function PictureSumEditor({ config, onChange, instructionText, onInstructionChan
             <ChoiceChips<PictureSumConfig["op"]>
               label="Sum type"
               value={config.op}
-              onChange={(op) =>
-                onChange({ ...config, op, rows: op === "SUBTRACT" ? config.rows.map((r) => ({ ...r, a: Math.max(1, r.a), b: Math.min(r.b, Math.max(1, r.a)) })) : config.rows })
-              }
+              onChange={(op) => {
+                const instruction = followMode(instructionText || config.instruction, PICTURE_SUM_INSTRUCTIONS, op);
+                onChange({ ...config, op, instruction, rows: op === "SUBTRACT" ? config.rows.map((r) => ({ ...r, a: Math.max(1, r.a), b: Math.min(r.b, Math.max(1, r.a)) })) : config.rows });
+                onInstructionChange(instruction);
+              }}
               options={[
                 { value: "ADD", label: "+ Addition" },
                 { value: "SUBTRACT", label: "− Subtraction" },

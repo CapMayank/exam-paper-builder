@@ -7,6 +7,7 @@
 import { ChoiceChips, EditorShell, InstructionField, TextListField, ToggleRow } from "../editor-kit";
 import type { KindergartenActivityPlugin, KindergartenEditorProps, KindergartenPrintProps } from "../types";
 import { ActivityFrame, PreviewBox } from "./_shared";
+import { followMode } from "../autoInstruction";
 
 export type BarakhadiShow = "NONE" | "FIRST" | "ALL";
 
@@ -30,7 +31,7 @@ export const hindiBarakhadiDefaultConfig = (): HindiBarakhadiConfig => ({
   consonants: ["ग", "म"],
   showForms: "NONE",
   showMatraHeader: true,
-  instruction: "बारहखड़ी लिखो:",
+  instruction: "बारहखड़ी लिखो:", // BARAKHADI_INSTRUCTIONS.NONE
 });
 
 const BOX = "flex h-9 w-9 shrink-0 items-center justify-center rounded border-2 border-slate-800";
@@ -72,7 +73,7 @@ export function BarakhadiRows({ config, showKey }: { config: HindiBarakhadiConfi
                       ) : guide ? (
                         <span className="text-lg font-bold text-slate-950">{f}</span>
                       ) : dotted ? (
-                        <span className="text-lg font-bold text-slate-300">{f}</span>
+                        <span className="text-lg font-bold text-slate-400">{f}</span>
                       ) : null}
                     </span>
                   );
@@ -86,11 +87,17 @@ export function BarakhadiRows({ config, showKey }: { config: HindiBarakhadiConfi
   );
 }
 
+export const BARAKHADI_INSTRUCTIONS: Record<BarakhadiShow, string> = {
+  ALL: "बारहखड़ी के अक्षरों पर लिखो (Trace the barakhadi):",
+  FIRST: "बारहखड़ी देख कर लिखो:",
+  NONE: "बारहखड़ी लिखो:",
+};
+
 function HindiBarakhadiEditor({ config, onChange, instructionText, onInstructionChange }: KindergartenEditorProps<HindiBarakhadiConfig>) {
   const setShow = (showForms: BarakhadiShow) => {
-    onChange({ ...config, showForms });
-    if (showForms === "FIRST") onInstructionChange("बारहखड़ी देख कर लिखो:");
-    else if (showForms === "NONE") onInstructionChange("बारहखड़ी लिखो:");
+    const instruction = followMode(instructionText || config.instruction, BARAKHADI_INSTRUCTIONS, showForms);
+    onChange({ ...config, showForms, instruction });
+    onInstructionChange(instruction);
   };
   return (
     <div className="space-y-4">

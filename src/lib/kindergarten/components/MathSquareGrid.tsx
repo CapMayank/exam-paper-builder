@@ -1,5 +1,5 @@
 import React from "react";
-import { gridOrder, gridShape, type GridDirection } from "../gridPlacement";
+import { decadeLead, gridOrder, gridShape, type GridDirection } from "../gridPlacement";
 import type { NumberGridCell } from "../types";
 
 /** Largest box: room for a child to write a two-digit number. */
@@ -14,8 +14,9 @@ interface MathSquareGridProps {
 }
 
 export function MathSquareGrid({ cells = [], columns = 10, direction = "ROW", className = "" }: MathSquareGridProps) {
-  const { columns: colCount, rows: rowCount } = gridShape(cells.length, columns, direction);
-  const slots = gridOrder(cells.length, columns, direction);
+  const lead = direction === "COLUMN" ? decadeLead(cells) : 0;
+  const { columns: colCount, rows: rowCount } = gridShape(cells.length, columns, direction, lead);
+  const slots = gridOrder(cells.length, columns, direction, lead);
 
   return (
     <div className={`my-3 ${className}`}>

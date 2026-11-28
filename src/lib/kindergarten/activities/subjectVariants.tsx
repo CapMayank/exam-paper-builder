@@ -8,6 +8,7 @@
 import type { CircleTargetConfig, HindiFirstLetterConfig, KindergartenActivityPlugin, PictureMatchConfig } from "../types";
 import { circleTargetPlugin } from "./circleTarget";
 import { hindiFirstLetterPlugin } from "./hindiFirstLetter";
+import { FIRST_LETTER_INSTRUCTIONS } from "../firstLetterChoices";
 import { pictureMatchPlugin } from "./pictureMatch";
 
 const pair = (id: string, clipartId: string, label: string, matchLabel: string) => ({ id, clipartId, label, matchLabel });
@@ -48,12 +49,13 @@ export const evsHomePlugin: KindergartenActivityPlugin<PictureMatchConfig> = {
   defaultConfig: evsHomeDefaultConfig,
 };
 
-let n = 0;
-const item = (clipartId: string, isTarget = false) => ({ id: `evs-${++n}`, type: "CLIPART" as const, clipartId, isTarget });
+// ids come from the picture (each default picture is used once), so every call builds the same config
+const item = (clipartId: string, isTarget = false) => ({ id: `evs-${clipartId}`, type: "CLIPART" as const, clipartId, isTarget });
 
 export const evsOddOneDefaultConfig = (): CircleTargetConfig => ({
   mode: "ODD_ONE_OUT",
-  targetDescription: "Cross (✗) the one that does not belong in each row:",
+  // the instruction already says it; this prints under it, so it stays empty
+  targetDescription: "",
   rows: [
     { rowLabel: "Row 1", items: [item("apple"), item("mango"), item("car", true), item("grapes")] },
     { rowLabel: "Row 2", items: [item("cat"), item("dog"), item("elephant"), item("pencil", true)] },
@@ -82,7 +84,7 @@ export const englishFirstLetterDefaultConfig = (): HindiFirstLetterConfig => ({
     { clipartId: "fish", word: "Fish", choices: ["F"] },
     { clipartId: "kite", word: "Kite", choices: ["K"] },
   ],
-  instruction: "Look at the pictures and write the first letter:",
+  instruction: FIRST_LETTER_INSTRUCTIONS.latin.WRITE,
 });
 
 export const englishFirstLetterPlugin: KindergartenActivityPlugin<HindiFirstLetterConfig> = {

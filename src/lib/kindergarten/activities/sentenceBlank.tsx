@@ -47,6 +47,10 @@ export const sentenceBlankDefaultConfig = (): SentenceBlankConfig => ({
 /** Every row's choices once, in first-seen order, for the shared word box. */
 export const sharedChoices = (rows: SentenceBlankRow[]): string[] => [...new Set(rows.flatMap((r) => r.choices.map((c) => c.trim()).filter(Boolean)))];
 
+/** The word box on top is one list: every sentence carries the same choices. */
+export const withSharedChoices = (rows: SentenceBlankRow[], words: string[]): SentenceBlankRow[] =>
+  rows.map((r) => ({ ...r, choices: [...words] }));
+
 function Blank({ answer, showKey }: { answer?: string; showKey?: boolean }) {
   return (
     // tight leading keeps the line just under the letters instead of at the bottom of the tall sentence line
@@ -92,6 +96,10 @@ export function SentenceBlankBody({ config, showKey }: { config: SentenceBlankCo
 
 function SentenceBlankEditor({ config, onChange, instructionText, onInstructionChange }: KindergartenEditorProps<SentenceBlankConfig>) {
   const input = "min-w-0 flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-sm font-semibold";
+  const top = config.choicesAt === "TOP";
+  const words = sharedChoices(config.rows);
+  // a key word the child can't find in the word box
+  const missing = top ? [...new Set(config.rows.map((r) => r.answer?.trim() ?? "").filter((a) => a && !words.includes(a)))] : [];
   return (
     <div className="space-y-4">
       <EditorShell
@@ -106,13 +114,24 @@ function SentenceBlankEditor({ config, onChange, instructionText, onInstructionC
                 { value: "END", label: "After each sentence" },
                 { value: "TOP", label: "In one box on top" },
               ]}
-              onChange={(choicesAt) => onChange({ ...config, choicesAt })}
+              onChange={(choicesAt) =>
+                // one box on top: every sentence shares the same words
+                onChange({ ...config, choicesAt, rows: choicesAt === "TOP" ? withSharedChoices(config.rows, sharedChoices(config.rows)) : config.rows })
+              }
             />
+            {top && (
+              <div>
+                <TextListField label="Words in the box" values={words} onChange={(w) => onChange({ ...config, rows: withSharedChoices(config.rows, w) })} />
+                {missing.length > 0 && (
+                  <p className="mt-1 text-[11px] font-semibold text-amber-700">Not in the box: {missing.join(", ")} — add it so the child can find it.</p>
+                )}
+              </div>
+            )}
             <RowList<SentenceBlankRow>
               label="Sentences — type ___ where the blank goes"
               rows={config.rows}
               onChange={(rows) => onChange({ ...config, rows })}
-              makeRow={() => ({ text: "___ ", choices: [] })}
+              makeRow={() => ({ text: "___ ", choices: top ? [...words] : [] })}
               max={8}
               addLabel="Add sentence"
               renderRow={(r, update) => (
@@ -133,7 +152,7 @@ function SentenceBlankEditor({ config, onChange, instructionText, onInstructionC
                     onChange={(e) => update({ ...r, answer: e.target.value })}
                     className={`${input} w-full text-emerald-700`}
                   />
-                  <TextListField label="Choices" values={r.choices} onChange={(choices) => update({ ...r, choices })} />
+                  {!top && <TextListField label="Choices" values={r.choices} onChange={(choices) => update({ ...r, choices })} />}
                 </div>
               )}
             />

@@ -5,7 +5,7 @@ import { ChoiceChips, EditorShell, Field, InstructionField, NumberStepper } from
 import React from "react";
 import { MathSquareGrid } from "../components/MathSquareGrid";
 import { PreviewBox } from "./_shared";
-import { blankPattern, gridOrder, gridShape, numberCells, type BlankPattern, type GridDirection } from "../gridPlacement";
+import { blankPattern, decadeLead, gridOrder, gridShape, numberCells, type BlankPattern, type GridDirection } from "../gridPlacement";
 import type {
   KindergartenActivityPlugin,
   KindergartenEditorProps,
@@ -56,7 +56,8 @@ const PRESETS: { label: string; start: number; end: number; columns: number; pat
 function NumberGridEditor({ config, onChange, instructionText, onInstructionChange }: KindergartenEditorProps<NumberGridConfig>) {
   const pattern = blankPattern(config.cells);
   const direction = config.fillDirection ?? "ROW";
-  const shape = gridShape(config.cells.length, config.columns, direction);
+  const lead = direction === "COLUMN" ? decadeLead(config.cells) : 0;
+  const shape = gridShape(config.cells.length, config.columns, direction, lead);
   const columnOptions = [5, 10].includes(config.columns) ? [5, 10] : [config.columns, 5, 10].sort((a, b) => a - b);
 
   /** New range or pattern; a hand-made pattern keeps the blanks it had for numbers still in range. */
@@ -122,15 +123,18 @@ function NumberGridEditor({ config, onChange, instructionText, onInstructionChan
                 { value: "ROW", label: "→ Across each row" },
               ]}
             />
-            <ChoiceChips<number>
-              label="Columns"
-              value={config.columns}
-              onChange={(columns) => onChange({ ...config, columns })}
-              options={columnOptions.map((n) => ({ value: n, label: String(n) }))}
-            />
+            {/* counting down, each column is one ten (1–10, 11–20 …), so the count of columns follows the range */}
+            {direction === "ROW" && (
+              <ChoiceChips<number>
+                label="Columns"
+                value={config.columns}
+                onChange={(columns) => onChange({ ...config, columns })}
+                options={columnOptions.map((n) => ({ value: n, label: String(n) }))}
+              />
+            )}
             <Field label="Tap a box to blank it or fill it in" hint={`${config.cells.filter((c) => c.isBlank).length} blanks`}>
               <div className="grid max-h-64 overflow-y-auto rounded-md border-2 border-slate-900 bg-white" style={{ gridTemplateColumns: `repeat(${Math.max(1, shape.columns)}, minmax(0, 1fr))` }}>
-                {gridOrder(config.cells.length, config.columns, direction).map((idx, pos) => {
+                {gridOrder(config.cells.length, config.columns, direction, lead).map((idx, pos) => {
                   const cell = idx === null ? undefined : config.cells[idx];
                   if (!cell || idx === null) return <span key={pos} className="aspect-square border-r border-b border-slate-200 bg-slate-50" />;
                   return (

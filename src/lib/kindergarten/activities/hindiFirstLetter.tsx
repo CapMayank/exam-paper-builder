@@ -4,6 +4,8 @@ import { ChoiceChips, EditorShell, InstructionField, PictureChip, RowList, TextL
 import { firstLetter } from "../hindi";
 import type { HindiFirstLetterConfig, HindiFirstLetterRow, KindergartenActivityPlugin, KindergartenEditorProps, KindergartenPrintProps } from "../types";
 import { ActivityFrame, AnswerBox, Art, PreviewBox } from "./_shared";
+import { followMode } from "../autoInstruction";
+import { FIRST_LETTER_INSTRUCTIONS, padChoices, printedChoices } from "../firstLetterChoices";
 
 export const hindiFirstLetterDefaultConfig = (): HindiFirstLetterConfig => ({
   answerStyle: "CIRCLE",
@@ -13,7 +15,7 @@ export const hindiFirstLetterDefaultConfig = (): HindiFirstLetterConfig => ({
     { clipartId: "kite", word: "पतंग", choices: ["प", "त", "ग"] },
     { clipartId: "house", word: "घर", choices: ["र", "क", "घ"] },
   ],
-  instruction: "चित्र का पहला अक्षर गोला लगाइए (Circle the first letter of each picture's name):",
+  instruction: FIRST_LETTER_INSTRUCTIONS.hindi.CIRCLE,
 });
 
 function FirstLetterRows({ config, showWords }: { config: HindiFirstLetterConfig; showWords?: boolean }) {
@@ -30,7 +32,7 @@ function FirstLetterRows({ config, showWords }: { config: HindiFirstLetterConfig
             <AnswerBox size={46} />
           ) : (
             <span className="flex min-w-0 flex-wrap gap-2">
-              {row.choices.map((c, k) => (
+              {printedChoices(row).map((c, k) => (
                 <span key={k} className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 text-xl font-bold text-slate-950">
                   {c}
                 </span>
@@ -62,7 +64,13 @@ function HindiFirstLetterEditor({ config, onChange, instructionText, onInstructi
             <ChoiceChips<HindiFirstLetterConfig["answerStyle"]>
               label="Child"
               value={config.answerStyle}
-              onChange={(answerStyle) => onChange({ ...config, answerStyle })}
+              onChange={(answerStyle) => {
+                const instruction = followMode(instructionText || config.instruction, FIRST_LETTER_INSTRUCTIONS[latin ? "latin" : "hindi"], answerStyle);
+                // circling needs letters to choose from: rows saved for writing may have only the answer
+                const rows = answerStyle === "CIRCLE" ? config.rows.map((r) => ({ ...r, choices: padChoices(r) })) : config.rows;
+                onChange({ ...config, answerStyle, instruction, rows });
+                onInstructionChange(instruction);
+              }}
               options={[
                 { value: "CIRCLE", label: "Circles the letter" },
                 { value: "WRITE", label: "Writes the letter" },

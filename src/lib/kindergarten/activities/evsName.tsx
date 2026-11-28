@@ -4,6 +4,7 @@ import React from "react";
 import { ChoiceChips, EditorShell, InstructionField, PictureChip, RowList, TextListField } from "../editor-kit";
 import type { EvsNameConfig, EvsNameRow, KindergartenActivityPlugin, KindergartenEditorProps, KindergartenPrintProps } from "../types";
 import { ActivityFrame, Art, PreviewBox } from "./_shared";
+import { followMode } from "../autoInstruction";
 
 export const evsNameDefaultConfig = (): EvsNameConfig => ({
   answer: "TICK",
@@ -82,8 +83,9 @@ function EvsNameEditor({ config, onChange, instructionText, onInstructionChange 
               label="Child"
               value={config.answer}
               onChange={(answer) => {
-                onChange({ ...config, answer, instruction: INSTRUCTION[answer] });
-                onInstructionChange(INSTRUCTION[answer]);
+                const instruction = followMode(instructionText || config.instruction, INSTRUCTION, answer);
+                onChange({ ...config, answer, instruction });
+                onInstructionChange(instruction);
               }}
               options={[
                 { value: "TICK", label: "Ticks the right name" },

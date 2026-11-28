@@ -18,8 +18,18 @@ export interface JoinLettersConfig {
   instruction: string;
 }
 
-/** Code points, not graphemes: Intl.Segmenter would glue the matras on and hide the teaching point. */
-export const splitWord = (word: string): string[] => [...word.trim().replace(/\s+/g, "")];
+/**
+ * Code points, not graphemes: Intl.Segmenter would glue the matras on and hide the teaching point.
+ * A halant or nukta stays on its letter, so क्षमा splits as क् + ष, never a lone "्" box.
+ */
+export const splitWord = (word: string): string[] => {
+  const out: string[] = [];
+  for (const c of word.trim().replace(/\s+/g, "")) {
+    if ((c === "\u094D" || c === "\u093C") && out.length > 0) out[out.length - 1] += c;
+    else out.push(c);
+  }
+  return out;
+};
 
 const word = (w: string): JoinLettersRow => ({ parts: splitWord(w) });
 
@@ -96,10 +106,12 @@ function JoinLettersPrint({ config, instructionText, numberLabel, marks }: Kinde
   );
 }
 
-export const validJoinLetters = (cfg: unknown) =>
-  cfg && Array.isArray((cfg as JoinLettersConfig).rows) && (cfg as JoinLettersConfig).rows.length >= 1
-    ? { valid: true }
-    : { valid: false, error: "Add at least one word" };
+export const validJoinLetters = (cfg: unknown) => {
+  const c = cfg as JoinLettersConfig;
+  if (!c || !Array.isArray(c.rows) || c.rows.length < 1) return { valid: false, error: "Add at least one word" };
+  if (c.rows.some((r) => !Array.isArray(r.parts) || !r.parts.some((x) => x.trim()))) return { valid: false, error: "Fill in every word or remove the empty ones" };
+  return { valid: true };
+};
 
 export const joinLettersPlugin: KindergartenActivityPlugin<JoinLettersConfig> = {
   type: "KDG_JOIN_LETTERS",

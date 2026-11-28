@@ -22,14 +22,30 @@ export const drawForNumberDefaultConfig = (): DrawForNumberConfig => ({
 const parseNumbers = (values: string[]) =>
   values.map((v) => (/^\d+$/.test(v.trim()) ? Number(v) : NaN)).filter((n) => n >= 0 && n <= 10);
 
+const autoInstruction = (thing: string) => `Draw ${thing.trim() || "lines"} according to the given number:`;
+
+/** The instruction after the thing changes: it follows only while it is still the automatic text. */
+export const instructionForThing = (current: string, oldThing: string, thing: string) =>
+  !current.trim() || current === autoInstruction(oldThing) ? autoInstruction(thing) : current;
+
+const isLines = (thing: string) => /^(lines?|sticks?|strokes?)$/i.test(thing.trim() || "lines");
+
+/** One box size for every number: room for the biggest number of lines (or bigger drawn objects). */
+export function drawBoxSize(config: DrawForNumberConfig): { width: number; height: number } {
+  const most = Math.max(1, ...config.numbers);
+  const lines = isLines(config.thing);
+  return { width: Math.max(220, most * (lines ? 24 : 40) + 24), height: lines ? 44 : 56 };
+}
+
 export function DrawForNumberBody({ config, showKey }: { config: DrawForNumberConfig; showKey?: boolean }) {
+  const box = drawBoxSize(config);
   return (
     <div className="space-y-3">
       {config.numbers.map((n, i) => (
         <div key={i} className="flex items-center gap-3 text-lg font-bold text-slate-900">
           <span className="w-8 text-right">{n}</span>
           <span>=</span>
-          <span className="flex h-[44px] w-[220px] items-center gap-2 rounded-sm border-2 border-slate-800 px-3 text-xl font-bold text-emerald-700">
+          <span style={{ width: box.width, height: box.height }} className="flex max-w-full items-center gap-2 rounded-sm border-2 border-slate-800 px-3 text-xl font-bold text-emerald-700">
             {showKey && Array.from({ length: n }, (_, k) => <span key={k}>|</span>)}
           </span>
         </div>
@@ -40,7 +56,8 @@ export function DrawForNumberBody({ config, showKey }: { config: DrawForNumberCo
 
 function DrawForNumberEditor({ config, onChange, instructionText, onInstructionChange }: KindergartenEditorProps<DrawForNumberConfig>) {
   const setThing = (thing: string) => {
-    const instruction = `Draw ${thing.trim() || "lines"} according to the given number:`;
+    // the teacher's own wording is kept; only the automatic sentence follows the thing
+    const instruction = instructionForThing(instructionText || config.instruction, config.thing, thing);
     onChange({ ...config, thing, instruction });
     onInstructionChange(instruction);
   };
@@ -98,6 +115,7 @@ export const drawForNumberPlugin: KindergartenActivityPlugin<DrawForNumberConfig
       : { valid: false, error: "Add at least one number" },
   renderEditor: DrawForNumberEditor,
   renderPrint: DrawForNumberPrint,
-  halfWidth: () => true,
+  // half a page is about 300px of room for the box beside its number
+  halfWidth: (config) => drawBoxSize(config).width <= 260,
   getSummary: (config) => config.numbers.join(", "),
 };

@@ -110,11 +110,12 @@ function MissingLettersPrint({ config, instructionText, numberLabel, marks }: Ki
           ))}
         </div>
       )}
-      <div className="grid grid-cols-2 gap-x-4 gap-y-3 py-1">
+      {/* two words a line fit up to about six letters; longer words get the whole width */}
+      <div className={`grid gap-x-4 gap-y-3 py-1 ${config.items.some((it) => it.word.length > 6) ? "grid-cols-1" : "grid-cols-2"}`}>
         {config.items.map((it, i) => (
           <div key={i} className="flex items-center gap-3">
             {it.clipartId && <Art id={it.clipartId} size={46} />}
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               {it.word.split("").map((ch, idx) =>
                 it.blanks.includes(idx) ? (
                   <span key={idx} className="inline-block h-9 w-9 rounded-md border-2 border-dashed border-slate-500" />

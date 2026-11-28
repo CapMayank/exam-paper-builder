@@ -108,7 +108,7 @@ export const colourPlugin: KindergartenActivityPlugin<ColourConfig> = {
   },
   renderEditor: ColourEditor,
   renderPrint: ColourPrint,
-  // pictures sit in a 4-wide grid that just wraps
-  halfWidth: () => true,
+  // each 72px picture card is about 25mm wide, so only up to 2 sit within half a page
+  halfWidth: (c) => c.items.length <= 2,
   getSummary: (c) => `${c.items.length} pictures to colour`,
 };

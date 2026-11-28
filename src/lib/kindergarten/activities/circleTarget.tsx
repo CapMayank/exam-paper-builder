@@ -18,7 +18,8 @@ import type {
 export const circleTargetDefaultConfig = (): CircleTargetConfig => {
   return {
     mode: "ODD_ONE_OUT",
-    targetDescription: "Find and circle the odd picture in each row:",
+    // empty: the instruction already says it; a teacher can add a hint that prints under it
+    targetDescription: "",
     instruction: "Circle the odd one out in each row:",
     rows: [
       {
@@ -47,6 +48,15 @@ function newItem(clipartId: string, isTarget = false): CircleTargetRowItem {
   return { id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, type: "CLIPART", clipartId, isTarget };
 }
 
+/** A new row; the answer moves along with the row count so it isn't always the third picture. */
+export function newCircleRow(index: number): CircleTargetRow {
+  const target = index % 4;
+  return {
+    rowLabel: `Row ${index + 1}`,
+    items: [0, 1, 2, 3].map((k) => newItem(k === target ? "sun" : "star", k === target)),
+  };
+}
+
 function CircleTargetEditor({ config, onChange, instructionText, onInstructionChange }: KindergartenEditorProps<CircleTargetConfig>) {
   const oddOneOut = config.mode === "ODD_ONE_OUT";
   const toggleTarget = (row: CircleTargetRow, itemIdx: number): CircleTargetRow => ({
@@ -62,7 +72,7 @@ function CircleTargetEditor({ config, onChange, instructionText, onInstructionCh
           <>
             <InstructionField value={instructionText} onChange={onInstructionChange} defaultValue={config.instruction} />
             <ChoiceChips<CircleTargetConfig["mode"]>
-              label="Child circles"
+              label="Child marks"
               value={config.mode}
               onChange={(mode) =>
                 onChange({
@@ -87,7 +97,7 @@ function CircleTargetEditor({ config, onChange, instructionText, onInstructionCh
               label={oddOneOut ? "Rows — tap ○ to mark the odd one" : "Rows — tap ○ on each answer"}
               rows={config.rows}
               onChange={(rows) => onChange({ ...config, rows })}
-              makeRow={() => ({ rowLabel: `Row ${config.rows.length + 1}`, items: [newItem("star"), newItem("star"), newItem("sun", true), newItem("star")] })}
+              makeRow={() => newCircleRow(config.rows.length)}
               max={6}
               addLabel="Add row"
               renderRow={(row, update) => (
@@ -174,6 +184,8 @@ function CircleTargetPrint({
         )}
       </div>
 
+      {config.targetDescription && <p className="mb-2 text-xs font-semibold text-slate-700">{config.targetDescription}</p>}
+
       <div className={`grid gap-3 my-1 ${twoUp ? "@xl:grid-cols-2" : ""}`}>
         {config.rows.map((row, rIdx) => (
           <div
@@ -212,8 +224,14 @@ export const circleTargetPlugin: KindergartenActivityPlugin<CircleTargetConfig> 
   description: "Rows of clipart images or letters for children to circle the odd or target item.",
   iconName: "CircleDot",
   defaultConfig: circleTargetDefaultConfig,
-  validateConfig: (cfg) => {
-    if (!cfg || typeof cfg !== "object") return { valid: false, error: "Invalid config" };
+  validateConfig: (raw) => {
+    const cfg = raw as CircleTargetConfig;
+    if (!cfg || typeof cfg !== "object" || !Array.isArray(cfg.rows)) return { valid: false, error: "Invalid config" };
+    for (const [i, row] of cfg.rows.entries()) {
+      const targets = Array.isArray(row?.items) ? row.items.filter((it) => it.isTarget).length : 0;
+      if (cfg.mode === "ODD_ONE_OUT" && targets !== 1) return { valid: false, error: `Row ${i + 1}: mark exactly one odd picture` };
+      if (cfg.mode === "FIND_TARGET" && targets < 1) return { valid: false, error: `Row ${i + 1}: mark at least one picture to circle` };
+    }
     return { valid: true };
   },
   renderEditor: CircleTargetEditor,

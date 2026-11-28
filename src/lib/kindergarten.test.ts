@@ -135,8 +135,8 @@ describe("Later kindergarten activities", () => {
     const { expandPattern } = await import("./kindergarten/activities/pattern");
     const seq = expandPattern({ unit: ["circle", "square"], repeats: 3, blanksAtEnd: 2 });
     expect(seq).toEqual(["circle", "square", "circle", "square", null, null]);
-    // never blanks out the whole pattern
-    expect(expandPattern({ unit: ["star"], repeats: 2, blanksAtEnd: 9 })).toEqual(["star", null]);
+    // the pattern always shows twice before the blanks, and at most two patterns' worth is left blank
+    expect(expandPattern({ unit: ["star"], repeats: 2, blanksAtEnd: 9 })).toEqual(["star", "star", null, null]);
   });
 
   it("places the requested number of join-the-dots points", async () => {

@@ -16,6 +16,10 @@ export const tickPictureDefaultConfig = (): TickPictureConfig => ({
   ],
 });
 
+
+/** A new question; the right picture moves along with the count so it isn't always the first. */
+export const newTickRow = (index: number): TickPictureRow => ({ question: "", options: ["apple", "ball", "cat"], correctIndex: index % 3 });
+
 function TickPictureEditor({ config, onChange, instructionText, onInstructionChange }: KindergartenEditorProps<TickPictureConfig>) {
   return (
     <div className="space-y-4">
@@ -28,7 +32,7 @@ function TickPictureEditor({ config, onChange, instructionText, onInstructionCha
               label="Questions — green tick marks the answer (not printed)"
               rows={config.rows}
               onChange={(rows) => onChange({ ...config, rows })}
-              makeRow={() => ({ question: "", options: ["apple", "ball", "cat"], correctIndex: 0 })}
+              makeRow={() => newTickRow(config.rows.length)}
               max={6}
               addLabel="Add question"
               renderRow={(r, update) => (
@@ -133,6 +137,7 @@ export const tickPicturePlugin: KindergartenActivityPlugin<TickPictureConfig> = 
   validateConfig: (cfg) => {
     const c = cfg as TickPictureConfig;
     if (!c || !Array.isArray(c.rows) || c.rows.length === 0) return { valid: false, error: "Add at least one question" };
+    if (c.rows.some((r) => !r.question?.trim())) return { valid: false, error: "Type every question or remove the empty ones" };
     return { valid: true };
   },
   renderEditor: TickPictureEditor,

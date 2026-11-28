@@ -4,6 +4,7 @@
 import { ChoiceChips, EditorShell, InstructionField, TextListField } from "../editor-kit";
 import type { KindergartenActivityPlugin, KindergartenEditorProps, KindergartenPrintProps } from "../types";
 import { ActivityFrame, PreviewBox } from "./_shared";
+import { followAuto } from "../autoInstruction";
 
 export type MarkAction = "UNDERLINE" | "CIRCLE";
 
@@ -63,8 +64,13 @@ export function MarkLettersWords({ config, showKey }: { config: MarkLettersConfi
 function MarkLettersEditor({ config, onChange, instructionText, onInstructionChange }: KindergartenEditorProps<MarkLettersConfig>) {
   const update = (patch: Partial<MarkLettersConfig>) => {
     const next = { ...config, ...patch };
+    if ("targets" in patch || "action" in patch) {
+      // the teacher's own wording stays; only the automatic sentence follows the letters
+      const instruction = followAuto(instructionText || config.instruction, instructionFor(config.targets, config.action), instructionFor(next.targets, next.action));
+      next.instruction = instruction;
+      onInstructionChange(instruction);
+    }
     onChange(next);
-    if ("targets" in patch || "action" in patch) onInstructionChange(instructionFor(next.targets, next.action));
   };
   return (
     <div className="space-y-4">
@@ -117,10 +123,16 @@ export const markLettersPlugin: KindergartenActivityPlugin<MarkLettersConfig> = 
   description: "Words in a row – the child underlines or circles the vowels (or any chosen letters).",
   iconName: "Type",
   defaultConfig: markLettersDefaultConfig,
-  validateConfig: (cfg) =>
-    cfg && Array.isArray((cfg as MarkLettersConfig).words) && (cfg as MarkLettersConfig).words.length > 0
-      ? { valid: true }
-      : { valid: false, error: "Add at least one word" },
+  validateConfig: (cfg) => {
+    const c = cfg as MarkLettersConfig;
+    if (!c || !Array.isArray(c.words) || c.words.length === 0) return { valid: false, error: "Add at least one word" };
+    const targets = (c.targets ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean);
+    if (targets.length === 0) return { valid: false, error: "Choose the letters to look for" };
+    // a word with none of the letters leaves the child nothing to mark
+    const without = c.words.filter((w) => ![...w.toLowerCase()].some((ch) => targets.includes(ch)));
+    if (without.length > 0) return { valid: false, error: `These words have none of the letters: ${without.join(", ")}` };
+    return { valid: true };
+  },
   renderEditor: MarkLettersEditor,
   renderPrint: MarkLettersPrint,
   halfWidth: (config) => config.words.join("").length <= 20,

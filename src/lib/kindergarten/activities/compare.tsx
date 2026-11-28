@@ -5,6 +5,7 @@ import { ChoiceChips, EditorShell, InstructionField, NumberStepper, PictureChip,
 import React from "react";
 import type { CompareConfig, CompareMode, CompareRow, KindergartenActivityPlugin, KindergartenEditorProps, KindergartenPrintProps } from "../types";
 import { ActivityFrame, Art, PreviewBox } from "./_shared";
+import { followAuto } from "../autoInstruction";
 
 export const MODE_LABEL: Record<CompareMode, string> = {
   BIGGER: "Circle the bigger one",
@@ -43,6 +44,8 @@ export function validateCompare(c: CompareConfig): { valid: boolean; error?: str
         return { valid: false, error: "Each group needs one clearly tallest and one clearly shortest picture" };
       }
     }
+  } else if (c.rows.some((r) => r.left === r.right)) {
+    return { valid: false, error: "Each pair needs one bigger and one smaller (or more and fewer) – two are equal" };
   }
   return { valid: true };
 }
@@ -127,10 +130,11 @@ function CompareEditor({ config, onChange, instructionText, onInstructionChange 
               value={config.mode}
               onChange={(mode) => {
                 const cap = isCount(mode) ? 10 : 5;
+                const instruction = followAuto(instructionText || config.instruction, modeInstruction(config.mode), modeInstruction(mode));
                 onChange({
                   ...config,
                   mode,
-                  instruction: modeInstruction(mode),
+                  instruction,
                   rows: config.rows.map((r) => ({
                     ...r,
                     left: Math.min(r.left, cap),
@@ -138,7 +142,7 @@ function CompareEditor({ config, onChange, instructionText, onInstructionChange 
                     ...(mode === "TALLEST_SHORTEST" && !r.sizes?.length ? { sizes: [...TS_DEFAULT_SIZES] } : {}),
                   })),
                 });
-                onInstructionChange(modeInstruction(mode));
+                onInstructionChange(instruction);
               }}
               options={(Object.keys(MODE_LABEL) as CompareMode[]).map((m) => ({ value: m, label: MODE_LABEL[m] }))}
             />
@@ -217,7 +221,8 @@ function ComparePrint({ config, instructionText, numberLabel, marks, showKey }: 
   }
   return (
     <ActivityFrame numberLabel={numberLabel} marks={marks} instruction={instructionText || config.instruction}>
-      <div className="grid grid-cols-3 gap-3 py-1">
+      {/* as many pairs a line as fit, so half the page width never overflows */}
+      <div className="grid gap-3 py-1" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(11rem, 1fr))" }}>
         {config.rows.map((r, i) => (
           <div key={i} className="grid grid-cols-2 gap-1 rounded-lg border-2 border-slate-300">
             <div className="flex items-end justify-center border-r-2 border-slate-300 p-2">

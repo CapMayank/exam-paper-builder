@@ -84,10 +84,20 @@ export function buildWordSearch(config: WordSearchConfig): WordSearchResult {
   return { grid, placed, skipped };
 }
 
+/** Words that made it into the grid, in the teacher's order: empty and skipped ones are left off the paper. */
+function shownWords(config: WordSearchConfig): WordSearchWord[] {
+  const { skipped } = buildWordSearch(config);
+  return config.words.filter((x) => {
+    const word = cleanWord(x.word);
+    return word && !skipped.includes(word);
+  });
+}
+
 const ROMAN = ["i", "ii", "iii", "iv", "v", "vi", "vii", "viii"];
 
 export function WordSearchBody({ config, showKey }: { config: WordSearchConfig; showKey?: boolean }) {
   const { grid, placed } = buildWordSearch(config);
+  const shown = shownWords(config);
   const hit = new Set<string>();
   for (const p of placed) {
     for (let k = 0; k < p.word.length; k++) hit.add(`${p.row + (p.down ? k : 0)},${p.col + (p.down ? 0 : k)}`);
@@ -95,7 +105,7 @@ export function WordSearchBody({ config, showKey }: { config: WordSearchConfig; 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-end gap-x-5 gap-y-2">
-        {config.words.map((x, i) => (
+        {shown.map((x, i) => (
           <span key={i} className="flex flex-col items-center gap-0.5">
             {x.clipartId && <Art id={x.clipartId} size={44} />}
             {config.showWordList && <span className="text-sm font-bold text-slate-900">{cleanWord(x.word)}</span>}
@@ -122,7 +132,7 @@ export function WordSearchBody({ config, showKey }: { config: WordSearchConfig; 
       </table>
       {config.answerLines && (
         <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-          {config.words.map((x, i) => (
+          {shown.map((x, i) => (
             <div key={i} className="flex items-end gap-2">
               <span className="text-sm font-bold text-slate-800">({ROMAN[i] ?? i + 1})</span>
               <span className="flex-1 border-b-2 border-slate-800 text-center text-lg font-bold leading-6 text-emerald-700">
@@ -213,10 +223,14 @@ export const wordSearchPlugin: KindergartenActivityPlugin<WordSearchConfig> = {
   description: "A letter grid with hidden words – the child finds them from the pictures and writes them on the lines.",
   iconName: "Grid",
   defaultConfig: wordSearchDefaultConfig,
-  validateConfig: (cfg) =>
-    cfg && Array.isArray((cfg as WordSearchConfig).words) && (cfg as WordSearchConfig).words.length > 0
-      ? { valid: true }
-      : { valid: false, error: "Add at least one word" },
+  validateConfig: (cfg) => {
+    const c = cfg as WordSearchConfig;
+    if (!c || !Array.isArray(c.words) || c.words.length === 0) return { valid: false, error: "Add at least one word" };
+    if (c.words.some((x) => !cleanWord(x.word))) return { valid: false, error: "Fill in every word (letters A-Z) or remove the empty ones" };
+    const { skipped } = buildWordSearch(c);
+    if (skipped.length > 0) return { valid: false, error: `These words do not fit the grid: ${skipped.join(", ")}. Make the grid bigger or the words shorter.` };
+    return { valid: true };
+  },
   renderEditor: WordSearchEditor,
   renderPrint: WordSearchPrint,
   getSummary: (config) => config.words.map((x) => cleanWord(x.word)).join(", "),

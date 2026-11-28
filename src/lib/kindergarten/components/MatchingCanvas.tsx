@@ -1,11 +1,23 @@
 import React from "react";
 import { getClipartById } from "../clipartLibrary";
+import { mixedOrder } from "../seeded";
 import type { PictureMatchPair } from "../types";
+
+/**
+ * Which pair's answer prints in each row of the right column. Mixed, no answer sits straight
+ * across from its own picture, and the same pairs always mix the same way.
+ */
+export function rightColumnOrder(pairs: PictureMatchPair[], shuffle: boolean): number[] {
+  if (!shuffle) return pairs.map((_, i) => i);
+  return mixedOrder(pairs.length, pairs.map((p) => `${p.clipartId}|${p.label}|${p.matchLabel}`).join("|"));
+}
 
 interface MatchingCanvasProps {
   pairs: PictureMatchPair[];
   leftTitle?: string;
   rightTitle?: string;
+  /** Mix up the right column so the child has to find each match. */
+  shuffle?: boolean;
   className?: string;
 }
 
@@ -13,8 +25,10 @@ export function MatchingCanvas({
   pairs = [],
   leftTitle,
   rightTitle,
+  shuffle = false,
   className = "",
 }: MatchingCanvasProps) {
+  const order = rightColumnOrder(pairs, shuffle);
   return (
     <div className={`my-3 w-full ${className}`}>
       {(leftTitle || rightTitle) && (
@@ -64,8 +78,8 @@ export function MatchingCanvas({
                 </div>
               </div>
 
-              {/* Middle open space for students to draw connecting lines */}
-              <div className="w-16 sm:w-24 border-b border-dashed border-slate-300" />
+              {/* open space for the child to draw the joining line */}
+              <div className="w-16 sm:w-24" />
 
               {/* Right Side: Connector dot + Alphabet/Word */}
               <div className="flex items-center gap-3 min-w-0 flex-1 justify-end">
@@ -76,7 +90,7 @@ export function MatchingCanvas({
                   </div>
                 </div>
                 <div className="w-16 h-16 shrink-0 flex items-center justify-center p-1 bg-slate-50 rounded-lg border-2 border-slate-900 text-slate-950 font-black text-2xl tracking-wider">
-                  {pair.matchLabel || "?"}
+                  {pairs[order[idx]]?.matchLabel || "?"}
                 </div>
               </div>
             </div>

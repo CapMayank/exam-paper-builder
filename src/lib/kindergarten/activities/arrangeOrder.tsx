@@ -8,6 +8,7 @@ import { ChoiceChips, EditorShell, InstructionField, RowList, TextListField } fr
 import type { KindergartenActivityPlugin, KindergartenEditorProps, KindergartenPrintProps } from "../types";
 import { mixedOrder } from "../seeded";
 import { ActivityFrame, PreviewBox } from "./_shared";
+import { followMode } from "../autoInstruction";
 
 export type ArrangeMode = "ALPHABETICAL" | "ASCENDING" | "DESCENDING" | "UNJUMBLE";
 
@@ -123,8 +124,10 @@ function ArrangeEditor({ config, onChange, instructionText, onInstructionChange 
   const setMode = (mode: ArrangeMode) => {
     // A jumbled-word row holds one word; the other modes hold a list of items.
     const rows = mode === "UNJUMBLE" ? config.rows.map((r) => ({ items: [r.items.join("")] })) : config.rows;
-    onChange({ ...config, mode, rows, instruction: INSTRUCTIONS[mode] });
-    onInstructionChange(INSTRUCTIONS[mode]);
+    // a Hindi or hand-written instruction stays; only the automatic English one follows the mode
+    const instruction = followMode(instructionText || config.instruction, INSTRUCTIONS, mode);
+    onChange({ ...config, mode, rows, instruction });
+    onInstructionChange(instruction);
   };
   return (
     <div className="space-y-4">
@@ -182,10 +185,13 @@ function ArrangePrint({ config, instructionText, numberLabel, marks }: Kindergar
   );
 }
 
-export const validArrangeOrder = (cfg: unknown) =>
-  cfg && Array.isArray((cfg as ArrangeOrderConfig).rows) && (cfg as ArrangeOrderConfig).rows.length >= 1
-    ? { valid: true }
-    : { valid: false, error: "Add at least one row" };
+export const validArrangeOrder = (cfg: unknown) => {
+  const c = cfg as ArrangeOrderConfig;
+  if (!c || !Array.isArray(c.rows) || c.rows.length < 1) return { valid: false, error: "Add at least one row" };
+  // an empty row prints answer lines with nothing to arrange
+  if (c.rows.some((r) => !Array.isArray(r.items) || !r.items.some((x) => x.trim()))) return { valid: false, error: "Fill in every row or remove the empty ones" };
+  return { valid: true };
+};
 
 export const arrangeOrderPlugin: KindergartenActivityPlugin<ArrangeOrderConfig> = {
   type: "KDG_ARRANGE_ORDER",

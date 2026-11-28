@@ -4,7 +4,7 @@ import { EditorShell, Field, InstructionField, RowList, ToggleRow } from "../edi
 
 import { PreviewBox } from "./_shared";
 import React, { useState } from "react";
-import { ImagePlus, Shuffle } from "lucide-react";
+import { ImagePlus } from "lucide-react";
 import { ClipartPickerModal } from "../components/ClipartPickerModal";
 import { MatchingCanvas } from "../components/MatchingCanvas";
 import { getClipartById } from "../clipartLibrary";
@@ -31,19 +31,27 @@ export const pictureMatchDefaultConfig = (): PictureMatchConfig => {
   };
 };
 
+/**
+ * A pair after the teacher picks a new picture. A name the teacher typed (a Hindi word, say) stays;
+ * the automatic English name follows the picture, and so does the answer when it is that name's
+ * first letter. A word answer ("Water" for a fish) is left alone.
+ */
+export function afterPicturePick(pair: PictureMatchPair, item: { id: string; name: string }): PictureMatchPair {
+  const oldName = pair.clipartId ? getClipartById(pair.clipartId)?.name : undefined;
+  const autoNamed = !pair.label || pair.label === oldName;
+  const letterMatch = !pair.matchLabel || pair.matchLabel.toUpperCase() === (pair.label?.[0] ?? "").toUpperCase();
+  return {
+    ...pair,
+    clipartId: item.id,
+    customImageUrl: undefined,
+    ...(autoNamed ? { label: item.name, ...(letterMatch ? { matchLabel: item.name[0]?.toUpperCase() || "A" } : {}) } : {}),
+  };
+}
+
 function PictureMatchEditor({ config, onChange, instructionText, onInstructionChange }: KindergartenEditorProps<PictureMatchConfig>) {
   const [pickerIndex, setPickerIndex] = useState<number | null>(null);
   const updatePair = (index: number, patch: Partial<PictureMatchPair>) =>
     onChange({ ...config, pairs: config.pairs.map((p, i) => (i === index ? { ...p, ...patch } : p)) });
-
-  const shuffleRightLabels = () => {
-    const right = config.pairs.map((p) => p.matchLabel);
-    for (let i = right.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [right[i], right[j]] = [right[j], right[i]];
-    }
-    onChange({ ...config, pairs: config.pairs.map((p, idx) => ({ ...p, matchLabel: right[idx] })) });
-  };
 
   return (
     <div className="space-y-4">
@@ -102,10 +110,7 @@ function PictureMatchEditor({ config, onChange, instructionText, onInstructionCh
         }
         advanced={
           <>
-            <button type="button" onClick={shuffleRightLabels} className="btn btn-sm">
-              <Shuffle size={13} /> Shuffle the right column now
-            </button>
-            <ToggleRow label="Mix up the right column when printing" checked={config.shuffleRight} onChange={(shuffleRight) => onChange({ ...config, shuffleRight })} />
+            <ToggleRow label="Mix up the right column when printing" checked={config.shuffleRight !== false} onChange={(shuffleRight) => onChange({ ...config, shuffleRight })} />
             <Field label="Column titles (optional)">
               <div className="flex gap-2">
                 <input
@@ -136,14 +141,8 @@ function PictureMatchEditor({ config, onChange, instructionText, onInstructionCh
             if ("customUrl" in item) {
               updatePair(pickerIndex, { customImageUrl: item.customUrl, label: item.name });
             } else {
-              // a name the teacher typed (a Hindi word, say) stays; the automatic English name follows the picture
               const pair = config.pairs[pickerIndex];
-              const autoNamed = !pair?.label || pair.label === (pair.clipartId ? getClipartById(pair.clipartId)?.name : undefined);
-              updatePair(pickerIndex, {
-                clipartId: item.id,
-                customImageUrl: undefined,
-                ...(autoNamed ? { label: item.name, matchLabel: item.name[0]?.toUpperCase() || "A" } : {}),
-              });
+              if (pair) updatePair(pickerIndex, afterPicturePick(pair, item));
             }
             setPickerIndex(null);
           }}
@@ -151,7 +150,7 @@ function PictureMatchEditor({ config, onChange, instructionText, onInstructionCh
       )}
 
       <PreviewBox>
-        <MatchingCanvas pairs={config.pairs} />
+        <MatchingCanvas pairs={config.pairs} leftTitle={config.leftTitle} rightTitle={config.rightTitle} shuffle={config.shuffleRight !== false} />
       </PreviewBox>
     </div>
   );
@@ -185,6 +184,7 @@ function PictureMatchPrint({
         pairs={config.pairs}
         leftTitle={config.leftTitle}
         rightTitle={config.rightTitle}
+        shuffle={config.shuffleRight !== false}
       />
     </div>
   );

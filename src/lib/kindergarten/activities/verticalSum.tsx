@@ -2,6 +2,7 @@
 
 /** Sums written one below the other (add, subtract, multiply), with an empty answer box under each. */
 import { ChoiceChips, EditorShell, InstructionField, RowList, ToggleRow } from "../editor-kit";
+import { followMode } from "../autoInstruction";
 import type { KindergartenActivityPlugin, KindergartenEditorProps, KindergartenPrintProps } from "../types";
 import { ActivityFrame, PreviewBox } from "./_shared";
 
@@ -69,7 +70,8 @@ function SumBlock({ op, a, b, cols, showKey, placeValue }: { op: VerticalSumOp; 
       </div>
       <div
         className="mt-1 flex h-9 items-center justify-end rounded-sm border-2 border-slate-800 px-2 text-xl font-bold text-emerald-700"
-        style={{ marginLeft: "1.25rem" }}
+        // a one-digit sum is only one column wide; the box still needs room for a child's handwriting
+        style={{ marginLeft: "1.25rem", minWidth: "3rem" }}
       >
         {showKey ? resultText.replace("-", "−") : ""}
       </div>
@@ -98,8 +100,9 @@ export function VerticalSumBody({ config, showKey }: { config: VerticalSumConfig
 function VerticalSumEditor({ config, onChange, instructionText, onInstructionChange }: KindergartenEditorProps<VerticalSumConfig>) {
   const input = "w-20 rounded-lg border border-slate-300 px-2 py-1.5 text-sm font-semibold";
   const setOp = (op: VerticalSumOp) => {
-    onChange({ ...config, op, instruction: INSTRUCTIONS[op] });
-    onInstructionChange(INSTRUCTIONS[op]);
+    const instruction = followMode(instructionText || config.instruction, INSTRUCTIONS, op);
+    onChange({ ...config, op, instruction });
+    onInstructionChange(instruction);
   };
   const negatives = config.op === "SUBTRACT" && config.rows.some((r) => r.a < r.b);
   return (
@@ -170,10 +173,13 @@ export const verticalSumPlugin: KindergartenActivityPlugin<VerticalSumConfig> = 
   iconName: "Calculator",
   defaultConfig: verticalSumDefaultConfig,
   legacyDefaults: { placeValue: false },
-  validateConfig: (cfg) =>
-    cfg && Array.isArray((cfg as VerticalSumConfig).rows) && (cfg as VerticalSumConfig).rows.length > 0
-      ? { valid: true }
-      : { valid: false, error: "Add at least one sum" },
+  validateConfig: (cfg) => {
+    const c = cfg as VerticalSumConfig;
+    if (!c || !Array.isArray(c.rows) || c.rows.length === 0) return { valid: false, error: "Add at least one sum" };
+    // KG children have not met numbers below zero
+    if (c.op === "SUBTRACT" && c.rows.some((r) => r.a < r.b)) return { valid: false, error: "Each take-away needs the bigger number on top" };
+    return { valid: true };
+  },
   renderEditor: VerticalSumEditor,
   renderPrint: VerticalSumPrint,
   // up to 3 sums fit side by side in half the page

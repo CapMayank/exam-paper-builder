@@ -49,9 +49,11 @@ function Line({ text, showKey, className = "" }: { text?: string; showKey?: bool
 }
 
 export function AnswerLinesBody({ config, showKey }: { config: AnswerLinesConfig; showKey?: boolean }) {
-  const label = config.answerLabel.trim();
-  const count = Math.min(6, Math.max(1, config.listCount));
-  const besideWidth = Math.min(16, Math.max(...config.rows.map((r) => r.prompt.length), 1) * 1.3);
+  // older saved configs may lack the label or the line count
+  const label = (config.answerLabel ?? "").trim();
+  const count = Number.isFinite(config.listCount) ? Math.min(6, Math.max(1, config.listCount)) : 3;
+  // wide enough for a short Hindi phrase, so the prompt doesn't wrap onto a second line
+  const besideWidth = Math.min(24, Math.max(...config.rows.map((r) => (r.prompt ?? "").length), 1) * 1.3);
   return (
     <div className="space-y-3">
       {config.rows.map((r, i) => {

@@ -1,7 +1,7 @@
 "use client";
 
 /** Put the correct sign ( > , < , = ) in the box between two numbers. */
-import { EditorShell, InstructionField, RowList, ToggleRow } from "../editor-kit";
+import { EditorShell, InstructionField, NumberStepper, RowList, ToggleRow } from "../editor-kit";
 import type { KindergartenActivityPlugin, KindergartenEditorProps, KindergartenPrintProps } from "../types";
 import { ActivityFrame, PreviewBox } from "./_shared";
 
@@ -45,7 +45,6 @@ export function NumberCompareSignBody({ config, showKey }: { config: NumberCompa
 }
 
 function NumberCompareSignEditor({ config, onChange, instructionText, onInstructionChange }: KindergartenEditorProps<NumberCompareSignConfig>) {
-  const input = "w-20 rounded-lg border border-slate-300 px-2 py-1.5 text-sm font-semibold";
   return (
     <div className="space-y-4">
       <EditorShell
@@ -57,14 +56,13 @@ function NumberCompareSignEditor({ config, onChange, instructionText, onInstruct
               label="Pairs of numbers"
               rows={config.rows}
               onChange={(rows) => onChange({ ...config, rows })}
-              makeRow={() => ({ a: 0, b: 0 })}
+              makeRow={() => ({ a: 3, b: 5 })}
               max={10}
               addLabel="Add pair"
               renderRow={(row, update) => (
-                <div className="flex items-center gap-1.5">
-                  <input type="number" aria-label="First number" value={row.a} onChange={(e) => update({ ...row, a: Number(e.target.value) || 0 })} className={input} />
-                  <span className="text-xs text-slate-400">?</span>
-                  <input type="number" aria-label="Second number" value={row.b} onChange={(e) => update({ ...row, b: Number(e.target.value) || 0 })} className={input} />
+                <div className="space-y-1">
+                  <NumberStepper label="First" value={row.a} min={0} max={100} onChange={(a) => update({ ...row, a })} />
+                  <NumberStepper label="Second" value={row.b} min={0} max={100} onChange={(b) => update({ ...row, b })} />
                 </div>
               )}
             />
@@ -103,10 +101,13 @@ export const numberCompareSignPlugin: KindergartenActivityPlugin<NumberCompareSi
   iconName: "Scale",
   defaultConfig: numberCompareSignDefaultConfig,
   legacyDefaults: { showHelp: false },
-  validateConfig: (cfg) =>
-    cfg && Array.isArray((cfg as NumberCompareSignConfig).rows) && (cfg as NumberCompareSignConfig).rows.length > 0
-      ? { valid: true }
-      : { valid: false, error: "Add at least one pair" },
+  validateConfig: (cfg) => {
+    const c = cfg as NumberCompareSignConfig;
+    if (!c || !Array.isArray(c.rows) || c.rows.length === 0) return { valid: false, error: "Add at least one pair" };
+    const ok = (n: number) => Number.isInteger(n) && n >= 0 && n <= 100;
+    if (c.rows.some((r) => !ok(r.a) || !ok(r.b))) return { valid: false, error: "Use whole numbers from 0 to 100" };
+    return { valid: true };
+  },
   renderEditor: NumberCompareSignEditor,
   renderPrint: NumberCompareSignPrint,
   halfWidth: () => true,

@@ -107,7 +107,10 @@ export const hindiVarnamalaPlugin: KindergartenActivityPlugin<HindiVarnamalaConf
   description: "Each letter with shirorekha boxes to trace and copy (स्वर, क–ङ, च–ञ…).",
   iconName: "PenTool",
   defaultConfig: hindiVarnamalaDefaultConfig,
-  validateConfig: (cfg) => (cfg && Array.isArray((cfg as HindiVarnamalaConfig).letters) ? { valid: true } : { valid: false, error: "Invalid config" }),
+  validateConfig: (cfg) =>
+    cfg && Array.isArray((cfg as HindiVarnamalaConfig).letters) && (cfg as HindiVarnamalaConfig).letters.some((l) => l.trim())
+      ? { valid: true }
+      : { valid: false, error: "Add at least one letter" },
   renderEditor: HindiVarnamalaEditor,
   renderPrint: HindiVarnamalaPrint,
   getSummary: (config) => config.letters.join(" "),

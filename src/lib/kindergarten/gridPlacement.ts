@@ -1,34 +1,58 @@
 export type GridDirection = "COLUMN" | "ROW";
 
+/** Numbers in one column when counting down: one ten (1–10, 11–20, …), like a hundred chart. */
+const PER_COLUMN = 10;
+
 /**
- * How many rows and columns a grid of `count` numbers really uses. The column count is kept
- * between 2 and 10 (as printed). Counting down, it never uses so many that a whole column stays empty.
+ * How many empty slots go above the first number so each column holds one ten: a grid that
+ * starts at 5 leaves 1–4 empty, one that counts down from 95 leaves 100–96 empty.
+ * Tens run 1–10 unless the grid starts at 0 (then 0–9). 0 for anything that isn't a whole number.
  */
-export function gridShape(count: number, columns: number, direction: GridDirection): { rows: number; columns: number } {
+export function decadeLead(cells: { value: number | string }[]): number {
+  if (cells.length === 0) return 0;
+  const values = cells.map((c) => Number(c.value));
+  if (!values.every(Number.isInteger)) return 0;
+  const descending = values.length > 1 && values[0] > values[1];
+  const low = Math.min(...values);
+  const base = low === 0 ? 0 : 1;
+  const within = (((values[0] - base) % PER_COLUMN) + PER_COLUMN) % PER_COLUMN;
+  return descending ? PER_COLUMN - 1 - within : within;
+}
+
+/**
+ * How many rows and columns a grid of `count` numbers really uses. Across rows, the column count
+ * is kept between 2 and 10 (as printed). Counting down, every column holds ten numbers, so
+ * `columns` is ignored; `lead` empty slots go above the first number (see decadeLead).
+ */
+export function gridShape(count: number, columns: number, direction: GridDirection, lead = 0): { rows: number; columns: number } {
   if (count <= 0) return { rows: 0, columns: 0 };
-  const asked = Math.max(2, Math.min(10, Math.floor(columns) || 10));
   // across rows keeps the layout older papers were printed with
-  if (direction === "ROW") return { rows: Math.ceil(count / asked), columns: asked };
-  const rows = Math.ceil(count / asked);
-  return { rows, columns: Math.ceil(count / rows) };
+  if (direction === "ROW") {
+    const asked = Math.max(2, Math.min(10, Math.floor(columns) || 10));
+    return { rows: Math.ceil(count / asked), columns: asked };
+  }
+  // everything fits in one ten: one short column, no gap above
+  if (count + lead <= PER_COLUMN) return { rows: count, columns: 1 };
+  return { rows: PER_COLUMN, columns: Math.ceil((count + lead) / PER_COLUMN) };
 }
 
 /**
  * Where each number goes in a writing grid, in the order a CSS grid paints its slots
  * (left to right, then top to bottom). Each entry is the index of the cell shown in that slot,
- * or null for an empty slot at the foot of the last column. Lay it out with `gridShape(...).columns`.
+ * or null for an empty slot. Lay it out with `gridShape(...).columns`.
  *
- * ROW: 1 2 3 runs across. COLUMN: 1 2 3 runs down, so 1–10 fill the first column.
+ * ROW: 1 2 3 runs across. COLUMN: 1 2 3 runs down, ten to a column, so 1–10 fill the first one.
  */
-export function gridOrder(count: number, columns: number, direction: GridDirection): (number | null)[] {
+export function gridOrder(count: number, columns: number, direction: GridDirection, lead = 0): (number | null)[] {
   if (count <= 0) return [];
   if (direction === "ROW") return Array.from({ length: count }, (_, i) => i);
-  const { rows, columns: cols } = gridShape(count, columns, direction);
+  const { rows, columns: cols } = gridShape(count, columns, direction, lead);
+  const offset = count + lead <= PER_COLUMN ? 0 : lead;
   const out: (number | null)[] = [];
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      const index = c * rows + r;
-      out.push(index < count ? index : null);
+      const index = c * rows + r - offset;
+      out.push(index >= 0 && index < count ? index : null);
     }
   }
   return out;

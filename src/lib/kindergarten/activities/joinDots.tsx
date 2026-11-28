@@ -3,6 +3,7 @@
 import { ChoiceChips, EditorShell, InstructionField, NumberStepper } from "../editor-kit";
 
 import React from "react";
+import { followMode } from "../autoInstruction";
 import type { JoinDotsConfig, JoinDotsShape, KindergartenActivityPlugin, KindergartenEditorProps, KindergartenPrintProps } from "../types";
 import { ActivityFrame, PreviewBox } from "./_shared";
 
@@ -92,11 +93,32 @@ export function dotPoints(shape: JoinDotsShape, count: number): { x: number; y: 
   });
 }
 
+/** Closed outlines are loops: the child ends by joining the last dot back to the first. */
+export const isClosedShape = (shape: JoinDotsShape) => shape === "CIRCLE" || OUTLINES[shape][0].join() === OUTLINES[shape].at(-1)!.join();
+
+export function joinDotsInstruction(labels: JoinDotsConfig["labels"], shape: JoinDotsShape): string {
+  const from = labels === "LETTERS" ? "A" : "1";
+  return isClosedShape(shape)
+    ? `Join the dots in order from ${from}, then join the last dot back to the first, and see the picture:`
+    : `Join the dots in order from ${from} and see the picture:`;
+}
+
+/** Every automatic wording, so a switch can tell "still automatic" from the teacher's own text. */
+export const JOIN_DOTS_AUTO = {
+  NUMBERS_OPEN: joinDotsInstruction("NUMBERS", "ZIGZAG"),
+  NUMBERS_CLOSED: joinDotsInstruction("NUMBERS", "STAR"),
+  LETTERS_OPEN: joinDotsInstruction("LETTERS", "ZIGZAG"),
+  LETTERS_CLOSED: joinDotsInstruction("LETTERS", "STAR"),
+  // the wording before the instruction followed the labels
+  LEGACY: "Join the dots in order from 1 and see the picture:",
+};
+const autoKey = (labels: JoinDotsConfig["labels"], shape: JoinDotsShape) => `${labels}_${isClosedShape(shape) ? "CLOSED" : "OPEN"}` as keyof typeof JOIN_DOTS_AUTO;
+
 export const joinDotsDefaultConfig = (): JoinDotsConfig => ({
   shape: "STAR",
   labels: "NUMBERS",
   count: 10,
-  instruction: "Join the dots in order from 1 and see the picture:",
+  instruction: joinDotsInstruction("NUMBERS", "STAR"),
 });
 
 export function dotLabel(i: number, labels: JoinDotsConfig["labels"]): string {
@@ -130,6 +152,13 @@ function DotsFigure({ config }: { config: JoinDotsConfig }) {
 }
 
 function JoinDotsEditor({ config, onChange, instructionText, onInstructionChange }: KindergartenEditorProps<JoinDotsConfig>) {
+  // the instruction follows labels and shape unless the teacher wrote their own
+  const change = (patch: Partial<JoinDotsConfig>) => {
+    const next = { ...config, ...patch };
+    const instruction = followMode(instructionText, JOIN_DOTS_AUTO, autoKey(next.labels, next.shape));
+    onChange({ ...next, instruction: instruction === instructionText ? next.instruction : instruction });
+    if (instruction !== instructionText) onInstructionChange(instruction);
+  };
   return (
     <div className="space-y-4">
       <EditorShell
@@ -140,7 +169,7 @@ function JoinDotsEditor({ config, onChange, instructionText, onInstructionChange
             <ChoiceChips<JoinDotsShape>
               label="Shape"
               value={config.shape}
-              onChange={(shape) => onChange({ ...config, shape })}
+              onChange={(shape) => change({ shape })}
               options={(Object.keys(SHAPE_NAMES) as JoinDotsShape[]).map((s) => ({ value: s, label: SHAPE_NAMES[s] }))}
             />
             <NumberStepper label="Dots" value={config.count} min={4} max={26} onChange={(count) => onChange({ ...config, count })} />
@@ -150,7 +179,7 @@ function JoinDotsEditor({ config, onChange, instructionText, onInstructionChange
           <ChoiceChips<JoinDotsConfig["labels"]>
             label="Dot labels"
             value={config.labels}
-            onChange={(labels) => onChange({ ...config, labels })}
+            onChange={(labels) => change({ labels })}
             options={[
               { value: "NUMBERS", label: "1, 2, 3…" },
               { value: "LETTERS", label: "A, B, C…" },

@@ -171,10 +171,13 @@ function TextMatchPrint({ config, instructionText, numberLabel, marks }: Kinderg
   );
 }
 
-export const validTextMatch = (cfg: unknown) =>
-  cfg && Array.isArray((cfg as TextMatchConfig).pairs) && (cfg as TextMatchConfig).pairs.length >= 2
-    ? { valid: true }
-    : { valid: false, error: "Add at least two pairs" };
+export const validTextMatch = (cfg: unknown) => {
+  const c = cfg as TextMatchConfig;
+  if (!c || !Array.isArray(c.pairs) || c.pairs.length < 2) return { valid: false, error: "Add at least two pairs" };
+  // a half-filled pair leaves the child something with nothing to match it to
+  if (c.pairs.some((x) => !x.left?.trim() || !x.right?.trim())) return { valid: false, error: "Fill in both sides of every pair or remove it" };
+  return { valid: true };
+};
 
 export const textMatchPlugin: KindergartenActivityPlugin<TextMatchConfig> = {
   type: "KDG_TEXT_MATCH",
@@ -201,7 +204,7 @@ export const hindiTextMatchPlugin: KindergartenActivityPlugin<TextMatchConfig> =
   category: "hindi",
   description: "Two columns – अ ↔ अनार, प ↔ पतंग – the child joins each letter to its word.",
   defaultConfig: () => ({
-    pairs: [p("अ", "अनार"), p("प", "पतंग"), p("न", "नल"), p("म", "मछली"), p("व", "वक")],
+    pairs: [p("अ", "अनार"), p("प", "पतंग"), p("न", "नल"), p("म", "मछली"), p("व", "वन")],
     mixRight: true,
     instruction: "मिलान करो (Match):",
   }),

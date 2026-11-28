@@ -13,6 +13,27 @@ import type {
   TraceWriteConfig,
 } from "../types";
 
+const RULING_NOTE: Record<RulingType, string> = {
+  FOUR_LINE: " (4-line ruling)",
+  TWO_LINE: " (2-line ruling)",
+  SINGLE_LINE: "",
+  BOXES: " in the boxes",
+};
+
+/** The automatic English instruction: "trace" only when there are dotted letters to trace over. */
+export const traceInstruction = (dotted: boolean, ruling: RulingType) =>
+  `${dotted ? "Trace and copy" : "Copy"} the letters neatly${RULING_NOTE[ruling] ?? ""}:`;
+
+/** What saved papers were printed with before the instruction followed the settings. */
+const LEGACY_AUTO = "Trace and copy the letters neatly (4-line ruling):";
+
+/** The instruction after tracing or ruling changes; the teacher's own (or Hindi) wording is kept. */
+export function nextTraceInstruction(current: string, dotted: boolean, ruling: RulingType, nextDotted: boolean, nextRuling: RulingType): string {
+  const text = current.trim();
+  const auto = !text || text === traceInstruction(dotted, ruling) || text === LEGACY_AUTO;
+  return auto ? traceInstruction(nextDotted, nextRuling) : current;
+}
+
 export const traceWriteDefaultConfig = (subject?: string): TraceWriteConfig => {
   const isHindi = subject?.toLowerCase().includes("hindi");
   return {
@@ -20,7 +41,7 @@ export const traceWriteDefaultConfig = (subject?: string): TraceWriteConfig => {
     fontSizePt: 24,
     instruction: isHindi
       ? "सुंदर अक्षरों में लिखिए (Copy in neat handwriting):"
-      : "Trace and copy the letters neatly (4-line ruling):",
+      : traceInstruction(false, "FOUR_LINE"),
     lines: [
       {
         promptText: isHindi ? "अ  आ  इ  ई  उ  ऊ" : "A  B  C  D  E  F",
@@ -35,8 +56,15 @@ function TraceWriteEditor({ config, onChange, instructionText, onInstructionChan
   const line = config.lines?.[0] || { promptText: "A B C D", traceDotted: false, repeatCount: 2 };
 
   // only the first line is edited here; keep any further lines an imported paper brought with it
-  const updateLine = (patch: Partial<typeof line>) =>
-    onChange({ ...config, lines: [{ ...line, ...patch }, ...(config.lines ?? []).slice(1)] });
+  const follow = (dotted: boolean, ruling: RulingType) => {
+    const instruction = nextTraceInstruction(instructionText || config.instruction, line.traceDotted, config.rulingType, dotted, ruling);
+    if (instruction !== (instructionText || config.instruction)) onInstructionChange(instruction);
+    return instruction;
+  };
+  const updateLine = (patch: Partial<typeof line>) => {
+    const instruction = "traceDotted" in patch ? follow(!!patch.traceDotted, config.rulingType) : config.instruction;
+    onChange({ ...config, instruction, lines: [{ ...line, ...patch }, ...(config.lines ?? []).slice(1)] });
+  };
 
   return (
     <div className="space-y-4">
@@ -59,7 +87,7 @@ function TraceWriteEditor({ config, onChange, instructionText, onInstructionChan
             <ChoiceChips<RulingType>
               label="Ruling"
               value={config.rulingType}
-              onChange={(rulingType) => onChange({ ...config, rulingType })}
+              onChange={(rulingType) => onChange({ ...config, rulingType, instruction: follow(line.traceDotted, rulingType) })}
               options={[
                 { value: "FOUR_LINE", label: "4-line English" },
                 { value: "TWO_LINE", label: "2-line Hindi" },

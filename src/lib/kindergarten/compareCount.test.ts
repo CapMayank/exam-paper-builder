@@ -23,6 +23,14 @@ describe("compare: tallest and shortest", () => {
     expect(comparePlugin.validateConfig(shortTie).valid).toBe(false);
   });
 
+  it("rejects a pair of equal size or count in the two-picture modes", () => {
+    for (const mode of ["BIGGER", "SMALLER", "TALLER", "SHORTER", "MORE", "FEWER"] as const) {
+      const tie: CompareConfig = { mode, instruction: "x", rows: [{ clipartId: "apple", left: 2, right: 4 }, { clipartId: "ball", left: 3, right: 3 }] };
+      expect(comparePlugin.validateConfig(tie).valid).toBe(false);
+      expect(comparePlugin.validateConfig({ ...tie, rows: [tie.rows[0]] }).valid).toBe(true);
+    }
+  });
+
   it("is never half width", () => {
     const c: CompareConfig = { mode: "TALLEST_SHORTEST", instruction: "x", rows: [{ clipartId: "tree", left: 1, right: 5, sizes: [2, 5, 3] }] };
     expect(comparePlugin.halfWidth?.(c)).toBe(false);

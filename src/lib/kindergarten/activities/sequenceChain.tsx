@@ -127,6 +127,7 @@ function SequenceChainPrint({
   const n = config.items.length;
   const lines = Math.max(1, Math.ceil(n / 10));
   const perRow = Math.max(1, Math.ceil(n / lines));
+  const apples = config.theme === "APPLES";
   const bubbleText = perRow <= 7 ? "text-2xl" : "text-xl";
   // room the caterpillar head / engine takes at the start of the first line; later lines are indented to match
   const headRem =
@@ -208,17 +209,21 @@ function SequenceChainPrint({
                 className="flex max-w-[4.75rem] items-center"
                 style={{ width: `calc((100% - ${headRem}rem) / ${perRow})` }}
               >
-                {/* Connecting link */}
-                <div className="h-1 w-3 shrink-0 bg-slate-900" />
+                {/* Connecting link; on the apple theme it is the branch */}
+                <div className={`w-3 shrink-0 bg-slate-900 ${apples ? "h-1.5" : "h-1"}`} />
 
-                {/* Bubble */}
+                {/* Bubble (an apple with a stem when hanging from the branch) */}
                 <div
-                  className={`aspect-square min-w-0 flex-1 rounded-full border-3 border-slate-900 flex items-center justify-center font-black ${bubbleText} ${
+                  data-apple={apples ? "" : undefined}
+                  className={`relative aspect-square min-w-0 flex-1 border-3 border-slate-900 flex items-center justify-center font-black ${
+                    apples ? "rounded-[50%_50%_45%_45%/40%_40%_60%_60%]" : "rounded-full"
+                  } ${bubbleText} ${
                     item.isBlank
                       ? "bg-slate-50/60 border-dashed border-slate-400"
                       : "bg-white text-slate-950"
                   }`}
                 >
+                  {apples && <span aria-hidden className="absolute -top-2.5 left-1/2 h-2.5 w-0.5 bg-slate-900" />}
                   {item.isBlank ? (
                     <span className="text-slate-300 text-xs font-mono select-none">
                       •
