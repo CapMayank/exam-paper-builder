@@ -223,6 +223,15 @@ export type WorksheetMeasure = {
 export const PACK_SAFETY = 0.97;
 
 /**
+ * Page heights for packing when the worksheet prints at `zoom`, in full-size units: a smaller print holds more,
+ * and the header shrinks with everything else, so it is taken off after scaling the page.
+ */
+export function packPagesAt(m: WorksheetMeasure, zoom: number): PackPages {
+  const page = (m.pageHeightPx * PACK_SAFETY) / zoom;
+  return { page1: page - m.headerPx, page2: page, gap: m.gapPx ?? 0 };
+}
+
+/**
  * The order the print preview should save, or null when nothing would change (or it can't tell).
  * A worksheet too long for 2 pages at full size is printed smaller, which moves every page break, so it is
  * arranged for the largest print size at which it fits 2 pages (the sizes print steps through).
@@ -230,11 +239,7 @@ export const PACK_SAFETY = 0.97;
 export function arrangeForPrint(m: WorksheetMeasure): string[] | null {
   if (m.order.length < 2 || m.order.some((id) => typeof m.heights[id] !== "number")) return null;
   const items: PackItem[] = m.order.map((id) => ({ id, half: Boolean(m.half[id]), height: m.heights[id] }));
-  const pagesAt = (zoom: number): PackPages => ({
-    page1: ((m.pageHeightPx - m.headerPx) * PACK_SAFETY) / zoom,
-    page2: (m.pageHeightPx * PACK_SAFETY) / zoom,
-    gap: m.gapPx ?? 0,
-  });
+  const pagesAt = (zoom: number) => packPagesAt(m, zoom);
   const zooms = WORKSHEET_FIT_LEVELS.map((f) => f.zoom);
   let next = m.order;
   for (const zoom of zooms) {

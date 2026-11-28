@@ -1279,11 +1279,14 @@ export function PaperSheets({
           half: Object.fromEntries(tagged.map((el) => [el.dataset.wsItem!, el.dataset.wsHalf === "1"])),
           headerPx: firstBlock > 0 ? heights.slice(0, firstBlock).reduce((a, b) => a + b, 0) : 0,
           pageHeightPx: pageH - 6,
-          // the space between consecutive blocks (their margins), taken from the first two activity blocks
+          // the space between one activity block and the next (activity margins sit outside what is measured)
           gapPx: (() => {
             const blockEls = els.filter((el) => el.querySelector("[data-ws-item]"));
             if (blockEls.length < 2) return 0;
-            return Math.max(0, blockEls[1].getBoundingClientRect().top - blockEls[0].getBoundingClientRect().bottom);
+            const rects = (el: HTMLElement) => Array.from(el.querySelectorAll("[data-ws-item]")).map((n) => n.getBoundingClientRect());
+            const bottom = Math.max(...rects(blockEls[0]).map((r) => r.bottom));
+            const top = Math.min(...rects(blockEls[1]).map((r) => r.top));
+            return Math.max(0, top - bottom);
           })(),
         });
       }

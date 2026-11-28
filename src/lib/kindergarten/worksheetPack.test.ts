@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { seededRandom } from "./seeded";
-import { arrangeForPrint, packWorksheet, pageCount, rowHeight, rowsFor, splitColumns, type LayoutRow, type PackItem, type PackPages } from "./worksheetPack";
+import { arrangeForPrint, packPagesAt, packWorksheet, pageCount, rowHeight, rowsFor, splitColumns, type LayoutRow, type PackItem, type PackPages } from "./worksheetPack";
 
 const full = (id: string, height: number): PackItem => ({ id, half: false, height });
 const half = (id: string, height: number): PackItem => ({ id, half: true, height });
@@ -145,7 +145,7 @@ describe("arrangeForPrint when the worksheet has to shrink", () => {
     const fitsAt = (z: number) =>
       pageCount(
         out.map((id) => ({ id, half: false, height: heights[id as keyof typeof heights] })),
-        { page1: (500 * 0.97) / z, page2: (600 * 0.97) / z, gap: 0 },
+        { page1: (600 * 0.97) / z - 100, page2: (600 * 0.97) / z, gap: 0 },
       ) <= 2;
     // 68% is the largest print size at which any order of these fits one sheet
     expect(fitsAt(0.68)).toBe(true);
@@ -157,5 +157,18 @@ describe("arrangeForPrint with the space print leaves between activities", () =>
     // page 1 holds 485: A (300) + C (180) = 480 fits, but not with 10 between them
     const m = { order: ["A", "B", "C"], heights: { A: 300, B: 400, C: 180 }, half: {}, headerPx: 100, pageHeightPx: 600, gapPx: 10 };
     expect(arrangeForPrint(m)).toEqual(["B", "A", "C"]);
+  });
+});
+
+describe("packPagesAt", () => {
+  const m = { order: [], heights: {}, half: {}, headerPx: 100, pageHeightPx: 600, gapPx: 8 };
+
+  it("gives full-size page heights at 100%", () => {
+    expect(packPagesAt(m, 1)).toEqual({ page1: 600 * 0.97 - 100, page2: 600 * 0.97, gap: 8 });
+  });
+
+  it("shrinks the header with everything else when printing smaller", () => {
+    // at 50% the page holds twice as much full-size content, and the header is still 100 of it
+    expect(packPagesAt(m, 0.5)).toEqual({ page1: (600 * 0.97) / 0.5 - 100, page2: (600 * 0.97) / 0.5, gap: 8 });
   });
 });
