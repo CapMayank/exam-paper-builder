@@ -22,3 +22,8 @@ export function sectionOrderFor(items: { id: string; sectionId: string }[], item
   }
   return out;
 }
+
+/** The label an activity gets at place `index`: the automatic "Activity N" follows it; a teacher's own title stays. */
+export function activityTitleAt(title: string, index: number): string {
+  return /^Activity \d+$/.test(title.trim()) ? `Activity ${index + 1}` : title;
+}

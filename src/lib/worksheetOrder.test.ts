@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { moveToIndex, sectionOrderFor } from "./worksheetOrder";
+import { activityTitleAt, moveToIndex, sectionOrderFor } from "./worksheetOrder";
 
 describe("moveToIndex", () => {
   const ids = ["a", "b", "c", "d"];
@@ -28,5 +28,15 @@ describe("sectionOrderFor", () => {
   it("refuses a list with an unknown or repeated activity", () => {
     expect(sectionOrderFor(items, ["q3", "q1", "q9"])).toBeNull();
     expect(sectionOrderFor(items, ["q3", "q1", "q1"])).toBeNull();
+  });
+});
+
+describe("activityTitleAt", () => {
+  it("renumbers the automatic 'Activity N' label to the new place", () => {
+    expect(activityTitleAt("Activity 7", 0)).toBe("Activity 1");
+  });
+
+  it("leaves a title the teacher wrote alone", () => {
+    expect(activityTitleAt("Phonics", 0)).toBe("Phonics");
   });
 });
