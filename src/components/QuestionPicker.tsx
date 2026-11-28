@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, CheckCircle2, Pencil, Plus, RefreshCw, Sparkles } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { QuestionForm } from "@/components/QuestionForm";
 import { PasteQuestionsPanel } from "@/components/PasteQuestionsPanel";
 import { isExhaustedUsage, QuestionFreshnessAlert, QuestionUsagePills } from "@/components/QuestionUsageHistory";
@@ -179,51 +179,59 @@ export function QuestionPicker({
     return () => clearTimeout(t);
   }, [paper.id, paper.blueprint.bookId, pickType, filters, orChapterLocked, mainChapterId]);
 
+  /** Why `q` cannot be placed in the current slot, or null when it fits; shared by the bank list and similar matches. */
+  const whyCannotUse = useCallback(
+    (q: QuestionDto): string | null => {
+      if (isAlternate) {
+        if (activeItem && q.id === activeItem.question.id) {
+          return "This is the main question of this slot.";
+        }
+        if (paper.items.some((i) => i.question.id === q.id || i.orQuestion?.id === q.id)) {
+          return "Already used in this paper.";
+        }
+        if (!isTypeAllowed(section, q.type)) {
+          return `Must be a type this section accepts (${typeLabels(allowedTypes)}).`;
+        }
+        if (orChapterLocked && activeItem && q.chapterId !== activeItem.question.chapterId) {
+          return `Must be from the same chapter as the main question (Ch ${activeItem.question.chapter?.number}).`;
+        }
+        const marksProblem = subpartsMarksProblem(section, q);
+        if (marksProblem) {
+          return `Its parts: ${marksProblem}`;
+        }
+        return null;
+      }
+
+      if (paper.items.some((i) => (i.question.id === q.id || i.orQuestion?.id === q.id) && i.id !== replacingItemId)) {
+        return "Already used in this paper.";
+      }
+      if (isReplacing && activeItem?.orQuestion?.id === q.id) {
+        return "This is the OR question of this slot.";
+      }
+      // the same two checks the server makes when the question is added
+      const marksProblem = subpartsMarksProblem(section, q);
+      if (marksProblem) return `Its parts: ${marksProblem}`;
+      const pairValue = spanningMatchPick && q.type === "MATCH_COLUMN" ? pairMarksPick : undefined;
+      const pairProblem =
+        pairValue === 0.5
+          ? pairMarksProblem(section, parseMatchColumnPairs(q.options, q.text, (q as { explanation?: string }).explanation).length, 0.5)
+          : null;
+      if (pairProblem) return pairProblem;
+      return whyCannotAdd(def, placed, {
+        sectionId: section.id,
+        chapterId: q.chapterId,
+        type: q.type,
+        ...slotPlacement(section, pairValue ? { ...q, pairMarks: pairValue } : q),
+        passageGroupId: q.passageGroupId,
+      });
+    },
+    [isAlternate, activeItem, paper.items, section, allowedTypes, orChapterLocked, replacingItemId, isReplacing, spanningMatchPick, pairMarksPick, def, placed],
+  );
+
   // Smart assist: questions that fit the blueprint come first, then least-used, then newest.
   const ranked = useMemo(() => {
     return bank
-      .map((q) => {
-        let why: string | null = null;
-        if (isAlternate) {
-          if (activeItem && q.id === activeItem.question.id) {
-            why = "This is the main question of this slot.";
-          } else if (paper.items.some((i) => i.question.id === q.id || i.orQuestion?.id === q.id)) {
-            why = "Already used in this paper.";
-          } else if (!isTypeAllowed(section, q.type)) {
-            why = `Must be a type this section accepts (${typeLabels(allowedTypes)}).`;
-          } else if (orChapterLocked && activeItem && q.chapterId !== activeItem.question.chapterId) {
-            why = `Must be from the same chapter as the main question (Ch ${activeItem.question.chapter?.number}).`;
-          } else if (subpartsMarksProblem(section, q)) {
-            why = `Its parts: ${subpartsMarksProblem(section, q)}`;
-          }
-        } else {
-          if (paper.items.some((i) => (i.question.id === q.id || i.orQuestion?.id === q.id) && i.id !== replacingItemId)) {
-            why = "Already used in this paper.";
-          } else if (isReplacing && activeItem?.orQuestion?.id === q.id) {
-            why = "This is the OR question of this slot.";
-          } else {
-            // the same two checks the server makes when the question is added
-            const marksProblem = subpartsMarksProblem(section, q);
-            const pairValue = spanningMatchPick && q.type === "MATCH_COLUMN" ? pairMarksPick : undefined;
-            const pairProblem =
-              pairValue === 0.5
-                ? pairMarksProblem(section, parseMatchColumnPairs(q.options, q.text, (q as { explanation?: string }).explanation).length, 0.5)
-                : null;
-            why = marksProblem
-              ? `Its parts: ${marksProblem}`
-              : pairProblem
-              ? pairProblem
-              : whyCannotAdd(def, placed, {
-                  sectionId: section.id,
-                  chapterId: q.chapterId,
-                  type: q.type,
-                  ...slotPlacement(section, pairValue ? { ...q, pairMarks: pairValue } : q),
-                  passageGroupId: q.passageGroupId,
-                });
-          }
-        }
-        return { q, why };
-      })
+      .map((q) => ({ q, why: whyCannotUse(q) }))
       // questions that fit come first (for an OR, those from the main question's chapter first among them), then those
       // from the most under-covered chapters, then the least used and newest
       .sort(
@@ -235,7 +243,7 @@ export function QuestionPicker({
           Date.parse(b.q.createdAt ?? "") - Date.parse(a.q.createdAt ?? "") ||
           0,
       );
-  }, [chapterGaps, bank, placed, def, section.id, isAlternate, activeItem, paper.items, pickType, targetSlotMarks, isMultiUnitMatch, replacingItemId, orChapterLocked, mainChapterId, pairMarksPick, spanningMatchPick]);
+  }, [bank, whyCannotUse, mainChapterId, chapterGaps]);
 
   /** Resolves true when the question was placed; false when it was refused (the error is shown in the banner). */
   async function add(questionId: string, orQuestionId?: string | null): Promise<boolean> {
@@ -878,6 +886,16 @@ export function QuestionPicker({
                   preferredChapterId={orRule === "guideline" ? (mainChapterId ?? undefined) : undefined}
                   chapterHint={orRuleLine ?? undefined}
                   openMarks={chapterGaps}
+                  paperContext={paper}
+                  useExistingBlockedReason={whyCannotUse}
+                  onUseExisting={async (q) => {
+                    // Closes automatically via add() on replace/OR or when the last slot fills; otherwise discard the typed draft.
+                    const placedOk = await add(q.id);
+                    if (placedOk) {
+                      setInitialForEdit(undefined);
+                      setFormKey((k) => k + 1);
+                    }
+                  }}
                   submitLabel={
                     isAlternate
                       ? "Save to Bank & Set as OR question"
