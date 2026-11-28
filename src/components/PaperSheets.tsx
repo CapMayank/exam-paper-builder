@@ -1279,6 +1279,12 @@ export function PaperSheets({
           half: Object.fromEntries(tagged.map((el) => [el.dataset.wsItem!, el.dataset.wsHalf === "1"])),
           headerPx: firstBlock > 0 ? heights.slice(0, firstBlock).reduce((a, b) => a + b, 0) : 0,
           pageHeightPx: pageH - 6,
+          // the space between consecutive blocks (their margins), taken from the first two activity blocks
+          gapPx: (() => {
+            const blockEls = els.filter((el) => el.querySelector("[data-ws-item]"));
+            if (blockEls.length < 2) return 0;
+            return Math.max(0, blockEls[1].getBoundingClientRect().top - blockEls[0].getBoundingClientRect().bottom);
+          })(),
         });
       }
       const paged = paginateSlices(

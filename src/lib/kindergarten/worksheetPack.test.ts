@@ -151,3 +151,11 @@ describe("arrangeForPrint when the worksheet has to shrink", () => {
     expect(fitsAt(0.68)).toBe(true);
   });
 });
+
+describe("arrangeForPrint with the space print leaves between activities", () => {
+  it("counts that space, so two activities that only fit without it are not put on one page", () => {
+    // page 1 holds 485: A (300) + C (180) = 480 fits, but not with 10 between them
+    const m = { order: ["A", "B", "C"], heights: { A: 300, B: 400, C: 180 }, half: {}, headerPx: 100, pageHeightPx: 600, gapPx: 10 };
+    expect(arrangeForPrint(m)).toEqual(["B", "A", "C"]);
+  });
+});

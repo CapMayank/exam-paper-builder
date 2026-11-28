@@ -215,6 +215,8 @@ export type WorksheetMeasure = {
   /** Height of the worksheet header (school name, student details) above the first activity on page 1. */
   headerPx: number;
   pageHeightPx: number;
+  /** Space print leaves between one activity (or row) and the next. */
+  gapPx?: number;
 };
 
 /** Packing leaves this share of each page free, so small measuring differences never spill onto a third page. */
@@ -231,7 +233,7 @@ export function arrangeForPrint(m: WorksheetMeasure): string[] | null {
   const pagesAt = (zoom: number): PackPages => ({
     page1: ((m.pageHeightPx - m.headerPx) * PACK_SAFETY) / zoom,
     page2: (m.pageHeightPx * PACK_SAFETY) / zoom,
-    gap: 0,
+    gap: m.gapPx ?? 0,
   });
   const zooms = WORKSHEET_FIT_LEVELS.map((f) => f.zoom);
   let next = m.order;
