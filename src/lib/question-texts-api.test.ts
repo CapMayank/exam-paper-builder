@@ -23,11 +23,18 @@ const callQuestions = (url: string, headers?: HeadersInit) =>
 describe("GET /api/questions/texts", () => {
   const stamp = Date.now();
   let userId: string;
-  let bookId: string;
-  let chapterId: string;
-  let otherBookId: string;
-  let otherChapterId: string;
-  let firstQuestionId: string | undefined;
+  const createdBookIds: string[] = [];
+
+  async function createBookWithChapter(label: string, subject = "Science") {
+    const book = await prisma.book.create({
+      data: { title: `Texts ${label} ${stamp}`, subject, className: "Class 8", academicSession: "2026–27" },
+    });
+    createdBookIds.push(book.id);
+    const chapter = await prisma.chapter.create({
+      data: { bookId: book.id, number: 1, title: `${label} Chapter 1` },
+    });
+    return { bookId: book.id, chapterId: chapter.id };
+  }
 
   beforeAll(async () => {
     const user = await prisma.user.create({
@@ -41,36 +48,23 @@ describe("GET /api/questions/texts", () => {
     });
     userId = user.id;
     mockSessionUserId = userId;
-
-    const book = await prisma.book.create({
-      data: { title: `Texts Book ${stamp}`, subject: "Science", className: "Class 8", academicSession: "2026–27" },
-    });
-    bookId = book.id;
-    const chapter = await prisma.chapter.create({
-      data: { bookId, number: 1, title: "Chapter 1" },
-    });
-    chapterId = chapter.id;
-
-    const otherBook = await prisma.book.create({
-      data: { title: `Other Book ${stamp}`, subject: "Math", className: "Class 8", academicSession: "2026–27" },
-    });
-    otherBookId = otherBook.id;
-    const otherChapter = await prisma.chapter.create({
-      data: { bookId: otherBookId, number: 1, title: "Other Chapter 1" },
-    });
-    otherChapterId = otherChapter.id;
   });
 
   afterAll(async () => {
-    await prisma.question.deleteMany({ where: { bookId: { in: [bookId, otherBookId] } } });
-    await prisma.chapter.deleteMany({ where: { bookId: { in: [bookId, otherBookId] } } });
-    await prisma.book.deleteMany({ where: { id: { in: [bookId, otherBookId] } } });
+    if (createdBookIds.length > 0) {
+      await prisma.question.deleteMany({ where: { bookId: { in: createdBookIds } } });
+      await prisma.chapter.deleteMany({ where: { bookId: { in: createdBookIds } } });
+      await prisma.book.deleteMany({ where: { id: { in: createdBookIds } } });
+    }
     await prisma.auditLog.deleteMany({ where: { userId } });
     await prisma.user.deleteMany({ where: { id: userId } });
   });
 
   it("returns only id, type, chapterId and text for the book", async () => {
-    const q1 = await prisma.question.create({
+    const { bookId, chapterId } = await createBookWithChapter("shape");
+    const { bookId: otherBookId, chapterId: otherChapterId } = await createBookWithChapter("other", "Math");
+
+    await prisma.question.create({
       data: {
         bookId,
         chapterId,
@@ -81,7 +75,6 @@ describe("GET /api/questions/texts", () => {
         createdById: userId,
       },
     });
-    firstQuestionId = q1.id;
 
     await prisma.question.create({
       data: {
@@ -108,6 +101,7 @@ describe("GET /api/questions/texts", () => {
 
     const res = await call(`/api/questions/texts?bookId=${bookId}`);
     expect(res.status).toBe(200);
+    expect(res.headers.get("Cache-Control")).toBe("private, no-cache");
     const items = (await res.json()) as QuestionText[];
     expect(items).toHaveLength(2);
     for (const item of items) {
@@ -116,6 +110,29 @@ describe("GET /api/questions/texts", () => {
   });
 
   it("excludes shuffled variant clones", async () => {
+    const { bookId, chapterId } = await createBookWithChapter("variants");
+
+    const orig = await prisma.question.create({
+      data: {
+        bookId,
+        chapterId,
+        type: "MCQ",
+        text: "What is photosynthesis?",
+        optionsJson: JSON.stringify(["A", "B", "C", "D"]),
+        answer: "A",
+        createdById: userId,
+      },
+    });
+    const second = await prisma.question.create({
+      data: {
+        bookId,
+        chapterId,
+        type: "SA",
+        text: "Explain Newton's first law.",
+        answer: "Law of inertia",
+        createdById: userId,
+      },
+    });
     const variant = await prisma.question.create({
       data: {
         bookId,
@@ -123,7 +140,7 @@ describe("GET /api/questions/texts", () => {
         type: "MCQ",
         text: "Shuffled variant of photosynthesis",
         optionsJson: JSON.stringify(["D", "C", "B", "A"]),
-        subpartsJson: JSON.stringify({ [VARIANT_MARKER]: firstQuestionId ?? "orig", subparts: [] }),
+        subpartsJson: JSON.stringify({ [VARIANT_MARKER]: orig.id, subparts: [] }),
         answer: "D",
         createdById: userId,
       },
@@ -132,38 +149,51 @@ describe("GET /api/questions/texts", () => {
     const res = await call(`/api/questions/texts?bookId=${bookId}`);
     expect(res.status).toBe(200);
     const items = (await res.json()) as QuestionText[];
-    expect(items).toHaveLength(2);
+    expect(items.map((item) => item.id).sort()).toEqual([orig.id, second.id].sort());
     expect(items.some((item) => item.id === variant.id)).toBe(false);
   });
 
-  it("returns 304 when the ETag matches", async () => {
+  it("returns 304 when the ETag matches (exact, weak, or comma-separated)", async () => {
+    const { bookId, chapterId } = await createBookWithChapter("etag");
+    await prisma.question.create({
+      data: {
+        bookId,
+        chapterId,
+        type: "SA",
+        text: "State Ohm's law clearly.",
+        answer: "V = IR",
+        createdById: userId,
+      },
+    });
+
     const first = await call(`/api/questions/texts?bookId=${bookId}`);
     expect(first.status).toBe(200);
     const etag = first.headers.get("ETag");
     expect(etag).toBeTruthy();
 
-    const second = await call(`/api/questions/texts?bookId=${bookId}`, {
-      "If-None-Match": etag!,
-    });
-    expect(second.status).toBe(304);
-    expect(await second.text()).toBe("");
+    for (const headerValue of [etag!, `W/${etag!}`, `"stale-tag", W/${etag!}`]) {
+      const res = await call(`/api/questions/texts?bookId=${bookId}`, {
+        "If-None-Match": headerValue,
+      });
+      expect(res.status).toBe(304);
+      expect(res.headers.get("ETag")).toBe(etag);
+      expect(res.headers.get("Cache-Control")).toBe("private, no-cache");
+      expect(await res.text()).toBe("");
+    }
   });
 
   it("changes the ETag after a question's text changes", async () => {
-    const targetId =
-      firstQuestionId ??
-      (
-        await prisma.question.create({
-          data: {
-            bookId,
-            chapterId,
-            type: "SA",
-            text: "Initial question text",
-            answer: "Answer",
-            createdById: userId,
-          },
-        })
-      ).id;
+    const { bookId, chapterId } = await createBookWithChapter("etag-change");
+    const target = await prisma.question.create({
+      data: {
+        bookId,
+        chapterId,
+        type: "SA",
+        text: "Initial question text",
+        answer: "Answer",
+        createdById: userId,
+      },
+    });
 
     const before = await call(`/api/questions/texts?bookId=${bookId}`);
     expect(before.status).toBe(200);
@@ -171,7 +201,7 @@ describe("GET /api/questions/texts", () => {
     expect(etagBefore).toBeTruthy();
 
     await prisma.question.update({
-      where: { id: targetId },
+      where: { id: target.id },
       data: { text: "Updated question text for ETag check" },
     });
 

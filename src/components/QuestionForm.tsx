@@ -86,7 +86,13 @@ import { findFreshnessConflicts, isExhaustedUsage, type CurrentPaperContext } fr
 import { SimilarQuestionsPanel } from "./SimilarQuestionsPanel";
 import { useSimilarQuestions } from "./useSimilarQuestions";
 import { findSimilar, SIMILAR_CONFIRM } from "@/lib/questionSimilarity";
-import { getCachedBookTexts, loadQuestionDetails, rememberSavedQuestion } from "@/lib/similarQuestionsClient";
+import {
+  getCachedBookTexts,
+  loadBookTexts,
+  loadQuestionDetails,
+  rememberSavedQuestion,
+  type PreparedText,
+} from "@/lib/similarQuestionsClient";
 
 /** Pre-primary worksheets are written on: they keep blank answer space under each question. */
 const PRE_PRIMARY_SPACE: Record<string, number> = {
@@ -532,11 +538,29 @@ export function QuestionForm({
 
     if (!excludeId && similarityEnabled && confirmedSimilarTextRef.current !== text) {
       const trimmedBookId = bookId.trim();
-      const candidates = trimmedBookId ? (getCachedBookTexts(trimmedBookId) ?? []) : [];
+      let candidates: PreparedText[] = trimmedBookId ? (getCachedBookTexts(trimmedBookId) ?? []) : [];
+      if (trimmedBookId && getCachedBookTexts(trimmedBookId) === null) {
+        setBusy(true);
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          const loaded = await Promise.race([
+            loadBookTexts(trimmedBookId),
+            new Promise<null>((resolve) => {
+              timer = setTimeout(() => resolve(null), 1500);
+            }),
+          ]);
+          if (loaded) candidates = loaded;
+        } catch {
+          // Never block saving if the background text list request fails.
+        } finally {
+          if (timer !== undefined) clearTimeout(timer);
+          setBusy(false);
+        }
+      }
+
       const exactHit = findSimilar(text, candidates, {
         limit: 1,
         minScore: SIMILAR_CONFIRM,
-        excludeIds: excludeId ? [excludeId] : undefined,
       })[0];
 
       if (exactHit) {
@@ -554,7 +578,9 @@ export function QuestionForm({
         }
 
         const chapterNumber =
-          topDto?.chapter?.number ?? chapters.find((c) => c.id === exactHit.item.chapterId)?.number;
+          topDto?.chapter?.number ??
+          book?.chapters.find((c) => c.id === exactHit.item.chapterId)?.number ??
+          chapters.find((c) => c.id === exactHit.item.chapterId)?.number;
         const chapterPrefix = chapterNumber !== undefined ? `Ch ${chapterNumber}: ` : "";
         const sourceText = topDto?.text ?? exactHit.item.text;
         const normalizedSnippet = sourceText.replace(/\s+/g, " ").trim();

@@ -28,6 +28,8 @@ const nextConfig: NextConfig = {
       { source: "/:path*", headers: security },
       // signed-in data must never be kept by shared caches
       { source: "/api/:path*", headers: [{ key: "Cache-Control", value: "no-store" }] },
+      // conditional ETag endpoint: still private (no shared caches), revalidated via If-None-Match
+      { source: "/api/questions/texts", headers: [{ key: "Cache-Control", value: "private, no-cache" }] },
     ];
   },
   async redirects() {

@@ -246,7 +246,12 @@ export function QuestionPicker({
   }, [bank, whyCannotUse, mainChapterId, chapterGaps]);
 
   /** Resolves true when the question was placed; false when it was refused (the error is shown in the banner). */
-  async function add(questionId: string, orQuestionId?: string | null, questionType?: string): Promise<boolean> {
+  async function add(
+    questionId: string,
+    orQuestionId?: string | null,
+    questionType?: string,
+    opts?: { rethrow?: boolean },
+  ): Promise<boolean> {
     if (addingQuestionId) return false;
     setAddingQuestionId(questionId);
     setError(null);
@@ -292,6 +297,7 @@ export function QuestionPicker({
         setBank((b) => (b.some((q) => q.id === questionId) ? b : [targetQ, ...b]));
       }
       setError((e as Error).message);
+      if (opts?.rethrow) throw e;
       return false;
     } finally {
       setAddingQuestionId(null);
@@ -891,7 +897,7 @@ export function QuestionPicker({
                   useExistingBlockedReason={whyCannotUse}
                   onUseExisting={async (q) => {
                     // Closes automatically via add() on replace/OR or when the last slot fills; otherwise discard the typed draft.
-                    const placedOk = await add(q.id, undefined, q.type);
+                    const placedOk = await add(q.id, undefined, q.type, { rethrow: true });
                     if (placedOk) {
                       setInitialForEdit(undefined);
                       setFormKey((k) => k + 1);
