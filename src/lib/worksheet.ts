@@ -2,8 +2,9 @@ import "server-only";
 import { HttpError, type SessionUser } from "./api";
 import { defaultExamDurationMin, WORKSHEET_MODE, type ExamType } from "./constants";
 import { assertCanModifyPaper, loadPaperView } from "./papers";
+import { recordAudit } from "./audit";
 import { prisma } from "./prisma";
-import { moveToIndex } from "./worksheetOrder";
+import { moveToIndex, sectionOrderFor } from "./worksheetOrder";
 
 const WORKSHEET_CHAPTER_TITLE = "Worksheet activities";
 
@@ -200,5 +201,21 @@ export async function removeWorksheetActivity(paperId: string, itemId: string, u
   });
   if (stillUsed === 0) await prisma.question.delete({ where: { id: item.question.id } });
   await prisma.paper.update({ where: { id: paperId }, data: { updatedAt: new Date() } });
+  return loadPaperView(paperId);
+}
+
+/**
+ * Puts the worksheet's activities in this order (all of them, by item id) in one go, and renumbers
+ * them to match. Used when the print preview arranges the activities to fit the page.
+ */
+export async function reorderWorksheet(paperId: string, user: SessionUser, itemIds: string[]) {
+  const paper = await loadEditableWorksheet(paperId, user);
+  const sections = sectionOrderFor(paper.items, itemIds);
+  if (!sections) throw new HttpError(400, "The activity list has changed — reload and try again.");
+  await prisma.$transaction([
+    ...sections.map((id, position) => prisma.blueprintSection.update({ where: { id }, data: { position } })),
+    prisma.paper.update({ where: { id: paperId }, data: { updatedAt: new Date() } }),
+  ]);
+  await recordAudit(user, "PAPER_UPDATE", "PAPER", paperId, { title: paper.title, action: "REORDERED" });
   return loadPaperView(paperId);
 }

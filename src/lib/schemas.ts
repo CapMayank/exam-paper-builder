@@ -294,6 +294,7 @@ export const paperUpdateSchema = z
     showSignatures: z.boolean(),
     securityWatermark: z.boolean(),
     watermarkText: z.string().max(100),
+    autoArrange: z.boolean(),
   })
   .partial();
 

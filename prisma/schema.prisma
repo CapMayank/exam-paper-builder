@@ -214,6 +214,8 @@ model Paper {
   /// Time allowed from the exam date sheet; null = the blueprint's time.
   durationMin          Int?
   watermarkText        String          @default("")
+  /// Nursery–KG worksheets: arrange the activities to fit the page when printing.
+  autoArrange          Boolean         @default(true)
   status               String          @default("DRAFT") // DRAFT | FINAL
   createdById          String
   createdAt            DateTime        @default(now())

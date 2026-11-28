@@ -209,6 +209,8 @@ export type PaperData = {
   showSignatures: boolean;
   securityWatermark?: boolean;
   watermarkText?: string;
+  /** Worksheets: arrange the activities to fit the page when printing (missing = on). */
+  autoArrange?: boolean;
   createdAt?: string;
   updatedAt?: string;
   snapshots?: PaperSnapshot[];

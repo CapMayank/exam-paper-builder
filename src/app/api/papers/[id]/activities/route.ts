@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { body, route } from "@/lib/api";
 import { KINDERGARTEN_QUESTION_TYPES } from "@/lib/constants";
-import { addWorksheetActivity } from "@/lib/worksheet";
+import { addWorksheetActivity, reorderWorksheet } from "@/lib/worksheet";
 
 const addSchema = z.object({
   type: z.enum(KINDERGARTEN_QUESTION_TYPES),
@@ -16,4 +16,12 @@ const addSchema = z.object({
 export const POST = route(async (req, { id }, user) => {
   const input = await body(req, addSchema);
   return addWorksheetActivity(id, user, input);
+});
+
+const reorderSchema = z.object({ order: z.array(z.string().min(1)).max(200) });
+
+/** Puts all of a worksheet's activities in a new order at once (the print preview's arrangement). */
+export const PUT = route(async (req, { id }, user) => {
+  const { order } = await body(req, reorderSchema);
+  return reorderWorksheet(id, user, order);
 });
