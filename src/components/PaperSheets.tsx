@@ -38,6 +38,7 @@ import { normalizeNumberingStyle,
 import { decomposeForSlot } from "@/lib/subpartExtractor";
 import { WorkbookHeader } from "@/lib/kindergarten/components/WorkbookHeader";
 import { fitsHalfWidth } from "@/lib/kindergarten/pairing";
+import { splitColumns } from "@/lib/kindergarten/worksheetPack";
 import { getKindergartenActivity, parseKindergartenConfig } from "@/lib/kindergarten/registry";
 import {
   computeDisplayedPaperNumbering,
@@ -71,9 +72,33 @@ type Block = {
   continuationLabel?: string;
   /** Stretches to the bottom of its page (a Drawing paper's drawing area). */
   fillPage?: boolean;
-  /** A half-width activity still waiting for a partner: the next half-width activity joins its row. */
-  openHalf?: boolean;
+  /**
+   * A run of consecutive half-width activities printed as two columns side by side (see halfRunBlock).
+   * The next half-width activity joins the run.
+   */
+  halfRun?: { ids: string[]; renders: (() => ReactNode)[] };
 };
+
+/**
+ * Two columns for a run of half-width activities: the left takes the first k, the right the rest, k chosen so
+ * the columns end as level as possible (from the measured heights; without them, half each). Reading order,
+ * and so numbering, stays left column top to bottom, then right column.
+ */
+function halfRunRender(run: { ids: string[]; renders: (() => ReactNode)[] }, heights?: Record<string, number>) {
+  return function HalfRunColumns() {
+    const n = run.ids.length;
+    if (n === 1) return run.renders[0]();
+    const hs = run.ids.map((id) => heights?.[id]);
+    const k = hs.every((h): h is number => typeof h === "number") ? splitColumns(hs, 0) : Math.ceil(n / 2);
+    const column = (from: number, to: number) => <div style={{ minWidth: 0 }}>{run.renders.slice(from, to).map((r, i) => <div key={run.ids[from + i]}>{r()}</div>)}</div>;
+    return (
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", columnGap: "5mm", alignItems: "start" }}>
+        {column(0, k)}
+        {column(k, n)}
+      </div>
+    );
+  };
+}
 
 type LineBox = { top: number; bottom: number; n: number };
 
@@ -199,7 +224,14 @@ function extractSectionLetter(title: string, fallbackIndex: number): string {
   return sectionLetter(title) ?? String.fromCharCode(65 + (fallbackIndex % 26));
 }
 
-function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, showSignatures?: boolean, fit: PrintFit = getFit(0)): Block[] {
+function buildBlocks(
+  rawPaper: PaperData,
+  compact?: boolean,
+  isA5?: boolean,
+  showSignatures?: boolean,
+  fit: PrintFit = getFit(0),
+  activityHeights?: Record<string, number>,
+): Block[] {
   // printed as the paper reads: rows of one form under one heading are one run (one sub-heading, one numbering)
   const view = mergeSameFormRows(rawPaper.blueprint.sections, rawPaper.items);
   const paper: PaperData = { ...rawPaper, blueprint: { ...rawPaper.blueprint, sections: view.sections }, items: view.items };
@@ -900,27 +932,18 @@ function buildBlocks(rawPaper: PaperData, compact?: boolean, isA5?: boolean, sho
             </div>
           );
           const prev = blocks[blocks.length - 1];
-          if (half && prev?.openHalf && prev.render && !breakBeforeQuestion) {
-            const left = prev.render;
-            blocks[blocks.length - 1] = {
-              ...prev,
-              key: `${prev.key}+${it.id}`,
-              openHalf: false,
-              render: (ctx) => (
-                <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", columnGap: "5mm", alignItems: "start" }}>
-                  <div style={{ minWidth: 0 }}>{left(ctx)}</div>
-                  <div style={{ minWidth: 0 }}>{renderActivity()}</div>
-                </div>
-              ),
-            };
+          if (half && prev?.halfRun && !breakBeforeQuestion) {
+            const run = { ids: [...prev.halfRun.ids, it.id], renders: [...prev.halfRun.renders, renderActivity] };
+            blocks[blocks.length - 1] = { ...prev, key: `${prev.key}+${it.id}`, halfRun: run, render: halfRunRender(run, activityHeights) };
           } else {
+            const run = half ? { ids: [it.id], renders: [renderActivity] } : undefined;
             blocks.push({
               key: it.id,
               keepWithNext: false,
               forceBreakBefore: breakBeforeQuestion,
               groupId: it.id,
-              openHalf: half,
-              render: renderActivity,
+              halfRun: run,
+              render: run ? halfRunRender(run, activityHeights) : renderActivity,
             });
           }
         } else if (canDecompose) {
@@ -1178,6 +1201,7 @@ export function PaperSheets({
   autoFit = true,
   maxPages = BOOKLET_MAX_PAGES,
   onInfo,
+  activityHeights,
 }: {
   paper: PaperData;
   view?: "reading" | "sheets";
@@ -1192,6 +1216,8 @@ export function PaperSheets({
   autoFit?: boolean;
   maxPages?: number;
   onInfo?: (i: SheetsInfo) => void;
+  /** Worksheets: each activity's measured height by item id, so runs of small ones split into level columns. */
+  activityHeights?: Record<string, number>;
 }) {
   const isA5 = paper.layout === "BOOKLET_A4";
   const isBooklet = isBookletLayout(paper.layout);
@@ -1212,8 +1238,8 @@ export function PaperSheets({
   const fitLevel = fitCurrent?.level ?? 0;
   const fit = useMemo(() => getFit(fitLevel, fitLevels), [fitLevel, fitLevels]);
   const blocks = useMemo(
-    () => buildBlocks(paper, compact, isA5, showSignatures, fit),
-    [paper, compact, isA5, showSignatures, fit]
+    () => buildBlocks(paper, compact, isA5, showSignatures, fit, activityHeights),
+    [paper, compact, isA5, showSignatures, fit, activityHeights]
   );
   const measureRef = useRef<HTMLDivElement>(null);
   const probeRef = useRef<HTMLDivElement>(null);
